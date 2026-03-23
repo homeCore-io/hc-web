@@ -1,25 +1,17 @@
-import 'package:flex_color_scheme/flex_color_scheme.dart';
 import 'package:flutter/material.dart';
 
 class AppTheme {
-  static ThemeData get light => FlexThemeData.light(
-        scheme: FlexScheme.indigo,
-        surfaceMode: FlexSurfaceMode.levelSurfacesLowScaffold,
-        blendLevel: 9,
-        subThemesData: const FlexSubThemesData(
-          blendOnLevel: 10,
-          blendOnColors: false,
-        ),
+  static const _seed = Color(0xFF3F51B5); // indigo
+
+  static ThemeData get light => ThemeData(
+        colorSchemeSeed: _seed,
+        brightness: Brightness.light,
         useMaterial3: true,
       );
 
-  static ThemeData get dark => FlexThemeData.dark(
-        scheme: FlexScheme.indigo,
-        surfaceMode: FlexSurfaceMode.levelSurfacesLowScaffold,
-        blendLevel: 15,
-        subThemesData: const FlexSubThemesData(
-          blendOnLevel: 20,
-        ),
+  static ThemeData get dark => ThemeData(
+        colorSchemeSeed: _seed,
+        brightness: Brightness.dark,
         useMaterial3: true,
       );
 }
