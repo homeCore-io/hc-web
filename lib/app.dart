@@ -3,6 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'core/providers/auth_provider.dart';
 import 'core/theme/app_theme.dart';
+import 'features/admin/admin_shell.dart';
+import 'features/admin/areas_page.dart';
+import 'features/admin/plugins_page.dart';
+import 'features/admin/system_page.dart';
+import 'features/admin/users_page.dart';
 import 'features/auth/login_page.dart';
 import 'features/automations/automation_editor_page.dart';
 import 'features/automations/automation_list_page.dart';
@@ -65,6 +70,24 @@ GoRouter _buildRouter(Ref ref) {
           GoRoute(
               path: '/events',
               builder: (_, __) => const EventsPage()),
+          // Admin sub-section — inner shell provides the tab bar.
+          ShellRoute(
+            builder: (context, state, child) => AdminShell(child: child),
+            routes: [
+              GoRoute(
+                  path: '/admin/users',
+                  builder: (_, __) => const UsersPage()),
+              GoRoute(
+                  path: '/admin/plugins',
+                  builder: (_, __) => const PluginsPage()),
+              GoRoute(
+                  path: '/admin/areas',
+                  builder: (_, __) => const AreasPage()),
+              GoRoute(
+                  path: '/admin/system',
+                  builder: (_, __) => const SystemPage()),
+            ],
+          ),
         ],
       ),
       // Device detail is outside the shell (full-screen)

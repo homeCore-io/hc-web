@@ -10,27 +10,32 @@ class AppShell extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isWide = MediaQuery.of(context).size.width >= 600;
+    final currentUser = ref.watch(currentUserProvider).valueOrNull;
+    final isAdmin = currentUser?['role'] == 'admin';
 
-    const destinations = [
-      NavigationDestination(
+    final destinations = [
+      const NavigationDestination(
           icon: Icon(Icons.dashboard), label: 'Dashboard'),
-      NavigationDestination(icon: Icon(Icons.devices), label: 'Devices'),
-      NavigationDestination(
+      const NavigationDestination(icon: Icon(Icons.devices), label: 'Devices'),
+      const NavigationDestination(
           icon: Icon(Icons.auto_awesome), label: 'Automations'),
-      NavigationDestination(icon: Icon(Icons.movie), label: 'Scenes'),
-      NavigationDestination(
-          icon: Icon(Icons.tune), label: 'Modes'),
-      NavigationDestination(
+      const NavigationDestination(icon: Icon(Icons.movie), label: 'Scenes'),
+      const NavigationDestination(icon: Icon(Icons.tune), label: 'Modes'),
+      const NavigationDestination(
           icon: Icon(Icons.event_note), label: 'Events'),
+      if (isAdmin)
+        const NavigationDestination(
+            icon: Icon(Icons.admin_panel_settings_outlined), label: 'Admin'),
     ];
 
-    const routes = [
+    final routes = [
       '/dashboard',
       '/devices',
       '/automations',
       '/scenes',
       '/modes',
-      '/events'
+      '/events',
+      if (isAdmin) '/admin/users',
     ];
 
     int selectedIndex() {

@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../api/homecore_client.dart';
 import '../api/auth_api.dart';
+import '../api/users_api.dart';
 
 final homecoreClientProvider = Provider<HomecoreClient>((ref) {
   return HomecoreClient();
@@ -8,6 +9,10 @@ final homecoreClientProvider = Provider<HomecoreClient>((ref) {
 
 final authApiProvider = Provider<AuthApi>((ref) {
   return AuthApi(ref.watch(homecoreClientProvider));
+});
+
+final usersApiProvider = Provider<UsersApi>((ref) {
+  return UsersApi(ref.watch(homecoreClientProvider));
 });
 
 class AuthNotifier extends AsyncNotifier<bool> {
@@ -33,3 +38,14 @@ class AuthNotifier extends AsyncNotifier<bool> {
 final authProvider = AsyncNotifierProvider<AuthNotifier, bool>(
   AuthNotifier.new,
 );
+
+/// Current signed-in user profile. Null if not logged in or fetch fails.
+final currentUserProvider = FutureProvider<Map<String, dynamic>?>((ref) async {
+  final isLoggedIn = await ref.watch(authProvider.future);
+  if (!isLoggedIn) return null;
+  try {
+    return await ref.read(usersApiProvider).me();
+  } catch (_) {
+    return null;
+  }
+});
