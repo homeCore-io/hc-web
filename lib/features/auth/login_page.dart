@@ -31,7 +31,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     if (authState.hasError) {
       setState(() => _error = 'Login failed. Check credentials.');
     } else if (authState.valueOrNull == true) {
-      if (mounted) context.go('/devices');
+      if (mounted) context.go('/dashboard');
     }
   }
 

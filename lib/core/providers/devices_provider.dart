@@ -2,13 +2,62 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../api/devices_api.dart';
 import '../models/device_state.dart';
 import 'auth_provider.dart';
+import 'events_provider.dart';
 
 final devicesApiProvider = Provider<DevicesApi>((ref) {
   return DevicesApi(ref.watch(homecoreClientProvider));
 });
 
-final devicesProvider = FutureProvider<List<DeviceState>>((ref) async {
-  final api = ref.watch(devicesApiProvider);
-  final raw = await api.listDevices();
-  return raw.map(DeviceState.fromJson).toList();
-});
+class DevicesNotifier extends AsyncNotifier<List<DeviceState>> {
+  @override
+  Future<List<DeviceState>> build() async {
+    // Listen for WebSocket events and update devices in-place
+    ref.listen(eventsStreamProvider, (_, next) {
+      next.whenData((event) {
+        final current = state.valueOrNull;
+        if (current == null) return;
+
+        if (event.type == 'device_state_changed' &&
+            event.deviceId != null &&
+            event.current != null) {
+          final updated = current.map((d) {
+            if (d.id != event.deviceId) return d;
+            return DeviceState(
+              id: d.id,
+              pluginId: d.pluginId,
+              name: d.name,
+              area: d.area,
+              available: true,
+              state: Map<String, dynamic>.from(d.state)..addAll(event.current!),
+            );
+          }).toList();
+          state = AsyncData(updated);
+        } else if (event.type == 'device_availability_changed' &&
+            event.deviceId != null) {
+          final avail = event.available ?? false;
+          final updated = current.map((d) {
+            if (d.id != event.deviceId) return d;
+            return DeviceState(
+              id: d.id,
+              pluginId: d.pluginId,
+              name: d.name,
+              area: d.area,
+              available: avail,
+              state: d.state,
+            );
+          }).toList();
+          state = AsyncData(updated);
+        }
+      });
+    });
+
+    final api = ref.read(devicesApiProvider);
+    final raw = await api.listDevices();
+    return raw.map(DeviceState.fromJson).toList();
+  }
+}
+
+final devicesProvider =
+    AsyncNotifierProvider<DevicesNotifier, List<DeviceState>>(
+  DevicesNotifier.new,
+);

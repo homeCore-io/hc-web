@@ -12,14 +12,23 @@ class AppShell extends ConsumerWidget {
     final isWide = MediaQuery.of(context).size.width >= 600;
 
     const destinations = [
+      NavigationDestination(
+          icon: Icon(Icons.dashboard), label: 'Dashboard'),
       NavigationDestination(icon: Icon(Icons.devices), label: 'Devices'),
       NavigationDestination(
           icon: Icon(Icons.auto_awesome), label: 'Automations'),
       NavigationDestination(icon: Icon(Icons.movie), label: 'Scenes'),
-      NavigationDestination(icon: Icon(Icons.event_note), label: 'Events'),
+      NavigationDestination(
+          icon: Icon(Icons.event_note), label: 'Events'),
     ];
 
-    const routes = ['/devices', '/automations', '/scenes', '/events'];
+    const routes = [
+      '/dashboard',
+      '/devices',
+      '/automations',
+      '/scenes',
+      '/events'
+    ];
 
     int selectedIndex() {
       final loc = GoRouterState.of(context).matchedLocation;
