@@ -8,7 +8,10 @@ import 'features/automations/automation_editor_page.dart';
 import 'features/automations/automation_list_page.dart';
 import 'features/dashboard/dashboard_page.dart';
 import 'features/devices/device_detail_page.dart';
+import 'features/devices/device_history_page.dart';
 import 'features/devices/device_list_page.dart';
+import 'features/events/events_page.dart';
+import 'features/modes/modes_page.dart';
 import 'features/scenes/scene_editor_page.dart';
 import 'features/scenes/scenes_page.dart';
 import 'shared/widgets/app_shell.dart';
@@ -57,9 +60,11 @@ GoRouter _buildRouter(Ref ref) {
               builder: (_, state) =>
                   SceneEditorPage(sceneId: state.pathParameters['id'])),
           GoRoute(
+              path: '/modes',
+              builder: (_, __) => const ModesPage()),
+          GoRoute(
               path: '/events',
-              builder: (_, __) =>
-                  const _PlaceholderPage(title: 'Events')),
+              builder: (_, __) => const EventsPage()),
         ],
       ),
       // Device detail is outside the shell (full-screen)
@@ -68,19 +73,17 @@ GoRouter _buildRouter(Ref ref) {
         builder: (_, state) =>
             DeviceDetailPage(deviceId: state.pathParameters['id']!),
       ),
+      // Device history is outside the shell (full-screen)
+      GoRoute(
+        path: '/devices/:id/history',
+        builder: (_, state) =>
+            DeviceHistoryPage(deviceId: state.pathParameters['id']!),
+      ),
     ],
   );
 }
 
 final routerProvider = Provider<GoRouter>((ref) => _buildRouter(ref));
-
-class _PlaceholderPage extends StatelessWidget {
-  final String title;
-  const _PlaceholderPage({required this.title});
-  @override
-  Widget build(BuildContext context) =>
-      Center(child: Text('$title — coming soon'));
-}
 
 class HomecoreApp extends ConsumerWidget {
   const HomecoreApp({super.key});

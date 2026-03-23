@@ -19,6 +19,8 @@ class AppShell extends ConsumerWidget {
           icon: Icon(Icons.auto_awesome), label: 'Automations'),
       NavigationDestination(icon: Icon(Icons.movie), label: 'Scenes'),
       NavigationDestination(
+          icon: Icon(Icons.tune), label: 'Modes'),
+      NavigationDestination(
           icon: Icon(Icons.event_note), label: 'Events'),
     ];
 
@@ -27,6 +29,7 @@ class AppShell extends ConsumerWidget {
       '/devices',
       '/automations',
       '/scenes',
+      '/modes',
       '/events'
     ];
 

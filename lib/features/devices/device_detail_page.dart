@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../core/models/device_state.dart';
 import '../../core/providers/devices_provider.dart';
 
@@ -88,6 +89,12 @@ class _DeviceDetailView extends ConsumerWidget {
           if (device.state.isEmpty)
             const Text('No attributes',
                 style: TextStyle(color: Colors.grey)),
+          const SizedBox(height: 24),
+          OutlinedButton.icon(
+            icon: const Icon(Icons.history),
+            label: const Text('View History'),
+            onPressed: () => context.push('/devices/${device.id}/history'),
+          ),
         ],
       ),
     );
