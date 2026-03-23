@@ -16,12 +16,12 @@ class DeviceState {
   });
 
   factory DeviceState.fromJson(Map<String, dynamic> json) => DeviceState(
-        id: json['id'] as String,
+        id: json['device_id'] as String,
         pluginId: json['plugin_id'] as String? ?? '',
         name: json['name'] as String?,
         area: json['area'] as String?,
         available: json['available'] as bool? ?? false,
-        state: Map<String, dynamic>.from(json['state'] as Map? ?? {}),
+        state: Map<String, dynamic>.from(json['attributes'] as Map? ?? {}),
       );
 
   String get displayName => name ?? id;
