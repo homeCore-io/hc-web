@@ -1,0 +1,17 @@
+{
+    email admin@example.com
+}
+
+homecore.example.com {
+    root * /home/john/work/homeCore/web
+    encode gzip
+
+    handle /api/v1/* {
+        reverse_proxy localhost:8080
+    }
+
+    handle {
+        try_files {path} /index.html
+        file_server
+    }
+}
