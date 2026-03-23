@@ -27,6 +27,7 @@ class DevicesNotifier extends AsyncNotifier<List<DeviceState>> {
               pluginId: d.pluginId,
               name: d.name,
               area: d.area,
+              deviceType: d.deviceType,
               available: true,
               state: Map<String, dynamic>.from(d.state)..addAll(event.current!),
             );
@@ -42,6 +43,7 @@ class DevicesNotifier extends AsyncNotifier<List<DeviceState>> {
               pluginId: d.pluginId,
               name: d.name,
               area: d.area,
+              deviceType: d.deviceType,
               available: avail,
               state: d.state,
             );

@@ -26,15 +26,17 @@ class DeviceListPage extends ConsumerWidget {
         loading: () => const SkeletonList(count: 10),
         error: (e, _) => Center(child: Text('Error: $e')),
         data: (devices) {
+          // Exclude scene pseudo-devices — they appear in the Scenes section
+          final nonScenes = devices.where((d) => d.deviceType != 'scene').toList();
           // Group by area
           final Map<String, List<DeviceState>> grouped = {};
-          for (final d in devices) {
+          for (final d in nonScenes) {
             final key = d.area ?? 'Unassigned';
             grouped.putIfAbsent(key, () => []).add(d);
           }
           final areas = grouped.keys.toList()..sort();
 
-          if (devices.isEmpty) {
+          if (nonScenes.isEmpty) {
             return const Center(
                 child: Text('No devices registered'));
           }

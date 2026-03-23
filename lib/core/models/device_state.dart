@@ -3,6 +3,7 @@ class DeviceState {
   final String pluginId;
   final String? name;
   final String? area;
+  final String? deviceType;
   final bool available;
   final Map<String, dynamic> state;
 
@@ -11,6 +12,7 @@ class DeviceState {
     required this.pluginId,
     this.name,
     this.area,
+    this.deviceType,
     required this.available,
     required this.state,
   });
@@ -20,6 +22,7 @@ class DeviceState {
         pluginId: json['plugin_id'] as String? ?? '',
         name: json['name'] as String?,
         area: json['area'] as String?,
+        deviceType: json['device_type'] as String?,
         available: json['available'] as bool? ?? false,
         state: Map<String, dynamic>.from(json['attributes'] as Map? ?? {}),
       );
