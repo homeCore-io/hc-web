@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/models/rule.dart';
 import '../../core/providers/automations_provider.dart';
+import '../../shared/widgets/skeleton.dart';
 
 class AutomationListPage extends ConsumerWidget {
   const AutomationListPage({super.key});
@@ -26,7 +27,7 @@ class AutomationListPage extends ConsumerWidget {
         child: const Icon(Icons.add),
       ),
       body: rulesAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => const SkeletonList(count: 8, withAvatar: false),
         error: (e, _) => Center(child: Text('Error: $e')),
         data: (rules) {
           if (rules.isEmpty) {

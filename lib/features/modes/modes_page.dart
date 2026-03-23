@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/modes_api.dart';
 import '../../core/models/mode_state.dart';
 import '../../core/providers/modes_provider.dart';
+import '../../shared/widgets/skeleton.dart';
 
 class ModesPage extends ConsumerWidget {
   const ModesPage({super.key});
@@ -25,7 +26,7 @@ class ModesPage extends ConsumerWidget {
         ],
       ),
       body: modesAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => const SkeletonCardList(count: 4),
         error: (e, _) => Center(child: Text('Error: $e')),
         data: (modes) {
           if (modes.isEmpty) {

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/models/device_state.dart';
 import '../../core/providers/areas_provider.dart';
 import '../../core/providers/devices_provider.dart';
+import '../../shared/widgets/skeleton.dart';
 
 class AreasPage extends ConsumerWidget {
   const AreasPage({super.key});
@@ -25,7 +26,7 @@ class AreasPage extends ConsumerWidget {
         ],
       ),
       body: areasAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => const SkeletonCardList(count: 5),
         error: (e, _) => Center(child: Text('Error: $e')),
         data: (areas) {
           if (areas.isEmpty) {

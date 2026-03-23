@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/models/plugin_entry.dart';
 import '../../core/providers/plugins_provider.dart';
+import '../../shared/widgets/skeleton.dart';
 
 class PluginsPage extends ConsumerWidget {
   const PluginsPage({super.key});
@@ -20,7 +21,7 @@ class PluginsPage extends ConsumerWidget {
         ],
       ),
       body: pluginsAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => const SkeletonList(count: 6),
         error: (e, _) => Center(child: Text('Error: $e')),
         data: (plugins) {
           if (plugins.isEmpty) {

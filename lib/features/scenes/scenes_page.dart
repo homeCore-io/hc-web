@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/models/scene.dart';
 import '../../core/providers/scenes_provider.dart';
+import '../../shared/widgets/skeleton.dart';
 
 class ScenesPage extends ConsumerWidget {
   const ScenesPage({super.key});
@@ -25,7 +26,7 @@ class ScenesPage extends ConsumerWidget {
         child: const Icon(Icons.add),
       ),
       body: scenesAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => const SkeletonCardList(count: 6),
         error: (e, _) => Center(child: Text('Error: $e')),
         data: (scenes) {
           if (scenes.isEmpty) {

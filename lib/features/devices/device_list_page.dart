@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/models/device_state.dart';
 import '../../core/providers/devices_provider.dart';
+import '../../shared/widgets/skeleton.dart';
 
 class DeviceListPage extends ConsumerWidget {
   const DeviceListPage({super.key});
@@ -22,8 +23,7 @@ class DeviceListPage extends ConsumerWidget {
         ],
       ),
       body: devicesAsync.when(
-        loading: () =>
-            const Center(child: CircularProgressIndicator()),
+        loading: () => const SkeletonList(count: 10),
         error: (e, _) => Center(child: Text('Error: $e')),
         data: (devices) {
           // Group by area

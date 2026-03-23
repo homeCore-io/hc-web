@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/models/user_entry.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/providers/users_provider.dart';
+import '../../shared/widgets/skeleton.dart';
 
 class UsersPage extends ConsumerWidget {
   const UsersPage({super.key});
@@ -27,7 +28,7 @@ class UsersPage extends ConsumerWidget {
         ],
       ),
       body: usersAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => const SkeletonList(count: 5),
         error: (e, _) => Center(child: Text('Error: $e')),
         data: (users) {
           if (users.isEmpty) {
