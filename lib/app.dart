@@ -5,6 +5,7 @@ import 'core/providers/auth_provider.dart';
 import 'core/theme/app_theme.dart';
 import 'features/admin/admin_shell.dart';
 import 'features/admin/areas_page.dart';
+import 'features/admin/logs_page.dart';
 import 'features/admin/plugins_page.dart';
 import 'features/admin/system_page.dart';
 import 'features/admin/users_page.dart';
@@ -86,6 +87,9 @@ GoRouter _buildRouter(Ref ref) {
               GoRoute(
                   path: '/admin/system',
                   builder: (_, __) => const SystemPage()),
+              GoRoute(
+                  path: '/admin/logs',
+                  builder: (_, __) => const LogsPage()),
             ],
           ),
         ],

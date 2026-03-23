@@ -12,3 +12,9 @@ final eventsStreamProvider = StreamProvider<HcEvent>((ref) {
   final api = ref.watch(eventsApiProvider);
   return api.connect();
 });
+
+/// True while the events WebSocket is connected, false when dropped/reconnecting.
+final wsConnectedProvider = StreamProvider<bool>((ref) {
+  final api = ref.watch(eventsApiProvider);
+  return api.connectionState;
+});
