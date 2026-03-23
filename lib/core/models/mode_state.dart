@@ -21,17 +21,27 @@ class ModeState {
     this.effectiveOff,
   });
 
-  factory ModeState.fromJson(Map<String, dynamic> json) => ModeState(
-        id: json['id'] as String,
-        kind: json['kind'] as String? ?? 'manual',
-        on: json['on'] as bool? ?? false,
-        onOffsetMinutes: json['on_offset_minutes'] as int? ?? 0,
-        offOffsetMinutes: json['off_offset_minutes'] as int? ?? 0,
-        sunsetToday: json['sunset_today'] as String?,
-        sunriseToday: json['sunrise_today'] as String?,
-        effectiveOn: json['effective_on'] as String?,
-        effectiveOff: json['effective_off'] as String?,
-      );
+  factory ModeState.fromJson(Map<String, dynamic> json) {
+    final config = json['config'] as Map<String, dynamic>? ?? json;
+    final attrs = ((json['state'] as Map<String, dynamic>?)?['attributes'])
+            as Map<String, dynamic>? ??
+        {};
+    return ModeState(
+      id: config['id'] as String,
+      kind: config['kind'] as String? ?? 'manual',
+      on: attrs['on'] as bool? ?? false,
+      onOffsetMinutes: config['on_offset_minutes'] as int? ??
+          attrs['on_offset_minutes'] as int? ??
+          0,
+      offOffsetMinutes: config['off_offset_minutes'] as int? ??
+          attrs['off_offset_minutes'] as int? ??
+          0,
+      sunsetToday: attrs['sunset_today'] as String?,
+      sunriseToday: attrs['sunrise_today'] as String?,
+      effectiveOn: attrs['effective_on'] as String?,
+      effectiveOff: attrs['effective_off'] as String?,
+    );
+  }
 
   String get displayName {
     switch (id) {
