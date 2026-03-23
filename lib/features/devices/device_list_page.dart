@@ -123,7 +123,7 @@ class _DeviceTile extends ConsumerWidget {
                       .secondaryContainer
                   : Theme.of(context).colorScheme.errorContainer,
             ),
-      onTap: () => context.go('/devices/${device.id}'),
+      onTap: () => context.push('/devices/${device.id}'),
     );
   }
 

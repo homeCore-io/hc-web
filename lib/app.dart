@@ -22,11 +22,19 @@ import 'features/scenes/scene_editor_page.dart';
 import 'features/scenes/scenes_page.dart';
 import 'shared/widgets/app_shell.dart';
 
+class _RouterNotifier extends ChangeNotifier {
+  _RouterNotifier(Ref ref) {
+    ref.listen<AsyncValue<bool>>(authProvider, (_, __) => notifyListeners());
+  }
+}
+
 GoRouter _buildRouter(Ref ref) {
+  final notifier = _RouterNotifier(ref);
   return GoRouter(
     initialLocation: '/dashboard',
+    refreshListenable: notifier,
     redirect: (context, state) async {
-      final isLoggedIn = ref.read(authProvider).valueOrNull ?? false;
+      final isLoggedIn = await ref.read(authProvider.future);
       final isLoginPage = state.matchedLocation == '/login';
       if (!isLoggedIn && !isLoginPage) return '/login';
       if (isLoggedIn && isLoginPage) return '/dashboard';
@@ -71,6 +79,14 @@ GoRouter _buildRouter(Ref ref) {
           GoRoute(
               path: '/events',
               builder: (_, __) => const EventsPage()),
+          GoRoute(
+              path: '/devices/:id',
+              builder: (_, state) =>
+                  DeviceDetailPage(deviceId: state.pathParameters['id']!)),
+          GoRoute(
+              path: '/devices/:id/history',
+              builder: (_, state) =>
+                  DeviceHistoryPage(deviceId: state.pathParameters['id']!)),
           // Admin sub-section — inner shell provides the tab bar.
           ShellRoute(
             builder: (context, state, child) => AdminShell(child: child),
@@ -93,18 +109,6 @@ GoRouter _buildRouter(Ref ref) {
             ],
           ),
         ],
-      ),
-      // Device detail is outside the shell (full-screen)
-      GoRoute(
-        path: '/devices/:id',
-        builder: (_, state) =>
-            DeviceDetailPage(deviceId: state.pathParameters['id']!),
-      ),
-      // Device history is outside the shell (full-screen)
-      GoRoute(
-        path: '/devices/:id/history',
-        builder: (_, state) =>
-            DeviceHistoryPage(deviceId: state.pathParameters['id']!),
       ),
     ],
   );

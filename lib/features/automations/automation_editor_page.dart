@@ -164,7 +164,7 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
         await api.updateRule(widget.ruleId!, payload);
       }
       await ref.read(automationsProvider.notifier).reload();
-      if (mounted) context.go('/automations');
+      if (mounted) context.pop();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
@@ -193,6 +193,10 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
             ? 'New Automation'
             : 'Edit Automation'),
         actions: [
+          if (!_loading)
+            TextButton(
+                onPressed: () => context.pop(),
+                child: const Text('Cancel')),
           if (_loading)
             const Padding(
                 padding: EdgeInsets.all(14),

@@ -66,7 +66,7 @@ class _SceneEditorPageState extends ConsumerState<SceneEditorPage> {
         await api.updateScene(widget.sceneId!, payload);
       }
       ref.invalidate(scenesProvider);
-      if (mounted) context.go('/scenes');
+      if (mounted) context.pop();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
@@ -96,6 +96,10 @@ class _SceneEditorPageState extends ConsumerState<SceneEditorPage> {
             ? 'New Scene'
             : 'Edit Scene'),
         actions: [
+          if (!_loading)
+            TextButton(
+                onPressed: () => context.pop(),
+                child: const Text('Cancel')),
           if (_loading)
             const Padding(
                 padding: EdgeInsets.all(14),

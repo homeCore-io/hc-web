@@ -23,7 +23,7 @@ class AutomationListPage extends ConsumerWidget {
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => context.go('/automations/new'),
+        onPressed: () => context.push('/automations/new'),
         child: const Icon(Icons.add),
       ),
       body: rulesAsync.when(
@@ -141,7 +141,7 @@ class _RuleTile extends ConsumerWidget {
           ),
         ],
       ),
-      onTap: () => context.go('/automations/${rule.id}'),
+      onTap: () => context.push('/automations/${rule.id}'),
     );
   }
 }

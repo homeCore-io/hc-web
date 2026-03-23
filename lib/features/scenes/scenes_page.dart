@@ -60,7 +60,7 @@ class ScenesPage extends ConsumerWidget {
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => context.go('/scenes/new'),
+        onPressed: () => context.push('/scenes/new'),
         tooltip: 'New HomeCore scene',
         child: const Icon(Icons.add),
       ),
@@ -121,7 +121,7 @@ class _SceneCard extends ConsumerWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         // Plugin scenes have no editor; native scenes navigate to editor
-        onTap: scene.isPlugin ? null : () => context.go('/scenes/${scene.id}'),
+        onTap: scene.isPlugin ? null : () => context.push('/scenes/${scene.id}'),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(

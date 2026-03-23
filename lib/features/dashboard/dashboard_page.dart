@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/models/device_state.dart';
-import '../../core/models/hc_event.dart';
 import '../../core/models/mode_state.dart';
 import '../../core/models/scene.dart';
 import '../../core/providers/devices_provider.dart';
@@ -9,21 +8,14 @@ import '../../core/providers/events_provider.dart';
 import '../../core/providers/modes_provider.dart';
 import '../../core/providers/scenes_provider.dart';
 
-// Rolling list of recent events — kept in a simple StateProvider
-final _recentEventsProvider = StateProvider<List<HcEvent>>((ref) => []);
-
 class DashboardPage extends ConsumerWidget {
   const DashboardPage({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Accumulate recent events and show toasts for notable events
+    // Show toasts for notable events
     ref.listen(eventsStreamProvider, (_, next) {
       next.whenData((event) {
-        ref.read(_recentEventsProvider.notifier).update((list) {
-          final updated = [event, ...list];
-          return updated.length > 20 ? updated.sublist(0, 20) : updated;
-        });
         if (event.type == 'rule_fired') {
           final ruleName = event.data['rule_name'] as String? ??
               event.data['rule_id'] as String? ??
@@ -51,7 +43,6 @@ class DashboardPage extends ConsumerWidget {
     final devicesAsync = ref.watch(devicesProvider);
     final modesAsync = ref.watch(modesProvider);
     final scenesAsync = ref.watch(scenesProvider);
-    final recentEvents = ref.watch(_recentEventsProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Dashboard')),
@@ -99,9 +90,6 @@ class DashboardPage extends ConsumerWidget {
                 return _OfflineBanner(count: offline.length);
               }).valueOrNull ??
                   const SizedBox.shrink(),
-              const SizedBox(height: 16),
-              // Recent events
-              _RecentEventsPanel(events: recentEvents),
             ],
           ),
         ),
@@ -271,84 +259,3 @@ class _OfflineBanner extends StatelessWidget {
   }
 }
 
-class _RecentEventsPanel extends StatelessWidget {
-  final List<HcEvent> events;
-  const _RecentEventsPanel({required this.events});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Recent Events',
-            style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 8),
-        if (events.isEmpty)
-          const Text('No events yet',
-              style: TextStyle(color: Colors.grey))
-        else
-          ...events.take(10).map((e) => _EventRow(event: e)),
-      ],
-    );
-  }
-}
-
-class _EventRow extends StatelessWidget {
-  final HcEvent event;
-  const _EventRow({required this.event});
-
-  Color _color(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    switch (event.type) {
-      case 'device_state_changed':
-        return cs.primary;
-      case 'rule_fired':
-        return Colors.green;
-      case 'device_availability_changed':
-        return event.available == true ? Colors.green : cs.error;
-      case 'system_alert':
-        return cs.error;
-      case 'scene_activated':
-        return Colors.purple;
-      default:
-        return cs.outline;
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        children: [
-          Container(
-              width: 4,
-              height: 32,
-              color: _color(context),
-              margin: const EdgeInsets.only(right: 8)),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(event.type,
-                    style: Theme.of(context).textTheme.bodySmall),
-                if (event.deviceId != null)
-                  Text(event.deviceId!,
-                      overflow: TextOverflow.ellipsis),
-              ],
-            ),
-          ),
-          Text(
-            _formatTime(event.timestamp),
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _formatTime(DateTime t) {
-    final local = t.toLocal();
-    return '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}:${local.second.toString().padLeft(2, '0')}';
-  }
-}
