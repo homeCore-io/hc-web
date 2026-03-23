@@ -17,13 +17,34 @@ class DashboardPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Accumulate recent events
+    // Accumulate recent events and show toasts for notable events
     ref.listen(eventsStreamProvider, (_, next) {
       next.whenData((event) {
         ref.read(_recentEventsProvider.notifier).update((list) {
           final updated = [event, ...list];
           return updated.length > 20 ? updated.sublist(0, 20) : updated;
         });
+        if (event.type == 'rule_fired') {
+          final ruleName = event.data['rule_name'] as String? ??
+              event.data['rule_id'] as String? ??
+              'rule';
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Rule fired: $ruleName'),
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        } else if (event.type == 'scene_activated') {
+          final sceneName = event.data['scene_name'] as String? ??
+              event.data['scene_id'] as String? ??
+              'scene';
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Scene activated: $sceneName'),
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
       });
     });
 

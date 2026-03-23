@@ -4,9 +4,13 @@ import 'package:go_router/go_router.dart';
 import 'core/providers/auth_provider.dart';
 import 'core/theme/app_theme.dart';
 import 'features/auth/login_page.dart';
+import 'features/automations/automation_editor_page.dart';
+import 'features/automations/automation_list_page.dart';
 import 'features/dashboard/dashboard_page.dart';
 import 'features/devices/device_detail_page.dart';
 import 'features/devices/device_list_page.dart';
+import 'features/scenes/scene_editor_page.dart';
+import 'features/scenes/scenes_page.dart';
 import 'shared/widgets/app_shell.dart';
 
 GoRouter _buildRouter(Ref ref) {
@@ -32,12 +36,26 @@ GoRouter _buildRouter(Ref ref) {
               builder: (_, __) => const DeviceListPage()),
           GoRoute(
               path: '/automations',
+              builder: (_, __) => const AutomationListPage()),
+          GoRoute(
+              path: '/automations/new',
               builder: (_, __) =>
-                  const _PlaceholderPage(title: 'Automations')),
+                  const AutomationEditorPage(ruleId: 'new')),
+          GoRoute(
+              path: '/automations/:id',
+              builder: (_, state) => AutomationEditorPage(
+                  ruleId: state.pathParameters['id'])),
           GoRoute(
               path: '/scenes',
+              builder: (_, __) => const ScenesPage()),
+          GoRoute(
+              path: '/scenes/new',
               builder: (_, __) =>
-                  const _PlaceholderPage(title: 'Scenes')),
+                  const SceneEditorPage(sceneId: 'new')),
+          GoRoute(
+              path: '/scenes/:id',
+              builder: (_, state) =>
+                  SceneEditorPage(sceneId: state.pathParameters['id'])),
           GoRoute(
               path: '/events',
               builder: (_, __) =>
