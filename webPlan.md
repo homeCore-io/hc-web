@@ -573,36 +573,519 @@ The `NavigationRail` / `BottomNavigationBar` swap is handled in `AppShell`.
 
 ---
 
-## Open Questions / Decisions Pending
+## Open Questions — Resolution Plans
 
-1. **Base URL configuration** — How does the Flutter app know where HomeCore is?
-   - Option A: Hard-code at build time via `--dart-define=HOMECORE_URL=http://...`
-   - Option B: App fetches `/config.json` from Caddy before init (runtime configurable)
-   - Option C: Caddy always proxies `/api/v1/` so the Flutter app always uses relative paths
-   - **Recommendation: Option C** — cleanest, no config needed in the app. Caddy always proxies
-     to the backend. The app never needs to know the backend's direct address.
+Six questions were flagged during initial planning.  Two require HomeCore backend work; two are
+UX design decisions; two are deployment/configuration choices.  Each is resolved below with a
+concrete plan and phased work items.
 
-2. **Automation editor complexity** — The `parallel`, `conditional`, and `repeat_until` action
-   types involve nested action lists.  The Phase 3 editor will handle them with collapsible
-   nested list widgets, but a visual node-graph editor (drag-and-drop flow) would be ideal as a
-   Phase 6+ enhancement.
+---
 
-3. **Log file streaming** — HomeCore currently writes logs to files (`logs/homecore.YYYY-MM-DD`).
-   There is no streaming log API endpoint yet.  The admin system page will display a notice about
-   this; a future homeCore feature (`GET /api/v1/logs/stream` as a text/event-stream SSE endpoint)
-   would enable a live log viewer.  Should be tracked as a homeCore enhancement request.
+### Q1 — Base URL Configuration ✅ RESOLVED
 
-4. **Device capability schema** — The `attributes` map on `DeviceState` is free-form JSON.  The
-   UI infers control types from value shape (bool → toggle, 0–100 int → slider).  Plugin authors
-   could register a JSON Schema per device to drive richer auto-generated controls.  Track as a
-   future homeCore enhancement.
+**Decision: Option C — Caddy always proxies `/api/v1/`.**
 
-5. **Caddy deployment model** — Does Caddy run on the same machine as HomeCore, or separately?
-   - Same machine: `reverse_proxy localhost:8080` (simplest, recommended for v1)
-   - Separate: `reverse_proxy homecore.internal:8080` with DNS or `/etc/hosts`
+The Flutter app uses only relative paths (e.g. `fetch('/api/v1/devices')`).  Caddy is always
+the entry point; it proxies to HomeCore behind the scenes.  The app has no knowledge of the
+backend's host or port.
 
-6. **Multi-instance** — Will users need to switch between multiple HomeCore instances from one UI?
-   If so, a connection profile manager is needed.  Deferred to Phase 6+.
+**Benefits:**
+- Zero build-time configuration — same `build/web/` artifact works on any deployment
+- No runtime `config.json` fetch that could fail before auth
+- CORS is never an issue (same origin for both static files and API)
+- Caddy URL changes only require a `Caddyfile` edit, not a Flutter rebuild
+
+**Caddyfile — same-machine deployment (recommended default):**
+```
+:8443 {
+    tls internal
+    root * /opt/hc-web/build/web
+    try_files {path} /index.html
+
+    reverse_proxy /api/v1/* localhost:8080 {
+        header_up Host {upstream_hostport}
+    }
+
+    file_server
+    encode gzip
+}
+```
+
+**Caddyfile — separate-machine deployment:**
+```
+:8443 {
+    tls internal
+    root * /opt/hc-web/build/web
+    try_files {path} /index.html
+
+    reverse_proxy /api/v1/* homecore.internal:8080 {
+        header_up Host {upstream_hostport}
+    }
+
+    file_server
+    encode gzip
+}
+```
+
+**Caddyfile — public domain with auto-TLS (Let's Encrypt):**
+```
+yourdomain.com {
+    root * /var/www/hc-web
+    try_files {path} /index.html
+    reverse_proxy /api/v1/* localhost:8080
+    file_server
+    encode gzip
+}
+```
+
+Both `Caddyfile` (dev, localhost) and `Caddyfile.production` (public domain) will live in the
+repo root.  No HomeCore changes needed.
+
+**Phase 1 work items:**
+- [ ] Add `Caddyfile` (dev, same-machine, `tls internal`) to repo root
+- [ ] Add `Caddyfile.production` (Let's Encrypt) to repo root
+- [ ] Document both in README under "Deployment"
+
+---
+
+### Q2 — Automation Editor: Nested Action Types ✅ RESOLVED (two-tier approach)
+
+**Decision: Tree editor in Phase 3; visual canvas in Phase 6.**
+
+The action model supports three container types that hold sub-actions:
+- `Parallel` — all children run concurrently
+- `Conditional` — Rhai condition → then-branch / else-branch
+- `RepeatUntil` — Rhai condition + loop body
+
+**Phase 3 — Tree editor (collapsible, max 2 levels deep)**
+
+Each action is an `ActionCard` widget.  Container types render an indented sub-list.
+All re-ordering uses `ReorderableListView` at each nesting level independently.
+
+```
+ActionCard (set_device_state) [drag handle] [delete]
+ActionCard (delay: 2s)        [drag handle] [delete]
+ActionCard (parallel)         [drag handle] [delete]  ← ExpandedCard
+  └─ ActionCard (notify: phone)   [drag handle] [delete]
+  └─ ActionCard (call_service)    [drag handle] [delete]
+  └─ [+ Add action inside Parallel]
+ActionCard (conditional)      [drag handle] [delete]  ← ExpandedCard
+  ├─ condition: "current_hour() > 18"  [edit]
+  ├─ THEN
+  │   └─ ActionCard (set_device_state)
+  │   └─ [+ Add then-action]
+  └─ ELSE
+      └─ ActionCard (notify)
+      └─ [+ Add else-action]
+ActionCard (repeat_until)     [drag handle] [delete]  ← ExpandedCard
+  ├─ condition: "timer == finished"  [edit]
+  ├─ interval: 500 ms  [edit]
+  ├─ max_iterations: 100  [edit]
+  └─ ActionCard (delay: 500ms)
+  └─ [+ Add loop-action]
+[+ Add action]
+```
+
+Rules:
+- Max nesting depth: **2 levels**.  A `Parallel` inside a `Conditional` is allowed.
+  A `Parallel` inside a `Parallel` inside a `Conditional` is rejected at the UI level with
+  a tooltip explaining the limit.  The HomeCore rule engine supports arbitrary depth but the
+  UI caps it to keep authoring manageable.
+- Cross-level drag-and-drop is **not** supported in Phase 3.  Actions can only be reordered
+  within their own list.  Promote/demote buttons (↑ out, ↓ in) will be the escape hatch.
+- Rhai condition fields in `Conditional` and `RepeatUntil` use a monospace `TextField` with
+  syntax hint text showing available functions.
+
+**Phase 6 — Visual canvas editor (node graph)**
+
+Replace (or complement) the tree editor with a drag-and-drop canvas using `flutter_flow_chart`
+or a custom `CustomPainter`-based canvas:
+- Nodes for trigger, conditions, actions
+- Edge connections show execution flow
+- Container nodes (Parallel, Conditional) have embedded sub-canvases
+- Export to/import from the same JSON rule format — canvas is just a different view of the
+  same underlying data model
+
+**Phase 3 work items** (add to Phase 3 checklist):
+- [ ] `ActionCard` widget — renders any action type with drag handle + delete
+- [ ] `ParallelActionCard` — expandable, wraps a nested `ReorderableListView`
+- [ ] `ConditionalActionCard` — then/else sub-lists with Rhai condition editor
+- [ ] `RepeatUntilActionCard` — loop body sub-list + condition + interval fields
+- [ ] Nesting depth guard — `ActionListEditor` tracks depth, disables container-type options
+  at depth ≥ 2
+
+**Phase 6 work items** (add to Phase 6 checklist):
+- [ ] Visual node-graph canvas editor (`features/automations/canvas_editor_page.dart`)
+- [ ] Toggle between tree view and canvas view per-rule (preference stored locally)
+
+---
+
+### Q3 — Log Streaming: HomeCore Backend Work Required
+
+**Decision: Add `GET /api/v1/logs/stream` as a WebSocket endpoint in HomeCore.**
+
+WebSocket is preferred over SSE because the existing `/events/stream` WebSocket infrastructure
+is already in place, and a consistent connection model simplifies the Flutter client.
+
+#### HomeCore Implementation Plan
+
+**New tracing layer — `hc-logging/src/broadcast_layer.rs`**
+
+Add a custom `tracing_subscriber::Layer` that intercepts formatted log events and sends them
+into a `tokio::sync::broadcast::Sender<LogLine>`.  A ring buffer (e.g. last 500 lines) is held
+in an `Arc<Mutex<VecDeque<LogLine>>>` so new subscribers receive recent history before switching
+to live.
+
+```rust
+pub struct LogLine {
+    pub timestamp: DateTime<Utc>,
+    pub level:     String,   // "ERROR" | "WARN" | "INFO" | "DEBUG" | "TRACE"
+    pub target:    String,   // "hc_core::engine"
+    pub message:   String,
+    pub fields:    serde_json::Value,  // structured key-value pairs from tracing spans
+}
+```
+
+The broadcast sender is created once at startup and its clone passed to:
+1. The tracing subscriber (produces lines)
+2. The API layer (consumes lines for streaming)
+
+**New API endpoint — `hc-api/src/handlers/logs.rs`**
+
+```
+GET /api/v1/logs/stream
+  ?token=<JWT>            (WebSocket auth, same as /events/stream)
+  &level=info             (minimum level: error | warn | info | debug | trace)
+  &target=hc_core         (optional prefix filter, e.g. "hc_core" matches "hc_core::engine")
+  &history=100            (lines of ring-buffer history to send before live, default 50, max 500)
+```
+
+- Upgrades to WebSocket
+- Sends ring buffer history first (as individual JSON frames, oldest first)
+- Then streams live `LogLine` JSON frames as they arrive from the broadcast channel
+- Closes gracefully when client disconnects
+
+**Wire-up in `homeCore/src/main.rs`**
+
+```rust
+// After building the tracing subscriber:
+let (log_tx, _) = broadcast::channel::<LogLine>(2048);
+let log_ring = Arc::new(Mutex::new(VecDeque::with_capacity(500)));
+
+// Pass log_tx to the BroadcastLayer
+tracing_subscriber::registry()
+    .with(stderr_layer)
+    .with(file_layer)
+    .with(BroadcastLayer::new(log_tx.clone(), Arc::clone(&log_ring)))
+    .init();
+
+// Pass log_tx + log_ring to the API router
+let app = hc_api::build_router(..., log_tx, log_ring);
+```
+
+**hc-web implementation — `features/admin/logs_page.dart`** (Phase 5)
+
+- Connects to `wss://.../api/v1/logs/stream?token=JWT&level=info`
+- Level filter dropdown (error/warn/info/debug)
+- Target filter text field (prefix match)
+- Scrolling log view — newest at bottom, auto-scroll with pause
+- Color coding: ERROR=red, WARN=amber, INFO=blue, DEBUG=grey
+- Line format: `[timestamp] LEVEL target: message {fields}`
+- Download button: exports current buffer as `.log` text file
+- "Clear view" button (clears local display, not server logs)
+
+**HomeCore work items** (new Phase — see Phase 7 below):
+- [ ] `hc-logging`: add `LogLine` type to `hc-types` or `hc-logging`
+- [ ] `hc-logging`: implement `BroadcastLayer` (`tracing_subscriber::Layer` impl)
+- [ ] `hc-logging`: ring buffer (`Arc<Mutex<VecDeque<LogLine>>>`) with configurable capacity
+- [ ] `hc-api`: `GET /api/v1/logs/stream` WS handler with level + target filters
+- [ ] `homeCore/src/main.rs`: wire `BroadcastLayer` into tracing init, pass to API router
+- [ ] Add `[logging.stream]` section to `homecore.toml`:
+  ```toml
+  [logging.stream]
+  enabled         = true
+  ring_buffer_size = 500   # lines kept for new subscriber history
+  ```
+
+**hc-web work items** (Phase 5 addition):
+- [ ] `features/admin/logs_page.dart` — WS log stream viewer
+- [ ] Level/target filter controls
+- [ ] Color-coded log renderer
+- [ ] Download buffer as text file
+
+---
+
+### Q4 — Device Capability Schema: HomeCore Backend Work Required
+
+**Decision: Add per-device capability schema registration, stored in redb, exposed via API.**
+
+Currently `DeviceState.attributes` is free-form JSON.  The UI guesses control types from value
+shape.  A registered schema lets plugins declare the meaning, range, and writability of each
+attribute — enabling richer, more accurate controls without heuristics.
+
+#### HomeCore Implementation Plan
+
+**New type — `hc-types/src/schema.rs`**
+
+```rust
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeviceSchema {
+    pub attributes: HashMap<String, AttributeSchema>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AttributeSchema {
+    pub kind:         AttributeKind,
+    pub writable:     bool,
+    pub display_name: Option<String>,
+    pub unit:         Option<String>,   // "%", "K", "lux", "°C", "W", etc.
+    pub min:          Option<f64>,      // for numeric kinds
+    pub max:          Option<f64>,
+    pub step:         Option<f64>,      // slider step size
+    pub options:      Option<Vec<String>>,  // for Enum kind
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AttributeKind {
+    Bool,
+    Integer,
+    Float,
+    String,
+    Enum,           // fixed set of string options
+    ColorXy,        // {x: f64, y: f64} CIE xy
+    ColorRgb,       // {r, g, b} 0–255
+    ColorTemp,      // integer Kelvin (use min/max for range)
+    Json,           // opaque, display as raw JSON
+}
+```
+
+**Schema storage in `hc-state`**
+
+Add a new redb table `DEVICE_SCHEMAS: &str → &[u8]` (device_id → JSON-encoded `DeviceSchema`).
+
+```rust
+// New state store methods:
+async fn upsert_device_schema(&self, device_id: &str, schema: &DeviceSchema) -> Result<()>;
+async fn get_device_schema(&self, device_id: &str) -> Result<Option<DeviceSchema>>;
+```
+
+**Plugin SDK registration** (`plugins/plugin-sdk-rs/src/lib.rs`)
+
+Extend `PublishHandle::register_device` to accept an optional schema:
+
+```rust
+pub async fn register_device_with_schema(
+    &self,
+    device_id: &str,
+    name: &str,
+    device_type: &str,
+    area: Option<&str>,
+    schema: Option<&DeviceSchema>,
+) -> Result<()>
+```
+
+The schema is published to `homecore/devices/{id}/schema` (retained=true) and persisted by the
+state bridge when received.
+
+**New API endpoints**
+
+```
+GET  /api/v1/devices/{id}/schema
+     → DeviceSchema | 404 if no schema registered
+
+GET  /api/v1/devices?include_schema=true
+     → [DeviceState & { schema?: DeviceSchema }]
+```
+
+The `include_schema=true` query param inlines the schema into the device list response so the
+UI can fetch everything in one call on load.
+
+**hc-web usage — `core/utils/device_attribute_type.dart`**
+
+Replace the current heuristic (`0–100 int → slider`) with schema-driven rendering:
+
+```dart
+Widget buildControl(String attr, dynamic value, AttributeSchema? schema) {
+  if (schema == null) return _heuristicControl(attr, value);  // fallback
+
+  return switch (schema.kind) {
+    AttributeKind.bool      => Switch(value: value as bool, ...),
+    AttributeKind.integer ||
+    AttributeKind.float     => schema.min != null && schema.max != null
+                                 ? Slider(min: schema.min!, max: schema.max!, ...)
+                                 : NumericInput(...),
+    AttributeKind.enum_     => DropdownButton(items: schema.options!, ...),
+    AttributeKind.colorXy   => ColorPickerXy(...),
+    AttributeKind.colorRgb  => ColorPickerRgb(...),
+    AttributeKind.colorTemp => Slider(min: schema.min ?? 2700, max: schema.max ?? 6500, ...),
+    AttributeKind.string    => TextField(...),
+    AttributeKind.json      => JsonViewer(...),
+  };
+}
+```
+
+Read-only attributes (`writable: false`) render as display-only (no interaction, grey text).
+Unit labels (e.g. "%" , "K", "°C") are shown next to sliders and inputs.
+
+**HomeCore work items** (Phase 7):
+- [ ] `hc-types`: add `DeviceSchema`, `AttributeSchema`, `AttributeKind` to `src/schema.rs`
+- [ ] `hc-state`: `DEVICE_SCHEMAS` redb table + `upsert/get_device_schema` methods
+- [ ] `hc-core/state_bridge.rs`: handle retained `homecore/devices/{id}/schema` MQTT messages
+- [ ] `plugin-sdk-rs`: `register_device_with_schema` and MQTT publish of schema
+- [ ] `hc-api`: `GET /devices/{id}/schema` handler + `?include_schema=true` on device list
+- [ ] Update hc-hue, hc-wled to register schemas for their known attribute types
+
+**hc-web work items** (Phase 4 enhancement):
+- [ ] `core/models/device_schema.dart` — freezed model for `DeviceSchema` / `AttributeSchema`
+- [ ] `devices_provider.dart` — fetch schema alongside devices (`?include_schema=true`)
+- [ ] `core/utils/device_attribute_type.dart` — schema-driven control builder with heuristic fallback
+- [ ] `ColorPickerXy` and `ColorPickerRgb` widgets for Hue color control
+- [ ] `ColorTempSlider` widget for Kelvin color temperature
+
+---
+
+### Q5 — Caddy Deployment Model ✅ RESOLVED
+
+**Decision: Same-machine (localhost proxy) is the standard and documented default.**
+Separate-machine is a supported variant documented in `Caddyfile.production`.
+
+The HomeCore process binds to `0.0.0.0:8080` by default.  When Caddy runs on the same machine,
+it is preferable to restrict HomeCore to `127.0.0.1:8080` so it is not directly reachable on
+the network — all traffic must pass through Caddy (which handles TLS and auth for the UI).
+Note: plugins on other machines still need to reach the MQTT broker (port 1883), which is
+separate from the HTTP API.
+
+**Recommended `homecore.toml` change when behind Caddy:**
+```toml
+[server]
+host = "127.0.0.1"   # API only reachable via Caddy; change from 0.0.0.0
+port = 8080
+```
+
+**Phase 1 work items:**
+- [ ] `Caddyfile` in repo root — dev config (`:8443`, `tls internal`, `localhost:8080`)
+- [ ] `Caddyfile.production` in repo root — public domain + Let's Encrypt
+- [ ] README: deployment section covering both models + `homecore.toml` server binding note
+
+---
+
+### Q6 — Multi-Instance Support ✅ RESOLVED (deferred to Phase 7, design now)
+
+**Decision: Single-instance in Phases 1–6.  Connection profile manager in Phase 7.**
+
+The Phase 7 multi-instance design:
+
+**Connection profiles** — stored in `flutter_secure_storage` as a JSON list:
+
+```json
+[
+  {
+    "id": "uuid",
+    "name": "Home",
+    "baseUrl": "https://home.example.com",
+    "lastUsed": "2026-03-22T20:00:00Z"
+  },
+  {
+    "id": "uuid",
+    "name": "Cabin",
+    "baseUrl": "https://cabin.example.com",
+    "lastUsed": "2026-03-01T10:00:00Z"
+  }
+]
+```
+
+Each profile stores its own JWT separately (`flutter_secure_storage` key: `jwt_{profile_id}`).
+
+**UI changes:**
+- Login page gains a profile selector (dropdown of saved profiles + "Add new" option)
+- App bar shows current instance name with a switch button
+- "Add instance" flow: enter base URL → test connectivity (`GET /health`) → proceed to login
+- Profile management page (rename, delete, reorder) in Settings
+
+**API client change:**
+- `HomecoreClient` becomes profile-aware: `HomecoreClient(profile: ConnectionProfile)`
+- All Riverpod providers take `profileId` as a family parameter so each instance has its own
+  cached state
+
+**Phase 7 work items:**
+- [ ] `core/models/connection_profile.dart` — freezed model
+- [ ] `core/providers/profiles_provider.dart` — CRUD on stored profiles
+- [ ] `features/auth/login_page.dart` — profile selector + "Add instance" flow
+- [ ] `core/api/homecore_client.dart` — accept `baseUrl` from profile (not hardcoded `/`)
+- [ ] App bar instance switcher
+- [ ] `features/settings/profiles_page.dart`
+
+---
+
+## Revised Phased Plan
+
+The original six phases stand.  Two new phases are added to address the backend work items
+from Q3 and Q4.  These are backend (HomeCore) phases that unblock hc-web enhancements.
+
+| Phase | Scope | Repo |
+|-------|-------|------|
+| 1 | Foundation: auth, device list, Caddy | hc-web |
+| 2 | Dashboard + device control + live WS | hc-web |
+| 3 | Automations (tree editor) + Scenes | hc-web |
+| 4 | History charts + Events + Modes | hc-web |
+| 5 | Admin (users/plugins/areas/system + log viewer) | hc-web |
+| 6 | PWA, polish, node-graph editor, hardening | hc-web |
+| **7** | **HomeCore: log streaming API + device schema** | **homeCore** |
+| **8** | **hc-web: schema-driven controls + multi-instance** | **hc-web** |
+
+Phase 7 can be worked in parallel with Phases 3–5 since it is independent backend work.
+The hc-web enhancements in Phase 8 are gated on Phase 7 being complete.
+
+### Phase 7 — HomeCore Backend Enhancements
+**Goal:** Add log streaming and device capability schema APIs to HomeCore.
+
+**Log streaming (Q3):**
+- [ ] `hc-types`: add `LogLine` struct (`timestamp`, `level`, `target`, `message`, `fields`)
+- [ ] `hc-logging`: implement `BroadcastLayer` (custom `tracing_subscriber::Layer`)
+- [ ] `hc-logging`: ring buffer (`Arc<Mutex<VecDeque<LogLine>>>`, configurable capacity)
+- [ ] `hc-api`: `GET /api/v1/logs/stream` WS handler (level + target query filters)
+- [ ] `homeCore/src/main.rs`: wire `BroadcastLayer` into subscriber init, pass to API
+- [ ] `homecore.toml`: add `[logging.stream]` section with `enabled` + `ring_buffer_size`
+
+**Device capability schema (Q4):**
+- [ ] `hc-types`: add `DeviceSchema`, `AttributeSchema`, `AttributeKind` to `src/schema.rs`
+- [ ] `hc-state`: `DEVICE_SCHEMAS` redb table; `upsert_device_schema` / `get_device_schema`
+- [ ] `hc-core/state_bridge.rs`: consume retained `homecore/devices/{id}/schema` MQTT topic
+- [ ] `plugin-sdk-rs`: `register_device_with_schema`; publishes schema as retained MQTT message
+- [ ] `hc-api`: `GET /devices/{id}/schema`; `?include_schema=true` on device list
+- [ ] `hc-hue`: register schemas for `on` (bool), `brightness_pct` (int, 0–100, "%"),
+     `color_xy` (ColorXy), `color_temp` (ColorTemp, 2000–6500 K)
+- [ ] `hc-wled`: register schemas for `on` (bool), `brightness_pct` (int, 0–100, "%"),
+     `preset` (int), `effect` (Enum, populated from effect list)
+
+**Deliverable:** HomeCore exposes live log streaming and rich device schemas.
+
+---
+
+### Phase 8 — hc-web Schema-Driven Controls + Multi-Instance
+**Goal:** Replace control heuristics with schema; support multiple HomeCore instances.
+
+**Schema-driven controls (Q4, gated on Phase 7):**
+- [ ] `core/models/device_schema.dart` — freezed models
+- [ ] `devices_provider.dart` — `GET /devices?include_schema=true`
+- [ ] `core/utils/device_attribute_type.dart` — schema-driven `buildControl()` with fallback
+- [ ] `ColorPickerXy` widget (Hue CIE xy color wheel)
+- [ ] `ColorTempSlider` widget (Kelvin range with warm/cool gradient)
+- [ ] `ColorPickerRgb` widget (WLED RGB)
+- [ ] Unit labels on sliders and inputs
+- [ ] Read-only attribute display (non-writable schema fields)
+
+**Multi-instance (Q6):**
+- [ ] `core/models/connection_profile.dart`
+- [ ] `core/providers/profiles_provider.dart`
+- [ ] Login page profile selector + "Add instance" flow
+- [ ] `HomecoreClient` accepts `baseUrl` per profile
+- [ ] App bar instance switcher
+- [ ] `features/settings/profiles_page.dart`
+
+**Deliverable:** Rich device controls (color pickers, typed sliders); seamlessly switch
+between multiple HomeCore installations.
 
 ---
 
@@ -629,4 +1112,4 @@ flutter test
 
 ---
 
-*Last updated: 2026-03-23 — initial planning document*
+*Last updated: 2026-03-23 — open questions resolved; Phases 7–8 added*
