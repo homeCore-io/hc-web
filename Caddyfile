@@ -1,20 +1,20 @@
 {
-    admin off
+	admin off
 }
 
 :8090 {
-    # Serve Flutter web build
-    root * /home/john/RustroverProjects/homeCore/hc-web/build/web
-    encode gzip
+	# Serve Flutter web build
+	root * /home/john/RustroverProjects/homeCore/clients/hc-web/build/web
+	encode gzip
 
-    # Proxy API calls to HomeCore
-    handle /api/v1/* {
-        reverse_proxy localhost:8080
-    }
+	# Proxy API calls to HomeCore
+	handle /api/v1/* {
+		reverse_proxy localhost:8080
+	}
 
-    # SPA fallback
-    handle {
-        try_files {path} /index.html
-        file_server
-    }
+	# SPA fallback
+	handle {
+		try_files {path} /index.html
+		file_server
+	}
 }
