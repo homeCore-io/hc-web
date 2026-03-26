@@ -18,7 +18,30 @@ final usersApiProvider = Provider<UsersApi>((ref) {
 class AuthNotifier extends AsyncNotifier<bool> {
   @override
   Future<bool> build() async {
-    return ref.read(homecoreClientProvider).hasToken();
+    final client = ref.read(homecoreClientProvider);
+
+    // Clear any stale callback from a previous build cycle.
+    client.onUnauthorized = null;
+
+    final hasToken = await client.hasToken();
+    if (!hasToken) return false;
+
+    // Validate the stored token against the server. If it's expired or invalid,
+    // clear it and fall through to the login page.
+    try {
+      await ref.read(usersApiProvider).me();
+    } catch (_) {
+      await client.clearToken();
+      return false;
+    }
+
+    // Token is valid — wire the mid-session 401 callback now so any future
+    // expiry during the session triggers an immediate logout/redirect.
+    client.onUnauthorized = () {
+      state = const AsyncData(false);
+    };
+
+    return true;
   }
 
   Future<void> login(String username, String password) async {

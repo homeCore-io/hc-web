@@ -5,6 +5,10 @@ class HomecoreClient {
   static const _tokenKey = 'jwt_token';
   late final Dio dio;
 
+  /// Called when any request receives a 401. Set by [AuthNotifier] to trigger
+  /// a logout/redirect without requiring Riverpod access here.
+  void Function()? onUnauthorized;
+
   HomecoreClient() {
     dio = Dio(BaseOptions(
       baseUrl: '/api/v1',
@@ -21,9 +25,10 @@ class HomecoreClient {
         }
         handler.next(options);
       },
-      onError: (error, handler) {
+      onError: (error, handler) async {
         if (error.response?.statusCode == 401) {
-          // Token expired — caller should redirect to login
+          await clearToken();
+          onUnauthorized?.call();
         }
         handler.next(error);
       },
