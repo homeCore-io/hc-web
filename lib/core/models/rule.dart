@@ -3,6 +3,7 @@ class HcRule {
   final String name;
   final bool enabled;
   final int priority;
+  final int? cooldownSecs;
   final Map<String, dynamic> trigger;
   final List<Map<String, dynamic>> conditions;
   final List<Map<String, dynamic>> actions;
@@ -12,6 +13,7 @@ class HcRule {
     required this.name,
     required this.enabled,
     required this.priority,
+    this.cooldownSecs,
     required this.trigger,
     required this.conditions,
     required this.actions,
@@ -22,6 +24,7 @@ class HcRule {
         name: json['name'] as String,
         enabled: json['enabled'] as bool? ?? true,
         priority: json['priority'] as int? ?? 0,
+        cooldownSecs: json['cooldown_secs'] as int?,
         trigger: Map<String, dynamic>.from(json['trigger'] as Map? ?? {}),
         conditions: (json['conditions'] as List? ?? [])
             .map((e) => Map<String, dynamic>.from(e as Map))
@@ -36,6 +39,7 @@ class HcRule {
         'name': name,
         'enabled': enabled,
         'priority': priority,
+        if (cooldownSecs != null) 'cooldown_secs': cooldownSecs,
         'trigger': trigger,
         'conditions': conditions,
         'actions': actions,
@@ -56,6 +60,8 @@ class HcRule {
         return 'Manual';
       case 'mqtt_message':
         return 'MQTT: ${trigger['topic_pattern']}';
+      case 'device_availability_changed':
+        return 'Availability: ${trigger['device_id']}';
       default:
         return t;
     }

@@ -28,7 +28,7 @@ class SystemPage extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          _SectionHeader('Health'),
+          const _SectionHeader('Health'),
           healthAsync.when(
             loading: () => const Card(
               child: ListTile(
@@ -65,7 +65,7 @@ class SystemPage extends ConsumerWidget {
             },
           ),
           const SizedBox(height: 16),
-          _SectionHeader('Signed in as'),
+          const _SectionHeader('Signed in as'),
           Card(
             child: ListTile(
               leading: const Icon(Icons.account_circle_outlined),
@@ -75,7 +75,7 @@ class SystemPage extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 16),
-          _SectionHeader('API'),
+          const _SectionHeader('API'),
           Card(
             child: ListTile(
               leading: const Icon(Icons.api),

@@ -28,6 +28,7 @@ class AutomationsNotifier extends AsyncNotifier<List<HcRule>> {
             name: r.name,
             enabled: enabled,
             priority: r.priority,
+            cooldownSecs: r.cooldownSecs,
             trigger: r.trigger,
             conditions: r.conditions,
             actions: r.actions)

@@ -34,6 +34,7 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
 
   static const _triggerTypes = [
     'device_state_changed',
+    'device_availability_changed',
     'time_of_day',
     'sun_event',
     'webhook_received',
@@ -113,6 +114,8 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
             t['to'] = jsonDecode(_triggerCtrls['to']!.text);
           } catch (_) {}
         }
+      case 'device_availability_changed':
+        t['device_id'] = _triggerCtrls['device_id']!.text;
       case 'time_of_day':
         t['time'] = _triggerCtrls['time']!.text;
         t['days'] = _triggerCtrls['days']!
@@ -179,9 +182,9 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
   void dispose() {
     _nameCtrl.dispose();
     _priorityCtrl.dispose();
-    for (final c in _triggerCtrls.values) c.dispose();
-    for (final c in _conditionCtrls) c.dispose();
-    for (final c in _actionCtrls) c.dispose();
+    for (final c in _triggerCtrls.values) { c.dispose(); }
+    for (final c in _conditionCtrls) { c.dispose(); }
+    for (final c in _actionCtrls) { c.dispose(); }
     super.dispose();
   }
 
@@ -238,7 +241,7 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
             // Trigger section
             const _SectionHeader(title: 'Trigger'),
             DropdownButtonFormField<String>(
-              value: _triggerType,
+              initialValue: _triggerType,
               items: _triggerTypes
                   .map((t) => DropdownMenuItem(value: t, child: Text(t)))
                   .toList(),
@@ -304,6 +307,11 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
               ctrl: _triggerCtrls['to']!,
               label: 'To value (JSON, optional)'),
         ];
+      case 'device_availability_changed':
+        return [
+          _TriggerField(
+              ctrl: _triggerCtrls['device_id']!, label: 'Device ID'),
+        ];
       case 'time_of_day':
         return [
           _TriggerField(
@@ -316,7 +324,7 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
         return [
           StatefulBuilder(
             builder: (context, setState) => DropdownButtonFormField<String>(
-              value: _triggerCtrls['event']!.text.isEmpty
+              initialValue: _triggerCtrls['event']!.text.isEmpty
                   ? 'sunset'
                   : _triggerCtrls['event']!.text,
               items: ['sunrise', 'sunset', 'solar_noon', 'civil_dawn', 'civil_dusk']

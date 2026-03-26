@@ -80,7 +80,7 @@ class _SceneEditorPageState extends ConsumerState<SceneEditorPage> {
   @override
   void dispose() {
     _nameCtrl.dispose();
-    for (final c in _stateRows.values) c.dispose();
+    for (final c in _stateRows.values) { c.dispose(); }
     super.dispose();
   }
 
