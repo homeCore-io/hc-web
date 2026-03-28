@@ -1963,29 +1963,45 @@ class _ActionEditorDialogState extends State<_ActionEditorDialog> {
   static const _actionTypes = [
     'set_device_state',
     'delay',
+    'run_script',
     'notify',
     'log_message',
     'fire_event',
-    'comment',
     'set_mode',
     'set_hub_variable',
     'run_rule_actions',
+    'parallel',
+    'conditional',
+    'repeat_until',
     'exit_rule',
     'stop_rule_chain',
+    'comment',
   ];
 
   static const _actionLabels = {
     'set_device_state': 'Set Device State',
     'delay': 'Delay',
+    'run_script': 'Run Script (Rhai)',
     'notify': 'Notify',
     'log_message': 'Log Message',
     'fire_event': 'Fire Event',
-    'comment': 'Comment',
     'set_mode': 'Set Mode',
     'set_hub_variable': 'Set Hub Variable',
     'run_rule_actions': 'Run Rule Actions',
+    'parallel': 'Parallel (run actions concurrently)',
+    'conditional': 'Conditional (if/then/else)',
+    'repeat_until': 'Repeat Until',
     'exit_rule': 'Exit Rule',
     'stop_rule_chain': 'Stop Rule Chain',
+    'comment': 'Comment',
+  };
+
+  static const _jsonBlockTypes = {'parallel', 'conditional', 'repeat_until'};
+
+  static const _jsonBlockTemplates = {
+    'parallel': '{\n  "type": "parallel",\n  "actions": [\n    {"type": "set_device_state", "device_id": "", "state": {}}\n  ]\n}',
+    'conditional': '{\n  "type": "conditional",\n  "expression": "ctx.get(\\"on\\") == true",\n  "then_actions": [\n    {"type": "set_device_state", "device_id": "", "state": {}}\n  ],\n  "else_actions": []\n}',
+    'repeat_until': '{\n  "type": "repeat_until",\n  "condition_expression": "ctx.get(\\"on\\") == true",\n  "max_iterations": 10,\n  "actions": [\n    {"type": "delay", "duration_secs": 1}\n  ]\n}',
   };
 
   @override
@@ -1998,8 +2014,10 @@ class _ActionEditorDialogState extends State<_ActionEditorDialog> {
       _type = 'set_device_state';
       _data = {'type': _type};
     }
-    if (!_actionTypes.contains(_type)) {
-      _jsonCtrl.text = const JsonEncoder.withIndent('  ').convert(_data);
+    if (!_actionTypes.contains(_type) || _jsonBlockTypes.contains(_type)) {
+      final template = _jsonBlockTemplates[_type];
+      _jsonCtrl.text = template ??
+          const JsonEncoder.withIndent('  ').convert(_data);
     }
   }
 
@@ -2018,7 +2036,7 @@ class _ActionEditorDialogState extends State<_ActionEditorDialog> {
   }
 
   Map<String, dynamic>? _build() {
-    if (!_actionTypes.contains(_type)) {
+    if (!_actionTypes.contains(_type) || _jsonBlockTypes.contains(_type)) {
       try {
         return Map<String, dynamic>.from(jsonDecode(_jsonCtrl.text) as Map);
       } catch (_) {
@@ -2030,7 +2048,7 @@ class _ActionEditorDialogState extends State<_ActionEditorDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final isKnown = _actionTypes.contains(_type);
+    final isKnown = _actionTypes.contains(_type) && !_jsonBlockTypes.contains(_type);
     return AlertDialog(
       title: Text(widget.initial == null ? 'Add Action' : 'Edit Action'),
       content: SizedBox(
@@ -2063,8 +2081,9 @@ class _ActionEditorDialogState extends State<_ActionEditorDialog> {
                   setState(() {
                     _type = v;
                     _data = {'type': v};
-                    if (!_actionTypes.contains(v)) {
-                      _jsonCtrl.text =
+                    if (!_actionTypes.contains(v) ||
+                        _jsonBlockTypes.contains(v)) {
+                      _jsonCtrl.text = _jsonBlockTemplates[v] ??
                           const JsonEncoder.withIndent('  ').convert(_data);
                     }
                   });
@@ -2073,6 +2092,15 @@ class _ActionEditorDialogState extends State<_ActionEditorDialog> {
               const SizedBox(height: 16),
               if (isKnown)
                 _buildKnownActionForm()
+              else if (_type == 'parallel')
+                _buildBlockJsonForm(
+                  'Runs all listed actions concurrently. Edit the "actions" array below.')
+              else if (_type == 'conditional')
+                _buildBlockJsonForm(
+                  'Evaluates a Rhai expression; runs then_actions if true, else_actions if false.')
+              else if (_type == 'repeat_until')
+                _buildBlockJsonForm(
+                  'Repeats actions until condition_expression is true (or max_iterations reached).')
               else
                 _buildJsonForm(),
             ],
@@ -2325,6 +2353,42 @@ class _ActionEditorDialogState extends State<_ActionEditorDialog> {
           onChanged: (v) => _set('rule_id', v),
         );
 
+      case 'run_script':
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Rhai script. Use set_device_state(id, state), notify(channel, msg), http_get(url), publish_mqtt(topic, payload).',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.outline),
+            ),
+            const SizedBox(height: 8),
+            TextFormField(
+              initialValue: _data['script'] as String? ?? '',
+              decoration: const InputDecoration(
+                labelText: 'Script (Rhai)',
+                border: OutlineInputBorder(),
+                helperText: 'Script runs in a sandboxed Rhai environment',
+              ),
+              maxLines: 10,
+              style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+              onChanged: (v) => _set('script', v),
+            ),
+            const SizedBox(height: 8),
+            _FormField(
+              label: 'Timeout seconds (optional)',
+              value: (_data['timeout_secs'] as num?)?.toString() ?? '',
+              keyboardType: TextInputType.number,
+              hint: 'Default: 5',
+              onChanged: (v) {
+                final n = int.tryParse(v);
+                if (n == null) _remove('timeout_secs');
+                else _set('timeout_secs', n);
+              },
+            ),
+          ],
+        );
+
       case 'exit_rule':
         return const Padding(
           padding: EdgeInsets.symmetric(vertical: 8),
@@ -2346,6 +2410,21 @@ class _ActionEditorDialogState extends State<_ActionEditorDialog> {
       default:
         return _buildJsonForm();
     }
+  }
+
+  Widget _buildBlockJsonForm(String description) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          description,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Theme.of(context).colorScheme.outline),
+        ),
+        const SizedBox(height: 8),
+        _buildJsonForm(),
+      ],
+    );
   }
 
   Widget _buildJsonForm() {
