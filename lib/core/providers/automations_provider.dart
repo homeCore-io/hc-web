@@ -29,9 +29,11 @@ class AutomationsNotifier extends AsyncNotifier<List<HcRule>> {
             enabled: enabled,
             priority: r.priority,
             cooldownSecs: r.cooldownSecs,
+            runMode: r.runMode,
             trigger: r.trigger,
             conditions: r.conditions,
-            actions: r.actions)
+            actions: r.actions,
+            tags: r.tags)
         : r).toList());
   }
 

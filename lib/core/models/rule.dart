@@ -5,6 +5,7 @@ class HcRule {
   final int priority;
   final int? cooldownSecs;
   final String runMode;
+  final int maxQueue;
   final Map<String, dynamic> trigger;
   final List<Map<String, dynamic>> conditions;
   final List<Map<String, dynamic>> actions;
@@ -17,6 +18,7 @@ class HcRule {
     required this.priority,
     this.cooldownSecs,
     this.runMode = 'parallel',
+    this.maxQueue = 10,
     required this.trigger,
     required this.conditions,
     required this.actions,
@@ -29,7 +31,8 @@ class HcRule {
         enabled: json['enabled'] as bool? ?? true,
         priority: json['priority'] as int? ?? 0,
         cooldownSecs: json['cooldown_secs'] as int?,
-        runMode: json['run_mode'] as String? ?? 'parallel',
+        runMode: _parseRunMode(json['run_mode']),
+        maxQueue: _parseMaxQueue(json['run_mode']),
         trigger: Map<String, dynamic>.from(json['trigger'] as Map? ?? {}),
         conditions: (json['conditions'] as List? ?? [])
             .map((e) => Map<String, dynamic>.from(e as Map))
@@ -47,13 +50,31 @@ class HcRule {
         'name': name,
         'enabled': enabled,
         'priority': priority,
-        'run_mode': runMode,
+        if (runMode != 'parallel') 'run_mode': encodeRunMode(runMode, maxQueue),
         if (cooldownSecs != null) 'cooldown_secs': cooldownSecs,
         'trigger': trigger,
         'conditions': conditions,
         'actions': actions,
         'tags': tags,
       };
+
+  /// Rust RunMode is a tagged enum: null/absent → parallel; otherwise {"type": "..."}
+  static String _parseRunMode(dynamic raw) {
+    if (raw == null) return 'parallel';
+    if (raw is Map) return raw['type'] as String? ?? 'parallel';
+    if (raw is String) return raw; // defensive: already a string
+    return 'parallel';
+  }
+
+  static int _parseMaxQueue(dynamic raw) {
+    if (raw is Map) return raw['max_queue'] as int? ?? 10;
+    return 10;
+  }
+
+  static Map<String, dynamic> encodeRunMode(String mode, int maxQueue) {
+    if (mode == 'queued') return {'type': 'queued', 'max_queue': maxQueue};
+    return {'type': mode};
+  }
 
   String get triggerSummary => _buildTriggerSummary(trigger, null, null);
 

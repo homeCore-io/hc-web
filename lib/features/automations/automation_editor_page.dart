@@ -223,6 +223,7 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
   // Settings
   final _priorityCtrl = TextEditingController(text: '0');
   String _runMode = 'parallel';
+  int _maxQueue = 10;
   int? _cooldownSecs;
   String _cooldownPreset = 'none';
   final _cooldownCustomCtrl = TextEditingController();
@@ -250,6 +251,7 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
     _enabled = rule.enabled;
     _priorityCtrl.text = rule.priority.toString();
     _runMode = rule.runMode.isNotEmpty ? rule.runMode : 'parallel';
+    _maxQueue = rule.maxQueue;
     _trigger = Map<String, dynamic>.from(rule.trigger);
     _triggerType = rule.trigger['type'] as String? ?? 'device_state_changed';
     _conditions = rule.conditions.map((c) => Map<String, dynamic>.from(c)).toList();
@@ -299,7 +301,8 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
         'name': _nameCtrl.text.trim(),
         'enabled': _enabled,
         'priority': int.tryParse(_priorityCtrl.text) ?? 0,
-        'run_mode': _runMode,
+        if (_runMode != 'parallel')
+          'run_mode': HcRule.encodeRunMode(_runMode, _maxQueue),
         'trigger': _trigger,
         'conditions': _conditions,
         'actions': _actions,
