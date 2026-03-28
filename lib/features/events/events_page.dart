@@ -12,11 +12,20 @@ final _liveEventsProvider = StateProvider<List<HcEvent>>((ref) => []);
 // Selected type filters for live tab
 final _liveTypeFilterProvider = StateProvider<Set<String>>((ref) => {});
 
-// Historical events
+// History limit
+final _historyLimitProvider = StateProvider<int>((ref) => 100);
+
+// History type filter
+final _historyTypeFilterProvider = StateProvider<Set<String>>((ref) => {});
+
+// History device search
+final _historyDeviceSearchProvider = StateProvider<String>((ref) => '');
+
+// Historical events — family on limit so it re-fetches when limit changes
 final _historyEventsProvider =
-    FutureProvider.autoDispose<List<EventEntry>>((ref) async {
+    FutureProvider.autoDispose.family<List<EventEntry>, int>((ref, limit) async {
   final client = ref.watch(homecoreClientProvider);
-  return EventsHistoryApi(client).listEvents(limit: 100);
+  return EventsHistoryApi(client).listEvents(limit: limit);
 });
 
 class EventsPage extends ConsumerWidget {
@@ -63,27 +72,110 @@ const _allEventTypes = [
   'system_alert',
 ];
 
-class _LiveTab extends ConsumerWidget {
+// ── Live tab ──────────────────────────────────────────────────────────────────
+
+class _LiveTab extends ConsumerStatefulWidget {
   const _LiveTab();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_LiveTab> createState() => _LiveTabState();
+}
+
+class _LiveTabState extends ConsumerState<_LiveTab> {
+  final _searchCtrl = TextEditingController();
+  final _scrollCtrl = ScrollController();
+  bool _autoScroll = true;
+  String _deviceSearch = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _searchCtrl.addListener(() {
+      setState(() => _deviceSearch = _searchCtrl.text);
+    });
+    _scrollCtrl.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    _scrollCtrl.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    final pos = _scrollCtrl.position;
+    final atTop = pos.pixels <= 40; // list is newest-first, so top = newest
+    if (atTop != _autoScroll) {
+      setState(() => _autoScroll = atTop);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final events = ref.watch(_liveEventsProvider);
     final typeFilter = ref.watch(_liveTypeFilterProvider);
 
-    final filtered = typeFilter.isEmpty
+    var filtered = typeFilter.isEmpty
         ? events
         : events.where((e) => typeFilter.contains(e.type)).toList();
 
+    if (_deviceSearch.isNotEmpty) {
+      final q = _deviceSearch.toLowerCase();
+      filtered = filtered
+          .where((e) => e.deviceId?.toLowerCase().contains(q) == true)
+          .toList();
+    }
+
     return Column(
       children: [
+        // Search + clear row
+        Padding(
+          padding: const EdgeInsets.fromLTRB(8, 6, 8, 2),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _searchCtrl,
+                  decoration: InputDecoration(
+                    hintText: 'Filter by device ID…',
+                    prefixIcon: const Icon(Icons.search, size: 18),
+                    suffixIcon: _searchCtrl.text.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear, size: 16),
+                            onPressed: () => _searchCtrl.clear(),
+                          )
+                        : null,
+                    isDense: true,
+                    border: const OutlineInputBorder(),
+                    contentPadding:
+                        const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                icon: const Icon(Icons.delete_sweep_outlined),
+                tooltip: 'Clear buffer',
+                onPressed: () =>
+                    ref.read(_liveEventsProvider.notifier).state = [],
+              ),
+              IconButton(
+                icon: Icon(_autoScroll
+                    ? Icons.vertical_align_top
+                    : Icons.pause_outlined),
+                tooltip: _autoScroll ? 'Auto-scroll on' : 'Auto-scroll off',
+                onPressed: () => setState(() => _autoScroll = !_autoScroll),
+              ),
+            ],
+          ),
+        ),
         // Filter chips
         SizedBox(
-          height: 48,
+          height: 44,
           child: ListView(
             scrollDirection: Axis.horizontal,
-            padding:
-                const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             children: _allEventTypes.map((t) {
               final selected = typeFilter.contains(t);
               return Padding(
@@ -92,6 +184,7 @@ class _LiveTab extends ConsumerWidget {
                   label: Text(t.replaceAll('_', ' '),
                       style: const TextStyle(fontSize: 11)),
                   selected: selected,
+                  visualDensity: VisualDensity.compact,
                   onSelected: (val) {
                     final current = Set<String>.from(typeFilter);
                     if (val) {
@@ -107,6 +200,7 @@ class _LiveTab extends ConsumerWidget {
             }).toList(),
           ),
         ),
+        const Divider(height: 1),
         if (filtered.isEmpty)
           const Expanded(
               child: Center(
@@ -114,6 +208,7 @@ class _LiveTab extends ConsumerWidget {
         else
           Expanded(
             child: ListView.builder(
+              controller: _scrollCtrl,
               itemCount: filtered.length,
               itemBuilder: (context, i) =>
                   _LiveEventTile(event: filtered[i]),
@@ -170,40 +265,139 @@ class _LiveEventTile extends StatelessWidget {
   }
 }
 
-class _HistoryTab extends ConsumerWidget {
+// ── History tab ───────────────────────────────────────────────────────────────
+
+class _HistoryTab extends ConsumerStatefulWidget {
   const _HistoryTab();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final historyAsync = ref.watch(_historyEventsProvider);
+  ConsumerState<_HistoryTab> createState() => _HistoryTabState();
+}
+
+class _HistoryTabState extends ConsumerState<_HistoryTab> {
+  final _searchCtrl = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _searchCtrl.addListener(() {
+      ref.read(_historyDeviceSearchProvider.notifier).state =
+          _searchCtrl.text;
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final limit = ref.watch(_historyLimitProvider);
+    final historyAsync = ref.watch(_historyEventsProvider(limit));
+    final typeFilter = ref.watch(_historyTypeFilterProvider);
+    final deviceSearch = ref.watch(_historyDeviceSearchProvider);
 
     return Column(
       children: [
+        // Search + limit row
         Padding(
-          padding: const EdgeInsets.all(8),
+          padding: const EdgeInsets.fromLTRB(8, 6, 8, 2),
           child: Row(
             children: [
-              const Spacer(),
+              Expanded(
+                child: TextField(
+                  controller: _searchCtrl,
+                  decoration: InputDecoration(
+                    hintText: 'Filter by device ID…',
+                    prefixIcon: const Icon(Icons.search, size: 18),
+                    suffixIcon: _searchCtrl.text.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear, size: 16),
+                            onPressed: () => _searchCtrl.clear(),
+                          )
+                        : null,
+                    isDense: true,
+                    border: const OutlineInputBorder(),
+                    contentPadding:
+                        const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Limit buttons
+              for (final l in [50, 100, 500])
+                Padding(
+                  padding: const EdgeInsets.only(left: 4),
+                  child: ChoiceChip(
+                    label: Text('$l', style: const TextStyle(fontSize: 11)),
+                    selected: limit == l,
+                    visualDensity: VisualDensity.compact,
+                    onSelected: (_) =>
+                        ref.read(_historyLimitProvider.notifier).state = l,
+                  ),
+                ),
               IconButton(
                 icon: const Icon(Icons.refresh),
-                onPressed: () => ref.invalidate(_historyEventsProvider),
+                onPressed: () => ref.invalidate(_historyEventsProvider(limit)),
               ),
             ],
           ),
         ),
+        // Type chips
+        SizedBox(
+          height: 44,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            children: _allEventTypes.map((t) {
+              final selected = typeFilter.contains(t);
+              return Padding(
+                padding: const EdgeInsets.only(right: 4),
+                child: FilterChip(
+                  label: Text(t.replaceAll('_', ' '),
+                      style: const TextStyle(fontSize: 11)),
+                  selected: selected,
+                  visualDensity: VisualDensity.compact,
+                  onSelected: (val) {
+                    final current = Set<String>.from(typeFilter);
+                    if (val) current.add(t); else current.remove(t);
+                    ref.read(_historyTypeFilterProvider.notifier).state =
+                        current;
+                  },
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+        const Divider(height: 1),
         Expanded(
           child: historyAsync.when(
             loading: () =>
                 const Center(child: CircularProgressIndicator()),
             error: (e, _) => Center(child: Text('Error: $e')),
             data: (entries) {
-              if (entries.isEmpty) {
-                return const Center(child: Text('No events in log'));
+              var filtered = entries;
+              if (typeFilter.isNotEmpty) {
+                filtered = filtered
+                    .where((e) => typeFilter.contains(e.eventType))
+                    .toList();
+              }
+              if (deviceSearch.isNotEmpty) {
+                final q = deviceSearch.toLowerCase();
+                filtered = filtered
+                    .where(
+                        (e) => e.deviceId?.toLowerCase().contains(q) == true)
+                    .toList();
+              }
+              if (filtered.isEmpty) {
+                return const Center(child: Text('No events match the filter.'));
               }
               return ListView.builder(
-                itemCount: entries.length,
+                itemCount: filtered.length,
                 itemBuilder: (context, i) =>
-                    _HistoryEventTile(entry: entries[i]),
+                    _HistoryEventTile(entry: filtered[i]),
               );
             },
           ),

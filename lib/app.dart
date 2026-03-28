@@ -11,6 +11,7 @@ import 'features/admin/system_page.dart';
 import 'features/admin/users_page.dart';
 import 'features/auth/login_page.dart';
 import 'features/automations/automation_editor_page.dart';
+import 'features/automations/automation_groups_page.dart';
 import 'features/automations/automation_list_page.dart';
 import 'features/dashboard/dashboard_page.dart';
 import 'features/devices/device_detail_page.dart';
@@ -54,6 +55,9 @@ GoRouter _buildRouter(Ref ref) {
           GoRoute(
               path: '/automations',
               builder: (_, __) => const AutomationListPage()),
+          GoRoute(
+              path: '/automations/groups',
+              builder: (_, __) => const AutomationGroupsPage()),
           GoRoute(
               path: '/automations/new',
               builder: (_, __) =>

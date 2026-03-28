@@ -49,11 +49,13 @@ class _ServerLogsPage extends ConsumerStatefulWidget {
 
 class _ServerLogsPageState extends ConsumerState<_ServerLogsPage> {
   final _scrollController = ScrollController();
+  final _moduleFilterCtrl = TextEditingController();
   final List<LogEntry> _entries = [];
   StreamSubscription<LogEntry>? _sub;
   bool _autoScroll = true;
   bool _connected = false;
   String _minLevel = 'INFO';
+  String _moduleFilter = '';
   static const _maxEntries = 500;
 
   static const _levels = ['DEBUG', 'INFO', 'WARN', 'ERROR'];
@@ -62,6 +64,8 @@ class _ServerLogsPageState extends ConsumerState<_ServerLogsPage> {
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
+    _moduleFilterCtrl.addListener(
+        () => setState(() => _moduleFilter = _moduleFilterCtrl.text));
     WidgetsBinding.instance.addPostFrameCallback((_) => _connect());
   }
 
@@ -111,14 +115,21 @@ class _ServerLogsPageState extends ConsumerState<_ServerLogsPage> {
   void dispose() {
     _sub?.cancel();
     _scrollController.dispose();
+    _moduleFilterCtrl.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final filtered = _entries
+    var filtered = _entries
         .where((e) => e.severity >= _levelSeverity(_minLevel))
         .toList();
+    if (_moduleFilter.isNotEmpty) {
+      final q = _moduleFilter.toLowerCase();
+      filtered = filtered
+          .where((e) => e.target.toLowerCase().contains(q))
+          .toList();
+    }
 
     return Column(
       children: [
@@ -141,6 +152,27 @@ class _ServerLogsPageState extends ConsumerState<_ServerLogsPage> {
                 Text(
                   _connected ? 'Live' : 'Reconnecting…',
                   style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(width: 12),
+                SizedBox(
+                  width: 160,
+                  child: TextField(
+                    controller: _moduleFilterCtrl,
+                    decoration: InputDecoration(
+                      hintText: 'Filter module…',
+                      isDense: true,
+                      border: const OutlineInputBorder(),
+                      contentPadding: const EdgeInsets.symmetric(
+                          vertical: 4, horizontal: 8),
+                      suffixIcon: _moduleFilterCtrl.text.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear, size: 14),
+                              onPressed: () => _moduleFilterCtrl.clear(),
+                            )
+                          : null,
+                    ),
+                    style: const TextStyle(fontSize: 12),
+                  ),
                 ),
                 const Spacer(),
                 for (final level in _levels)

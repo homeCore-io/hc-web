@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers/auth_provider.dart';
+import '../../core/providers/time_display_provider.dart';
 
 final _healthProvider = FutureProvider<Map<String, dynamic>>((ref) async {
   final client = ref.read(homecoreClientProvider);
@@ -8,13 +10,42 @@ final _healthProvider = FutureProvider<Map<String, dynamic>>((ref) async {
   return Map<String, dynamic>.from(response.data as Map);
 });
 
-class SystemPage extends ConsumerWidget {
+final _statusProvider = FutureProvider<Map<String, dynamic>>((ref) async {
+  final client = ref.read(homecoreClientProvider);
+  final response = await client.dio.get('/system/status');
+  return Map<String, dynamic>.from(response.data as Map);
+});
+
+class SystemPage extends ConsumerStatefulWidget {
   const SystemPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SystemPage> createState() => _SystemPageState();
+}
+
+class _SystemPageState extends ConsumerState<SystemPage> {
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 30), (_) {
+      ref.invalidate(_statusProvider);
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final healthAsync = ref.watch(_healthProvider);
+    final statusAsync = ref.watch(_statusProvider);
     final currentUser = ref.watch(currentUserProvider).valueOrNull;
+    final isUtc = ref.watch(timeUtcProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -22,7 +53,10 @@ class SystemPage extends ConsumerWidget {
         actions: [
           IconButton(
               icon: const Icon(Icons.refresh),
-              onPressed: () => ref.invalidate(_healthProvider)),
+              onPressed: () {
+                ref.invalidate(_healthProvider);
+                ref.invalidate(_statusProvider);
+              }),
         ],
       ),
       body: ListView(
@@ -65,6 +99,58 @@ class SystemPage extends ConsumerWidget {
             },
           ),
           const SizedBox(height: 16),
+          const _SectionHeader('Status'),
+          statusAsync.when(
+            loading: () => const Card(
+              child: ListTile(
+                leading: CircularProgressIndicator(),
+                title: Text('Loading...'),
+              ),
+            ),
+            error: (e, _) => Card(
+              child: ListTile(
+                leading: Icon(Icons.error_outline,
+                    color: Theme.of(context).colorScheme.error),
+                title: const Text('Status unavailable'),
+                subtitle: Text('$e'),
+              ),
+            ),
+            data: (status) {
+              final uptimeSecs = status['uptime_secs'] as int? ?? 0;
+              final version = status['version'] as String? ?? '—';
+              final ruleCount = status['rule_count'] as int? ?? 0;
+              final deviceCount = status['device_count'] as int? ?? 0;
+              final pluginCount = status['plugin_count'] as int? ?? 0;
+              final stateDbBytes = status['state_db_bytes'] as int? ?? 0;
+              final historyDbBytes = status['history_db_bytes'] as int? ?? 0;
+
+              return Card(
+                child: Column(
+                  children: [
+                    _StatusRow(Icons.timer_outlined, 'Uptime', _fmtUptime(uptimeSecs)),
+                    _StatusRow(Icons.info_outline, 'Version', version),
+                    _StatusRow(Icons.rule_outlined, 'Rules', '$ruleCount'),
+                    _StatusRow(Icons.device_hub, 'Devices', '$deviceCount'),
+                    _StatusRow(Icons.extension_outlined, 'Plugins', '$pluginCount'),
+                    _StatusRow(Icons.storage_outlined, 'State DB', _fmtBytes(stateDbBytes)),
+                    _StatusRow(Icons.history, 'History DB', _fmtBytes(historyDbBytes)),
+                  ],
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 16),
+          const _SectionHeader('Display'),
+          Card(
+            child: SwitchListTile(
+              secondary: const Icon(Icons.access_time_outlined),
+              title: const Text('Show times in UTC'),
+              subtitle: Text(isUtc ? 'Timestamps shown as UTC (Z)' : 'Timestamps shown in local time'),
+              value: isUtc,
+              onChanged: (_) => ref.read(timeUtcProvider.notifier).toggle(),
+            ),
+          ),
+          const SizedBox(height: 16),
           const _SectionHeader('Signed in as'),
           Card(
             child: ListTile(
@@ -101,12 +187,42 @@ class SystemPage extends ConsumerWidget {
     );
   }
 
+  String _fmtUptime(int secs) {
+    final h = secs ~/ 3600;
+    final m = (secs % 3600) ~/ 60;
+    final s = secs % 60;
+    return '${h}h ${m}m ${s}s';
+  }
+
+  String _fmtBytes(int bytes) {
+    if (bytes < 1024) return '${bytes}B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(2)} MB';
+  }
+
   String _displayRole(String role) => switch (role) {
         'admin' => 'Admin',
         'user' => 'User',
         'read_only' => 'Read Only',
         _ => role,
       };
+}
+
+class _StatusRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  const _StatusRow(this.icon, this.label, this.value);
+
+  @override
+  Widget build(BuildContext context) => ListTile(
+        dense: true,
+        leading: Icon(icon, size: 20),
+        title: Text(label),
+        trailing: Text(value,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Theme.of(context).colorScheme.primary)),
+      );
 }
 
 class _SectionHeader extends StatelessWidget {

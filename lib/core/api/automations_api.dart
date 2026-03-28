@@ -34,4 +34,45 @@ class AutomationsApi {
     final response = await client.dio.post('/automations/$id/test');
     return Map<String, dynamic>.from(response.data as Map);
   }
+
+  Future<HcRule> cloneRule(String id) async {
+    final response = await client.dio.post('/automations/$id/clone');
+    return HcRule.fromJson(Map<String, dynamic>.from(response.data as Map));
+  }
+
+  Future<List<Map<String, dynamic>>> getRuleHistory(String id) async {
+    final response = await client.dio.get('/automations/$id/history');
+    return (response.data as List)
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
+  }
+
+  Future<void> bulkPatch(Map<String, dynamic> patch) async {
+    await client.dio.patch('/automations', data: patch);
+  }
+
+  Future<List<Map<String, dynamic>>> listGroups() async {
+    final response = await client.dio.get('/automations/groups');
+    return (response.data as List)
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
+  }
+
+  Future<Map<String, dynamic>> createGroup(Map<String, dynamic> body) async {
+    final response = await client.dio.post('/automations/groups', data: body);
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
+  Future<Map<String, dynamic>> updateGroup(String id, Map<String, dynamic> body) async {
+    final response = await client.dio.patch('/automations/groups/$id', data: body);
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
+  Future<void> deleteGroup(String id) async {
+    await client.dio.delete('/automations/groups/$id');
+  }
+
+  Future<void> setGroupEnabled(String id, {required bool enabled}) async {
+    await client.dio.post('/automations/groups/$id/${enabled ? 'enable' : 'disable'}');
+  }
 }

@@ -30,10 +30,12 @@ class AutomationsNotifier extends AsyncNotifier<List<HcRule>> {
             priority: r.priority,
             cooldownSecs: r.cooldownSecs,
             runMode: r.runMode,
+            maxQueue: r.maxQueue,
             trigger: r.trigger,
             conditions: r.conditions,
             actions: r.actions,
-            tags: r.tags)
+            tags: r.tags,
+            error: r.error)
         : r).toList());
   }
 
@@ -41,6 +43,26 @@ class AutomationsNotifier extends AsyncNotifier<List<HcRule>> {
     await ref.read(automationsApiProvider).deleteRule(id);
     final current = state.valueOrNull ?? [];
     state = AsyncData(current.where((r) => r.id != id).toList());
+  }
+
+  Future<String> clone(String id) async {
+    final cloned = await ref.read(automationsApiProvider).cloneRule(id);
+    final current = state.valueOrNull ?? [];
+    state = AsyncData([...current, cloned]);
+    return cloned.id;
+  }
+
+  Future<void> bulkSetEnabled(List<String> ids, bool enabled) async {
+    await ref.read(automationsApiProvider).bulkPatch({'ids': ids, 'enabled': enabled});
+    final current = state.valueOrNull ?? [];
+    state = AsyncData(current.map((r) =>
+      ids.contains(r.id) ? HcRule(
+        id: r.id, name: r.name, enabled: enabled,
+        priority: r.priority, cooldownSecs: r.cooldownSecs,
+        runMode: r.runMode, maxQueue: r.maxQueue,
+        trigger: r.trigger, conditions: r.conditions,
+        actions: r.actions, tags: r.tags, error: r.error,
+      ) : r).toList());
   }
 }
 

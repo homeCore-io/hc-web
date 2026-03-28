@@ -10,6 +10,7 @@ class HcRule {
   final List<Map<String, dynamic>> conditions;
   final List<Map<String, dynamic>> actions;
   final List<String> tags;
+  final String? error;
 
   HcRule({
     required this.id,
@@ -23,6 +24,7 @@ class HcRule {
     required this.conditions,
     required this.actions,
     this.tags = const [],
+    this.error,
   });
 
   factory HcRule.fromJson(Map<String, dynamic> json) => HcRule(
@@ -43,6 +45,7 @@ class HcRule {
         tags: (json['tags'] as List? ?? [])
             .map((e) => e as String)
             .toList(),
+        error: json['error'] as String?,
       );
 
   Map<String, dynamic> toJson() => {
@@ -56,6 +59,7 @@ class HcRule {
         'conditions': conditions,
         'actions': actions,
         'tags': tags,
+        if (error != null) 'error': error,
       };
 
   /// Rust RunMode is a tagged enum: null/absent → parallel; otherwise {"type": "..."}
