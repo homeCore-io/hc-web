@@ -57,6 +57,20 @@ class DevicesNotifier extends AsyncNotifier<List<DeviceState>> {
     final raw = await api.listDevices();
     return raw.map(DeviceState.fromJson).toList();
   }
+
+  Future<void> updateDevice(String id, Map<String, dynamic> body) async {
+    final raw = await ref.read(devicesApiProvider).updateDevice(id, body);
+    final updated = DeviceState.fromJson(raw);
+    final current = state.valueOrNull ?? [];
+    state = AsyncData(
+        current.map((d) => d.id == id ? updated : d).toList());
+  }
+
+  Future<void> deleteDevice(String id) async {
+    await ref.read(devicesApiProvider).deleteDevice(id);
+    final current = state.valueOrNull ?? [];
+    state = AsyncData(current.where((d) => d.id != id).toList());
+  }
 }
 
 final devicesProvider =

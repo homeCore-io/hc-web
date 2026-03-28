@@ -17,4 +17,14 @@ class DevicesApi {
   Future<void> setDeviceState(String id, Map<String, dynamic> state) async {
     await client.dio.patch('/devices/$id/state', data: state);
   }
+
+  Future<Map<String, dynamic>> updateDevice(
+      String id, Map<String, dynamic> body) async {
+    final response = await client.dio.patch('/devices/$id', data: body);
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
+  Future<void> deleteDevice(String id) async {
+    await client.dio.delete('/devices/$id');
+  }
 }
