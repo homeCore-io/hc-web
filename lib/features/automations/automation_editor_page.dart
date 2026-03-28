@@ -863,23 +863,60 @@ class _TriggerForm extends StatefulWidget {
 
 class _TriggerFormState extends State<_TriggerForm> {
   late Map<String, dynamic> _data;
+  // Separate slot list for device_state_changed — allows empty "pending" slots
+  // that haven't been filled yet without corrupting _data.
+  late List<String> _deviceSlots;
 
   @override
   void initState() {
     super.initState();
     _data = Map<String, dynamic>.from(widget.trigger);
     if (_data['type'] == null) _data['type'] = widget.triggerType;
+    _deviceSlots = _slotsFromData();
   }
 
   @override
   void didUpdateWidget(_TriggerForm old) {
     super.didUpdateWidget(old);
     if (old.triggerType != widget.triggerType) {
+      // Trigger type switched — reset everything.
       _data = {'type': widget.triggerType};
+      _deviceSlots = [''];
     } else if (old.trigger != widget.trigger &&
         widget.trigger['type'] != _data['type']) {
+      // External data reload (e.g. navigating to a different rule).
       _data = Map<String, dynamic>.from(widget.trigger);
+      _deviceSlots = _slotsFromData();
     }
+  }
+
+  /// Build the initial slot list from _data.
+  List<String> _slotsFromData() {
+    final primary = _data['device_id'] as String? ?? '';
+    final extra = (_data['device_ids'] as List?)
+            ?.map((e) => e.toString())
+            .toList() ??
+        [];
+    final all = [if (primary.isNotEmpty) primary, ...extra];
+    return all.isEmpty ? [''] : all;
+  }
+
+  /// Write _deviceSlots back to _data and notify parent.
+  /// Empty slots are excluded from device_id / device_ids.
+  void _flushDeviceSlots() {
+    final nonEmpty = _deviceSlots.where((id) => id.isNotEmpty).toList();
+    if (nonEmpty.isEmpty) {
+      _data.remove('device_id');
+      _data.remove('device_ids');
+    } else {
+      _data['device_id'] = nonEmpty.first;
+      if (nonEmpty.length > 1) {
+        _data['device_ids'] = nonEmpty.sublist(1);
+      } else {
+        _data.remove('device_ids');
+      }
+    }
+    widget.onChanged(Map<String, dynamic>.from(_data));
   }
 
   void _set(String key, dynamic value) {
@@ -936,76 +973,47 @@ class _TriggerFormState extends State<_TriggerForm> {
     }
   }
 
-  /// Combine device_id + device_ids into one ordered list, save back to both fields.
-  List<String> get _allTriggerDeviceIds {
-    final primary = _data['device_id'] as String?;
-    final extra = (_data['device_ids'] as List?)
-            ?.map((e) => e as String)
-            .toList() ??
-        [];
-    return [if (primary != null && primary.isNotEmpty) primary, ...extra];
-  }
-
-  void _setTriggerDeviceIds(List<String> ids) {
-    final filtered = ids.where((id) => id.isNotEmpty).toList();
-    if (filtered.isEmpty) {
-      _data.remove('device_id');
-      _data.remove('device_ids');
-    } else {
-      _data['device_id'] = filtered.first;
-      if (filtered.length > 1) {
-        _data['device_ids'] = filtered.sublist(1);
-      } else {
-        _data.remove('device_ids');
-      }
-    }
-    widget.onChanged(Map<String, dynamic>.from(_data));
-    setState(() {});
-  }
-
   Widget _buildDeviceStateChanged() {
-    final allIds = _allTriggerDeviceIds;
-    // Ensure at least one slot
-    final displayIds = allIds.isEmpty ? [''] : allIds;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // One row per device
-        ...List.generate(displayIds.length, (i) {
-          return Padding(
+        // One picker row per slot
+        for (int i = 0; i < _deviceSlots.length; i++)
+          Padding(
+            key: ValueKey('device_slot_$i'),
             padding: const EdgeInsets.only(bottom: 8),
             child: Row(
               children: [
                 Expanded(
                   child: _DevicePicker(
                     hint: i == 0 ? 'Device (required)' : 'Additional device',
-                    value: displayIds[i].isEmpty ? null : displayIds[i],
+                    value: _deviceSlots[i].isEmpty ? null : _deviceSlots[i],
                     devices: widget.deviceResolver.devices,
                     onChanged: (v) {
-                      final updated = List<String>.from(displayIds);
-                      updated[i] = v ?? '';
-                      _setTriggerDeviceIds(updated);
+                      setState(() {
+                        _deviceSlots[i] = v ?? '';
+                        _flushDeviceSlots();
+                      });
                     },
                   ),
                 ),
-                if (displayIds.length > 1)
+                if (_deviceSlots.length > 1)
                   IconButton(
                     icon: const Icon(Icons.remove_circle_outline, size: 20),
                     tooltip: 'Remove device',
                     onPressed: () {
-                      final updated = List<String>.from(displayIds)
-                        ..removeAt(i);
-                      _setTriggerDeviceIds(updated);
+                      setState(() {
+                        _deviceSlots.removeAt(i);
+                        _flushDeviceSlots();
+                      });
                     },
                   ),
               ],
             ),
-          );
-        }),
-        // Add device button
+          ),
+        // Add device button — just appends an empty slot, no data flush yet
         TextButton.icon(
-          onPressed: () => _setTriggerDeviceIds([...displayIds, '']),
+          onPressed: () => setState(() => _deviceSlots.add('')),
           icon: const Icon(Icons.add, size: 16),
           label: const Text('Add device (OR)'),
           style: TextButton.styleFrom(
