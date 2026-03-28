@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/models/rule.dart';
 import '../../core/providers/automations_provider.dart';
+import '../../core/providers/name_resolver_provider.dart';
 import '../../shared/widgets/skeleton.dart';
 
 class AutomationListPage extends ConsumerWidget {
@@ -11,6 +12,8 @@ class AutomationListPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final rulesAsync = ref.watch(automationsProvider);
+    final deviceResolver = ref.watch(deviceNameResolverProvider);
+    final modeResolver = ref.watch(modeNameResolverProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -39,7 +42,11 @@ class AutomationListPage extends ConsumerWidget {
             ..sort((a, b) => b.priority.compareTo(a.priority));
           return ListView.builder(
             itemCount: sorted.length,
-            itemBuilder: (context, i) => _RuleTile(rule: sorted[i]),
+            itemBuilder: (context, i) => _RuleTile(
+              rule: sorted[i],
+              deviceResolver: deviceResolver,
+              modeResolver: modeResolver,
+            ),
           );
         },
       ),
@@ -49,7 +56,14 @@ class AutomationListPage extends ConsumerWidget {
 
 class _RuleTile extends ConsumerWidget {
   final HcRule rule;
-  const _RuleTile({required this.rule});
+  final DeviceNameResolver deviceResolver;
+  final ModeNameResolver modeResolver;
+
+  const _RuleTile({
+    required this.rule,
+    required this.deviceResolver,
+    required this.modeResolver,
+  });
 
   Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {
     final ok = await showDialog<bool>(
@@ -114,6 +128,27 @@ class _RuleTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final summary = rule.resolvedTriggerSummary(
+      deviceResolver.resolve,
+      modeResolver.resolve,
+    );
+
+    final tagChips = rule.tags.isEmpty
+        ? const SizedBox.shrink()
+        : Wrap(
+            spacing: 4,
+            children: rule.tags
+                .map((t) => Chip(
+                      label: Text(t,
+                          style: const TextStyle(fontSize: 10)),
+                      padding: EdgeInsets.zero,
+                      materialTapTargetSize:
+                          MaterialTapTargetSize.shrinkWrap,
+                      visualDensity: VisualDensity.compact,
+                    ))
+                .toList(),
+          );
+
     return ListTile(
       leading: Switch(
         value: rule.enabled,
@@ -121,14 +156,36 @@ class _RuleTile extends ConsumerWidget {
             ref.read(automationsProvider.notifier).toggle(rule.id, val),
       ),
       title: Text(rule.name),
-      subtitle: Text(rule.triggerSummary,
-          style: Theme.of(context).textTheme.bodySmall),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(summary,
+              style: Theme.of(context).textTheme.bodySmall),
+          if (rule.tags.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            tagChips,
+          ],
+        ],
+      ),
+      isThreeLine: rule.tags.isNotEmpty,
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Text('P${rule.priority}',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: Theme.of(context).colorScheme.outline)),
+          if (rule.runMode != 'parallel')
+            Padding(
+              padding: const EdgeInsets.only(left: 4),
+              child: Tooltip(
+                message: 'Run mode: ${rule.runMode}',
+                child: Icon(Icons.layers_outlined,
+                    size: 14,
+                    color:
+                        Theme.of(context).colorScheme.secondary),
+              ),
+            ),
           IconButton(
             icon: const Icon(Icons.play_arrow_outlined),
             tooltip: 'Test (dry run)',
