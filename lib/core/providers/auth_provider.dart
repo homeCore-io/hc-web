@@ -2,9 +2,20 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../api/homecore_client.dart';
 import '../api/auth_api.dart';
 import '../api/users_api.dart';
+import 'client_error_log_provider.dart';
 
 final homecoreClientProvider = Provider<HomecoreClient>((ref) {
-  return HomecoreClient();
+  final client = HomecoreClient();
+  client.onApiError = (statusCode, method, url, body) {
+    ref.read(clientErrorLogProvider.notifier).add(ApiErrorEntry(
+          timestamp: DateTime.now(),
+          method: method,
+          url: url,
+          statusCode: statusCode,
+          body: body,
+        ));
+  };
+  return client;
 });
 
 final authApiProvider = Provider<AuthApi>((ref) {

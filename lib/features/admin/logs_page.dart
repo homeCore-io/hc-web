@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/logs_api.dart';
 import '../../core/models/log_entry.dart';
+import '../../core/providers/client_error_log_provider.dart';
 
 final _logsApiProvider = Provider.autoDispose<LogsApi>((ref) {
   final api = LogsApi();
@@ -11,14 +12,42 @@ final _logsApiProvider = Provider.autoDispose<LogsApi>((ref) {
   return api;
 });
 
-class LogsPage extends ConsumerStatefulWidget {
+class LogsPage extends ConsumerWidget {
   const LogsPage({super.key});
 
   @override
-  ConsumerState<LogsPage> createState() => _LogsPageState();
+  Widget build(BuildContext context, WidgetRef ref) {
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Logs'),
+          bottom: const TabBar(
+            tabs: [
+              Tab(text: 'Server'),
+              Tab(text: 'Client Errors'),
+            ],
+          ),
+        ),
+        body: const TabBarView(
+          children: [
+            _ServerLogsTab(),
+            _ClientErrorsTab(),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
-class _LogsPageState extends ConsumerState<LogsPage> {
+class _ServerLogsPage extends ConsumerStatefulWidget {
+  const _ServerLogsPage();
+
+  @override
+  ConsumerState<_ServerLogsPage> createState() => _ServerLogsPageState();
+}
+
+class _ServerLogsPageState extends ConsumerState<_ServerLogsPage> {
   final _scrollController = ScrollController();
   final List<LogEntry> _entries = [];
   StreamSubscription<LogEntry>? _sub;
@@ -91,75 +120,192 @@ class _LogsPageState extends ConsumerState<LogsPage> {
         .where((e) => e.severity >= _levelSeverity(_minLevel))
         .toList();
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Row(children: [
-          const Text('Logs'),
-          const SizedBox(width: 12),
-          Icon(
-            _connected ? Icons.circle : Icons.circle_outlined,
-            size: 10,
-            color: _connected ? Colors.green : Theme.of(context).colorScheme.error,
-          ),
-          const SizedBox(width: 4),
-          Text(
-            _connected ? 'Live' : 'Reconnecting…',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-        ]),
-        actions: [
-          // Level filter chips
-          for (final level in _levels)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 8),
-              child: FilterChip(
-                label: Text(level, style: const TextStyle(fontSize: 11)),
-                selected: _minLevel == level,
-                visualDensity: VisualDensity.compact,
-                onSelected: (_) => setState(() {
-                  _minLevel = level;
-                }),
-              ),
+    return Column(
+      children: [
+        // Toolbar row
+        Material(
+          elevation: 0,
+          color: Theme.of(context).colorScheme.surface,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            child: Row(
+              children: [
+                Icon(
+                  _connected ? Icons.circle : Icons.circle_outlined,
+                  size: 10,
+                  color: _connected
+                      ? Colors.green
+                      : Theme.of(context).colorScheme.error,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  _connected ? 'Live' : 'Reconnecting…',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const Spacer(),
+                for (final level in _levels)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 2),
+                    child: FilterChip(
+                      label: Text(level, style: const TextStyle(fontSize: 11)),
+                      selected: _minLevel == level,
+                      visualDensity: VisualDensity.compact,
+                      onSelected: (_) =>
+                          setState(() => _minLevel = level),
+                    ),
+                  ),
+                const SizedBox(width: 4),
+                IconButton(
+                  icon: const Icon(Icons.delete_sweep_outlined),
+                  tooltip: 'Clear',
+                  onPressed: () => setState(() => _entries.clear()),
+                ),
+                IconButton(
+                  icon: Icon(_autoScroll
+                      ? Icons.vertical_align_bottom
+                      : Icons.pause_outlined),
+                  tooltip:
+                      _autoScroll ? 'Auto-scroll on' : 'Auto-scroll off',
+                  onPressed: () => setState(() {
+                    _autoScroll = !_autoScroll;
+                    if (_autoScroll && _scrollController.hasClients) {
+                      _scrollController.jumpTo(
+                          _scrollController.position.maxScrollExtent);
+                    }
+                  }),
+                ),
+              ],
             ),
-          const SizedBox(width: 4),
-          IconButton(
-            icon: const Icon(Icons.delete_sweep_outlined),
-            tooltip: 'Clear',
-            onPressed: () => setState(() => _entries.clear()),
           ),
-          IconButton(
-            icon: Icon(_autoScroll
-                ? Icons.vertical_align_bottom
-                : Icons.pause_outlined),
-            tooltip: _autoScroll ? 'Auto-scroll on' : 'Auto-scroll off',
-            onPressed: () => setState(() {
-              _autoScroll = !_autoScroll;
-              if (_autoScroll && _scrollController.hasClients) {
-                _scrollController
-                    .jumpTo(_scrollController.position.maxScrollExtent);
-              }
-            }),
-          ),
-        ],
-      ),
-      body: filtered.isEmpty
-          ? Center(
-              child: Text(
-                _connected ? 'Waiting for log lines…' : 'Connecting…',
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-            )
-          : SelectionArea(
-              child: ListView.builder(
-                controller: _scrollController,
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                itemCount: filtered.length,
-                itemBuilder: (context, i) => _LogRow(entry: filtered[i]),
-              ),
-            ),
+        ),
+        const Divider(height: 1),
+        Expanded(
+          child: filtered.isEmpty
+              ? Center(
+                  child: Text(
+                    _connected ? 'Waiting for log lines…' : 'Connecting…',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                )
+              : SelectionArea(
+                  child: ListView.builder(
+                    controller: _scrollController,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 4),
+                    itemCount: filtered.length,
+                    itemBuilder: (context, i) =>
+                        _LogRow(entry: filtered[i]),
+                  ),
+                ),
+        ),
+      ],
     );
   }
 }
+
+// ── Tab wrappers ─────────────────────────────────────────────────────────────
+
+class _ServerLogsTab extends StatelessWidget {
+  const _ServerLogsTab();
+  @override
+  Widget build(BuildContext context) => const _ServerLogsPage();
+}
+
+class _ClientErrorsTab extends ConsumerWidget {
+  const _ClientErrorsTab();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final errors = ref.watch(clientErrorLogProvider);
+
+    if (errors.isEmpty) {
+      return const Center(child: Text('No client errors recorded this session.'));
+    }
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          child: Row(
+            children: [
+              Text('${errors.length} error(s)',
+                  style: Theme.of(context).textTheme.bodySmall),
+              const Spacer(),
+              IconButton(
+                icon: const Icon(Icons.delete_sweep_outlined),
+                tooltip: 'Clear',
+                onPressed: () =>
+                    ref.read(clientErrorLogProvider.notifier).clear(),
+              ),
+            ],
+          ),
+        ),
+        const Divider(height: 1),
+        Expanded(
+          child: SelectionArea(
+            child: ListView.separated(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              itemCount: errors.length,
+              separatorBuilder: (_, __) => const Divider(height: 1),
+              itemBuilder: (context, i) {
+                final e = errors[errors.length - 1 - i]; // newest first
+                final ts = e.timestamp.toLocal();
+                final timeStr =
+                    '${ts.hour.toString().padLeft(2, '0')}:${ts.minute.toString().padLeft(2, '0')}:${ts.second.toString().padLeft(2, '0')}';
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            timeStr,
+                            style: TextStyle(
+                              fontFamily: 'monospace',
+                              fontSize: 11,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurface
+                                  .withValues(alpha: 0.5),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            '${e.statusCode ?? '?'} ${e.method} ${e.url}',
+                            style: TextStyle(
+                              fontFamily: 'monospace',
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color:
+                                  Theme.of(context).colorScheme.error,
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (e.body.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2, left: 4),
+                          child: Text(
+                            e.body,
+                            style: const TextStyle(
+                                fontFamily: 'monospace', fontSize: 11),
+                          ),
+                        ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ── Log row ───────────────────────────────────────────────────────────────────
 
 class _LogRow extends StatelessWidget {
   final LogEntry entry;

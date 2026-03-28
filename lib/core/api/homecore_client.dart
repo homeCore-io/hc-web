@@ -9,6 +9,11 @@ class HomecoreClient {
   /// a logout/redirect without requiring Riverpod access here.
   void Function()? onUnauthorized;
 
+  /// Called for every non-401 error response. Set by [homecoreClientProvider]
+  /// to feed the in-app client error log.
+  void Function(int? statusCode, String method, String url, String body)?
+      onApiError;
+
   HomecoreClient() {
     dio = Dio(BaseOptions(
       baseUrl: '/api/v1',
@@ -29,6 +34,14 @@ class HomecoreClient {
         if (error.response?.statusCode == 401) {
           await clearToken();
           onUnauthorized?.call();
+        } else {
+          final body = error.response?.data?.toString() ?? error.message ?? '';
+          onApiError?.call(
+            error.response?.statusCode,
+            error.requestOptions.method,
+            error.requestOptions.path,
+            body,
+          );
         }
         handler.next(error);
       },

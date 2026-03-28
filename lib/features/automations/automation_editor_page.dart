@@ -1,5 +1,7 @@
 import 'dart:convert';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/models/device_state.dart';
@@ -292,6 +294,83 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
     }
   }
 
+  void _showSaveError(Object e) {
+    String title;
+    String detail;
+    String? payloadJson;
+
+    if (e is DioException) {
+      final status = e.response?.statusCode;
+      title = 'Save failed (${status ?? 'no response'})';
+      final raw = e.response?.data;
+      detail = raw?.toString() ?? e.message ?? e.toString();
+    } else {
+      title = 'Save failed';
+      detail = e.toString();
+    }
+
+    // Also dump the payload we tried to send so the user can inspect it.
+    try {
+      if (e is DioException) {
+        final data = e.requestOptions.data;
+        payloadJson = const JsonEncoder.withIndent('  ').convert(data);
+      }
+    } catch (_) {}
+
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: SizedBox(
+          width: 560,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Server response:',
+                    style: Theme.of(ctx).textTheme.labelSmall),
+                const SizedBox(height: 4),
+                SelectableText(
+                  detail,
+                  style: const TextStyle(
+                      fontFamily: 'monospace', fontSize: 12),
+                ),
+                if (payloadJson != null) ...[
+                  const SizedBox(height: 16),
+                  Text('Request payload:',
+                      style: Theme.of(ctx).textTheme.labelSmall),
+                  const SizedBox(height: 4),
+                  SelectableText(
+                    payloadJson,
+                    style: const TextStyle(
+                        fontFamily: 'monospace', fontSize: 11),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Clipboard.setData(ClipboardData(
+                  text: payloadJson != null
+                      ? '$title\n\n$detail\n\nPayload:\n$payloadJson'
+                      : '$title\n\n$detail'));
+              Navigator.pop(ctx);
+            },
+            child: const Text('Copy & Close'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _loading = true);
@@ -319,8 +398,7 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
       if (mounted) context.pop();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Save failed: $e')));
+        _showSaveError(e);
       }
     } finally {
       if (mounted) setState(() => _loading = false);
