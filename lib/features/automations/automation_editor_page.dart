@@ -196,6 +196,10 @@ String _actionSummary(Map<String, dynamic> action, DeviceNameResolver dr) {
   }
 }
 
+// ─── Action clipboard (persists across rule navigations) ─────────────────────
+
+final actionClipboardProvider = StateProvider<Map<String, dynamic>?>((_) => null);
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 class AutomationEditorPage extends ConsumerStatefulWidget {
@@ -673,6 +677,7 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
   // ─── Actions card ────────────────────────────────────────────────────────
 
   Widget _buildActionsCard(DeviceNameResolver dr) {
+    final clipboard = ref.watch(actionClipboardProvider);
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -684,6 +689,30 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
                 Text('Actions',
                     style: Theme.of(context).textTheme.titleMedium),
                 const Spacer(),
+                if (clipboard != null) ...[
+                  Tooltip(
+                    message: _actionSummary(clipboard, dr),
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.content_paste_outlined, size: 14),
+                      label: Text(
+                        'Paste ${clipboard['type'] as String? ?? 'action'}',
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                      onPressed: () {
+                        final copy = jsonDecode(jsonEncode(clipboard))
+                            as Map<String, dynamic>;
+                        setState(() => _actions.add(copy));
+                      },
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, size: 16),
+                    tooltip: 'Clear clipboard',
+                    onPressed: () =>
+                        ref.read(actionClipboardProvider.notifier).state = null,
+                  ),
+                  const SizedBox(width: 4),
+                ],
                 FilledButton.tonal(
                   onPressed: () async {
                     final result = await showDialog<Map<String, dynamic>>(
@@ -733,6 +762,69 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        PopupMenuButton<String>(
+                          icon: const Icon(Icons.more_vert, size: 18),
+                          tooltip: 'More',
+                          onSelected: (val) {
+                            switch (val) {
+                              case 'copy':
+                                ref
+                                    .read(actionClipboardProvider.notifier)
+                                    .state = jsonDecode(jsonEncode(action))
+                                    as Map<String, dynamic>;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                        'Copied: ${action['type'] ?? 'action'}'),
+                                    duration: const Duration(seconds: 2),
+                                  ),
+                                );
+                              case 'cut':
+                                ref
+                                    .read(actionClipboardProvider.notifier)
+                                    .state = jsonDecode(jsonEncode(action))
+                                    as Map<String, dynamic>;
+                                setState(() => _actions.removeAt(i));
+                              case 'paste_after':
+                                if (clipboard != null) {
+                                  final copy =
+                                      jsonDecode(jsonEncode(clipboard))
+                                          as Map<String, dynamic>;
+                                  setState(() => _actions.insert(i + 1, copy));
+                                }
+                            }
+                          },
+                          itemBuilder: (_) => [
+                            const PopupMenuItem(
+                              value: 'copy',
+                              child: Row(children: [
+                                Icon(Icons.copy_outlined, size: 16),
+                                SizedBox(width: 8),
+                                Text('Copy'),
+                              ]),
+                            ),
+                            const PopupMenuItem(
+                              value: 'cut',
+                              child: Row(children: [
+                                Icon(Icons.content_cut, size: 16),
+                                SizedBox(width: 8),
+                                Text('Cut'),
+                              ]),
+                            ),
+                            if (clipboard != null)
+                              PopupMenuItem(
+                                value: 'paste_after',
+                                child: Row(children: [
+                                  const Icon(
+                                      Icons.content_paste_outlined,
+                                      size: 16),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                      'Paste after (${clipboard['type'] as String? ?? 'action'})'),
+                                ]),
+                              ),
+                          ],
+                        ),
                         IconButton(
                           icon: const Icon(Icons.edit_outlined),
                           tooltip: 'Edit',
