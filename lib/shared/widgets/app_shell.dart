@@ -115,7 +115,7 @@ class _AppShellState extends ConsumerState<AppShell> {
             selectedIndex: selectedIndex(),
             onDestinationSelected: onDestinationSelected,
             labelType: NavigationRailLabelType.all,
-            leading: Image.asset('assets/images/logo.png', width: 56, height: 56),
+            // leading: Image.asset('assets/images/logo.png', width: 56, height: 56),
             trailing: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
