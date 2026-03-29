@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/models/plugin_entry.dart';
 import '../../core/providers/plugins_provider.dart';
 import '../../shared/widgets/skeleton.dart';
+import '../../core/providers/time_display_provider.dart';
 
 class PluginsPage extends ConsumerWidget {
   const PluginsPage({super.key});
@@ -57,7 +58,7 @@ class _PluginTile extends ConsumerWidget {
         ),
         title: Text(plugin.pluginId),
         subtitle: Text(
-          '$statusLabel  ·  registered ${_shortDate(plugin.registeredAt)}',
+          '$statusLabel  ·  registered ${_shortDate(plugin.registeredAt, ref.watch(timeUtcProvider))}',
         ),
         trailing: PopupMenuButton<String>(
           onSelected: (action) async {
@@ -100,12 +101,13 @@ class _PluginTile extends ConsumerWidget {
     );
   }
 
-  String _shortDate(String iso) {
+  String _shortDate(String iso, bool utc) {
     if (iso.isEmpty) return '—';
     final dt = DateTime.tryParse(iso);
     if (dt == null) return '—';
-    final local = dt.toLocal();
-    return '${local.year}-${local.month.toString().padLeft(2, '0')}-${local.day.toString().padLeft(2, '0')} '
-        '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
+    final t = utc ? dt.toUtc() : dt.toLocal();
+    final sfx = utc ? 'Z' : '';
+    return '${t.year}-${t.month.toString().padLeft(2, '0')}-${t.day.toString().padLeft(2, '0')} '
+        '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}$sfx';
   }
 }

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/logs_api.dart';
 import '../../core/models/log_entry.dart';
 import '../../core/providers/client_error_log_provider.dart';
+import '../../core/providers/time_display_provider.dart';
 
 final _logsApiProvider = Provider.autoDispose<LogsApi>((ref) {
   final api = LogsApi();
@@ -282,9 +283,8 @@ class _ClientErrorsTab extends ConsumerWidget {
               separatorBuilder: (_, __) => const Divider(height: 1),
               itemBuilder: (context, i) {
                 final e = errors[errors.length - 1 - i]; // newest first
-                final ts = e.timestamp.toLocal();
-                final timeStr =
-                    '${ts.hour.toString().padLeft(2, '0')}:${ts.minute.toString().padLeft(2, '0')}:${ts.second.toString().padLeft(2, '0')}';
+                final isUtc = ref.watch(timeUtcProvider);
+                final timeStr = fmtTime(e.timestamp, utc: isUtc);
                 return Padding(
                   padding: const EdgeInsets.symmetric(vertical: 6),
                   child: Column(
@@ -339,7 +339,7 @@ class _ClientErrorsTab extends ConsumerWidget {
 
 // ── Log row ───────────────────────────────────────────────────────────────────
 
-class _LogRow extends StatelessWidget {
+class _LogRow extends ConsumerWidget {
   final LogEntry entry;
   const _LogRow({required this.entry});
 
@@ -354,11 +354,10 @@ class _LogRow extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final color = _levelColor(context);
-    final ts = entry.timestamp.toLocal();
-    final timeStr =
-        '${ts.hour.toString().padLeft(2, '0')}:${ts.minute.toString().padLeft(2, '0')}:${ts.second.toString().padLeft(2, '0')}';
+    final isUtc = ref.watch(timeUtcProvider);
+    final timeStr = fmtTime(entry.timestamp, utc: isUtc);
 
     return InkWell(
       onLongPress: () {

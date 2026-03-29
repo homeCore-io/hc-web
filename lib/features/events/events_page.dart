@@ -5,6 +5,7 @@ import '../../core/models/event_entry.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/models/hc_event.dart';
 import '../../core/providers/events_provider.dart';
+import '../../core/providers/time_display_provider.dart';
 
 // Rolling live events list
 final _liveEventsProvider = StateProvider<List<HcEvent>>((ref) => []);
@@ -219,7 +220,7 @@ class _LiveTabState extends ConsumerState<_LiveTab> {
   }
 }
 
-class _LiveEventTile extends StatelessWidget {
+class _LiveEventTile extends ConsumerWidget {
   final HcEvent event;
   const _LiveEventTile({required this.event});
 
@@ -242,13 +243,9 @@ class _LiveEventTile extends StatelessWidget {
     }
   }
 
-  String _formatTime(DateTime t) {
-    final l = t.toLocal();
-    return '${l.hour.toString().padLeft(2, '0')}:${l.minute.toString().padLeft(2, '0')}:${l.second.toString().padLeft(2, '0')}';
-  }
-
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isUtc = ref.watch(timeUtcProvider);
     return ListTile(
       dense: true,
       leading: SizedBox(
@@ -259,7 +256,7 @@ class _LiveEventTile extends StatelessWidget {
           style: Theme.of(context).textTheme.bodyMedium),
       subtitle:
           event.deviceId != null ? Text(event.deviceId!) : null,
-      trailing: Text(_formatTime(event.timestamp),
+      trailing: Text(fmtTime(event.timestamp, utc: isUtc),
           style: Theme.of(context).textTheme.bodySmall),
     );
   }
@@ -407,7 +404,7 @@ class _HistoryTabState extends ConsumerState<_HistoryTab> {
   }
 }
 
-class _HistoryEventTile extends StatelessWidget {
+class _HistoryEventTile extends ConsumerWidget {
   final EventEntry entry;
   const _HistoryEventTile({required this.entry});
 
@@ -427,12 +424,11 @@ class _HistoryEventTile extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isUtc = ref.watch(timeUtcProvider);
     final ts = entry.event['timestamp'] as String?;
-    final dt = ts != null ? DateTime.tryParse(ts)?.toLocal() : null;
-    final timeStr = dt != null
-        ? '${dt.month}/${dt.day} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}'
-        : '';
+    final dt = ts != null ? DateTime.tryParse(ts) : null;
+    final timeStr = dt != null ? fmtTime(dt, utc: isUtc, showDate: true) : '';
     return ListTile(
       dense: true,
       leading: SizedBox(

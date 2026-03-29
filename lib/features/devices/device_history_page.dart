@@ -4,6 +4,7 @@ import 'package:fl_chart/fl_chart.dart';
 import '../../core/api/history_api.dart';
 import '../../core/models/history_entry.dart';
 import '../../core/providers/auth_provider.dart';
+import '../../core/providers/time_display_provider.dart';
 
 // Provider for device history (keyed by device ID)
 final _historyProvider =
@@ -74,7 +75,7 @@ class DeviceHistoryPage extends ConsumerWidget {
   }
 }
 
-class _AttributeChart extends StatelessWidget {
+class _AttributeChart extends ConsumerWidget {
   final String attribute;
   final List<HistoryEntry> entries;
   final Color primaryColor;
@@ -85,7 +86,8 @@ class _AttributeChart extends StatelessWidget {
       required this.primaryColor});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isUtc = ref.watch(timeUtcProvider);
     if (entries.isEmpty) {
       return const Center(child: Text('No data'));
     }
@@ -103,7 +105,7 @@ class _AttributeChart extends StatelessWidget {
           final e = entries[entries.length - 1 - i];
           return ListTile(
             title: Text(e.value?.toString() ?? 'null'),
-            subtitle: Text(_fmt(e.recordedAt)),
+            subtitle: Text(fmtTime(e.recordedAt, utc: isUtc, showDate: true)),
             dense: true,
           );
         },
@@ -165,10 +167,10 @@ class _AttributeChart extends StatelessWidget {
                 reservedSize: 30,
                 interval: (maxX - minX) / 4,
                 getTitlesWidget: (val, meta) {
-                  final dt =
-                      DateTime.fromMillisecondsSinceEpoch(val.toInt()).toLocal();
+                  final dt = DateTime.fromMillisecondsSinceEpoch(val.toInt());
+                  final t = isUtc ? dt.toUtc() : dt.toLocal();
                   return Text(
-                      '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}',
+                      '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}',
                       style: const TextStyle(fontSize: 10));
                 },
               ),
@@ -195,8 +197,4 @@ class _AttributeChart extends StatelessWidget {
     );
   }
 
-  String _fmt(DateTime dt) {
-    final l = dt.toLocal();
-    return '${l.month}/${l.day} ${l.hour.toString().padLeft(2, '0')}:${l.minute.toString().padLeft(2, '0')}';
-  }
 }

@@ -6,6 +6,7 @@ import '../../core/providers/automations_provider.dart';
 import '../../core/providers/name_resolver_provider.dart';
 import '../../shared/widgets/filter_bar.dart';
 import '../../shared/widgets/skeleton.dart';
+import '../../core/providers/time_display_provider.dart';
 
 // ── Filter state ─────────────────────────────────────────────────────────────
 
@@ -341,6 +342,7 @@ class _RuleTile extends ConsumerWidget {
       return;
     }
     if (!context.mounted) return;
+    final isUtc = ref.read(timeUtcProvider);
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -370,10 +372,7 @@ class _RuleTile extends ConsumerWidget {
                         ),
                         title: Text(
                           dt != null
-                              ? '${dt.toLocal().month}/${dt.toLocal().day} '
-                                  '${dt.toLocal().hour.toString().padLeft(2,'0')}:'
-                                  '${dt.toLocal().minute.toString().padLeft(2,'0')}:'
-                                  '${dt.toLocal().second.toString().padLeft(2,'0')}'
+                              ? fmtTime(dt, utc: isUtc, showDate: true)
                               : ts ?? '?',
                           style: const TextStyle(fontSize: 12),
                         ),

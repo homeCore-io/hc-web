@@ -4,6 +4,7 @@ import '../../core/models/user_entry.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/providers/users_provider.dart';
 import '../../shared/widgets/skeleton.dart';
+import '../../core/providers/time_display_provider.dart';
 
 class UsersPage extends ConsumerWidget {
   const UsersPage({super.key});
@@ -132,7 +133,7 @@ class _UserTile extends ConsumerWidget {
             const Chip(label: Text('you'), visualDensity: VisualDensity.compact),
           ],
         ]),
-        subtitle: Text('${user.displayRole}  ·  joined ${_shortDate(user.createdAt)}'),
+        subtitle: Text('${user.displayRole}  ·  joined ${_shortDate(user.createdAt, ref.watch(timeUtcProvider))}'),
         trailing: isSelf
             ? null
             : PopupMenuButton<String>(
@@ -197,10 +198,11 @@ class _UserTile extends ConsumerWidget {
     }
   }
 
-  String _shortDate(String iso) {
+  String _shortDate(String iso, bool utc) {
     if (iso.isEmpty) return '—';
     final dt = DateTime.tryParse(iso);
     if (dt == null) return '—';
-    return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+    final t = utc ? dt.toUtc() : dt.toLocal();
+    return '${t.year}-${t.month.toString().padLeft(2, '0')}-${t.day.toString().padLeft(2, '0')}';
   }
 }
