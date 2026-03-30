@@ -93,5 +93,15 @@ void main() {
       expect(dashboardBreakpointForWidth(1400), DashboardBreakpoint.desktop);
       expect(dashboardBreakpointForWidth(1900), DashboardBreakpoint.tv);
     });
+
+    test('provides size guidance for dense dashboard widgets', () {
+      final gridHint = dashboardWidgetSizeHint(DashboardWidgetType.deviceGrid);
+      final eventHint = dashboardWidgetSizeHint(DashboardWidgetType.eventFeed);
+
+      expect(gridHint.minW, greaterThanOrEqualTo(4));
+      expect(gridHint.recommendedW, greaterThanOrEqualTo(gridHint.minW));
+      expect(eventHint.minH, greaterThanOrEqualTo(2));
+      expect(eventHint.recommendedH, greaterThanOrEqualTo(eventHint.minH));
+    });
   });
 }

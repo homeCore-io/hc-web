@@ -519,6 +519,7 @@ class _DashboardEditorPageState extends ConsumerState<DashboardEditorPage> {
                   .where((item) => item.id == placement.widgetId)
                   .firstOrNull;
               if (widget == null) return const SizedBox.shrink();
+              final sizeHint = dashboardWidgetSizeHint(widget.type);
               return Card(
                 margin: const EdgeInsets.only(bottom: 12),
                 child: Padding(
@@ -526,8 +527,18 @@ class _DashboardEditorPageState extends ConsumerState<DashboardEditorPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(widget.title,
-                          style: Theme.of(context).textTheme.titleSmall),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(widget.title,
+                                style: Theme.of(context).textTheme.titleSmall),
+                          ),
+                          Text(
+                            'min ${sizeHint.minW}x${sizeHint.minH} • rec ${sizeHint.recommendedW}x${sizeHint.recommendedH}',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
+                      ),
                       const SizedBox(height: 12),
                       Wrap(
                         spacing: 12,
@@ -558,7 +569,7 @@ class _DashboardEditorPageState extends ConsumerState<DashboardEditorPage> {
                           _PlacementStepper(
                             label: 'Width',
                             value: placement.w,
-                            min: 1,
+                            min: sizeHint.minW.clamp(1, activeLayout.columns),
                             max: activeLayout.columns,
                             onChanged: (value) => _updatePlacement(
                               _layoutBreakpoint,
@@ -569,7 +580,7 @@ class _DashboardEditorPageState extends ConsumerState<DashboardEditorPage> {
                           _PlacementStepper(
                             label: 'Height',
                             value: placement.h,
-                            min: 1,
+                            min: sizeHint.minH,
                             max: 12,
                             onChanged: (value) => _updatePlacement(
                               _layoutBreakpoint,

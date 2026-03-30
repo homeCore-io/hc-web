@@ -22,6 +22,104 @@ enum DashboardWidgetType {
   dashboardLink,
 }
 
+class DashboardWidgetSizeHint {
+  final int minW;
+  final int minH;
+  final int recommendedW;
+  final int recommendedH;
+
+  const DashboardWidgetSizeHint({
+    required this.minW,
+    required this.minH,
+    required this.recommendedW,
+    required this.recommendedH,
+  });
+}
+
+DashboardWidgetSizeHint dashboardWidgetSizeHint(DashboardWidgetType type) {
+  switch (type) {
+    case DashboardWidgetType.deviceGrid:
+      return const DashboardWidgetSizeHint(
+        minW: 4,
+        minH: 2,
+        recommendedW: 8,
+        recommendedH: 2,
+      );
+    case DashboardWidgetType.eventFeed:
+      return const DashboardWidgetSizeHint(
+        minW: 4,
+        minH: 2,
+        recommendedW: 5,
+        recommendedH: 2,
+      );
+    case DashboardWidgetType.mediaPlayer:
+      return const DashboardWidgetSizeHint(
+        minW: 4,
+        minH: 2,
+        recommendedW: 6,
+        recommendedH: 2,
+      );
+    case DashboardWidgetType.dashboardLink:
+      return const DashboardWidgetSizeHint(
+        minW: 4,
+        minH: 1,
+        recommendedW: 6,
+        recommendedH: 2,
+      );
+    case DashboardWidgetType.cameraVideo:
+    case DashboardWidgetType.webEmbed:
+      return const DashboardWidgetSizeHint(
+        minW: 4,
+        minH: 2,
+        recommendedW: 6,
+        recommendedH: 3,
+      );
+    case DashboardWidgetType.historyChart:
+      return const DashboardWidgetSizeHint(
+        minW: 4,
+        minH: 2,
+        recommendedW: 8,
+        recommendedH: 2,
+      );
+    case DashboardWidgetType.markdown:
+      return const DashboardWidgetSizeHint(
+        minW: 3,
+        minH: 1,
+        recommendedW: 6,
+        recommendedH: 2,
+      );
+    case DashboardWidgetType.deviceList:
+      return const DashboardWidgetSizeHint(
+        minW: 3,
+        minH: 2,
+        recommendedW: 6,
+        recommendedH: 2,
+      );
+    case DashboardWidgetType.deviceTile:
+      return const DashboardWidgetSizeHint(
+        minW: 2,
+        minH: 1,
+        recommendedW: 3,
+        recommendedH: 1,
+      );
+    case DashboardWidgetType.modeChips:
+    case DashboardWidgetType.sceneRow:
+      return const DashboardWidgetSizeHint(
+        minW: 3,
+        minH: 1,
+        recommendedW: 6,
+        recommendedH: 1,
+      );
+    case DashboardWidgetType.statSummary:
+      return const DashboardWidgetSizeHint(
+        minW: 3,
+        minH: 1,
+        recommendedW: 6,
+        recommendedH: 1,
+      );
+  }
+}
+
 String _enumName(Object value) => value.toString().split('.').last;
 
 String _toSnakeCase(String value) {

@@ -523,6 +523,7 @@ Editing modes:
 Current implementation status:
 - `hc-web` now has a breakpoint-aware layout editor with explicit placement controls (`x`, `y`, `w`, `h`), per-breakpoint layout settings, and a live preview tied to the persisted dashboard layout model.
 - The dashboard renderer now uses persisted breakpoint placement data directly instead of flattening widgets into a single vertical list.
+- Widget rendering now includes compact-mode adaptation and editor-side minimum size guidance for dense grid layouts.
 - True pointer-driven drag/resize is still a follow-up enhancement, not the current editor behavior.
 
 #### Recommended initial presets

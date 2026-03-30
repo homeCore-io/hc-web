@@ -147,6 +147,8 @@ class _DashboardGridLayout extends StatelessWidget {
                     child: _DashboardWidgetCard(
                       dashboard: dashboard,
                       widgetModel: widget,
+                      placement: placement,
+                      layout: layout,
                     ),
                   ),
             ],
@@ -160,31 +162,46 @@ class _DashboardGridLayout extends StatelessWidget {
 class _DashboardWidgetCard extends ConsumerWidget {
   final DashboardDefinition dashboard;
   final DashboardWidgetModel widgetModel;
+  final DashboardWidgetPlacement placement;
+  final DashboardLayout layout;
   const _DashboardWidgetCard({
     required this.dashboard,
     required this.widgetModel,
+    required this.placement,
+    required this.layout,
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final sizeHint = dashboardWidgetSizeHint(widgetModel.type);
+    final isCompact =
+        placement.w < sizeHint.recommendedW || placement.h < sizeHint.recommendedH;
+    final isVeryCompact =
+        placement.w <= sizeHint.minW || placement.h <= sizeHint.minH;
     final body = switch (widgetModel.type) {
       DashboardWidgetType.statSummary =>
-        _StatSummaryWidget(widgetModel: widgetModel),
+        _StatSummaryWidget(widgetModel: widgetModel, compact: isCompact),
       DashboardWidgetType.deviceGrid =>
-        _DeviceGridWidget(widgetModel: widgetModel),
+        _DeviceGridWidget(
+            widgetModel: widgetModel, compact: isCompact, veryCompact: isVeryCompact),
       DashboardWidgetType.deviceList =>
-        _DeviceListWidget(widgetModel: widgetModel),
+        _DeviceListWidget(widgetModel: widgetModel, compact: isCompact),
       DashboardWidgetType.deviceTile =>
         _DeviceTileWidget(widgetModel: widgetModel),
       DashboardWidgetType.modeChips => const _ModeChipsWidget(),
       DashboardWidgetType.sceneRow => const _SceneRowWidget(),
       DashboardWidgetType.eventFeed =>
-        _EventFeedWidget(widgetModel: widgetModel),
+        _EventFeedWidget(widgetModel: widgetModel, compact: isCompact),
       DashboardWidgetType.mediaPlayer =>
-        _MediaPlayerDashboardWidget(widgetModel: widgetModel),
+        _MediaPlayerDashboardWidget(
+            widgetModel: widgetModel, compact: isCompact),
       DashboardWidgetType.markdown => _MarkdownWidget(widgetModel: widgetModel),
       DashboardWidgetType.dashboardLink =>
-        _DashboardLinkWidget(current: dashboard, widgetModel: widgetModel),
+        _DashboardLinkWidget(
+            current: dashboard,
+            widgetModel: widgetModel,
+            compact: isCompact,
+            veryCompact: isVeryCompact),
       DashboardWidgetType.cameraVideo =>
         _CameraVideoWidget(widgetModel: widgetModel),
       DashboardWidgetType.webEmbed => _WebEmbedWidget(widgetModel: widgetModel),
@@ -268,7 +285,8 @@ List<DeviceState> _selectDevices(
 
 class _StatSummaryWidget extends ConsumerWidget {
   final DashboardWidgetModel widgetModel;
-  const _StatSummaryWidget({required this.widgetModel});
+  final bool compact;
+  const _StatSummaryWidget({required this.widgetModel, required this.compact});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -334,7 +352,7 @@ class _StatSummaryWidget extends ConsumerWidget {
       runSpacing: 12,
       children: cards
           .map((card) => SizedBox(
-                width: 150,
+                width: compact ? 120 : 150,
                 child: Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
@@ -361,7 +379,13 @@ class _StatSummaryWidget extends ConsumerWidget {
 
 class _DeviceGridWidget extends ConsumerWidget {
   final DashboardWidgetModel widgetModel;
-  const _DeviceGridWidget({required this.widgetModel});
+  final bool compact;
+  final bool veryCompact;
+  const _DeviceGridWidget({
+    required this.widgetModel,
+    required this.compact,
+    required this.veryCompact,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -369,66 +393,78 @@ class _DeviceGridWidget extends ConsumerWidget {
       ref.watch(devicesProvider).valueOrNull ?? const <DeviceState>[],
       widgetModel.config,
     );
-    return Wrap(
-      spacing: 12,
-      runSpacing: 12,
-      children: devices
-          .map((device) => SizedBox(
-                width: 180,
-                child: InkWell(
-                  onTap: () => context.go('/devices/${device.id}'),
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      border: Border.all(
-                        color: Theme.of(context).dividerColor,
-                      ),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final targetWidth = veryCompact ? 140.0 : compact ? 160.0 : 180.0;
+        final columns = (constraints.maxWidth / targetWidth).floor().clamp(1, 4);
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: devices.length,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: columns,
+            mainAxisSpacing: 12,
+            crossAxisSpacing: 12,
+            childAspectRatio: veryCompact ? 1.25 : 1.1,
+          ),
+          itemBuilder: (context, index) {
+            final device = devices[index];
+            return InkWell(
+              onTap: () => context.go('/devices/${device.id}'),
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color: Theme.of(context).dividerColor,
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
                       children: [
-                        Row(
-                          children: [
-                            Icon(device.isMediaPlayer
-                                ? Icons.speaker
-                                : Icons.devices_other_outlined),
-                            const Spacer(),
-                            Icon(
-                              device.available
-                                  ? Icons.circle
-                                  : Icons.circle_outlined,
-                              size: 10,
-                              color:
-                                  device.available ? Colors.green : Colors.red,
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        Text(device.displayName,
-                            maxLines: 2, overflow: TextOverflow.ellipsis),
-                        const SizedBox(height: 4),
-                        Text(
-                          device.isMediaPlayer
-                              ? device.title ?? device.playbackState
-                              : device.area ?? device.id,
-                          style: Theme.of(context).textTheme.bodySmall,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
+                        Icon(device.isMediaPlayer
+                            ? Icons.speaker
+                            : Icons.devices_other_outlined),
+                        const Spacer(),
+                        Icon(
+                          device.available
+                              ? Icons.circle
+                              : Icons.circle_outlined,
+                          size: 10,
+                          color: device.available ? Colors.green : Colors.red,
                         ),
                       ],
                     ),
-                  ),
+                    const SizedBox(height: 12),
+                    Text(device.displayName,
+                        maxLines: veryCompact ? 1 : 2,
+                        overflow: TextOverflow.ellipsis),
+                    const SizedBox(height: 4),
+                    Text(
+                      device.isMediaPlayer
+                          ? device.title ?? device.playbackState
+                          : device.area ?? device.id,
+                      style: Theme.of(context).textTheme.bodySmall,
+                      maxLines: veryCompact ? 1 : 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
                 ),
-              ))
-          .toList(),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }
 
 class _DeviceListWidget extends ConsumerWidget {
   final DashboardWidgetModel widgetModel;
-  const _DeviceListWidget({required this.widgetModel});
+  final bool compact;
+  const _DeviceListWidget({required this.widgetModel, required this.compact});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -441,6 +477,8 @@ class _DeviceListWidget extends ConsumerWidget {
           .map((device) => ListTile(
                 dense: true,
                 contentPadding: EdgeInsets.zero,
+                visualDensity:
+                    compact ? VisualDensity.compact : VisualDensity.standard,
                 title: Text(device.displayName),
                 subtitle: Text(device.isMediaPlayer
                     ? (device.title ?? device.playbackState)
@@ -532,7 +570,11 @@ class _SceneRowWidget extends ConsumerWidget {
 
 class _EventFeedWidget extends ConsumerStatefulWidget {
   final DashboardWidgetModel widgetModel;
-  const _EventFeedWidget({required this.widgetModel});
+  final bool compact;
+  const _EventFeedWidget({
+    required this.widgetModel,
+    required this.compact,
+  });
 
   @override
   ConsumerState<_EventFeedWidget> createState() => _EventFeedWidgetState();
@@ -570,11 +612,16 @@ class _EventFeedWidgetState extends ConsumerState<_EventFeedWidget> {
     if (_events.isEmpty) {
       return const Text('No recent events yet.');
     }
+    final maxItems = widget.compact && _events.length > 5 ? 5 : _events.length;
     return Column(
       children: _events
+          .take(maxItems)
           .map((event) => ListTile(
                 dense: true,
                 contentPadding: EdgeInsets.zero,
+                visualDensity: widget.compact
+                    ? VisualDensity.compact
+                    : VisualDensity.standard,
                 title: Text(event.type),
                 subtitle: Text(
                   event.deviceId ??
@@ -590,7 +637,11 @@ class _EventFeedWidgetState extends ConsumerState<_EventFeedWidget> {
 
 class _MediaPlayerDashboardWidget extends ConsumerWidget {
   final DashboardWidgetModel widgetModel;
-  const _MediaPlayerDashboardWidget({required this.widgetModel});
+  final bool compact;
+  const _MediaPlayerDashboardWidget({
+    required this.widgetModel,
+    required this.compact,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -609,6 +660,9 @@ class _MediaPlayerDashboardWidget extends ConsumerWidget {
           .map((device) => Card(
                 margin: const EdgeInsets.only(bottom: 8),
                 child: ListTile(
+                  dense: compact,
+                  visualDensity:
+                      compact ? VisualDensity.compact : VisualDensity.standard,
                   title: Text(device.displayName),
                   subtitle: Text(device.title ?? device.playbackState),
                   trailing: Text(device.volumePercent != null
@@ -637,9 +691,13 @@ class _MarkdownWidget extends StatelessWidget {
 class _DashboardLinkWidget extends ConsumerWidget {
   final DashboardDefinition current;
   final DashboardWidgetModel widgetModel;
+  final bool compact;
+  final bool veryCompact;
   const _DashboardLinkWidget({
     required this.current,
     required this.widgetModel,
+    required this.compact,
+    required this.veryCompact,
   });
 
   @override
@@ -664,21 +722,23 @@ class _DashboardLinkWidget extends ConsumerWidget {
           spacing: 8,
           runSpacing: 8,
           children: [
-            FilledButton.icon(
-              onPressed: () => context.go('/dashboards'),
-              icon: const Icon(Icons.dashboard_customize_outlined),
-              label: const Text('Manage Dashboards'),
-            ),
+            if (!veryCompact)
+              FilledButton.icon(
+                onPressed: () => context.go('/dashboards'),
+                icon: const Icon(Icons.dashboard_customize_outlined),
+                label: Text(compact ? 'Manage' : 'Manage Dashboards'),
+              ),
             OutlinedButton.icon(
               onPressed: () => context.go('/dashboards/new/edit'),
               icon: const Icon(Icons.add),
-              label: const Text('New Dashboard'),
+              label: Text(compact ? 'New' : 'New Dashboard'),
             ),
-            OutlinedButton.icon(
-              onPressed: () => context.go('/dashboards/${current.id}/edit'),
-              icon: const Icon(Icons.edit_outlined),
-              label: const Text('Edit This Dashboard'),
-            ),
+            if (!veryCompact)
+              OutlinedButton.icon(
+                onPressed: () => context.go('/dashboards/${current.id}/edit'),
+                icon: const Icon(Icons.edit_outlined),
+                label: Text(compact ? 'Edit' : 'Edit This Dashboard'),
+              ),
           ],
         ),
         const SizedBox(height: 12),
@@ -691,6 +751,7 @@ class _DashboardLinkWidget extends ConsumerWidget {
             spacing: 8,
             runSpacing: 8,
             children: otherDashboards
+                .take(compact ? 4 : otherDashboards.length)
                 .map((dashboard) => OutlinedButton(
                       onPressed: () =>
                           context.go('/dashboards/${dashboard.id}'),
