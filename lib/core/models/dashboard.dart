@@ -129,7 +129,7 @@ class DashboardLayout {
   }
 
   Map<String, dynamic> toJson() => {
-        'breakpoint': _enumName(breakpoint),
+        'breakpoint': _toSnakeCase(_enumName(breakpoint)),
         'columns': columns,
         'row_height': rowHeight,
         'gap': gap,
@@ -295,7 +295,7 @@ class DashboardDefinition {
         'name': name,
         'description': description,
         'owner_user_id': ownerUserId,
-        'visibility': _enumName(visibility),
+        'visibility': _toSnakeCase(_enumName(visibility)),
         'tags': tags,
         'icon': icon,
         'is_default': isDefault,

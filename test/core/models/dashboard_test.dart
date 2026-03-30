@@ -56,6 +56,22 @@ void main() {
       );
     });
 
+    test('serializes starter dashboard payload using API snake_case names', () {
+      final dashboard =
+          DashboardTemplateFactory.starterDashboards(ownerUserId: 'john')
+              .single;
+      final json = dashboard.toJson();
+      final layouts = (json['layouts'] as List).cast<Map<String, dynamic>>();
+
+      expect(json['visibility'], 'private');
+      expect(layouts, isNotEmpty);
+      expect(layouts.first['breakpoint'], 'mobile');
+      expect(
+        layouts.any((layout) => layout['breakpoint'] == 'desktop'),
+        isTrue,
+      );
+    });
+
     test('selects breakpoint layouts by width', () {
       expect(dashboardBreakpointForWidth(500), DashboardBreakpoint.mobile);
       expect(dashboardBreakpointForWidth(700), DashboardBreakpoint.tablet);
