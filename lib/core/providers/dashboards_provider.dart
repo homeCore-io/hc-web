@@ -1,53 +1,49 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import '../api/dashboards_api.dart';
 import '../models/dashboard.dart';
 import 'auth_provider.dart';
 
-const _dashboardsStorageKey = 'hc_web_dashboards_v1';
+final dashboardsApiProvider = Provider<DashboardsApi>((ref) {
+  return DashboardsApi(ref.watch(homecoreClientProvider));
+});
 
 class DashboardsNotifier extends AsyncNotifier<List<DashboardDefinition>> {
   @override
   Future<List<DashboardDefinition>> build() async {
-    final prefs = await SharedPreferences.getInstance();
     final currentUser = await ref.watch(currentUserProvider.future);
-    final owner = currentUser?['username'] as String? ?? 'local_user';
-    final raw = prefs.getString(_dashboardsStorageKey);
-    if (raw == null || raw.isEmpty) {
-      final templates = DashboardTemplateFactory.templates(ownerUserId: owner);
-      await prefs.setString(
-        _dashboardsStorageKey,
-        DashboardTemplateFactory.encodeList(templates),
-      );
-      return templates;
+    final owner = currentUser?['id'] as String? ??
+        currentUser?['username'] as String? ??
+        'local_user';
+    final api = ref.read(dashboardsApiProvider);
+    var dashboards = await api.listDashboards();
+    if (dashboards.isEmpty) {
+      for (final template
+          in DashboardTemplateFactory.templates(ownerUserId: owner)) {
+        await api.createDashboard(template);
+      }
+      dashboards = await api.listDashboards();
     }
-    return DashboardTemplateFactory.decodeList(raw);
+    return dashboards;
   }
 
-  Future<void> _persist(List<DashboardDefinition> dashboards) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-      _dashboardsStorageKey,
-      DashboardTemplateFactory.encodeList(dashboards),
-    );
-    state = AsyncData(dashboards);
+  Future<void> reload() async {
+    state = const AsyncLoading();
+    state = AsyncData(await ref.read(dashboardsApiProvider).listDashboards());
   }
 
   Future<void> createDashboard(DashboardDefinition dashboard) async {
-    final dashboards = [...(state.valueOrNull ?? []), dashboard];
-    await _persist(dashboards);
+    await ref.read(dashboardsApiProvider).createDashboard(dashboard);
+    await reload();
   }
 
   Future<void> updateDashboard(DashboardDefinition dashboard) async {
-    final dashboards = (state.valueOrNull ?? [])
-        .map((item) => item.id == dashboard.id ? dashboard : item)
-        .toList();
-    await _persist(dashboards);
+    await ref.read(dashboardsApiProvider).updateDashboard(dashboard);
+    await reload();
   }
 
   Future<void> deleteDashboard(String id) async {
-    final dashboards =
-        (state.valueOrNull ?? []).where((item) => item.id != id).toList();
-    await _persist(_normalizeDefault(dashboards));
+    await ref.read(dashboardsApiProvider).deleteDashboard(id);
+    await reload();
   }
 
   Future<void> duplicateDashboard(String id) async {
@@ -65,30 +61,26 @@ class DashboardsNotifier extends AsyncNotifier<List<DashboardDefinition>> {
   }
 
   Future<void> setDefault(String id) async {
-    final dashboards = (state.valueOrNull ?? [])
-        .map((item) => item.copyWith(
-              isDefault: item.id == id,
-              updatedAt: DateTime.now(),
-            ))
-        .toList();
-    await _persist(dashboards);
+    await ref.read(dashboardsApiProvider).setDefault(id);
+    await reload();
   }
 
   Future<void> resetTemplates() async {
     final currentUser = await ref.read(currentUserProvider.future);
-    final owner = currentUser?['username'] as String? ?? 'local_user';
-    await _persist(DashboardTemplateFactory.templates(ownerUserId: owner));
-  }
-
-  List<DashboardDefinition> _normalizeDefault(
-      List<DashboardDefinition> dashboards) {
-    if (dashboards.isEmpty) return dashboards;
-    if (dashboards.any((item) => item.isDefault)) return dashboards;
-    final first = dashboards.first;
-    return [
-      first.copyWith(isDefault: true, updatedAt: DateTime.now()),
-      ...dashboards.skip(1),
-    ];
+    final owner = currentUser?['id'] as String? ??
+        currentUser?['username'] as String? ??
+        'local_user';
+    final existing = state.valueOrNull ?? const <DashboardDefinition>[];
+    for (final dashboard in existing) {
+      if (dashboard.ownerUserId == owner) {
+        await ref.read(dashboardsApiProvider).deleteDashboard(dashboard.id);
+      }
+    }
+    for (final template
+        in DashboardTemplateFactory.templates(ownerUserId: owner)) {
+      await ref.read(dashboardsApiProvider).createDashboard(template);
+    }
+    await reload();
   }
 }
 

@@ -287,6 +287,11 @@ platform with multiple user-defined dashboards for different purposes, such as:
 Each user can have multiple dashboards, choose a default dashboard, and optionally access shared
 dashboards created by admins or other users with permission.
 
+This must remain **API-first**. Dashboard persistence, visibility, ownership, and default selection
+belong in HomeCore, not browser-only storage, so other clients can consume the same feature set.
+`hc-web` should treat dashboard editing/rendering as a client of the shared `/api/v1/dashboards`
+resource.
+
 #### Dashboard platform model
 
 **Core entities**
@@ -299,9 +304,13 @@ dashboards created by admins or other users with permission.
 - `visibility`: `private | shared | public`
 - `tags`: e.g. `security`, `living_room`, `tablet`, `wall_display`
 - `icon`
-- `is_default`
 - `created_at`
 - `updated_at`
+
+Per-user default dashboard selection is **not** stored on the dashboard definition itself. The API
+should derive `is_default` in list/detail responses from a separate per-user preference map so that
+shared dashboards can still be the default for many different users without mutating the shared
+dashboard record.
 
 2. `DashboardLayout`
 - `breakpoint`: `mobile | tablet | desktop | tv`
@@ -329,6 +338,25 @@ dashboards created by admins or other users with permission.
 5. `DashboardLink`
 - optional widget type that links one dashboard to another
 - used for room/security drill-down flows without forcing nested dashboards in storage
+
+#### API contract
+
+HomeCore should expose dashboards as a first-class resource:
+
+- `GET /api/v1/dashboards`
+- `POST /api/v1/dashboards`
+- `GET /api/v1/dashboards/:id`
+- `PUT /api/v1/dashboards/:id`
+- `DELETE /api/v1/dashboards/:id`
+- `POST /api/v1/dashboards/:id/default`
+
+Rules:
+
+- list/get returns dashboards visible to the caller
+- create/update/delete is owner-or-admin only
+- `POST .../default` updates only the caller's default dashboard preference
+- responses may include derived `is_default`
+- other clients should be able to create dashboards without depending on `hc-web` template logic
 
 #### Widget type catalog
 
