@@ -299,8 +299,8 @@ class DashboardDefinition {
         'tags': tags,
         'icon': icon,
         'is_default': isDefault,
-        'created_at': createdAt.toIso8601String(),
-        'updated_at': updatedAt.toIso8601String(),
+        'created_at': createdAt.toUtc().toIso8601String(),
+        'updated_at': updatedAt.toUtc().toIso8601String(),
         'layouts': layouts.map((layout) => layout.toJson()).toList(),
         'widgets': widgets.map((widget) => widget.toJson()).toList(),
       };

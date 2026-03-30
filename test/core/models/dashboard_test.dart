@@ -70,6 +70,8 @@ void main() {
         layouts.any((layout) => layout['breakpoint'] == 'desktop'),
         isTrue,
       );
+      expect((json['created_at'] as String).endsWith('Z'), isTrue);
+      expect((json['updated_at'] as String).endsWith('Z'), isTrue);
     });
 
     test('selects breakpoint layouts by width', () {
