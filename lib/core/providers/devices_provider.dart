@@ -24,6 +24,7 @@ class DevicesNotifier extends AsyncNotifier<List<DeviceState>> {
             if (d.id != event.deviceId) return d;
             return DeviceState(
               id: d.id,
+              canonicalName: d.canonicalName,
               pluginId: d.pluginId,
               name: d.name,
               area: d.area,
@@ -40,6 +41,7 @@ class DevicesNotifier extends AsyncNotifier<List<DeviceState>> {
             if (d.id != event.deviceId) return d;
             return DeviceState(
               id: d.id,
+              canonicalName: d.canonicalName,
               pluginId: d.pluginId,
               name: d.name,
               area: d.area,
@@ -62,8 +64,7 @@ class DevicesNotifier extends AsyncNotifier<List<DeviceState>> {
     final raw = await ref.read(devicesApiProvider).updateDevice(id, body);
     final updated = DeviceState.fromJson(raw);
     final current = state.valueOrNull ?? [];
-    state = AsyncData(
-        current.map((d) => d.id == id ? updated : d).toList());
+    state = AsyncData(current.map((d) => d.id == id ? updated : d).toList());
   }
 
   Future<void> deleteDevice(String id) async {

@@ -144,6 +144,8 @@ Media-player UI convention:
 - Full CRUD + enable/disable toggle + dry-run test
 - Export/import JSON
 - Rule structure: trigger → conditions (AND) → actions (sequential or parallel)
+- Device-targeting rule authoring should prefer `device` / `devices` with canonical device references
+- UI loaders should remain backward-compatible with legacy `device_id` / `device_ids`
 - Trigger types: `device_state_changed`, `time_of_day`, `sun_event`, `mqtt_message`,
   `webhook_received`, `manual_trigger`
 - Action types: `set_device_state`, `publish_mqtt`, `call_service`, `fire_event`,

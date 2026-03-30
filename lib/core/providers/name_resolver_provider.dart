@@ -8,15 +8,42 @@ import 'modes_provider.dart';
 
 class DeviceNameResolver {
   final List<DeviceState> devices;
+  final Map<String, int> _nameCounts;
 
-  const DeviceNameResolver(this.devices);
+  DeviceNameResolver(this.devices)
+      : _nameCounts = {
+          for (final device in devices)
+            if (device.name != null && device.name!.isNotEmpty)
+              device.name!: devices
+                  .where((candidate) => candidate.name == device.name)
+                  .length,
+        };
+
+  DeviceState? lookup(String ref) {
+    if (ref.isEmpty) return null;
+
+    for (final d in devices) {
+      if (d.ruleReference == ref) return d;
+      if (d.canonicalName == ref) return d;
+      if (d.id == ref) return d;
+    }
+
+    for (final d in devices) {
+      final name = d.name;
+      if (name == ref && _nameCounts[name] == 1) return d;
+    }
+
+    return null;
+  }
 
   String resolve(String id) {
     if (id.isEmpty) return id;
-    for (final d in devices) {
-      if (d.id == id) return d.displayName;
-    }
-    return id;
+    return lookup(id)?.displayName ?? id;
+  }
+
+  String preferredRuleRef(String ref) {
+    if (ref.isEmpty) return ref;
+    return lookup(ref)?.ruleReference ?? ref;
   }
 }
 

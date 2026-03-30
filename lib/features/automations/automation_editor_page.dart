@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/models/device_reference.dart';
 import '../../core/models/device_state.dart';
 import '../../core/models/mode_state.dart';
 import '../../core/models/rule.dart';
@@ -20,23 +21,15 @@ String _triggerSummary(
   final type = trigger['type'] as String? ?? 'unknown';
   switch (type) {
     case 'device_state_changed':
-      final primaryId = trigger['device_id'] as String? ?? '';
-      final extraIds =
-          (trigger['device_ids'] as List?)?.map((e) => e as String).toList() ??
-              [];
-      final allNames = [
-        if (primaryId.isNotEmpty) dr.resolve(primaryId),
-        ...extraIds.map(dr.resolve),
-      ];
-      final devStr =
-          allNames.isEmpty ? '?' : allNames.join(', ');
+      final refs = readDeviceRefs(trigger);
+      final devStr = refs.isEmpty ? '?' : refs.map(dr.resolve).join(', ');
       final attr = trigger['attribute'] as String?;
       final to = trigger['to'];
       if (attr != null && to != null) return 'Device $devStr: $attr → $to';
       if (attr != null) return 'Device $devStr: $attr changes';
       return 'Device $devStr changes';
     case 'device_availability_changed':
-      final dev = dr.resolve(trigger['device_id'] as String? ?? '');
+      final dev = dr.resolve(readSingleDeviceRef(trigger) ?? '');
       final to = trigger['to'];
       if (to == true) return 'Device $dev comes online';
       if (to == false) return 'Device $dev goes offline';
@@ -74,14 +67,14 @@ String _triggerSummary(
       final unit = trigger['unit'] ?? 'minutes';
       return 'Every $n $unit';
     case 'button_event':
-      final dev = dr.resolve(trigger['device_id'] as String? ?? '');
+      final dev = dr.resolve(readSingleDeviceRef(trigger) ?? '');
       final event = trigger['event'] as String? ?? 'pushed';
       final btn = trigger['button_number'];
       return btn != null
           ? 'Button $btn on $dev: $event'
           : 'Button on $dev: $event';
     case 'numeric_threshold':
-      final dev = dr.resolve(trigger['device_id'] as String? ?? '');
+      final dev = dr.resolve(readSingleDeviceRef(trigger) ?? '');
       final attr = trigger['attribute'] as String? ?? '';
       final op = trigger['op'] as String? ?? '';
       final val = trigger['value'];
@@ -91,7 +84,9 @@ String _triggerSummary(
       return name != null ? 'Variable "$name" changed' : 'Any variable changed';
     case 'calendar_event':
       final title = trigger['title_contains'] as String?;
-      return title != null ? 'Calendar event containing "$title"' : 'Calendar event';
+      return title != null
+          ? 'Calendar event containing "$title"'
+          : 'Calendar event';
     default:
       return type;
   }
@@ -105,7 +100,7 @@ String _conditionSummary(
   final type = cond['type'] as String? ?? 'unknown';
   switch (type) {
     case 'device_state':
-      final dev = dr.resolve(cond['device_id'] as String? ?? '');
+      final dev = dr.resolve(readSingleDeviceRef(cond) ?? '');
       final attr = cond['attribute'] as String? ?? '';
       final op = cond['op'] as String? ?? 'eq';
       final val = cond['value'];
@@ -126,7 +121,7 @@ String _conditionSummary(
       final script = cond['script'] as String? ?? '';
       return 'Script: ${script.length > 40 ? '${script.substring(0, 40)}…' : script}';
     case 'time_elapsed':
-      final dev = dr.resolve(cond['device_id'] as String? ?? '');
+      final dev = dr.resolve(readSingleDeviceRef(cond) ?? '');
       final attr = cond['attribute'] as String? ?? '';
       final secs = cond['duration_secs'];
       return '$dev.$attr unchanged for ${secs}s';
@@ -139,16 +134,13 @@ String _conditionSummary(
       if (inner == null) return 'NOT (?)';
       return 'NOT (${_conditionSummary(inner, dr, mr)})';
     case 'and':
-      final nested =
-          (cond['conditions'] as List?)?.length ?? 0;
+      final nested = (cond['conditions'] as List?)?.length ?? 0;
       return 'AND ($nested conditions)';
     case 'or':
-      final nested =
-          (cond['conditions'] as List?)?.length ?? 0;
+      final nested = (cond['conditions'] as List?)?.length ?? 0;
       return 'OR ($nested conditions)';
     case 'xor':
-      final nested =
-          (cond['conditions'] as List?)?.length ?? 0;
+      final nested = (cond['conditions'] as List?)?.length ?? 0;
       return 'XOR ($nested conditions)';
     default:
       return type;
@@ -159,7 +151,7 @@ String _actionSummary(Map<String, dynamic> action, DeviceNameResolver dr) {
   final type = action['type'] as String? ?? 'unknown';
   switch (type) {
     case 'set_device_state':
-      final dev = dr.resolve(action['device_id'] as String? ?? '');
+      final dev = dr.resolve(readSingleDeviceRef(action) ?? '');
       final state = action['state'];
       return 'Set $dev → ${state != null ? jsonEncode(state) : '{}'}';
     case 'delay':
@@ -198,7 +190,126 @@ String _actionSummary(Map<String, dynamic> action, DeviceNameResolver dr) {
 
 // ─── Action clipboard (persists across rule navigations) ─────────────────────
 
-final actionClipboardProvider = StateProvider<Map<String, dynamic>?>((_) => null);
+final actionClipboardProvider =
+    StateProvider<Map<String, dynamic>?>((_) => null);
+
+Map<String, dynamic> _normalizeTrigger(
+  Map<String, dynamic> trigger,
+  DeviceNameResolver resolver,
+) {
+  final normalized = Map<String, dynamic>.from(trigger);
+  final type = normalized['type'] as String? ?? '';
+
+  switch (type) {
+    case 'device_state_changed':
+      final refs =
+          readDeviceRefs(normalized).map(resolver.preferredRuleRef).toList();
+      writeDeviceRefs(normalized, refs);
+      break;
+    case 'device_availability_changed':
+    case 'button_event':
+    case 'numeric_threshold':
+      final ref = readSingleDeviceRef(normalized);
+      writeSingleDeviceRef(
+        normalized,
+        ref == null ? null : resolver.preferredRuleRef(ref),
+      );
+      break;
+  }
+
+  return normalized;
+}
+
+Map<String, dynamic> _normalizeCondition(
+  Map<String, dynamic> condition,
+  DeviceNameResolver resolver,
+) {
+  final normalized = Map<String, dynamic>.from(condition);
+  final type = normalized['type'] as String? ?? '';
+
+  switch (type) {
+    case 'device_state':
+    case 'time_elapsed':
+      final ref = readSingleDeviceRef(normalized);
+      writeSingleDeviceRef(
+        normalized,
+        ref == null ? null : resolver.preferredRuleRef(ref),
+      );
+      break;
+    case 'not':
+      final nested = normalized['condition'];
+      if (nested is Map) {
+        normalized['condition'] = _normalizeCondition(
+          Map<String, dynamic>.from(nested),
+          resolver,
+        );
+      }
+      break;
+    case 'and':
+    case 'or':
+    case 'xor':
+      final nested = normalized['conditions'];
+      if (nested is List) {
+        normalized['conditions'] = nested
+            .whereType<Map>()
+            .map((item) => _normalizeCondition(
+                  Map<String, dynamic>.from(item),
+                  resolver,
+                ))
+            .toList();
+      }
+      break;
+  }
+
+  return normalized;
+}
+
+Map<String, dynamic> _normalizeAction(
+  Map<String, dynamic> action,
+  DeviceNameResolver resolver,
+) {
+  final normalized = Map<String, dynamic>.from(action);
+  final type = normalized['type'] as String? ?? '';
+
+  switch (type) {
+    case 'set_device_state':
+      final ref = readSingleDeviceRef(normalized);
+      writeSingleDeviceRef(
+        normalized,
+        ref == null ? null : resolver.preferredRuleRef(ref),
+      );
+      break;
+    case 'parallel':
+    case 'repeat_until':
+      final nested = normalized['actions'];
+      if (nested is List) {
+        normalized['actions'] = nested
+            .whereType<Map>()
+            .map((item) => _normalizeAction(
+                  Map<String, dynamic>.from(item),
+                  resolver,
+                ))
+            .toList();
+      }
+      break;
+    case 'conditional':
+      for (final key in ['then_actions', 'else_actions']) {
+        final nested = normalized[key];
+        if (nested is List) {
+          normalized[key] = nested
+              .whereType<Map>()
+              .map((item) => _normalizeAction(
+                    Map<String, dynamic>.from(item),
+                    resolver,
+                  ))
+              .toList();
+        }
+      }
+      break;
+  }
+
+  return normalized;
+}
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
@@ -260,7 +371,8 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
     _maxQueue = rule.maxQueue;
     _trigger = Map<String, dynamic>.from(rule.trigger);
     _triggerType = rule.trigger['type'] as String? ?? 'device_state_changed';
-    _conditions = rule.conditions.map((c) => Map<String, dynamic>.from(c)).toList();
+    _conditions =
+        rule.conditions.map((c) => Map<String, dynamic>.from(c)).toList();
     _actions = rule.actions.map((a) => Map<String, dynamic>.from(a)).toList();
     _tags = List<String>.from(rule.tags);
 
@@ -337,8 +449,7 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
                 const SizedBox(height: 4),
                 SelectableText(
                   detail,
-                  style: const TextStyle(
-                      fontFamily: 'monospace', fontSize: 12),
+                  style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
                 ),
                 if (payloadJson != null) ...[
                   const SizedBox(height: 16),
@@ -347,8 +458,8 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
                   const SizedBox(height: 4),
                   SelectableText(
                     payloadJson,
-                    style: const TextStyle(
-                        fontFamily: 'monospace', fontSize: 11),
+                    style:
+                        const TextStyle(fontFamily: 'monospace', fontSize: 11),
                   ),
                 ],
               ],
@@ -379,6 +490,7 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _loading = true);
     try {
+      final deviceResolver = ref.read(deviceNameResolverProvider);
       final cooldown = _resolveCooldown();
       final payload = <String, dynamic>{
         'name': _nameCtrl.text.trim(),
@@ -386,9 +498,13 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
         'priority': int.tryParse(_priorityCtrl.text) ?? 0,
         if (_runMode != 'parallel')
           'run_mode': HcRule.encodeRunMode(_runMode, _maxQueue),
-        'trigger': _trigger,
-        'conditions': _conditions,
-        'actions': _actions,
+        'trigger': _normalizeTrigger(_trigger, deviceResolver),
+        'conditions': _conditions
+            .map((condition) => _normalizeCondition(condition, deviceResolver))
+            .toList(),
+        'actions': _actions
+            .map((action) => _normalizeAction(action, deviceResolver))
+            .toList(),
         'tags': _tags,
         if (cooldown != null) 'cooldown_secs': cooldown,
       };
@@ -517,8 +633,7 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
             Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text('Enabled',
-                    style: Theme.of(context).textTheme.labelMedium),
+                Text('Enabled', style: Theme.of(context).textTheme.labelMedium),
                 Switch(
                   value: _enabled,
                   onChanged: (v) => setState(() => _enabled = v),
@@ -686,8 +801,7 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
           children: [
             Row(
               children: [
-                Text('Actions',
-                    style: Theme.of(context).textTheme.titleMedium),
+                Text('Actions', style: Theme.of(context).textTheme.titleMedium),
                 const Spacer(),
                 if (clipboard != null) ...[
                   Tooltip(
@@ -769,9 +883,10 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
                             switch (val) {
                               case 'copy':
                                 ref
-                                    .read(actionClipboardProvider.notifier)
-                                    .state = jsonDecode(jsonEncode(action))
-                                    as Map<String, dynamic>;
+                                        .read(actionClipboardProvider.notifier)
+                                        .state =
+                                    jsonDecode(jsonEncode(action))
+                                        as Map<String, dynamic>;
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
                                     content: Text(
@@ -781,15 +896,15 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
                                 );
                               case 'cut':
                                 ref
-                                    .read(actionClipboardProvider.notifier)
-                                    .state = jsonDecode(jsonEncode(action))
-                                    as Map<String, dynamic>;
+                                        .read(actionClipboardProvider.notifier)
+                                        .state =
+                                    jsonDecode(jsonEncode(action))
+                                        as Map<String, dynamic>;
                                 setState(() => _actions.removeAt(i));
                               case 'paste_after':
                                 if (clipboard != null) {
-                                  final copy =
-                                      jsonDecode(jsonEncode(clipboard))
-                                          as Map<String, dynamic>;
+                                  final copy = jsonDecode(jsonEncode(clipboard))
+                                      as Map<String, dynamic>;
                                   setState(() => _actions.insert(i + 1, copy));
                                 }
                             }
@@ -815,8 +930,7 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
                               PopupMenuItem(
                                 value: 'paste_after',
                                 child: Row(children: [
-                                  const Icon(
-                                      Icons.content_paste_outlined,
+                                  const Icon(Icons.content_paste_outlined,
                                       size: 16),
                                   const SizedBox(width: 8),
                                   Text(
@@ -847,8 +961,7 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
                         IconButton(
                           icon: const Icon(Icons.delete_outline),
                           tooltip: 'Delete',
-                          onPressed: () =>
-                              setState(() => _actions.removeAt(i)),
+                          onPressed: () => setState(() => _actions.removeAt(i)),
                         ),
                       ],
                     ),
@@ -921,8 +1034,7 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Run Mode',
-                  style: Theme.of(context).textTheme.labelLarge),
+              Text('Run Mode', style: Theme.of(context).textTheme.labelLarge),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
                 value: _runMode,
@@ -961,8 +1073,7 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
                   children: _tags
                       .map((tag) => Chip(
                             label: Text(tag),
-                            onDeleted: () =>
-                                setState(() => _tags.remove(tag)),
+                            onDeleted: () => setState(() => _tags.remove(tag)),
                             visualDensity: VisualDensity.compact,
                           ))
                       .toList(),
@@ -1065,31 +1176,22 @@ class _TriggerFormState extends State<_TriggerForm> {
 
   /// Build the initial slot list from _data.
   List<String> _slotsFromData() {
-    final primary = _data['device_id'] as String? ?? '';
-    final extra = (_data['device_ids'] as List?)
-            ?.map((e) => e.toString())
-            .toList() ??
-        [];
-    final all = [if (primary.isNotEmpty) primary, ...extra];
-    return all.isEmpty ? [''] : all;
+    final refs = readDeviceRefs(_data);
+    return refs.isEmpty ? [''] : refs;
   }
 
   /// Write _deviceSlots back to _data and notify parent.
-  /// Empty slots are excluded from device_id / device_ids.
+  /// Empty slots are excluded from device / devices.
   void _flushDeviceSlots() {
-    final nonEmpty = _deviceSlots.where((id) => id.isNotEmpty).toList();
-    if (nonEmpty.isEmpty) {
-      _data.remove('device_id');
-      _data.remove('device_ids');
-    } else {
-      _data['device_id'] = nonEmpty.first;
-      if (nonEmpty.length > 1) {
-        _data['device_ids'] = nonEmpty.sublist(1);
-      } else {
-        _data.remove('device_ids');
-      }
-    }
+    writeDeviceRefs(_data, _deviceSlots);
     widget.onChanged(Map<String, dynamic>.from(_data));
+  }
+
+  void _setDeviceRef(String? ref) {
+    setState(() {
+      writeSingleDeviceRef(_data, ref);
+      widget.onChanged(Map<String, dynamic>.from(_data));
+    });
   }
 
   void _set(String key, dynamic value) {
@@ -1229,9 +1331,9 @@ class _TriggerFormState extends State<_TriggerForm> {
       children: [
         _DevicePicker(
           hint: 'Select device',
-          value: _data['device_id'] as String?,
+          value: readSingleDeviceRef(_data),
           devices: widget.deviceResolver.devices,
-          onChanged: (v) => _set('device_id', v),
+          onChanged: _setDeviceRef,
         ),
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
@@ -1241,7 +1343,8 @@ class _TriggerFormState extends State<_TriggerForm> {
             border: OutlineInputBorder(),
           ),
           items: const [
-            DropdownMenuItem(value: 'any', child: Text('Any (online or offline)')),
+            DropdownMenuItem(
+                value: 'any', child: Text('Any (online or offline)')),
             DropdownMenuItem(value: 'online', child: Text('Online')),
             DropdownMenuItem(value: 'offline', child: Text('Offline')),
           ],
@@ -1256,9 +1359,8 @@ class _TriggerFormState extends State<_TriggerForm> {
   }
 
   Widget _buildTimeOfDay() {
-    final days = List<String>.from(_data['days'] as List? ?? [
-      'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'
-    ]);
+    final days = List<String>.from(_data['days'] as List? ??
+        ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']);
     const allDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1307,8 +1409,8 @@ class _TriggerFormState extends State<_TriggerForm> {
                   updated.remove(d);
                 }
                 // Preserve order
-                updated.sort((a, b) =>
-                    allDays.indexOf(a).compareTo(allDays.indexOf(b)));
+                updated.sort(
+                    (a, b) => allDays.indexOf(a).compareTo(allDays.indexOf(b)));
                 _set('days', updated);
               },
             );
@@ -1506,9 +1608,9 @@ class _TriggerFormState extends State<_TriggerForm> {
       children: [
         _DevicePicker(
           hint: 'Select button device',
-          value: _data['device_id'] as String?,
+          value: readSingleDeviceRef(_data),
           devices: widget.deviceResolver.devices,
-          onChanged: (v) => _set('device_id', v),
+          onChanged: _setDeviceRef,
         ),
         const SizedBox(height: 8),
         _FormField(
@@ -1518,8 +1620,10 @@ class _TriggerFormState extends State<_TriggerForm> {
           keyboardType: TextInputType.number,
           onChanged: (v) {
             final n = int.tryParse(v);
-            if (n == null) _remove('button_number');
-            else _set('button_number', n);
+            if (n == null)
+              _remove('button_number');
+            else
+              _set('button_number', n);
           },
         ),
         const SizedBox(height: 8),
@@ -1532,7 +1636,8 @@ class _TriggerFormState extends State<_TriggerForm> {
           items: const [
             DropdownMenuItem(value: 'pushed', child: Text('Pushed')),
             DropdownMenuItem(value: 'held', child: Text('Held')),
-            DropdownMenuItem(value: 'double_tapped', child: Text('Double Tapped')),
+            DropdownMenuItem(
+                value: 'double_tapped', child: Text('Double Tapped')),
             DropdownMenuItem(value: 'released', child: Text('Released')),
           ],
           onChanged: (v) => _set('event', v ?? 'pushed'),
@@ -1546,9 +1651,9 @@ class _TriggerFormState extends State<_TriggerForm> {
       children: [
         _DevicePicker(
           hint: 'Select device',
-          value: _data['device_id'] as String?,
+          value: readSingleDeviceRef(_data),
           devices: widget.deviceResolver.devices,
-          onChanged: (v) => _set('device_id', v),
+          onChanged: _setDeviceRef,
         ),
         const SizedBox(height: 8),
         _FormField(
@@ -1567,8 +1672,10 @@ class _TriggerFormState extends State<_TriggerForm> {
           items: const [
             DropdownMenuItem(value: 'above', child: Text('Above')),
             DropdownMenuItem(value: 'below', child: Text('Below')),
-            DropdownMenuItem(value: 'crosses_above', child: Text('Crosses Above')),
-            DropdownMenuItem(value: 'crosses_below', child: Text('Crosses Below')),
+            DropdownMenuItem(
+                value: 'crosses_above', child: Text('Crosses Above')),
+            DropdownMenuItem(
+                value: 'crosses_below', child: Text('Crosses Below')),
           ],
           onChanged: (v) => _set('op', v ?? 'above'),
         ),
@@ -1598,7 +1705,8 @@ class _TriggerFormState extends State<_TriggerForm> {
         _FormField(
           label: 'Calendar ID (optional)',
           value: _data['calendar_id'] as String? ?? '',
-          onChanged: (v) => v.isEmpty ? _remove('calendar_id') : _set('calendar_id', v),
+          onChanged: (v) =>
+              v.isEmpty ? _remove('calendar_id') : _set('calendar_id', v),
         ),
         const SizedBox(height: 8),
         _FormField(
@@ -1615,8 +1723,10 @@ class _TriggerFormState extends State<_TriggerForm> {
           keyboardType: TextInputType.number,
           onChanged: (v) {
             final n = int.tryParse(v);
-            if (n == null) _remove('offset_minutes');
-            else _set('offset_minutes', n);
+            if (n == null)
+              _remove('offset_minutes');
+            else
+              _set('offset_minutes', n);
           },
         ),
       ],
@@ -1686,8 +1796,7 @@ class _ConditionEditorDialogState extends State<_ConditionEditorDialog> {
     }
     final isKnown = _conditionTypes.contains(_type);
     if (!isKnown) {
-      _jsonCtrl.text =
-          const JsonEncoder.withIndent('  ').convert(_data);
+      _jsonCtrl.text = const JsonEncoder.withIndent('  ').convert(_data);
     }
   }
 
@@ -1763,10 +1872,7 @@ class _ConditionEditorDialogState extends State<_ConditionEditorDialog> {
                 },
               ),
               const SizedBox(height: 16),
-              if (isKnown)
-                _buildKnownConditionForm()
-              else
-                _buildJsonForm(),
+              if (isKnown) _buildKnownConditionForm() else _buildJsonForm(),
             ],
           ),
         ),
@@ -1794,9 +1900,11 @@ class _ConditionEditorDialogState extends State<_ConditionEditorDialog> {
           children: [
             _DevicePicker(
               hint: 'Select device',
-              value: _data['device_id'] as String?,
+              value: readSingleDeviceRef(_data),
               devices: widget.deviceResolver.devices,
-              onChanged: (v) => _set('device_id', v),
+              onChanged: (v) {
+                setState(() => writeSingleDeviceRef(_data, v));
+              },
             ),
             const SizedBox(height: 8),
             _FormField(
@@ -1925,9 +2033,11 @@ class _ConditionEditorDialogState extends State<_ConditionEditorDialog> {
           children: [
             _DevicePicker(
               hint: 'Select device',
-              value: _data['device_id'] as String?,
+              value: readSingleDeviceRef(_data),
               devices: widget.deviceResolver.devices,
-              onChanged: (v) => _set('device_id', v),
+              onChanged: (v) {
+                setState(() => writeSingleDeviceRef(_data, v));
+              },
             ),
             const SizedBox(height: 8),
             _FormField(
@@ -1942,8 +2052,7 @@ class _ConditionEditorDialogState extends State<_ConditionEditorDialog> {
               value: (_data['duration_secs'] as num?)?.toString() ?? '',
               hint: 'e.g. 300 (5 minutes)',
               keyboardType: TextInputType.number,
-              onChanged: (v) =>
-                  _set('duration_secs', int.tryParse(v) ?? 0),
+              onChanged: (v) => _set('duration_secs', int.tryParse(v) ?? 0),
             ),
           ],
         );
@@ -2091,9 +2200,12 @@ class _ActionEditorDialogState extends State<_ActionEditorDialog> {
   static const _jsonBlockTypes = {'parallel', 'conditional', 'repeat_until'};
 
   static const _jsonBlockTemplates = {
-    'parallel': '{\n  "type": "parallel",\n  "actions": [\n    {"type": "set_device_state", "device_id": "", "state": {}}\n  ]\n}',
-    'conditional': '{\n  "type": "conditional",\n  "expression": "ctx.get(\\"on\\") == true",\n  "then_actions": [\n    {"type": "set_device_state", "device_id": "", "state": {}}\n  ],\n  "else_actions": []\n}',
-    'repeat_until': '{\n  "type": "repeat_until",\n  "condition_expression": "ctx.get(\\"on\\") == true",\n  "max_iterations": 10,\n  "actions": [\n    {"type": "delay", "duration_secs": 1}\n  ]\n}',
+    'parallel':
+        '{\n  "type": "parallel",\n  "actions": [\n    {"type": "set_device_state", "device": "", "state": {}}\n  ]\n}',
+    'conditional':
+        '{\n  "type": "conditional",\n  "expression": "ctx.get(\\"on\\") == true",\n  "then_actions": [\n    {"type": "set_device_state", "device": "", "state": {}}\n  ],\n  "else_actions": []\n}',
+    'repeat_until':
+        '{\n  "type": "repeat_until",\n  "condition_expression": "ctx.get(\\"on\\") == true",\n  "max_iterations": 10,\n  "actions": [\n    {"type": "delay", "duration_secs": 1}\n  ]\n}',
   };
 
   @override
@@ -2108,8 +2220,8 @@ class _ActionEditorDialogState extends State<_ActionEditorDialog> {
     }
     if (!_actionTypes.contains(_type) || _jsonBlockTypes.contains(_type)) {
       final template = _jsonBlockTemplates[_type];
-      _jsonCtrl.text = template ??
-          const JsonEncoder.withIndent('  ').convert(_data);
+      _jsonCtrl.text =
+          template ?? const JsonEncoder.withIndent('  ').convert(_data);
     }
   }
 
@@ -2140,7 +2252,8 @@ class _ActionEditorDialogState extends State<_ActionEditorDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final isKnown = _actionTypes.contains(_type) && !_jsonBlockTypes.contains(_type);
+    final isKnown =
+        _actionTypes.contains(_type) && !_jsonBlockTypes.contains(_type);
     return AlertDialog(
       title: Text(widget.initial == null ? 'Add Action' : 'Edit Action'),
       content: SizedBox(
@@ -2186,13 +2299,13 @@ class _ActionEditorDialogState extends State<_ActionEditorDialog> {
                 _buildKnownActionForm()
               else if (_type == 'parallel')
                 _buildBlockJsonForm(
-                  'Runs all listed actions concurrently. Edit the "actions" array below.')
+                    'Runs all listed actions concurrently. Edit the "actions" array below.')
               else if (_type == 'conditional')
                 _buildBlockJsonForm(
-                  'Evaluates a Rhai expression; runs then_actions if true, else_actions if false.')
+                    'Evaluates a Rhai expression; runs then_actions if true, else_actions if false.')
               else if (_type == 'repeat_until')
                 _buildBlockJsonForm(
-                  'Repeats actions until condition_expression is true (or max_iterations reached).')
+                    'Repeats actions until condition_expression is true (or max_iterations reached).')
               else
                 _buildJsonForm(),
             ],
@@ -2222,9 +2335,11 @@ class _ActionEditorDialogState extends State<_ActionEditorDialog> {
           children: [
             _DevicePicker(
               hint: 'Select device',
-              value: _data['device_id'] as String?,
+              value: readSingleDeviceRef(_data),
               devices: widget.deviceResolver.devices,
-              onChanged: (v) => _set('device_id', v),
+              onChanged: (v) {
+                setState(() => writeSingleDeviceRef(_data, v));
+              },
             ),
             const SizedBox(height: 8),
             TextFormField(
@@ -2296,8 +2411,7 @@ class _ActionEditorDialogState extends State<_ActionEditorDialog> {
             _FormField(
               label: 'Title (optional)',
               value: _data['title'] as String? ?? '',
-              onChanged: (v) =>
-                  v.isEmpty ? _remove('title') : _set('title', v),
+              onChanged: (v) => v.isEmpty ? _remove('title') : _set('title', v),
             ),
           ],
         );
@@ -2451,8 +2565,10 @@ class _ActionEditorDialogState extends State<_ActionEditorDialog> {
           children: [
             Text(
               'Rhai script. Use set_device_state(id, state), notify(channel, msg), http_get(url), publish_mqtt(topic, payload).',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(context).colorScheme.outline),
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: Theme.of(context).colorScheme.outline),
             ),
             const SizedBox(height: 8),
             TextFormField(
@@ -2474,8 +2590,10 @@ class _ActionEditorDialogState extends State<_ActionEditorDialog> {
               hint: 'Default: 5',
               onChanged: (v) {
                 final n = int.tryParse(v);
-                if (n == null) _remove('timeout_secs');
-                else _set('timeout_secs', n);
+                if (n == null)
+                  _remove('timeout_secs');
+                else
+                  _set('timeout_secs', n);
               },
             ),
           ],
@@ -2510,8 +2628,10 @@ class _ActionEditorDialogState extends State<_ActionEditorDialog> {
       children: [
         Text(
           description,
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: Theme.of(context).colorScheme.outline),
+          style: Theme.of(context)
+              .textTheme
+              .bodySmall
+              ?.copyWith(color: Theme.of(context).colorScheme.outline),
         ),
         const SizedBox(height: 8),
         _buildJsonForm(),
@@ -2594,10 +2714,32 @@ class _DevicePicker extends StatelessWidget {
         return cmp != 0 ? cmp : a.displayName.compareTo(b.displayName);
       });
 
-    // Check if current value exists in device list; if not, add a synthetic entry
-    final knownIds = sorted.map((d) => d.id).toSet();
-    final effectiveValue =
-        (value != null && value!.isNotEmpty) ? value : null;
+    DeviceState? selectedDevice;
+    final rawValue = (value != null && value!.isNotEmpty) ? value : null;
+    if (rawValue != null) {
+      final byRuleRef =
+          sorted.where((d) => d.ruleReference == rawValue).toList();
+      if (byRuleRef.isNotEmpty) {
+        selectedDevice = byRuleRef.first;
+      } else {
+        final byCanonical =
+            sorted.where((d) => d.canonicalName == rawValue).toList();
+        if (byCanonical.isNotEmpty) {
+          selectedDevice = byCanonical.first;
+        } else {
+          final byId = sorted.where((d) => d.id == rawValue).toList();
+          if (byId.isNotEmpty) {
+            selectedDevice = byId.first;
+          } else {
+            final byName = sorted.where((d) => d.name == rawValue).toList();
+            if (byName.length == 1) {
+              selectedDevice = byName.first;
+            }
+          }
+        }
+      }
+    }
+    final effectiveValue = selectedDevice?.ruleReference ?? rawValue;
 
     final items = <DropdownMenuItem<String>>[];
     String? lastArea;
@@ -2620,7 +2762,7 @@ class _DevicePicker extends StatelessWidget {
         lastArea = area;
       }
       items.add(DropdownMenuItem<String>(
-        value: device.id,
+        value: device.ruleReference,
         child: Padding(
           padding: const EdgeInsets.only(left: 8),
           child: Text(device.displayName),
@@ -2629,7 +2771,8 @@ class _DevicePicker extends StatelessWidget {
     }
 
     // If current value isn't in the list, add it at the top
-    if (effectiveValue != null && !knownIds.contains(effectiveValue)) {
+    final knownRefs = sorted.map((d) => d.ruleReference).toSet();
+    if (effectiveValue != null && !knownRefs.contains(effectiveValue)) {
       items.insert(
         0,
         DropdownMenuItem<String>(

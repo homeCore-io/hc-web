@@ -1,3 +1,5 @@
+import 'device_reference.dart';
+
 class HcRule {
   final String id;
   final String name;
@@ -42,9 +44,7 @@ class HcRule {
         actions: (json['actions'] as List? ?? [])
             .map((e) => Map<String, dynamic>.from(e as Map))
             .toList(),
-        tags: (json['tags'] as List? ?? [])
-            .map((e) => e as String)
-            .toList(),
+        tags: (json['tags'] as List? ?? []).map((e) => e as String).toList(),
         error: json['error'] as String?,
       );
 
@@ -100,16 +100,12 @@ class HcRule {
 
     switch (type) {
       case 'device_state_changed':
-        final devIds = (t['device_ids'] as List?)
-            ?.map((e) => dev(e as String))
-            .join(', ');
-        final single =
-            t['device_id'] != null ? dev(t['device_id'] as String) : null;
-        final name = devIds ?? single ?? '?';
+        final refs = readDeviceRefs(t);
+        final name = refs.isEmpty ? '?' : refs.map(dev).join(', ');
         final attr = t['attribute'] != null ? ' → ${t['attribute']}' : '';
         return 'Device: $name$attr';
       case 'device_availability_changed':
-        return 'Availability: ${dev(t['device_id'] as String? ?? '?')}';
+        return 'Availability: ${dev(readSingleDeviceRef(t) ?? '?')}';
       case 'mode_changed':
         final mId = t['mode_id'] as String?;
         return 'Mode: ${mId != null ? mode(mId) : 'any'} changed';
@@ -126,9 +122,9 @@ class HcRule {
       case 'mqtt_message':
         return 'MQTT: ${t['topic_pattern']}';
       case 'button_event':
-        return 'Button: ${dev(t['device_id'] as String? ?? '?')} ${t['action'] ?? ''}';
+        return 'Button: ${dev(readSingleDeviceRef(t) ?? '?')} ${t['action'] ?? ''}';
       case 'numeric_threshold':
-        return 'Threshold: ${dev(t['device_id'] as String? ?? '?')} ${t['attribute']}';
+        return 'Threshold: ${dev(readSingleDeviceRef(t) ?? '?')} ${t['attribute']}';
       case 'periodic':
         return 'Every ${t['interval_secs']}s';
       case 'calendar_event':
