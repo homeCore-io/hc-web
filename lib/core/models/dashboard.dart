@@ -412,6 +412,13 @@ class DashboardTemplateFactory {
           refreshPolicy: DashboardRefreshPolicy.live,
           config: {'limit': 8},
         ),
+        DashboardWidgetModel(
+          id: 'starter_links',
+          type: DashboardWidgetType.dashboardLink,
+          title: 'Explore Dashboards',
+          refreshPolicy: DashboardRefreshPolicy.passive,
+          config: {},
+        ),
       ],
       layouts: _defaultLayouts(const {
         'welcome': [0, 0, 12, 2],
@@ -420,6 +427,7 @@ class DashboardTemplateFactory {
         'starter_scenes': [0, 4, 12, 1],
         'starter_devices': [0, 5, 7, 2],
         'starter_events': [7, 5, 5, 2],
+        'starter_links': [0, 7, 12, 1],
       }),
     );
   }

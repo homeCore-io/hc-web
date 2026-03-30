@@ -16,13 +16,7 @@ class DashboardsNotifier extends AsyncNotifier<List<DashboardDefinition>> {
         'local_user';
     final api = ref.read(dashboardsApiProvider);
     var dashboards = await api.listDashboards();
-    if (dashboards.isEmpty) {
-      for (final template
-          in DashboardTemplateFactory.starterDashboards(ownerUserId: owner)) {
-        await api.createDashboard(template);
-      }
-      dashboards = await api.listDashboards();
-    }
+    dashboards = await _ensureGettingStartedDashboard(api, owner, dashboards);
     return dashboards;
   }
 
@@ -81,6 +75,58 @@ class DashboardsNotifier extends AsyncNotifier<List<DashboardDefinition>> {
       await ref.read(dashboardsApiProvider).createDashboard(template);
     }
     await reload();
+  }
+
+  Future<List<DashboardDefinition>> _ensureGettingStartedDashboard(
+    DashboardsApi api,
+    String owner,
+    List<DashboardDefinition> dashboards,
+  ) async {
+    final starter =
+        DashboardTemplateFactory.starterDashboards(ownerUserId: owner).single;
+
+    if (dashboards.isEmpty) {
+      await api.createDashboard(starter);
+      final created = await api.listDashboards();
+      if (created.any((dashboard) => dashboard.id == starter.id)) {
+        await api.setDefault(starter.id);
+      }
+      return await api.listDashboards();
+    }
+
+    final existingStarter = dashboards
+        .where((dashboard) =>
+            dashboard.id == starter.id || dashboard.name == starter.name)
+        .firstOrNull;
+    if (existingStarter != null) {
+      if (!dashboards.any((dashboard) => dashboard.isDefault)) {
+        await api.setDefault(existingStarter.id);
+        return await api.listDashboards();
+      }
+      return dashboards;
+    }
+
+    final oldHome = dashboards
+        .where((dashboard) => dashboard.id == 'template_home_overview')
+        .firstOrNull;
+    if (oldHome != null) {
+      await api.updateDashboard(oldHome.copyWith(
+        name: starter.name,
+        description: starter.description,
+        visibility: starter.visibility,
+        tags: starter.tags,
+        icon: starter.icon,
+        widgets: starter.widgets,
+        layouts: starter.layouts,
+        updatedAt: DateTime.now(),
+      ));
+      await api.setDefault(oldHome.id);
+      return await api.listDashboards();
+    }
+
+    await api.createDashboard(starter);
+    await api.setDefault(starter.id);
+    return await api.listDashboards();
   }
 }
 

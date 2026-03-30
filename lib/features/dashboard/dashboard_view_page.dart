@@ -58,7 +58,10 @@ class DashboardViewPage extends ConsumerWidget {
         error: (e, _) => Center(child: Text('Error: $e')),
         data: (_) {
           if (dashboard == null) {
-            return const Center(child: Text('Dashboard not found'));
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (context.mounted) context.go('/dashboard');
+            });
+            return const Center(child: CircularProgressIndicator());
           }
           return RefreshIndicator(
             onRefresh: () async {
