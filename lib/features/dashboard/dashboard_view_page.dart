@@ -622,28 +622,96 @@ class _EventFeedWidgetState extends ConsumerState<_EventFeedWidget> {
 
   @override
   Widget build(BuildContext context) {
-    if (_events.isEmpty) {
+    final devices =
+        ref.watch(devicesProvider).valueOrNull ?? const <DeviceState>[];
+    final deviceById = {for (final device in devices) device.id: device};
+    final allowedTypes =
+        ((widget.widgetModel.config['types'] as List?) ?? const [])
+            .whereType<String>()
+            .toSet();
+    final allowedDeviceIds =
+        ((widget.widgetModel.config['device_ids'] as List?) ?? const [])
+            .whereType<String>()
+            .toSet();
+    final areaFilter = widget.widgetModel.config['area_name'] as String? ?? '';
+    final groupBy = widget.widgetModel.config['group_by'] as String? ?? 'none';
+    final filtered = _events.where((event) {
+      if (allowedTypes.isNotEmpty && !allowedTypes.contains(event.type)) {
+        return false;
+      }
+      if (allowedDeviceIds.isNotEmpty &&
+          (event.deviceId == null ||
+              !allowedDeviceIds.contains(event.deviceId))) {
+        return false;
+      }
+      if (areaFilter.isNotEmpty) {
+        final deviceId = event.deviceId;
+        if (deviceId == null || deviceById[deviceId]?.area != areaFilter) {
+          return false;
+        }
+      }
+      return true;
+    }).toList();
+
+    if (filtered.isEmpty) {
       return const Text('No recent events yet.');
     }
-    final maxItems = widget.compact && _events.length > 5 ? 5 : _events.length;
+    final maxItems =
+        widget.compact && filtered.length > 5 ? 5 : filtered.length;
+    final shown = filtered.take(maxItems).toList();
+    String groupLabel(HcEvent event) {
+      switch (groupBy) {
+        case 'type':
+          return event.type;
+        case 'device':
+          return event.deviceId == null
+              ? 'Other'
+              : (deviceById[event.deviceId!]?.displayName ?? event.deviceId!);
+        case 'area':
+          return event.deviceId == null
+              ? 'Other'
+              : (deviceById[event.deviceId!]?.area ?? 'Unassigned');
+        default:
+          return '';
+      }
+    }
+
+    final children = <Widget>[];
+    String? currentGroup;
+    for (final event in shown) {
+      final label = groupLabel(event);
+      if (groupBy != 'none' && label != currentGroup) {
+        currentGroup = label;
+        children.add(Padding(
+          padding: const EdgeInsets.only(top: 8, bottom: 4),
+          child: Text(
+            label,
+            style: Theme.of(context).textTheme.labelMedium,
+          ),
+        ));
+      }
+      children.add(ListTile(
+        dense: true,
+        contentPadding: EdgeInsets.zero,
+        visualDensity:
+            widget.compact ? VisualDensity.compact : VisualDensity.standard,
+        title: Text(event.type),
+        subtitle: Text(
+          event.deviceId == null
+              ? event.data['rule_id']?.toString() ??
+                  event.data['scene_id']?.toString() ??
+                  ''
+              : [
+                  deviceById[event.deviceId!]?.displayName ?? event.deviceId!,
+                  if ((deviceById[event.deviceId!]?.area ?? '').isNotEmpty)
+                    deviceById[event.deviceId!]?.area,
+                ].whereType<String>().join(' • '),
+        ),
+      ));
+    }
     return Column(
-      children: _events
-          .take(maxItems)
-          .map((event) => ListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                visualDensity: widget.compact
-                    ? VisualDensity.compact
-                    : VisualDensity.standard,
-                title: Text(event.type),
-                subtitle: Text(
-                  event.deviceId ??
-                      event.data['rule_id']?.toString() ??
-                      event.data['scene_id']?.toString() ??
-                      '',
-                ),
-              ))
-          .toList(),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: children,
     );
   }
 }
@@ -712,6 +780,7 @@ class _MediaPlayerDashboardCardState
   @override
   Widget build(BuildContext context) {
     final device = widget.device;
+    final sonos = device.sonos;
     final isPlaying = device.playbackState == 'playing' ||
         device.playbackState == 'buffering';
     final progress = (device.durationSecs != null && device.durationSecs! > 0)
@@ -719,6 +788,21 @@ class _MediaPlayerDashboardCardState
         : null;
     final volume =
         (_volumeDraft ?? device.volumePercent?.toDouble())?.clamp(0, 100);
+    final favorites =
+        ((sonos['favorites'] ?? device.state['available_favorites']) as List? ??
+                const [])
+            .whereType<String>()
+            .toList();
+    final playlists =
+        ((sonos['playlists'] ?? device.state['available_playlists']) as List? ??
+                const [])
+            .whereType<String>()
+            .toList();
+    final groupMembers =
+        ((sonos['group_members'] ?? device.state['group_members']) as List? ??
+                const [])
+            .whereType<String>()
+            .toList();
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
@@ -779,6 +863,34 @@ class _MediaPlayerDashboardCardState
                 '${_formatDuration(device.positionSecs)} / ${_formatDuration(device.durationSecs)}',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
+            ],
+            if (!widget.compact &&
+                (device.source != null ||
+                    device.album != null ||
+                    groupMembers.isNotEmpty ||
+                    device.uiEnrichments.isNotEmpty)) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  if (device.source != null && device.source!.isNotEmpty)
+                    Chip(label: Text(device.source!)),
+                  if (device.album != null && device.album!.isNotEmpty)
+                    Chip(label: Text(device.album!)),
+                  ...device.uiEnrichments.take(3).map((item) => Chip(
+                        visualDensity: VisualDensity.compact,
+                        label: Text(item),
+                      )),
+                ],
+              ),
+              if (groupMembers.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Text(
+                  'Group: ${groupMembers.join(', ')}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
             ],
             const SizedBox(height: 8),
             Wrap(
@@ -863,6 +975,46 @@ class _MediaPlayerDashboardCardState
                   ),
                   Text('${volume.round()}%'),
                 ],
+              ),
+            ],
+            if (!widget.compact && favorites.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: favorites
+                    .take(3)
+                    .map((favorite) => ActionChip(
+                          label: Text(favorite),
+                          onPressed: _busy
+                              ? null
+                              : () => _send({
+                                    'action': 'play_media',
+                                    'media_type': 'favorite',
+                                    'name': favorite,
+                                  }),
+                        ))
+                    .toList(),
+              ),
+            ],
+            if (!widget.compact && playlists.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: playlists
+                    .take(2)
+                    .map((playlist) => ActionChip(
+                          label: Text(playlist),
+                          onPressed: _busy
+                              ? null
+                              : () => _send({
+                                    'action': 'play_media',
+                                    'media_type': 'playlist',
+                                    'name': playlist,
+                                  }),
+                        ))
+                    .toList(),
               ),
             ],
           ],
@@ -1122,6 +1274,7 @@ class _HistoryChartWidget extends ConsumerWidget {
     final deviceId = widgetModel.config['device_id'] as String? ?? '';
     final attribute = widgetModel.config['attribute'] as String? ?? '';
     final limit = widgetModel.config['limit'] as int? ?? 50;
+    final timeframeHours = widgetModel.config['timeframe_hours'] as int? ?? 24;
     if (deviceId.isEmpty || attribute.isEmpty) {
       return const _PlaceholderWidget(
         message: 'Choose a device and attribute for this history chart.',
@@ -1134,13 +1287,17 @@ class _HistoryChartWidget extends ConsumerWidget {
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (error, _) => Text('History error: $error'),
       data: (entries) {
+        final cutoff = DateTime.now().subtract(Duration(hours: timeframeHours));
         final filtered = entries
-            .where((entry) => entry.attribute == attribute)
+            .where((entry) =>
+                entry.attribute == attribute &&
+                entry.recordedAt.isAfter(cutoff))
             .toList()
           ..sort((a, b) => a.recordedAt.compareTo(b.recordedAt));
         if (filtered.isEmpty) {
           return _PlaceholderWidget(
-            message: 'No $attribute history found for $deviceId.',
+            message:
+                'No $attribute history found for $deviceId in the last $timeframeHours hours.',
           );
         }
         final limited = filtered.length > limit
@@ -1151,6 +1308,7 @@ class _HistoryChartWidget extends ConsumerWidget {
           attribute: attribute,
           entries: limited,
           compact: compact,
+          timeframeHours: timeframeHours,
         );
       },
     );
@@ -1162,12 +1320,14 @@ class _HistoryChartContent extends ConsumerWidget {
   final String attribute;
   final List<HistoryEntry> entries;
   final bool compact;
+  final int timeframeHours;
 
   const _HistoryChartContent({
     required this.deviceId,
     required this.attribute,
     required this.entries,
     required this.compact,
+    required this.timeframeHours,
   });
 
   @override
@@ -1223,6 +1383,7 @@ class _HistoryChartContent extends ConsumerWidget {
           children: [
             Chip(label: Text(deviceId)),
             Chip(label: Text(attribute)),
+            Chip(label: Text('${timeframeHours}h')),
             Chip(label: Text('Latest: $latestLabel')),
           ],
         ),

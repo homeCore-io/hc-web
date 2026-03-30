@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'dart:convert';
 import '../../core/models/dashboard.dart';
 import '../../core/providers/dashboards_provider.dart';
 
@@ -15,10 +16,14 @@ class DashboardsPage extends ConsumerWidget {
         title: const Text('Dashboards'),
         actions: [
           IconButton(
-            tooltip: 'Reset templates',
-            onPressed: () =>
-                ref.read(dashboardsProvider.notifier).resetTemplates(),
-            icon: const Icon(Icons.restart_alt),
+            tooltip: 'Import dashboard',
+            onPressed: () => _showImportDialog(context, ref),
+            icon: const Icon(Icons.upload_file_outlined),
+          ),
+          IconButton(
+            tooltip: 'New from template',
+            onPressed: () => _showTemplateDialog(context, ref),
+            icon: const Icon(Icons.dashboard_customize_outlined),
           ),
         ],
       ),
@@ -134,6 +139,11 @@ class _DashboardCard extends ConsumerWidget {
                   label: const Text('Set Default'),
                 ),
                 OutlinedButton.icon(
+                  onPressed: () => _showExportDialog(context, ref, dashboard),
+                  icon: const Icon(Icons.download_outlined),
+                  label: const Text('Export'),
+                ),
+                OutlinedButton.icon(
                   onPressed: () async {
                     final confirmed = await showDialog<bool>(
                       context: context,
@@ -168,4 +178,104 @@ class _DashboardCard extends ConsumerWidget {
       ),
     );
   }
+}
+
+Future<void> _showTemplateDialog(BuildContext context, WidgetRef ref) async {
+  final templates = await ref.read(dashboardTemplatesProvider.future);
+  if (!context.mounted) return;
+  final templateId = await showDialog<String>(
+    context: context,
+    builder: (context) => SimpleDialog(
+      title: const Text('Create From Template'),
+      children: templates
+          .map((template) => SimpleDialogOption(
+                onPressed: () => Navigator.pop(context, template.id),
+                child: ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(template.name),
+                  subtitle: Text(template.description ?? template.id),
+                ),
+              ))
+          .toList(),
+    ),
+  );
+  if (templateId == null) return;
+  await ref.read(dashboardsProvider.notifier).createFromTemplate(templateId);
+}
+
+Future<void> _showExportDialog(
+  BuildContext context,
+  WidgetRef ref,
+  DashboardDefinition dashboard,
+) async {
+  final exported =
+      await ref.read(dashboardsProvider.notifier).exportDashboard(dashboard.id);
+  if (!context.mounted) return;
+  final controller = TextEditingController(
+    text: const JsonEncoder.withIndent('  ').convert(exported.toJson()),
+  );
+  await showDialog<void>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text('Export ${dashboard.name}'),
+      content: SizedBox(
+        width: 700,
+        child: TextField(
+          controller: controller,
+          maxLines: 20,
+          decoration: const InputDecoration(
+            border: OutlineInputBorder(),
+            labelText: 'Dashboard JSON',
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
+      ],
+    ),
+  );
+}
+
+Future<void> _showImportDialog(BuildContext context, WidgetRef ref) async {
+  final controller = TextEditingController();
+  final imported = await showDialog<DashboardDefinition>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Import Dashboard'),
+      content: SizedBox(
+        width: 700,
+        child: TextField(
+          controller: controller,
+          maxLines: 20,
+          decoration: const InputDecoration(
+            border: OutlineInputBorder(),
+            labelText: 'Paste exported dashboard JSON',
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () {
+            final decoded = jsonDecode(controller.text);
+            Navigator.pop(
+              context,
+              DashboardDefinition.fromJson(
+                Map<String, dynamic>.from(decoded as Map),
+              ),
+            );
+          },
+          child: const Text('Import'),
+        ),
+      ],
+    ),
+  );
+  if (imported == null) return;
+  await ref.read(dashboardsProvider.notifier).importDashboard(imported);
 }

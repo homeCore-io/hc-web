@@ -1168,7 +1168,9 @@ class _DashboardWidgetConfigEditorState
   late String _selectionMode;
   late String _sourceType;
   late String _sandboxProfile;
+  late String _eventGroupBy;
   late bool _showOffline;
+  late int _historyTimeframeHours;
 
   @override
   void initState() {
@@ -1215,7 +1217,9 @@ class _DashboardWidgetConfigEditorState
     _selectionMode = config['selection_mode'] as String? ?? 'query';
     _sourceType = config['source_type'] as String? ?? 'image_refresh';
     _sandboxProfile = config['sandbox_profile'] as String? ?? 'readonly_embed';
+    _eventGroupBy = config['group_by'] as String? ?? 'none';
     _showOffline = config['show_offline'] as bool? ?? true;
+    _historyTimeframeHours = config['timeframe_hours'] as int? ?? 24;
   }
 
   @override
@@ -1279,6 +1283,11 @@ class _DashboardWidgetConfigEditorState
         config = {
           if (limit != null) 'limit': limit,
           if (_csv(_eventTypesCtrl).isNotEmpty) 'types': _csv(_eventTypesCtrl),
+          if (_areaCtrl.text.trim().isNotEmpty)
+            'area_name': _areaCtrl.text.trim(),
+          if (_csv(_deviceIdsCtrl).isNotEmpty)
+            'device_ids': _csv(_deviceIdsCtrl),
+          if (_eventGroupBy != 'none') 'group_by': _eventGroupBy,
         };
       case DashboardWidgetType.cameraVideo:
         config = {
@@ -1299,6 +1308,7 @@ class _DashboardWidgetConfigEditorState
           'device_id': _historyDeviceCtrl.text.trim(),
           'attribute': _historyAttributeCtrl.text.trim(),
           if (limit != null) 'limit': limit,
+          'timeframe_hours': _historyTimeframeHours,
         };
       case DashboardWidgetType.dashboardLink:
         config = {
@@ -1497,6 +1507,69 @@ class _DashboardWidgetConfigEditorState
                     ))
                 .toList(),
           ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            initialValue: _eventGroupBy,
+            decoration: const InputDecoration(
+              labelText: 'Group events by',
+              border: OutlineInputBorder(),
+            ),
+            items: const [
+              DropdownMenuItem(value: 'none', child: Text('None')),
+              DropdownMenuItem(value: 'type', child: Text('Type')),
+              DropdownMenuItem(value: 'device', child: Text('Device')),
+              DropdownMenuItem(value: 'area', child: Text('Area')),
+            ],
+            onChanged: (value) {
+              if (value != null) {
+                setState(() => _eventGroupBy = value);
+                _emit();
+              }
+            },
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            initialValue: areaNames.contains(_areaCtrl.text.trim())
+                ? _areaCtrl.text.trim()
+                : null,
+            decoration: const InputDecoration(
+              labelText: 'Area filter',
+              border: OutlineInputBorder(),
+            ),
+            items: [
+              const DropdownMenuItem<String>(
+                value: '',
+                child: Text('All areas'),
+              ),
+              ...areaNames.map(
+                  (area) => DropdownMenuItem(value: area, child: Text(area))),
+            ],
+            onChanged: (value) {
+              _areaCtrl.text = value ?? '';
+              _emit();
+            },
+          ),
+          const SizedBox(height: 12),
+          _DeviceMultiSelectField(
+            label: 'Only these devices',
+            devices: devices,
+            selectedIds: selectedManualIds,
+            onChanged: (selectedIds) {
+              _setCsv(_deviceIdsCtrl, selectedIds);
+              _emit();
+              setState(() {});
+            },
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _limitCtrl,
+            decoration: const InputDecoration(
+              labelText: 'Limit',
+              border: OutlineInputBorder(),
+            ),
+            keyboardType: TextInputType.number,
+            onChanged: (_) => _emit(),
+          ),
         ],
         if ({
           DashboardWidgetType.cameraVideo,
@@ -1653,6 +1726,27 @@ class _DashboardWidgetConfigEditorState
               _historyAttributeCtrl.text = value ?? '';
               _emit();
               setState(() {});
+            },
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<int>(
+            initialValue: _historyTimeframeHours,
+            decoration: const InputDecoration(
+              labelText: 'Timeframe',
+              border: OutlineInputBorder(),
+            ),
+            items: const [
+              DropdownMenuItem(value: 1, child: Text('Last hour')),
+              DropdownMenuItem(value: 6, child: Text('Last 6 hours')),
+              DropdownMenuItem(value: 24, child: Text('Last 24 hours')),
+              DropdownMenuItem(value: 72, child: Text('Last 3 days')),
+              DropdownMenuItem(value: 168, child: Text('Last 7 days')),
+            ],
+            onChanged: (value) {
+              if (value != null) {
+                setState(() => _historyTimeframeHours = value);
+                _emit();
+              }
             },
           ),
           const SizedBox(height: 12),
@@ -2023,7 +2117,7 @@ Map<String, dynamic> _defaultWidgetConfig(DashboardWidgetType type) {
         'metrics': ['devices', 'on', 'offline'],
       };
     case DashboardWidgetType.eventFeed:
-      return {'limit': 10};
+      return {'limit': 10, 'group_by': 'none'};
     case DashboardWidgetType.cameraVideo:
       return {
         'source_type': 'image_refresh',
@@ -2038,7 +2132,12 @@ Map<String, dynamic> _defaultWidgetConfig(DashboardWidgetType type) {
     case DashboardWidgetType.markdown:
       return {'markdown': ''};
     case DashboardWidgetType.historyChart:
-      return {'device_id': '', 'attribute': '', 'limit': 50};
+      return {
+        'device_id': '',
+        'attribute': '',
+        'limit': 50,
+        'timeframe_hours': 24,
+      };
     case DashboardWidgetType.dashboardLink:
       return {'dashboard_ids': <String>[]};
     default:

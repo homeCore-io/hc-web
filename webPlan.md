@@ -356,9 +356,14 @@ HomeCore should expose dashboards as a first-class resource:
 
 - `GET /api/v1/dashboards`
 - `POST /api/v1/dashboards`
+- `GET /api/v1/dashboards/templates`
+- `POST /api/v1/dashboards/templates/:id`
+- `POST /api/v1/dashboards/import`
 - `GET /api/v1/dashboards/:id`
 - `PUT /api/v1/dashboards/:id`
 - `DELETE /api/v1/dashboards/:id`
+- `GET /api/v1/dashboards/:id/export`
+- `POST /api/v1/dashboards/:id/duplicate`
 - `POST /api/v1/dashboards/:id/default`
 
 Rules:
@@ -384,9 +389,9 @@ The platform must use typed widgets, not free-form page sections. Initial widget
 - `mode_chips`
   - manual and solar mode status/actions
 - `event_feed`
-  - rolling WS-driven event list
+  - rolling WS-driven event list with type/device/area filters and grouping
 - `history_chart`
-  - selected device attribute over time
+  - selected device attribute over time with timeframe presets
 - `stat_summary`
   - computed stats like offline count, doors open, lights on
 - `media_player`
@@ -529,6 +534,10 @@ Current implementation status:
 - Dashboard rendering and editor preview now both consume normalized layout data so overlapping placements are corrected consistently instead of leaving hidden stacked widgets behind.
 - Advanced widgets now have richer first-pass behavior: `history_chart` renders device history, `media_player` exposes inline transport/volume controls, and `camera_video` / `web_embed` present clearer configured-source states instead of bare placeholders.
 - Widget config editors now use selection-driven controls for common dashboard inputs such as areas, devices, dashboard links, history devices/attributes, metrics, and common event types instead of relying on raw free-text entry for those cases.
+- Dashboard lifecycle now includes API-backed duplication, template creation, export, and import flows rather than relying on `hc-web`-only cloning logic.
+- `event_feed` now supports area/device filters plus grouping by type, device, or area.
+- `history_chart` now supports timeframe presets in addition to device/attribute selection.
+- Dashboard `media_player` widgets now surface plugin enrichments such as Sonos favorites/playlists/group details when available without breaking the shared generic media-player contract.
 
 #### Recommended initial presets
 

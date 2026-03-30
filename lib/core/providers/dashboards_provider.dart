@@ -69,17 +69,64 @@ class DashboardsNotifier extends AsyncNotifier<List<DashboardDefinition>> {
   }
 
   Future<void> duplicateDashboard(String id) async {
-    final existing =
-        (state.valueOrNull ?? []).firstWhere((item) => item.id == id);
-    final now = DateTime.now();
-    final copy = existing.copyWith(
-      id: 'dashboard_${now.microsecondsSinceEpoch}',
-      name: '${existing.name} Copy',
-      isDefault: false,
-      createdAt: now,
-      updatedAt: now,
-    );
-    await createDashboard(copy);
+    if (!_dashboardApiAvailable) {
+      final existing =
+          (state.valueOrNull ?? []).firstWhere((item) => item.id == id);
+      final now = DateTime.now();
+      final copy = existing.copyWith(
+        id: 'dashboard_${now.microsecondsSinceEpoch}',
+        name: '${existing.name} Copy',
+        isDefault: false,
+        createdAt: now,
+        updatedAt: now,
+      );
+      await createDashboard(copy);
+      return;
+    }
+    await ref.read(dashboardsApiProvider).duplicateDashboard(id);
+    await reload();
+  }
+
+  Future<void> importDashboard(DashboardDefinition dashboard) async {
+    if (!_dashboardApiAvailable) {
+      await createDashboard(dashboard.copyWith(
+        id: 'dashboard_${DateTime.now().microsecondsSinceEpoch}',
+        isDefault: false,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      ));
+      return;
+    }
+    await ref.read(dashboardsApiProvider).importDashboard(dashboard);
+    await reload();
+  }
+
+  Future<DashboardDefinition> exportDashboard(String id) async {
+    if (!_dashboardApiAvailable) {
+      return (state.valueOrNull ?? const [])
+          .firstWhere((item) => item.id == id);
+    }
+    return ref.read(dashboardsApiProvider).exportDashboard(id);
+  }
+
+  Future<void> createFromTemplate(String templateId) async {
+    final currentUser = await ref.read(currentUserProvider.future);
+    final owner = currentUser?['id'] as String? ??
+        currentUser?['username'] as String? ??
+        'local_user';
+    if (!_dashboardApiAvailable) {
+      final template = DashboardTemplateFactory.templates(ownerUserId: owner)
+          .firstWhere((item) => item.id == templateId);
+      await createDashboard(template.copyWith(
+        id: 'dashboard_${DateTime.now().microsecondsSinceEpoch}',
+        isDefault: false,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      ));
+      return;
+    }
+    await ref.read(dashboardsApiProvider).createFromTemplate(templateId);
+    await reload();
   }
 
   Future<void> setDefault(String id) async {
@@ -115,10 +162,9 @@ class DashboardsNotifier extends AsyncNotifier<List<DashboardDefinition>> {
         await ref.read(dashboardsApiProvider).deleteDashboard(dashboard.id);
       }
     }
-    for (final template
-        in DashboardTemplateFactory.starterDashboards(ownerUserId: owner)) {
-      await ref.read(dashboardsApiProvider).createDashboard(template);
-    }
+    await ref
+        .read(dashboardsApiProvider)
+        .createFromTemplate('starter_getting_started');
     await reload();
   }
 
@@ -136,11 +182,8 @@ class DashboardsNotifier extends AsyncNotifier<List<DashboardDefinition>> {
     }
 
     if (dashboards.isEmpty) {
-      await api.createDashboard(starter);
-      final created = await api.listDashboards();
-      if (created.any((dashboard) => dashboard.id == starter.id)) {
-        await api.setDefault(starter.id);
-      }
+      final created = await api.createFromTemplate('starter_getting_started');
+      await api.setDefault(created.id);
       return await api.listDashboards();
     }
 
@@ -174,8 +217,8 @@ class DashboardsNotifier extends AsyncNotifier<List<DashboardDefinition>> {
       return await api.listDashboards();
     }
 
-    await api.createDashboard(starter);
-    await api.setDefault(starter.id);
+    final created = await api.createFromTemplate('starter_getting_started');
+    await api.setDefault(created.id);
     return await api.listDashboards();
   }
 
@@ -220,4 +263,20 @@ final defaultDashboardProvider = Provider<DashboardDefinition?>((ref) {
     if (dashboard.isDefault) return dashboard;
   }
   return dashboards.first;
+});
+
+final dashboardTemplatesProvider =
+    FutureProvider<List<DashboardDefinition>>((ref) async {
+  final currentUser = await ref.watch(currentUserProvider.future);
+  final owner = currentUser?['id'] as String? ??
+      currentUser?['username'] as String? ??
+      'local_user';
+  try {
+    return ref.read(dashboardsApiProvider).listTemplates();
+  } on DioException catch (error) {
+    if (error.response?.statusCode == 404) {
+      return DashboardTemplateFactory.templates(ownerUserId: owner);
+    }
+    rethrow;
+  }
 });
