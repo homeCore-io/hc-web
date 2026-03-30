@@ -21,6 +21,7 @@ class _DashboardEditorPageState extends ConsumerState<DashboardEditorPage> {
   DashboardVisibility _visibility = DashboardVisibility.private;
   String _icon = 'dashboard';
   bool _isDefault = false;
+  DashboardBreakpoint _layoutBreakpoint = DashboardBreakpoint.desktop;
   DashboardDefinition? _loaded;
   List<DashboardWidgetModel> _widgets = [];
   List<DashboardLayout> _layouts = [];
@@ -163,8 +164,123 @@ class _DashboardEditorPageState extends ConsumerState<DashboardEditorPage> {
     });
   }
 
+  DashboardLayout _layoutForEditor(DashboardBreakpoint breakpoint) {
+    final existing = _layouts.where((layout) => layout.breakpoint == breakpoint);
+    if (existing.isNotEmpty) return existing.first;
+
+    final columns = breakpoint == DashboardBreakpoint.mobile ? 1 : 12;
+    return DashboardLayout(
+      breakpoint: breakpoint,
+      columns: columns,
+      rowHeight: breakpoint == DashboardBreakpoint.tv ? 180 : 150,
+      gap: breakpoint == DashboardBreakpoint.tv ? 16 : 12,
+      placements: [
+        for (var index = 0; index < _widgets.length; index++)
+          DashboardWidgetPlacement(
+            widgetId: _widgets[index].id,
+            x: 0,
+            y: index,
+            w: columns,
+            h: 1,
+          ),
+      ],
+    );
+  }
+
+  void _replaceLayout(DashboardLayout layout) {
+    setState(() {
+      final next = [..._layouts];
+      final existingIndex =
+          next.indexWhere((item) => item.breakpoint == layout.breakpoint);
+      if (existingIndex >= 0) {
+        next[existingIndex] = layout;
+      } else {
+        next.add(layout);
+      }
+      _layouts = next;
+    });
+  }
+
+  void _updateLayoutConfig({
+    required DashboardBreakpoint breakpoint,
+    int? columns,
+    double? rowHeight,
+    double? gap,
+  }) {
+    final layout = _layoutForEditor(breakpoint);
+    final nextColumns = columns ?? layout.columns;
+    final placements = layout.placements
+        .map((placement) => placement.copyWith(
+              x: placement.x.clamp(0, nextColumns - 1),
+              w: placement.w.clamp(1, nextColumns),
+            ))
+        .map((placement) {
+      final maxX = nextColumns - placement.w;
+      return placement.copyWith(x: placement.x.clamp(0, maxX));
+    }).toList();
+    _replaceLayout(layout.copyWith(
+      columns: nextColumns,
+      rowHeight: rowHeight ?? layout.rowHeight,
+      gap: gap ?? layout.gap,
+      placements: placements,
+    ));
+  }
+
+  void _updatePlacement(
+    DashboardBreakpoint breakpoint,
+    String widgetId, {
+    int? x,
+    int? y,
+    int? w,
+    int? h,
+  }) {
+    final layout = _layoutForEditor(breakpoint);
+    final placements = layout.placements.map((placement) {
+      if (placement.widgetId != widgetId) return placement;
+      final nextW = (w ?? placement.w).clamp(1, layout.columns);
+      final nextX = (x ?? placement.x).clamp(0, layout.columns - nextW);
+      return placement.copyWith(
+        x: nextX,
+        y: (y ?? placement.y).clamp(0, 999),
+        w: nextW,
+        h: (h ?? placement.h).clamp(1, 12),
+      );
+    }).toList();
+    _replaceLayout(layout.copyWith(placements: placements));
+  }
+
+  void _syncLayoutFrom(
+    DashboardBreakpoint source,
+    DashboardBreakpoint destination,
+  ) {
+    final sourceLayout = _layoutForEditor(source);
+    final targetColumns =
+        destination == DashboardBreakpoint.mobile ? 1 : sourceLayout.columns;
+    final placements = sourceLayout.placements.map((placement) {
+      if (destination == DashboardBreakpoint.mobile) {
+        return placement.copyWith(x: 0, w: 1);
+      }
+      final nextW = placement.w.clamp(1, targetColumns);
+      return placement.copyWith(
+        x: placement.x.clamp(0, targetColumns - nextW),
+        w: nextW,
+      );
+    }).toList();
+    _replaceLayout(DashboardLayout(
+      breakpoint: destination,
+      columns: targetColumns,
+      rowHeight: sourceLayout.rowHeight,
+      gap: sourceLayout.gap,
+      placements: placements,
+    ));
+  }
+
   @override
   Widget build(BuildContext context) {
+    final activeLayout = _layoutForEditor(_layoutBreakpoint);
+    final sortedPlacements = [...activeLayout.placements]..sort((a, b) =>
+        a.y != b.y ? a.y.compareTo(b.y) : a.x.compareTo(b.x));
+
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -267,6 +383,211 @@ class _DashboardEditorPageState extends ConsumerState<DashboardEditorPage> {
           const Divider(height: 32),
           Row(
             children: [
+              Text('Layout', style: Theme.of(context).textTheme.titleMedium),
+              const Spacer(),
+              SegmentedButton<DashboardBreakpoint>(
+                segments: DashboardBreakpoint.values
+                    .map((breakpoint) => ButtonSegment(
+                          value: breakpoint,
+                          label: Text(_enumName(breakpoint)),
+                        ))
+                    .toList(),
+                selected: {_layoutBreakpoint},
+                onSelectionChanged: (selection) {
+                  setState(() => _layoutBreakpoint = selection.first);
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Wrap(
+                    spacing: 16,
+                    runSpacing: 12,
+                    children: [
+                      SizedBox(
+                        width: 180,
+                        child: DropdownButtonFormField<int>(
+                          key: ValueKey(
+                              'columns_${_layoutBreakpoint.name}_${activeLayout.columns}'),
+                          initialValue: activeLayout.columns,
+                          decoration: const InputDecoration(
+                            labelText: 'Columns',
+                            border: OutlineInputBorder(),
+                          ),
+                          items: (_layoutBreakpoint == DashboardBreakpoint.mobile
+                                  ? const [1, 2]
+                                  : const [4, 6, 8, 12])
+                              .map((value) => DropdownMenuItem(
+                                    value: value,
+                                    child: Text('$value columns'),
+                                  ))
+                              .toList(),
+                          onChanged: (value) {
+                            if (value != null) {
+                              _updateLayoutConfig(
+                                breakpoint: _layoutBreakpoint,
+                                columns: value,
+                              );
+                            }
+                          },
+                        ),
+                      ),
+                      SizedBox(
+                        width: 180,
+                        child: TextFormField(
+                          key: ValueKey(
+                              'rowHeight_${_layoutBreakpoint.name}_${activeLayout.rowHeight}'),
+                          initialValue: activeLayout.rowHeight.round().toString(),
+                          decoration: const InputDecoration(
+                            labelText: 'Row height',
+                            border: OutlineInputBorder(),
+                          ),
+                          keyboardType: TextInputType.number,
+                          onChanged: (value) {
+                            final parsed = double.tryParse(value);
+                            if (parsed != null) {
+                              _updateLayoutConfig(
+                                breakpoint: _layoutBreakpoint,
+                                rowHeight: parsed.clamp(80, 320),
+                              );
+                            }
+                          },
+                        ),
+                      ),
+                      SizedBox(
+                        width: 180,
+                        child: TextFormField(
+                          key: ValueKey(
+                              'gap_${_layoutBreakpoint.name}_${activeLayout.gap}'),
+                          initialValue: activeLayout.gap.round().toString(),
+                          decoration: const InputDecoration(
+                            labelText: 'Gap',
+                            border: OutlineInputBorder(),
+                          ),
+                          keyboardType: TextInputType.number,
+                          onChanged: (value) {
+                            final parsed = double.tryParse(value);
+                            if (parsed != null) {
+                              _updateLayoutConfig(
+                                breakpoint: _layoutBreakpoint,
+                                gap: parsed.clamp(0, 32),
+                              );
+                            }
+                          },
+                        ),
+                      ),
+                      if (_layoutBreakpoint != DashboardBreakpoint.desktop)
+                        FilledButton.tonalIcon(
+                          onPressed: () => _syncLayoutFrom(
+                            DashboardBreakpoint.desktop,
+                            _layoutBreakpoint,
+                          ),
+                          icon: const Icon(Icons.copy_all_outlined),
+                          label: const Text('Copy Desktop Layout'),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Preview',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                  const SizedBox(height: 8),
+                  _DashboardLayoutPreview(
+                    layout: activeLayout,
+                    widgets: _widgets,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          if (_widgets.isNotEmpty) ...[
+            Text(
+              'Widget Placement',
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+            const SizedBox(height: 12),
+            ...sortedPlacements.map((placement) {
+              final widget = _widgets
+                  .where((item) => item.id == placement.widgetId)
+                  .firstOrNull;
+              if (widget == null) return const SizedBox.shrink();
+              return Card(
+                margin: const EdgeInsets.only(bottom: 12),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(widget.title,
+                          style: Theme.of(context).textTheme.titleSmall),
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 12,
+                        children: [
+                          _PlacementStepper(
+                            label: 'Column',
+                            value: placement.x,
+                            min: 0,
+                            max: activeLayout.columns - placement.w,
+                            onChanged: (value) => _updatePlacement(
+                              _layoutBreakpoint,
+                              placement.widgetId,
+                              x: value,
+                            ),
+                          ),
+                          _PlacementStepper(
+                            label: 'Row',
+                            value: placement.y,
+                            min: 0,
+                            max: 999,
+                            onChanged: (value) => _updatePlacement(
+                              _layoutBreakpoint,
+                              placement.widgetId,
+                              y: value,
+                            ),
+                          ),
+                          _PlacementStepper(
+                            label: 'Width',
+                            value: placement.w,
+                            min: 1,
+                            max: activeLayout.columns,
+                            onChanged: (value) => _updatePlacement(
+                              _layoutBreakpoint,
+                              placement.widgetId,
+                              w: value,
+                            ),
+                          ),
+                          _PlacementStepper(
+                            label: 'Height',
+                            value: placement.h,
+                            min: 1,
+                            max: 12,
+                            onChanged: (value) => _updatePlacement(
+                              _layoutBreakpoint,
+                              placement.widgetId,
+                              h: value,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+            const Divider(height: 32),
+          ],
+          Row(
+            children: [
               Text('Widgets', style: Theme.of(context).textTheme.titleMedium),
               const Spacer(),
               Text('${_widgets.length} configured'),
@@ -328,6 +649,201 @@ class _DashboardEditorPageState extends ConsumerState<DashboardEditorPage> {
           ),
           const SizedBox(height: 80),
         ],
+      ),
+    );
+  }
+}
+
+class _PlacementStepper extends StatelessWidget {
+  final String label;
+  final int value;
+  final int min;
+  final int max;
+  final ValueChanged<int> onChanged;
+
+  const _PlacementStepper({
+    required this.label,
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final canDecrease = value > min;
+    final canIncrease = value < max;
+    return SizedBox(
+      width: 168,
+      child: InputDecorator(
+        decoration: InputDecoration(
+          labelText: label,
+          border: const OutlineInputBorder(),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        ),
+        child: Row(
+          children: [
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              onPressed: canDecrease ? () => onChanged(value - 1) : null,
+              icon: const Icon(Icons.remove),
+            ),
+            Expanded(
+              child: Text(
+                '$value',
+                textAlign: TextAlign.center,
+              ),
+            ),
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              onPressed: canIncrease ? () => onChanged(value + 1) : null,
+              icon: const Icon(Icons.add),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DashboardLayoutPreview extends StatelessWidget {
+  final DashboardLayout layout;
+  final List<DashboardWidgetModel> widgets;
+
+  const _DashboardLayoutPreview({
+    required this.layout,
+    required this.widgets,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final placements = [...layout.placements]..sort((a, b) =>
+        a.y != b.y ? a.y.compareTo(b.y) : a.x.compareTo(b.x));
+    final maxRow = placements.fold<int>(
+      0,
+      (current, placement) => placement.y + placement.h > current
+          ? placement.y + placement.h
+          : current,
+    );
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        border: Border.all(color: Theme.of(context).dividerColor),
+        borderRadius: BorderRadius.circular(16),
+        color: Theme.of(context).colorScheme.surfaceContainerLowest,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '${layout.columns} columns • row ${layout.rowHeight.round()} • gap ${layout.gap.round()}',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 12),
+          if (placements.isEmpty)
+            const Text('No widgets placed yet.')
+          else
+            ...List.generate(maxRow, (row) {
+              final rowPlacements =
+                  placements.where((placement) => placement.y == row).toList();
+              if (rowPlacements.isEmpty) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: _PreviewRowPlaceholder(columns: layout.columns),
+                );
+              }
+              var currentColumn = 0;
+              final children = <Widget>[];
+              for (final placement in rowPlacements) {
+                if (placement.x > currentColumn) {
+                  children.add(
+                    Expanded(
+                      flex: placement.x - currentColumn,
+                      child: const SizedBox.shrink(),
+                    ),
+                  );
+                }
+                final widget = widgets
+                    .where((item) => item.id == placement.widgetId)
+                    .firstOrNull;
+                final widthFactor = placement.w / layout.columns;
+                children.add(
+                  Expanded(
+                    flex: placement.w,
+                    child: Container(
+                      height: 48.0 * placement.h.clamp(1, 3),
+                      margin: const EdgeInsets.only(right: 8),
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .primaryContainer
+                            .withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            widget?.title ?? placement.widgetId,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                          Text(
+                            'x:${placement.x} y:${placement.y} w:${placement.w} h:${placement.h} • ${(widthFactor * 100).round()}%',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+                currentColumn = placement.x + placement.w;
+              }
+              if (currentColumn < layout.columns) {
+                children.add(
+                  Expanded(
+                    flex: layout.columns - currentColumn,
+                    child: const SizedBox.shrink(),
+                  ),
+                );
+              }
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(children: children),
+              );
+            }),
+        ],
+      ),
+    );
+  }
+}
+
+class _PreviewRowPlaceholder extends StatelessWidget {
+  final int columns;
+  const _PreviewRowPlaceholder({required this.columns});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: List.generate(
+        columns.clamp(1, 12),
+        (index) => Expanded(
+          child: Container(
+            height: 18,
+            margin: EdgeInsets.only(right: index == columns - 1 ? 0 : 6),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(6),
+            ),
+          ),
+        ),
       ),
     );
   }

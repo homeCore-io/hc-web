@@ -520,6 +520,10 @@ Editing modes:
 - desktop/tablet: drag-resize grid editor
 - mobile: stacked simplified editor with layout presets
 
+Current implementation status:
+- `hc-web` now has a breakpoint-aware layout editor with explicit placement controls (`x`, `y`, `w`, `h`), per-breakpoint layout settings, and a live preview tied to the persisted dashboard layout model.
+- True pointer-driven drag/resize is still a follow-up enhancement, not the current editor behavior.
+
 #### Recommended initial presets
 
 The system should ship with starter templates users can clone:
