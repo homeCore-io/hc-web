@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/models/dashboard.dart';
+import '../../core/models/device_state.dart';
 import '../../core/providers/auth_provider.dart';
+import '../../core/providers/areas_provider.dart';
 import '../../core/providers/dashboards_provider.dart';
+import '../../core/providers/devices_provider.dart';
 
 class DashboardEditorPage extends ConsumerStatefulWidget {
   final String dashboardId;
@@ -1114,7 +1117,7 @@ class _InteractivePlacementTile extends StatelessWidget {
   }
 }
 
-class _DashboardWidgetConfigEditor extends StatefulWidget {
+class _DashboardWidgetConfigEditor extends ConsumerStatefulWidget {
   final DashboardWidgetModel widgetModel;
   final void Function(Map<String, dynamic> config, String title) onChanged;
 
@@ -1124,12 +1127,12 @@ class _DashboardWidgetConfigEditor extends StatefulWidget {
   });
 
   @override
-  State<_DashboardWidgetConfigEditor> createState() =>
+  ConsumerState<_DashboardWidgetConfigEditor> createState() =>
       _DashboardWidgetConfigEditorState();
 }
 
 class _DashboardWidgetConfigEditorState
-    extends State<_DashboardWidgetConfigEditor> {
+    extends ConsumerState<_DashboardWidgetConfigEditor> {
   late final TextEditingController _titleCtrl;
   late final TextEditingController _queryCtrl;
   late final TextEditingController _areaCtrl;
@@ -1220,6 +1223,20 @@ class _DashboardWidgetConfigEditorState
       .where((item) => item.isNotEmpty)
       .toList();
 
+  void _setCsv(TextEditingController controller, List<String> values) {
+    controller.text = values.join(', ');
+  }
+
+  List<DeviceState> _sortedDevices(List<DeviceState> devices) {
+    final copy = [...devices];
+    copy.sort((a, b) {
+      final areaCmp = (a.area ?? '').compareTo(b.area ?? '');
+      if (areaCmp != 0) return areaCmp;
+      return a.displayName.compareTo(b.displayName);
+    });
+    return copy;
+  }
+
   void _emit() {
     final type = widget.widgetModel.type;
     final limit = int.tryParse(_limitCtrl.text.trim());
@@ -1280,6 +1297,45 @@ class _DashboardWidgetConfigEditorState
   @override
   Widget build(BuildContext context) {
     final type = widget.widgetModel.type;
+    final devices = _sortedDevices(
+      ref.watch(devicesProvider).valueOrNull ?? const <DeviceState>[],
+    );
+    final areaNames = [
+      ...{
+        ...((ref.watch(areasProvider).valueOrNull ??
+                const <Map<String, dynamic>>[])
+            .map((area) => area['name'] as String?)
+            .whereType<String>()),
+        ...devices.map((device) => device.area).whereType<String>(),
+      }
+    ]..sort();
+    final dashboards = ref.watch(dashboardsProvider).valueOrNull ??
+        const <DashboardDefinition>[];
+    final selectedManualIds = _csv(_deviceIdsCtrl).toSet();
+    final selectedHistoryDevice = devices
+        .where((device) => device.id == _historyDeviceCtrl.text.trim())
+        .firstOrNull;
+    final historyAttributes = [
+      ...?selectedHistoryDevice?.state.keys.where((key) {
+        final value = selectedHistoryDevice.state[key];
+        return value is num || value is bool || value is String;
+      }),
+    ]..sort();
+    const knownMetricOptions = [
+      'devices',
+      'on',
+      'offline',
+      'media_playing',
+      'doors_open',
+      'motion_active',
+    ];
+    const knownEventTypes = [
+      'device_state_changed',
+      'device_availability_changed',
+      'system_alert',
+      'scene_activated',
+      'automation_fired',
+    ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1328,23 +1384,33 @@ class _DashboardWidgetConfigEditorState
               onChanged: (_) => _emit(),
             ),
           if (_selectionMode == 'area')
-            TextField(
-              controller: _areaCtrl,
+            DropdownButtonFormField<String>(
+              initialValue: areaNames.contains(_areaCtrl.text.trim())
+                  ? _areaCtrl.text.trim()
+                  : null,
               decoration: const InputDecoration(
-                labelText: 'Area name',
+                labelText: 'Area',
                 border: OutlineInputBorder(),
               ),
-              onChanged: (_) => _emit(),
+              items: areaNames
+                  .map((area) =>
+                      DropdownMenuItem(value: area, child: Text(area)))
+                  .toList(),
+              onChanged: (value) {
+                _areaCtrl.text = value ?? '';
+                _emit();
+              },
             ),
           if (_selectionMode == 'manual')
-            TextField(
-              controller: _deviceIdsCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Device IDs',
-                hintText: 'device_one, device_two',
-                border: OutlineInputBorder(),
-              ),
-              onChanged: (_) => _emit(),
+            _DeviceMultiSelectField(
+              label: 'Devices',
+              devices: devices,
+              selectedIds: selectedManualIds,
+              onChanged: (selectedIds) {
+                _setCsv(_deviceIdsCtrl, selectedIds);
+                _emit();
+                setState(() {});
+              },
             ),
           const SizedBox(height: 12),
           SwitchListTile(
@@ -1368,25 +1434,49 @@ class _DashboardWidgetConfigEditorState
           ),
         ],
         if (type == DashboardWidgetType.statSummary) ...[
-          TextField(
-            controller: _metricsCtrl,
-            decoration: const InputDecoration(
-              labelText: 'Metrics',
-              hintText: 'devices, on, offline',
-              border: OutlineInputBorder(),
-            ),
-            onChanged: (_) => _emit(),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: knownMetricOptions
+                .map((metric) => FilterChip(
+                      label: Text(metric),
+                      selected: _csv(_metricsCtrl).contains(metric),
+                      onSelected: (selected) {
+                        final values = _csv(_metricsCtrl).toSet();
+                        if (selected) {
+                          values.add(metric);
+                        } else {
+                          values.remove(metric);
+                        }
+                        _setCsv(_metricsCtrl, values.toList());
+                        _emit();
+                        setState(() {});
+                      },
+                    ))
+                .toList(),
           ),
         ],
         if (type == DashboardWidgetType.eventFeed) ...[
-          TextField(
-            controller: _eventTypesCtrl,
-            decoration: const InputDecoration(
-              labelText: 'Event types',
-              hintText: 'device_state_changed, system_alert',
-              border: OutlineInputBorder(),
-            ),
-            onChanged: (_) => _emit(),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: knownEventTypes
+                .map((eventType) => FilterChip(
+                      label: Text(eventType),
+                      selected: _csv(_eventTypesCtrl).contains(eventType),
+                      onSelected: (selected) {
+                        final values = _csv(_eventTypesCtrl).toSet();
+                        if (selected) {
+                          values.add(eventType);
+                        } else {
+                          values.remove(eventType);
+                        }
+                        _setCsv(_eventTypesCtrl, values.toList());
+                        _emit();
+                        setState(() {});
+                      },
+                    ))
+                .toList(),
           ),
         ],
         if ({
@@ -1482,23 +1572,69 @@ class _DashboardWidgetConfigEditorState
           ),
         ],
         if (type == DashboardWidgetType.historyChart) ...[
-          TextField(
-            controller: _historyDeviceCtrl,
+          DropdownButtonFormField<String>(
+            initialValue: devices.any(
+                    (device) => device.id == _historyDeviceCtrl.text.trim())
+                ? _historyDeviceCtrl.text.trim()
+                : null,
             decoration: const InputDecoration(
-              labelText: 'Device ID',
+              labelText: 'Device',
               border: OutlineInputBorder(),
             ),
-            onChanged: (_) => _emit(),
+            items: devices
+                .map(
+                  (device) => DropdownMenuItem(
+                    value: device.id,
+                    child: Text(
+                      device.area == null || device.area!.isEmpty
+                          ? device.displayName
+                          : '${device.area} • ${device.displayName}',
+                    ),
+                  ),
+                )
+                .toList(),
+            onChanged: (value) {
+              _historyDeviceCtrl.text = value ?? '';
+              final selectedDevice = devices
+                  .where(
+                      (device) => device.id == _historyDeviceCtrl.text.trim())
+                  .firstOrNull;
+              final nextAttributes = [
+                ...?selectedDevice?.state.keys.where((key) {
+                  final attrValue = selectedDevice.state[key];
+                  return attrValue is num ||
+                      attrValue is bool ||
+                      attrValue is String;
+                }),
+              ]..sort();
+              if (!nextAttributes.contains(_historyAttributeCtrl.text.trim())) {
+                _historyAttributeCtrl.text = nextAttributes.firstOrNull ?? '';
+              }
+              _emit();
+              setState(() {});
+            },
           ),
           const SizedBox(height: 12),
-          TextField(
-            controller: _historyAttributeCtrl,
+          DropdownButtonFormField<String>(
+            initialValue:
+                historyAttributes.contains(_historyAttributeCtrl.text.trim())
+                    ? _historyAttributeCtrl.text.trim()
+                    : null,
             decoration: const InputDecoration(
               labelText: 'Attribute',
-              hintText: 'temperature, power, on',
               border: OutlineInputBorder(),
             ),
-            onChanged: (_) => _emit(),
+            items: historyAttributes
+                .map((attribute) => DropdownMenuItem(
+                      value: attribute,
+                      child: Text(attribute),
+                    ))
+                .toList(),
+            onChanged: (value) {
+              _historyAttributeCtrl.text = value ?? '';
+              _emit();
+              setState(() {});
+            },
           ),
           const SizedBox(height: 12),
           TextField(
@@ -1512,16 +1648,293 @@ class _DashboardWidgetConfigEditorState
           ),
         ],
         if (type == DashboardWidgetType.dashboardLink) ...[
-          TextField(
-            controller: _dashboardIdsCtrl,
-            decoration: const InputDecoration(
-              labelText: 'Dashboard IDs',
-              hintText: 'starter_getting_started, template_security',
-              border: OutlineInputBorder(),
-            ),
-            onChanged: (_) => _emit(),
+          _DashboardMultiSelectField(
+            dashboards: dashboards,
+            selectedIds: _csv(_dashboardIdsCtrl).toSet(),
+            onChanged: (selectedIds) {
+              _setCsv(_dashboardIdsCtrl, selectedIds);
+              _emit();
+              setState(() {});
+            },
           ),
         ],
+      ],
+    );
+  }
+}
+
+class _DeviceMultiSelectField extends StatelessWidget {
+  final String label;
+  final List<DeviceState> devices;
+  final Set<String> selectedIds;
+  final ValueChanged<List<String>> onChanged;
+
+  const _DeviceMultiSelectField({
+    required this.label,
+    required this.devices,
+    required this.selectedIds,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InputDecorator(
+      decoration: InputDecoration(
+        labelText: label,
+        border: const OutlineInputBorder(),
+        contentPadding: const EdgeInsets.all(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: selectedIds.isEmpty
+                ? [const Text('No devices selected')]
+                : devices
+                    .where((device) => selectedIds.contains(device.id))
+                    .map((device) => InputChip(
+                          label: Text(device.displayName),
+                          onDeleted: () => onChanged(
+                            selectedIds.where((id) => id != device.id).toList(),
+                          ),
+                        ))
+                    .toList(),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: () async {
+              final result = await showDialog<List<String>>(
+                context: context,
+                builder: (_) => _DeviceSelectionDialog(
+                  devices: devices,
+                  initialIds: selectedIds,
+                ),
+              );
+              if (result != null) onChanged(result);
+            },
+            icon: const Icon(Icons.checklist),
+            label: const Text('Choose Devices'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DashboardMultiSelectField extends StatelessWidget {
+  final List<DashboardDefinition> dashboards;
+  final Set<String> selectedIds;
+  final ValueChanged<List<String>> onChanged;
+
+  const _DashboardMultiSelectField({
+    required this.dashboards,
+    required this.selectedIds,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InputDecorator(
+      decoration: const InputDecoration(
+        labelText: 'Linked dashboards',
+        border: OutlineInputBorder(),
+        contentPadding: EdgeInsets.all(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: selectedIds.isEmpty
+                ? [const Text('Show all other dashboards')]
+                : dashboards
+                    .where((dashboard) => selectedIds.contains(dashboard.id))
+                    .map((dashboard) => InputChip(
+                          label: Text(dashboard.name),
+                          onDeleted: () => onChanged(
+                            selectedIds
+                                .where((id) => id != dashboard.id)
+                                .toList(),
+                          ),
+                        ))
+                    .toList(),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: () async {
+              final result = await showDialog<List<String>>(
+                context: context,
+                builder: (_) => _DashboardSelectionDialog(
+                  dashboards: dashboards,
+                  initialIds: selectedIds,
+                ),
+              );
+              if (result != null) onChanged(result);
+            },
+            icon: const Icon(Icons.dashboard_customize_outlined),
+            label: const Text('Choose Dashboards'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DeviceSelectionDialog extends StatefulWidget {
+  final List<DeviceState> devices;
+  final Set<String> initialIds;
+
+  const _DeviceSelectionDialog({
+    required this.devices,
+    required this.initialIds,
+  });
+
+  @override
+  State<_DeviceSelectionDialog> createState() => _DeviceSelectionDialogState();
+}
+
+class _DeviceSelectionDialogState extends State<_DeviceSelectionDialog> {
+  late final Set<String> _selected = {...widget.initialIds};
+  String _query = '';
+
+  @override
+  Widget build(BuildContext context) {
+    final filtered = widget.devices.where((device) {
+      if (_query.isEmpty) return true;
+      final lower = _query.toLowerCase();
+      return device.displayName.toLowerCase().contains(lower) ||
+          device.id.toLowerCase().contains(lower) ||
+          (device.area?.toLowerCase().contains(lower) ?? false);
+    }).toList();
+    final byArea = <String, List<DeviceState>>{};
+    for (final device in filtered) {
+      final area = device.area ?? 'Unassigned';
+      byArea.putIfAbsent(area, () => []).add(device);
+    }
+    final areas = byArea.keys.toList()..sort();
+
+    return AlertDialog(
+      title: const Text('Select devices'),
+      content: SizedBox(
+        width: 520,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              decoration: const InputDecoration(
+                labelText: 'Filter devices',
+                border: OutlineInputBorder(),
+              ),
+              onChanged: (value) => setState(() => _query = value),
+            ),
+            const SizedBox(height: 12),
+            Flexible(
+              child: ListView(
+                shrinkWrap: true,
+                children: [
+                  for (final area in areas) ...[
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      child: Text(
+                        area.toUpperCase(),
+                        style: Theme.of(context).textTheme.labelMedium,
+                      ),
+                    ),
+                    for (final device in byArea[area]!)
+                      CheckboxListTile(
+                        value: _selected.contains(device.id),
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(device.displayName),
+                        subtitle: Text(device.id),
+                        onChanged: (checked) {
+                          setState(() {
+                            if (checked == true) {
+                              _selected.add(device.id);
+                            } else {
+                              _selected.remove(device.id);
+                            }
+                          });
+                        },
+                      ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, _selected.toList()),
+          child: const Text('Apply'),
+        ),
+      ],
+    );
+  }
+}
+
+class _DashboardSelectionDialog extends StatefulWidget {
+  final List<DashboardDefinition> dashboards;
+  final Set<String> initialIds;
+
+  const _DashboardSelectionDialog({
+    required this.dashboards,
+    required this.initialIds,
+  });
+
+  @override
+  State<_DashboardSelectionDialog> createState() =>
+      _DashboardSelectionDialogState();
+}
+
+class _DashboardSelectionDialogState extends State<_DashboardSelectionDialog> {
+  late final Set<String> _selected = {...widget.initialIds};
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Select dashboards'),
+      content: SizedBox(
+        width: 420,
+        child: ListView(
+          shrinkWrap: true,
+          children: widget.dashboards
+              .map(
+                (dashboard) => CheckboxListTile(
+                  value: _selected.contains(dashboard.id),
+                  title: Text(dashboard.name),
+                  subtitle: Text(dashboard.id),
+                  onChanged: (checked) {
+                    setState(() {
+                      if (checked == true) {
+                        _selected.add(dashboard.id);
+                      } else {
+                        _selected.remove(dashboard.id);
+                      }
+                    });
+                  },
+                ),
+              )
+              .toList(),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, _selected.toList()),
+          child: const Text('Apply'),
+        ),
       ],
     );
   }

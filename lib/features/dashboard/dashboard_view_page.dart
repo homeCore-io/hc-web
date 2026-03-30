@@ -1,16 +1,23 @@
+import 'dart:async';
+
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/api/history_api.dart';
 import '../../core/models/dashboard.dart';
 import '../../core/models/device_state.dart';
 import '../../core/models/hc_event.dart';
+import '../../core/models/history_entry.dart';
 import '../../core/models/mode_state.dart';
 import '../../core/models/scene.dart';
+import '../../core/providers/auth_provider.dart';
 import '../../core/providers/dashboards_provider.dart';
 import '../../core/providers/devices_provider.dart';
 import '../../core/providers/events_provider.dart';
 import '../../core/providers/modes_provider.dart';
 import '../../core/providers/scenes_provider.dart';
+import '../../core/providers/time_display_provider.dart';
 
 class DashboardViewPage extends ConsumerWidget {
   final String dashboardId;
@@ -104,8 +111,9 @@ class _DashboardGridLayout extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final placements = [...layout.placements]..sort((a, b) =>
-            a.y != b.y ? a.y.compareTo(b.y) : a.x.compareTo(b.x));
+        final placements = [
+          ...layout.placements
+        ]..sort((a, b) => a.y != b.y ? a.y.compareTo(b.y) : a.x.compareTo(b.x));
         if (placements.isEmpty) {
           return const Card(
             child: Padding(
@@ -138,8 +146,7 @@ class _DashboardGridLayout extends StatelessWidget {
                 if (dashboard.widgetById(placement.widgetId) case final widget?)
                   Positioned(
                     left: (placement.x * cellWidth) + (placement.x * gap),
-                    top:
-                        (placement.y * layout.rowHeight) + (placement.y * gap),
+                    top: (placement.y * layout.rowHeight) + (placement.y * gap),
                     width:
                         (placement.w * cellWidth) + ((placement.w - 1) * gap),
                     height: (placement.h * layout.rowHeight) +
@@ -174,16 +181,17 @@ class _DashboardWidgetCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final sizeHint = dashboardWidgetSizeHint(widgetModel.type);
-    final isCompact =
-        placement.w < sizeHint.recommendedW || placement.h < sizeHint.recommendedH;
+    final isCompact = placement.w < sizeHint.recommendedW ||
+        placement.h < sizeHint.recommendedH;
     final isVeryCompact =
         placement.w <= sizeHint.minW || placement.h <= sizeHint.minH;
     final body = switch (widgetModel.type) {
       DashboardWidgetType.statSummary =>
         _StatSummaryWidget(widgetModel: widgetModel, compact: isCompact),
-      DashboardWidgetType.deviceGrid =>
-        _DeviceGridWidget(
-            widgetModel: widgetModel, compact: isCompact, veryCompact: isVeryCompact),
+      DashboardWidgetType.deviceGrid => _DeviceGridWidget(
+          widgetModel: widgetModel,
+          compact: isCompact,
+          veryCompact: isVeryCompact),
       DashboardWidgetType.deviceList =>
         _DeviceListWidget(widgetModel: widgetModel, compact: isCompact),
       DashboardWidgetType.deviceTile =>
@@ -192,22 +200,19 @@ class _DashboardWidgetCard extends ConsumerWidget {
       DashboardWidgetType.sceneRow => const _SceneRowWidget(),
       DashboardWidgetType.eventFeed =>
         _EventFeedWidget(widgetModel: widgetModel, compact: isCompact),
-      DashboardWidgetType.mediaPlayer =>
-        _MediaPlayerDashboardWidget(
-            widgetModel: widgetModel, compact: isCompact),
+      DashboardWidgetType.mediaPlayer => _MediaPlayerDashboardWidget(
+          widgetModel: widgetModel, compact: isCompact),
       DashboardWidgetType.markdown => _MarkdownWidget(widgetModel: widgetModel),
-      DashboardWidgetType.dashboardLink =>
-        _DashboardLinkWidget(
-            current: dashboard,
-            widgetModel: widgetModel,
-            compact: isCompact,
-            veryCompact: isVeryCompact),
+      DashboardWidgetType.dashboardLink => _DashboardLinkWidget(
+          current: dashboard,
+          widgetModel: widgetModel,
+          compact: isCompact,
+          veryCompact: isVeryCompact),
       DashboardWidgetType.cameraVideo =>
         _CameraVideoWidget(widgetModel: widgetModel),
       DashboardWidgetType.webEmbed => _WebEmbedWidget(widgetModel: widgetModel),
-      DashboardWidgetType.historyChart => const _PlaceholderWidget(
-          message:
-              'History chart widget is planned but not implemented in this pass.'),
+      DashboardWidgetType.historyChart =>
+        _HistoryChartWidget(widgetModel: widgetModel, compact: isCompact),
     };
 
     return Card(
@@ -395,8 +400,13 @@ class _DeviceGridWidget extends ConsumerWidget {
     );
     return LayoutBuilder(
       builder: (context, constraints) {
-        final targetWidth = veryCompact ? 140.0 : compact ? 160.0 : 180.0;
-        final columns = (constraints.maxWidth / targetWidth).floor().clamp(1, 4);
+        final targetWidth = veryCompact
+            ? 140.0
+            : compact
+                ? 160.0
+                : 180.0;
+        final columns =
+            (constraints.maxWidth / targetWidth).floor().clamp(1, 4);
         return GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
@@ -655,23 +665,206 @@ class _MediaPlayerDashboardWidget extends ConsumerWidget {
           message: 'No media players match this widget.');
     }
 
+    final maxItems = compact && devices.length > 2 ? 2 : devices.length;
     return Column(
       children: devices
-          .map((device) => Card(
-                margin: const EdgeInsets.only(bottom: 8),
-                child: ListTile(
-                  dense: compact,
-                  visualDensity:
-                      compact ? VisualDensity.compact : VisualDensity.standard,
-                  title: Text(device.displayName),
-                  subtitle: Text(device.title ?? device.playbackState),
-                  trailing: Text(device.volumePercent != null
-                      ? '${device.volumePercent}%'
-                      : device.playbackState),
-                  onTap: () => context.go('/devices/${device.id}'),
-                ),
+          .take(maxItems)
+          .map((device) => _MediaPlayerDashboardCard(
+                device: device,
+                compact: compact,
               ))
           .toList(),
+    );
+  }
+}
+
+class _MediaPlayerDashboardCard extends ConsumerStatefulWidget {
+  final DeviceState device;
+  final bool compact;
+
+  const _MediaPlayerDashboardCard({
+    required this.device,
+    required this.compact,
+  });
+
+  @override
+  ConsumerState<_MediaPlayerDashboardCard> createState() =>
+      _MediaPlayerDashboardCardState();
+}
+
+class _MediaPlayerDashboardCardState
+    extends ConsumerState<_MediaPlayerDashboardCard> {
+  bool _busy = false;
+  double? _volumeDraft;
+
+  Future<void> _send(Map<String, dynamic> body) async {
+    setState(() => _busy = true);
+    try {
+      await ref.read(devicesApiProvider).setDeviceState(widget.device.id, body);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final device = widget.device;
+    final isPlaying = device.playbackState == 'playing' ||
+        device.playbackState == 'buffering';
+    final progress = (device.durationSecs != null && device.durationSecs! > 0)
+        ? ((device.positionSecs ?? 0) / device.durationSecs!).clamp(0.0, 1.0)
+        : null;
+    final volume =
+        (_volumeDraft ?? device.volumePercent?.toDouble())?.clamp(0, 100);
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: InkWell(
+                    onTap: () => context.go('/devices/${device.id}'),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(device.displayName,
+                            style: Theme.of(context).textTheme.titleSmall),
+                        Text(
+                          [
+                            if (device.title != null &&
+                                device.title!.isNotEmpty)
+                              device.title,
+                            if (device.artist != null &&
+                                device.artist!.isNotEmpty)
+                              device.artist,
+                            if ((device.title == null ||
+                                    device.title!.isEmpty) &&
+                                device.playbackState.isNotEmpty)
+                              device.playbackState,
+                          ].whereType<String>().join(' • '),
+                          maxLines: widget.compact ? 1 : 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                if (_busy)
+                  const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                else
+                  Chip(
+                    visualDensity: VisualDensity.compact,
+                    label: Text(device.playbackState),
+                  ),
+              ],
+            ),
+            if (progress != null) ...[
+              const SizedBox(height: 8),
+              LinearProgressIndicator(value: progress),
+              const SizedBox(height: 4),
+              Text(
+                '${_formatDuration(device.positionSecs)} / ${_formatDuration(device.durationSecs)}',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                if (device.supportsAction('previous'))
+                  IconButton(
+                    tooltip: 'Previous',
+                    onPressed:
+                        _busy ? null : () => _send({'action': 'previous'}),
+                    icon: const Icon(Icons.skip_previous),
+                  ),
+                if (device.supportsAction('play') && !isPlaying)
+                  FilledButton.tonalIcon(
+                    onPressed: _busy ? null : () => _send({'action': 'play'}),
+                    icon: const Icon(Icons.play_arrow),
+                    label: const Text('Play'),
+                  ),
+                if (device.supportsAction('pause') && isPlaying)
+                  FilledButton.tonalIcon(
+                    onPressed: _busy ? null : () => _send({'action': 'pause'}),
+                    icon: const Icon(Icons.pause),
+                    label: const Text('Pause'),
+                  ),
+                if (device.supportsAction('stop'))
+                  OutlinedButton.icon(
+                    onPressed: _busy ? null : () => _send({'action': 'stop'}),
+                    icon: const Icon(Icons.stop),
+                    label: const Text('Stop'),
+                  ),
+                if (device.supportsAction('next'))
+                  IconButton(
+                    tooltip: 'Next',
+                    onPressed: _busy ? null : () => _send({'action': 'next'}),
+                    icon: const Icon(Icons.skip_next),
+                  ),
+              ],
+            ),
+            if (volume != null &&
+                (device.supportsAction('set_volume') ||
+                    device.supportsAction('set_mute'))) ...[
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  if (device.supportsAction('set_mute'))
+                    IconButton(
+                      tooltip: device.muted == true ? 'Unmute' : 'Mute',
+                      onPressed: _busy
+                          ? null
+                          : () => _send({
+                                'action': 'set_mute',
+                                'muted': !(device.muted ?? false),
+                              }),
+                      icon: Icon(
+                        device.muted == true
+                            ? Icons.volume_off
+                            : Icons.volume_up,
+                      ),
+                    ),
+                  Expanded(
+                    child: Slider(
+                      value: volume.toDouble(),
+                      min: 0,
+                      max: 100,
+                      divisions: 20,
+                      label: '${volume.round()}%',
+                      onChanged: device.supportsAction('set_volume') && !_busy
+                          ? (value) => setState(() => _volumeDraft = value)
+                          : null,
+                      onChangeEnd: device.supportsAction('set_volume') && !_busy
+                          ? (value) {
+                              setState(() => _volumeDraft = null);
+                              _send({
+                                'action': 'set_volume',
+                                'volume': value.round(),
+                              });
+                            }
+                          : null,
+                    ),
+                  ),
+                  Text('${volume.round()}%'),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }
@@ -764,31 +957,100 @@ class _DashboardLinkWidget extends ConsumerWidget {
   }
 }
 
-class _CameraVideoWidget extends StatelessWidget {
+class _CameraVideoWidget extends StatefulWidget {
   final DashboardWidgetModel widgetModel;
   const _CameraVideoWidget({required this.widgetModel});
 
   @override
-  Widget build(BuildContext context) {
-    final url = widgetModel.config['url'] as String? ?? '';
+  State<_CameraVideoWidget> createState() => _CameraVideoWidgetState();
+}
+
+class _CameraVideoWidgetState extends State<_CameraVideoWidget> {
+  Timer? _timer;
+  int _refreshTick = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _configureTimer();
+  }
+
+  @override
+  void didUpdateWidget(covariant _CameraVideoWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.widgetModel.config['refresh_secs'] !=
+            widget.widgetModel.config['refresh_secs'] ||
+        oldWidget.widgetModel.config['source_type'] !=
+            widget.widgetModel.config['source_type']) {
+      _configureTimer();
+    }
+  }
+
+  void _configureTimer() {
+    _timer?.cancel();
     final sourceType =
-        widgetModel.config['source_type'] as String? ?? 'image_refresh';
+        widget.widgetModel.config['source_type'] as String? ?? 'image_refresh';
+    final refreshSecs = widget.widgetModel.config['refresh_secs'] as int? ?? 15;
+    if (sourceType != 'image_refresh' || refreshSecs <= 0) return;
+    _timer = Timer.periodic(Duration(seconds: refreshSecs), (_) {
+      if (mounted) setState(() => _refreshTick++);
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final url = widget.widgetModel.config['url'] as String? ?? '';
+    final sourceType =
+        widget.widgetModel.config['source_type'] as String? ?? 'image_refresh';
+    final refreshSecs = widget.widgetModel.config['refresh_secs'] as int? ?? 15;
     if (url.isEmpty) {
       return const _PlaceholderWidget(message: 'Configure a camera/video URL.');
     }
-    if (sourceType == 'image_refresh' || sourceType == 'mjpeg') {
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: Image.network(
-          url,
-          fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => const _PlaceholderWidget(
-            message: 'Unable to load camera image.',
-          ),
+    final resolvedUrl = sourceType == 'image_refresh'
+        ? Uri.parse(url).replace(queryParameters: {
+            ...Uri.parse(url).queryParameters,
+            '_ts': '$_refreshTick',
+          }).toString()
+        : url;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            Chip(label: Text(sourceType)),
+            if (sourceType == 'image_refresh')
+              Chip(label: Text('${refreshSecs}s')),
+          ],
         ),
-      );
-    }
-    return SelectableText('Video source configured: $url');
+        const SizedBox(height: 8),
+        if (sourceType == 'image_refresh' || sourceType == 'mjpeg')
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Image.network(
+              resolvedUrl,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => const _PlaceholderWidget(
+                message: 'Unable to load camera image.',
+              ),
+            ),
+          )
+        else
+          _PlaceholderWidget(
+            message:
+                'The $sourceType source is configured. Full inline playback depends on browser/media support for this source.',
+          ),
+        const SizedBox(height: 8),
+        SelectableText(url, style: Theme.of(context).textTheme.bodySmall),
+      ],
+    );
   }
 }
 
@@ -799,20 +1061,252 @@ class _WebEmbedWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final url = widgetModel.config['url'] as String? ?? '';
+    final sandboxProfile =
+        widgetModel.config['sandbox_profile'] as String? ?? 'readonly_embed';
     if (url.isEmpty) {
       return const _PlaceholderWidget(message: 'Configure a web embed URL.');
     }
+    final host = Uri.tryParse(url)?.host;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Embedded web content is represented here and can be tightened with origin/CSP policy later.',
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            Chip(label: Text(sandboxProfile)),
+            if (host != null && host.isNotEmpty) Chip(label: Text(host)),
+          ],
         ),
         const SizedBox(height: 8),
-        SelectableText(url),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: const Text(
+            'Web embeds are configured and ready for policy-backed rendering. This dashboard shows the target URL and sandbox profile until full inline embed support is enabled.',
+          ),
+        ),
+        const SizedBox(height: 8),
+        SelectableText(url, style: Theme.of(context).textTheme.bodySmall),
       ],
     );
   }
+}
+
+final _dashboardHistoryProvider = FutureProvider.family
+    .autoDispose<List<HistoryEntry>, ({String deviceId, int limit})>(
+  (ref, args) async {
+    final client = ref.watch(homecoreClientProvider);
+    return HistoryApi(client).getHistory(args.deviceId, limit: args.limit);
+  },
+);
+
+class _HistoryChartWidget extends ConsumerWidget {
+  final DashboardWidgetModel widgetModel;
+  final bool compact;
+
+  const _HistoryChartWidget({
+    required this.widgetModel,
+    required this.compact,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final deviceId = widgetModel.config['device_id'] as String? ?? '';
+    final attribute = widgetModel.config['attribute'] as String? ?? '';
+    final limit = widgetModel.config['limit'] as int? ?? 50;
+    if (deviceId.isEmpty || attribute.isEmpty) {
+      return const _PlaceholderWidget(
+        message: 'Choose a device and attribute for this history chart.',
+      );
+    }
+
+    final historyAsync = ref
+        .watch(_dashboardHistoryProvider((deviceId: deviceId, limit: limit)));
+    return historyAsync.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (error, _) => Text('History error: $error'),
+      data: (entries) {
+        final filtered = entries
+            .where((entry) => entry.attribute == attribute)
+            .toList()
+          ..sort((a, b) => a.recordedAt.compareTo(b.recordedAt));
+        if (filtered.isEmpty) {
+          return _PlaceholderWidget(
+            message: 'No $attribute history found for $deviceId.',
+          );
+        }
+        final limited = filtered.length > limit
+            ? filtered.sublist(filtered.length - limit)
+            : filtered;
+        return _HistoryChartContent(
+          deviceId: deviceId,
+          attribute: attribute,
+          entries: limited,
+          compact: compact,
+        );
+      },
+    );
+  }
+}
+
+class _HistoryChartContent extends ConsumerWidget {
+  final String deviceId;
+  final String attribute;
+  final List<HistoryEntry> entries;
+  final bool compact;
+
+  const _HistoryChartContent({
+    required this.deviceId,
+    required this.attribute,
+    required this.entries,
+    required this.compact,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isUtc = ref.watch(timeUtcProvider);
+    final isBool = entries.any((e) => e.value is bool);
+    final isNumeric = entries.any((e) => e.value is num);
+    final latest = entries.last;
+
+    if (!isBool && !isNumeric) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('$deviceId • $attribute',
+              style: Theme.of(context).textTheme.bodySmall),
+          const SizedBox(height: 8),
+          ...entries.reversed.take(compact ? 4 : 8).map(
+                (entry) => ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(entry.value?.toString() ?? 'null'),
+                  subtitle: Text(
+                    fmtTime(entry.recordedAt, utc: isUtc, showDate: true),
+                  ),
+                ),
+              ),
+        ],
+      );
+    }
+
+    final spots = entries.map((e) {
+      final x = e.recordedAt.millisecondsSinceEpoch.toDouble();
+      final y =
+          isBool ? (e.value == true ? 1.0 : 0.0) : (e.value as num).toDouble();
+      return FlSpot(x, y);
+    }).toList();
+    final minX = spots.first.x;
+    final maxX = spots.last.x;
+    final values = spots.map((spot) => spot.y).toList();
+    final minY = values.reduce((a, b) => a < b ? a : b);
+    final maxY = values.reduce((a, b) => a > b ? a : b);
+    final yPad = (maxY - minY) == 0 ? 1.0 : (maxY - minY) * 0.1;
+    final latestLabel = latest.value is bool
+        ? ((latest.value as bool) ? 'On' : 'Off')
+        : latest.value.toString();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            Chip(label: Text(deviceId)),
+            Chip(label: Text(attribute)),
+            Chip(label: Text('Latest: $latestLabel')),
+          ],
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: compact ? 180 : 220,
+          child: LineChart(
+            LineChartData(
+              minX: minX,
+              maxX: maxX,
+              minY: isBool ? -0.1 : minY - yPad,
+              maxY: isBool ? 1.1 : maxY + yPad,
+              gridData: const FlGridData(show: true),
+              borderData: FlBorderData(show: true),
+              titlesData: FlTitlesData(
+                topTitles:
+                    const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                rightTitles:
+                    const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                leftTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    reservedSize: isBool ? 36 : 44,
+                    getTitlesWidget: (value, meta) {
+                      if (isBool) {
+                        if (value == 1) {
+                          return const Text('ON',
+                              style: TextStyle(fontSize: 10));
+                        }
+                        if (value == 0) {
+                          return const Text('OFF',
+                              style: TextStyle(fontSize: 10));
+                        }
+                        return const SizedBox.shrink();
+                      }
+                      return Text(
+                        value.toStringAsFixed(1),
+                        style: const TextStyle(fontSize: 10),
+                      );
+                    },
+                  ),
+                ),
+                bottomTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    reservedSize: 24,
+                    interval: ((maxX - minX) / 3).clamp(1, double.infinity),
+                    getTitlesWidget: (value, meta) {
+                      final dt =
+                          DateTime.fromMillisecondsSinceEpoch(value.toInt());
+                      final shown = isUtc ? dt.toUtc() : dt.toLocal();
+                      return Text(
+                        '${shown.hour.toString().padLeft(2, '0')}:${shown.minute.toString().padLeft(2, '0')}',
+                        style: const TextStyle(fontSize: 10),
+                      );
+                    },
+                  ),
+                ),
+              ),
+              lineBarsData: [
+                LineChartBarData(
+                  spots: spots,
+                  isCurved: !isBool,
+                  isStepLineChart: isBool,
+                  color: Theme.of(context).colorScheme.primary,
+                  barWidth: 2,
+                  dotData: FlDotData(show: spots.length <= 24),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+String _formatDuration(int? secs) {
+  if (secs == null || secs < 0) return '--:--';
+  final duration = Duration(seconds: secs);
+  final hours = duration.inHours;
+  final minutes = duration.inMinutes.remainder(60);
+  final seconds = duration.inSeconds.remainder(60);
+  if (hours > 0) {
+    return '$hours:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+  }
+  return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
 }
 
 class _PlaceholderWidget extends StatelessWidget {
