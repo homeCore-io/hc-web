@@ -120,6 +120,21 @@ Based on full API audit:
 - `GET /devices/{id}/history?from=&to=&limit=` — time-series (SQLite, per-attribute rows)
 - `PATCH /devices/{id}` — rename, re-area
 
+Media-player UI convention:
+- Generic media-player devices should publish `device_type=media_player`
+- Shared UI should prefer top-level generic attributes:
+  - `state`
+  - `title`
+  - `artist`
+  - `album`
+  - `position_secs`
+  - `duration_secs`
+  - `volume`
+  - `muted`
+  - `supported_actions`
+  - `ui_enrichments`
+- Plugin-specific enrichments should remain optional. For Sonos, `hc-web` now treats `sonos.*` as an additive layer for favorites, playlists, and grouping rather than the core media-player contract.
+
 ### Real-time
 - `WS /api/v1/events/stream?token=JWT&type=device_state_changed` — live event feed
 - Event types: `device_state_changed`, `device_availability_changed`, `rule_fired`,

@@ -6,6 +6,7 @@ void main() {
     test('parses full record', () {
       final d = DeviceState.fromJson({
         'device_id': 'light_living',
+        'canonical_name': 'living_room.floor_lamp',
         'plugin_id': 'plugin.hue',
         'name': 'Living Room',
         'area': 'living_room',
@@ -14,6 +15,8 @@ void main() {
       });
 
       expect(d.id, 'light_living');
+      expect(d.canonicalName, 'living_room.floor_lamp');
+      expect(d.ruleReference, 'living_room.floor_lamp');
       expect(d.pluginId, 'plugin.hue');
       expect(d.name, 'Living Room');
       expect(d.area, 'living_room');
@@ -67,6 +70,7 @@ void main() {
       });
 
       expect(d.displayName, 'switch_garden');
+      expect(d.ruleReference, 'switch_garden');
     });
 
     test('displayName uses name when set', () {
@@ -79,6 +83,69 @@ void main() {
       });
 
       expect(d.displayName, 'Garden Switch');
+    });
+
+    test('parses generic media player contract', () {
+      final d = DeviceState.fromJson({
+        'device_id': 'sonos_living',
+        'plugin_id': 'plugin.sonos',
+        'device_type': 'media_player',
+        'available': true,
+        'attributes': {
+          'state': 'playing',
+          'title': 'Blue Train',
+          'artist': 'John Coltrane',
+          'album': 'Blue Train',
+          'position_secs': 35,
+          'duration_secs': 610,
+          'volume': 27,
+          'muted': false,
+          'supported_actions': ['play', 'pause', 'stop', 'set_volume'],
+          'ui_enrichments': ['favorites', 'grouping'],
+        },
+      });
+
+      expect(d.isMediaPlayer, isTrue);
+      expect(d.playbackState, 'playing');
+      expect(d.title, 'Blue Train');
+      expect(d.artist, 'John Coltrane');
+      expect(d.album, 'Blue Train');
+      expect(d.positionSecs, 35);
+      expect(d.durationSecs, 610);
+      expect(d.volumePercent, 27);
+      expect(d.muted, isFalse);
+      expect(d.supportedActions, contains('stop'));
+      expect(d.uiEnrichments, contains('favorites'));
+      expect(d.supportsAction('set_volume'), isTrue);
+      expect(d.supportsAction('next'), isFalse);
+    });
+
+    test('reads legacy media keys and sonos enrichments', () {
+      final d = DeviceState.fromJson({
+        'device_id': 'sonos_kitchen',
+        'plugin_id': 'plugin.sonos',
+        'device_type': 'media_player',
+        'available': true,
+        'attributes': {
+          'media_title': 'News Hour',
+          'media_artist': 'BBC',
+          'media_album': 'Live',
+          'media_position': 5,
+          'media_duration': 1800,
+          'sonos': {
+            'favorites': ['News', 'Jazz'],
+            'group_members': ['sonos_kitchen'],
+          },
+        },
+      });
+
+      expect(d.title, 'News Hour');
+      expect(d.artist, 'BBC');
+      expect(d.album, 'Live');
+      expect(d.positionSecs, 5);
+      expect(d.durationSecs, 1800);
+      expect(d.sonos['favorites'], ['News', 'Jazz']);
+      expect(d.supportsAction('play'), isTrue);
     });
   });
 }

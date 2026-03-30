@@ -10,12 +10,25 @@ import '../../shared/widgets/skeleton.dart';
 String _abbreviatePlugin(String id) {
   return id
           .split(RegExp(r'[.\-]'))
-          .where((s) => s.isNotEmpty && s != 'hc' && s != 'core' && s != 'plugin')
+          .where(
+              (s) => s.isNotEmpty && s != 'hc' && s != 'core' && s != 'plugin')
           .firstOrNull ??
       id;
 }
 
 String _stateLabel(DeviceState d) {
+  if (d.isMediaPlayer) {
+    final state = d.playbackState;
+    final title = d.title;
+    final volume = d.volumePercent;
+    if (title != null && title.isNotEmpty) {
+      return '${_titleCase(state)}: $title';
+    }
+    if (volume != null) {
+      return '${_titleCase(state)} $volume%';
+    }
+    return _titleCase(state);
+  }
   final s = d.state;
   if (s.containsKey('temperature')) return '${s['temperature']}°F';
   if (s.containsKey('humidity')) return '${s['humidity']}%';
@@ -26,16 +39,26 @@ String _stateLabel(DeviceState d) {
   }
   if (s.containsKey('contact')) return s['contact'] == true ? 'Closed' : 'Open';
   if (s.containsKey('motion')) return s['motion'] == true ? 'Motion' : 'Clear';
-  if (s.containsKey('locked')) return s['locked'] == true ? 'Locked' : 'Unlocked';
-  if (s.containsKey('on') && s['on'] is bool) return s['on'] == true ? 'On' : 'Off';
+  if (s.containsKey('locked')) {
+    return s['locked'] == true ? 'Locked' : 'Unlocked';
+  }
+  if (s.containsKey('on') && s['on'] is bool) {
+    return s['on'] == true ? 'On' : 'Off';
+  }
   return d.available ? 'Online' : 'Offline';
 }
 
-IconData _iconForPlugin(String pluginId) {
+String _titleCase(String value) {
+  if (value.isEmpty) return value;
+  return value[0].toUpperCase() + value.substring(1);
+}
+
+IconData _iconForDevice(DeviceState device) {
+  if (device.isMediaPlayer) return Icons.speaker;
+  final pluginId = device.pluginId;
   if (pluginId.contains('hue') || pluginId.contains('wled')) {
     return Icons.lightbulb;
   }
-  if (pluginId.contains('sonos')) return Icons.speaker;
   if (pluginId.contains('zwave') || pluginId.contains('lutron')) {
     return Icons.toggle_on;
   }
@@ -79,10 +102,12 @@ class _TableFilter {
       sortAsc: sortAsc ?? this.sortAsc,
       areaFilter:
           areaFilter == _sentinel ? this.areaFilter : areaFilter as String?,
-      pluginFilter:
-          pluginFilter == _sentinel ? this.pluginFilter : pluginFilter as String?,
-      statusFilter:
-          statusFilter == _sentinel ? this.statusFilter : statusFilter as String?,
+      pluginFilter: pluginFilter == _sentinel
+          ? this.pluginFilter
+          : pluginFilter as String?,
+      statusFilter: statusFilter == _sentinel
+          ? this.statusFilter
+          : statusFilter as String?,
     );
   }
 }
@@ -99,7 +124,12 @@ List<DeviceState> _applyTableFilter(List<DeviceState> all, _TableFilter f) {
     if (f.search.isNotEmpty) {
       final q = f.search.toLowerCase();
       if (!d.displayName.toLowerCase().contains(q) &&
-          !d.id.toLowerCase().contains(q)) return false;
+          !d.id.toLowerCase().contains(q) &&
+          !(d.canonicalName?.toLowerCase().contains(q) ?? false) &&
+          !(d.title?.toLowerCase().contains(q) ?? false) &&
+          !(d.artist?.toLowerCase().contains(q) ?? false)) {
+        return false;
+      }
     }
     if (f.areaFilter != null && d.area != f.areaFilter) return false;
     if (f.pluginFilter != null && d.pluginId != f.pluginFilter) return false;
@@ -109,10 +139,18 @@ List<DeviceState> _applyTableFilter(List<DeviceState> all, _TableFilter f) {
       case 'offline':
         if (d.available) return false;
       case 'on':
-        if (d.state['on'] != true) return false;
+        if (d.isMediaPlayer) {
+          if (d.playbackState != 'playing') return false;
+        } else if (d.state['on'] != true) {
+          return false;
+        }
       case 'off':
-        final hasOn = d.state.containsKey('on') && d.state['on'] is bool;
-        if (!hasOn || d.state['on'] == true) return false;
+        if (d.isMediaPlayer) {
+          if (d.playbackState == 'playing') return false;
+        } else {
+          final hasOn = d.state.containsKey('on') && d.state['on'] is bool;
+          if (!hasOn || d.state['on'] == true) return false;
+        }
     }
     return true;
   }).toList();
@@ -190,8 +228,8 @@ class _DeviceListPageState extends ConsumerState<DeviceListPage> {
               .toSet()
               .toList()
             ..sort();
-          final allPlugins =
-              nonScenes.map((d) => d.pluginId).toSet().toList()..sort();
+          final allPlugins = nonScenes.map((d) => d.pluginId).toSet().toList()
+            ..sort();
 
           final filtered = _applyTableFilter(devices, filter);
 
@@ -310,8 +348,7 @@ class _DeviceTable extends ConsumerWidget {
               ? const Center(child: Text('No devices match the filter.'))
               : ListView.builder(
                   itemCount: devices.length,
-                  itemBuilder: (context, i) =>
-                      _DeviceRow(device: devices[i]),
+                  itemBuilder: (context, i) => _DeviceRow(device: devices[i]),
                 ),
         ),
       ],
@@ -341,7 +378,7 @@ class _TableHeader extends StatelessWidget {
       child: Row(
         children: [
           // avail dot + icon cols (no header label)
-          SizedBox(width: _DeviceTable._w0 + _DeviceTable._w1 + 4),
+          const SizedBox(width: _DeviceTable._w0 + _DeviceTable._w1 + 4),
           // NAME — sortable, no dropdown
           Expanded(
             child: _ColHeader(
@@ -445,9 +482,8 @@ class _ColHeader extends StatelessWidget {
     final isActive = filter.sortCol == colKey;
     final hasFilter = activeValue != null;
 
-    final labelColor = hasFilter
-        ? cs.primary
-        : cs.onSurface.withValues(alpha: 0.5);
+    final labelColor =
+        hasFilter ? cs.primary : cs.onSurface.withValues(alpha: 0.5);
 
     Widget sortIndicator() {
       if (!isActive) return const SizedBox.shrink();
@@ -487,9 +523,8 @@ class _ColHeader extends StatelessWidget {
           } else {
             final raw = rawOptions != null ? rawOptions![i - 1] : options![i];
             // For status, map display label to lowercase key
-            final value = (filterKey ?? colKey) == 'status'
-                ? raw.toLowerCase()
-                : raw;
+            final value =
+                (filterKey ?? colKey) == 'status' ? raw.toLowerCase() : raw;
             onUpdate(_applyFilterValue(filter, value));
           }
         },
@@ -544,6 +579,8 @@ class _DeviceRow extends ConsumerWidget {
     final hasOnOff =
         device.state.containsKey('on') && device.state['on'] is bool;
     final isOn = device.state['on'] as bool? ?? false;
+    final isPlaying = device.playbackState == 'playing' ||
+        device.playbackState == 'buffering';
 
     return InkWell(
       onTap: () => context.push('/devices/${device.id}'),
@@ -560,8 +597,7 @@ class _DeviceRow extends ConsumerWidget {
                   height: 7,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color:
-                        device.available ? Colors.green.shade400 : cs.error,
+                    color: device.available ? Colors.green.shade400 : cs.error,
                   ),
                 ),
               ),
@@ -570,7 +606,7 @@ class _DeviceRow extends ConsumerWidget {
             SizedBox(
               width: _DeviceTable._w1 + 4,
               child: Icon(
-                _iconForPlugin(device.pluginId),
+                _iconForDevice(device),
                 size: 14,
                 color: cs.onSurface.withValues(alpha: 0.4),
               ),
@@ -623,23 +659,42 @@ class _DeviceRow extends ConsumerWidget {
             // Control
             SizedBox(
               width: _DeviceTable._w5,
-              child: hasOnOff
-                  ? Transform.scale(
-                      scale: 0.70,
-                      child: Switch(
-                        value: isOn,
-                        onChanged: device.available
-                            ? (val) async {
-                                await ref
-                                    .read(devicesApiProvider)
-                                    .setDeviceState(device.id, {'on': val});
-                              }
-                            : null,
-                        materialTapTargetSize:
-                            MaterialTapTargetSize.shrinkWrap,
+              child: device.isMediaPlayer
+                  ? IconButton(
+                      tooltip: isPlaying ? 'Stop' : 'Play',
+                      iconSize: 18,
+                      visualDensity: VisualDensity.compact,
+                      onPressed: device.available
+                          ? () async {
+                              await ref.read(devicesApiProvider).setDeviceState(
+                                device.id,
+                                {'action': isPlaying ? 'stop' : 'play'},
+                              );
+                            }
+                          : null,
+                      icon: Icon(
+                        isPlaying
+                            ? Icons.stop_circle_outlined
+                            : Icons.play_circle_outline,
                       ),
                     )
-                  : const SizedBox(),
+                  : hasOnOff
+                      ? Transform.scale(
+                          scale: 0.70,
+                          child: Switch(
+                            value: isOn,
+                            onChanged: device.available
+                                ? (val) async {
+                                    await ref
+                                        .read(devicesApiProvider)
+                                        .setDeviceState(device.id, {'on': val});
+                                  }
+                                : null,
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                          ),
+                        )
+                      : const SizedBox(),
             ),
           ],
         ),
