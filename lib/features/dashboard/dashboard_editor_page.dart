@@ -223,12 +223,14 @@ class _DashboardEditorPageState extends ConsumerState<DashboardEditorPage> {
       final maxX = nextColumns - placement.w;
       return placement.copyWith(x: placement.x.clamp(0, maxX));
     }).toList();
-    _replaceLayout(layout.copyWith(
-      columns: nextColumns,
-      rowHeight: rowHeight ?? layout.rowHeight,
-      gap: gap ?? layout.gap,
-      placements: placements,
-    ));
+    _replaceLayout(normalizeDashboardLayout(
+        layout.copyWith(
+          columns: nextColumns,
+          rowHeight: rowHeight ?? layout.rowHeight,
+          gap: gap ?? layout.gap,
+          placements: placements,
+        ),
+        _widgets));
   }
 
   void _updatePlacement(
@@ -251,7 +253,11 @@ class _DashboardEditorPageState extends ConsumerState<DashboardEditorPage> {
         h: (h ?? placement.h).clamp(1, 12),
       );
     }).toList();
-    _replaceLayout(layout.copyWith(placements: placements));
+    _replaceLayout(normalizeDashboardLayout(
+      layout.copyWith(placements: placements),
+      _widgets,
+      anchorWidgetId: widgetId,
+    ));
   }
 
   DashboardWidgetPlacement? _placementFor(
@@ -281,13 +287,15 @@ class _DashboardEditorPageState extends ConsumerState<DashboardEditorPage> {
         w: nextW,
       );
     }).toList();
-    _replaceLayout(DashboardLayout(
-      breakpoint: destination,
-      columns: targetColumns,
-      rowHeight: sourceLayout.rowHeight,
-      gap: sourceLayout.gap,
-      placements: placements,
-    ));
+    _replaceLayout(normalizeDashboardLayout(
+        DashboardLayout(
+          breakpoint: destination,
+          columns: targetColumns,
+          rowHeight: sourceLayout.rowHeight,
+          gap: sourceLayout.gap,
+          placements: placements,
+        ),
+        _widgets));
   }
 
   @override

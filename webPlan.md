@@ -525,6 +525,7 @@ Current implementation status:
 - The dashboard renderer now uses persisted breakpoint placement data directly instead of flattening widgets into a single vertical list.
 - Widget rendering now includes compact-mode adaptation and editor-side minimum size guidance for dense grid layouts.
 - The editor preview now supports pointer-driven tile movement and resize for persisted dashboard placements, while the explicit numeric placement controls remain available for precise adjustments.
+- Layout edits now normalize placements to resolve overlaps, preserve minimum widget sizes, and keep mobile layouts snapped to a single-column flow.
 
 #### Recommended initial presets
 

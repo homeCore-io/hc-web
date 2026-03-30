@@ -103,5 +103,75 @@ void main() {
       expect(eventHint.minH, greaterThanOrEqualTo(2));
       expect(eventHint.recommendedH, greaterThanOrEqualTo(eventHint.minH));
     });
+
+    test('normalizes dashboard layouts to resolve overlaps', () {
+      final widgets = const [
+        DashboardWidgetModel(
+          id: 'a',
+          type: DashboardWidgetType.deviceGrid,
+          title: 'A',
+          refreshPolicy: DashboardRefreshPolicy.live,
+          config: {},
+        ),
+        DashboardWidgetModel(
+          id: 'b',
+          type: DashboardWidgetType.eventFeed,
+          title: 'B',
+          refreshPolicy: DashboardRefreshPolicy.live,
+          config: {},
+        ),
+      ];
+      final layout = DashboardLayout(
+        breakpoint: DashboardBreakpoint.desktop,
+        columns: 12,
+        rowHeight: 140,
+        gap: 12,
+        placements: const [
+          DashboardWidgetPlacement(widgetId: 'a', x: 0, y: 0, w: 6, h: 2),
+          DashboardWidgetPlacement(widgetId: 'b', x: 0, y: 0, w: 6, h: 2),
+        ],
+      );
+
+      final normalized =
+          normalizeDashboardLayout(layout, widgets, anchorWidgetId: 'a');
+
+      final a =
+          normalized.placements.firstWhere((item) => item.widgetId == 'a');
+      final b =
+          normalized.placements.firstWhere((item) => item.widgetId == 'b');
+      expect(a.x, 0);
+      expect(a.y, 0);
+      expect(dashboardPlacementsOverlap(a, b), isFalse);
+      expect(b.y, greaterThanOrEqualTo(a.y + a.h));
+    });
+
+    test('normalizes mobile layouts to a single full-width column', () {
+      final widgets = const [
+        DashboardWidgetModel(
+          id: 'camera',
+          type: DashboardWidgetType.cameraVideo,
+          title: 'Camera',
+          refreshPolicy: DashboardRefreshPolicy.live,
+          config: {},
+        ),
+      ];
+      final layout = DashboardLayout(
+        breakpoint: DashboardBreakpoint.mobile,
+        columns: 1,
+        rowHeight: 140,
+        gap: 12,
+        placements: const [
+          DashboardWidgetPlacement(widgetId: 'camera', x: 3, y: 0, w: 4, h: 1),
+        ],
+      );
+
+      final normalized = normalizeDashboardLayout(layout, widgets);
+      final camera =
+          normalized.placements.firstWhere((item) => item.widgetId == 'camera');
+
+      expect(camera.x, 0);
+      expect(camera.w, 1);
+      expect(camera.h, greaterThanOrEqualTo(2));
+    });
   });
 }

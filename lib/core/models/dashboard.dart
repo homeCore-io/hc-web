@@ -252,6 +252,94 @@ class DashboardLayout {
       );
 }
 
+bool dashboardPlacementsOverlap(
+  DashboardWidgetPlacement a,
+  DashboardWidgetPlacement b,
+) {
+  return a.x < b.x + b.w &&
+      a.x + a.w > b.x &&
+      a.y < b.y + b.h &&
+      a.y + a.h > b.y;
+}
+
+DashboardLayout normalizeDashboardLayout(
+  DashboardLayout layout,
+  List<DashboardWidgetModel> widgets, {
+  String? anchorWidgetId,
+}) {
+  final hintsByWidgetId = {
+    for (final widget in widgets)
+      widget.id: dashboardWidgetSizeHint(widget.type),
+  };
+
+  DashboardWidgetPlacement sanitize(DashboardWidgetPlacement placement) {
+    final hint = hintsByWidgetId[placement.widgetId];
+    final minH = hint?.minH ?? 1;
+    final minW = hint?.minW ?? 1;
+    final width = layout.breakpoint == DashboardBreakpoint.mobile
+        ? layout.columns
+        : placement.w.clamp(minW, layout.columns);
+    final x = layout.breakpoint == DashboardBreakpoint.mobile
+        ? 0
+        : placement.x.clamp(0, layout.columns - width);
+    return placement.copyWith(
+      x: x,
+      y: placement.y.clamp(0, 999),
+      w: width,
+      h: placement.h.clamp(minH, 12),
+    );
+  }
+
+  final originalOrder = <String, int>{
+    for (var index = 0; index < layout.placements.length; index++)
+      layout.placements[index].widgetId: index,
+  };
+  final sanitized = layout.placements.map(sanitize).toList();
+  sanitized.sort((a, b) {
+    if (a.widgetId == anchorWidgetId) return -1;
+    if (b.widgetId == anchorWidgetId) return 1;
+    return a.y != b.y ? a.y.compareTo(b.y) : a.x.compareTo(b.x);
+  });
+
+  final resolved = <DashboardWidgetPlacement>[];
+  for (final placement in sanitized) {
+    var candidate = placement;
+    while (true) {
+      final overlaps = resolved
+          .where((other) => dashboardPlacementsOverlap(candidate, other))
+          .toList();
+      if (overlaps.isEmpty) break;
+      final nextY = overlaps.fold<int>(
+        candidate.y,
+        (maxBottom, other) {
+          final bottom = other.y + other.h;
+          return bottom > maxBottom ? bottom : maxBottom;
+        },
+      );
+      candidate = candidate.copyWith(y: nextY);
+    }
+
+    if (candidate.widgetId != anchorWidgetId) {
+      while (candidate.y > 0) {
+        final trial = candidate.copyWith(y: candidate.y - 1);
+        final hasOverlap =
+            resolved.any((other) => dashboardPlacementsOverlap(trial, other));
+        if (hasOverlap) break;
+        candidate = trial;
+      }
+    }
+
+    resolved.add(candidate);
+  }
+
+  resolved.sort((a, b) {
+    final left = originalOrder[a.widgetId] ?? 0;
+    final right = originalOrder[b.widgetId] ?? 0;
+    return left.compareTo(right);
+  });
+  return layout.copyWith(placements: resolved);
+}
+
 class DashboardWidgetModel {
   final String id;
   final DashboardWidgetType type;
