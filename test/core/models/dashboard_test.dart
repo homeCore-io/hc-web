@@ -39,6 +39,23 @@ void main() {
       expect(decoded.first.widgets, isNotEmpty);
     });
 
+    test('serializes widget enums using API snake_case names', () {
+      final dashboard =
+          DashboardTemplateFactory.starterDashboards(ownerUserId: 'john')
+              .single;
+      final json = dashboard.toJson();
+      final widgets = (json['widgets'] as List).cast<Map<String, dynamic>>();
+
+      expect(
+        widgets.any((widget) => widget['type'] == 'device_list'),
+        isTrue,
+      );
+      expect(
+        widgets.any((widget) => widget['refresh_policy'] == 'passive'),
+        isTrue,
+      );
+    });
+
     test('selects breakpoint layouts by width', () {
       expect(dashboardBreakpointForWidth(500), DashboardBreakpoint.mobile);
       expect(dashboardBreakpointForWidth(700), DashboardBreakpoint.tablet);

@@ -24,10 +24,26 @@ enum DashboardWidgetType {
 
 String _enumName(Object value) => value.toString().split('.').last;
 
+String _toSnakeCase(String value) {
+  final buffer = StringBuffer();
+  for (var i = 0; i < value.length; i++) {
+    final char = value[i];
+    final isUpper = char.toUpperCase() == char && char.toLowerCase() != char;
+    if (isUpper && i > 0) buffer.write('_');
+    buffer.write(char.toLowerCase());
+  }
+  return buffer.toString();
+}
+
+String _normalizeEnumName(String value) =>
+    value.replaceAll('_', '').toLowerCase();
+
 T _enumByName<T>(List<T> values, String? raw, T fallback) {
   if (raw == null) return fallback;
   return values.firstWhere(
-    (value) => _enumName(value as Object) == raw,
+    (value) =>
+        _normalizeEnumName(_enumName(value as Object)) ==
+        _normalizeEnumName(raw),
     orElse: () => fallback,
   );
 }
@@ -175,10 +191,10 @@ class DashboardWidgetModel {
 
   Map<String, dynamic> toJson() => {
         'id': id,
-        'type': _enumName(type),
+        'type': _toSnakeCase(_enumName(type)),
         'title': title,
         'subtitle': subtitle,
-        'refresh_policy': _enumName(refreshPolicy),
+        'refresh_policy': _toSnakeCase(_enumName(refreshPolicy)),
         'config': config,
       };
 
