@@ -74,29 +74,85 @@ class DashboardViewPage extends ConsumerWidget {
                 final breakpoint =
                     dashboardBreakpointForWidth(constraints.maxWidth);
                 final layout = dashboard.layoutFor(breakpoint);
-                final sortedPlacements = [...layout.placements]..sort((a, b) =>
-                    a.y != b.y ? a.y.compareTo(b.y) : a.x.compareTo(b.x));
-
-                return ListView.separated(
+                return SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
                   padding: const EdgeInsets.all(16),
-                  itemBuilder: (context, index) {
-                    final placement = sortedPlacements[index];
-                    final widgetModel =
-                        dashboard.widgetById(placement.widgetId);
-                    if (widgetModel == null) return const SizedBox.shrink();
-                    return _DashboardWidgetCard(
-                      dashboard: dashboard,
-                      widgetModel: widgetModel,
-                    );
-                  },
-                  separatorBuilder: (_, __) => const SizedBox(height: 12),
-                  itemCount: sortedPlacements.length,
+                  child: _DashboardGridLayout(
+                    dashboard: dashboard,
+                    layout: layout,
+                  ),
                 );
               },
             ),
           );
         },
       ),
+    );
+  }
+}
+
+class _DashboardGridLayout extends StatelessWidget {
+  final DashboardDefinition dashboard;
+  final DashboardLayout layout;
+
+  const _DashboardGridLayout({
+    required this.dashboard,
+    required this.layout,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final placements = [...layout.placements]..sort((a, b) =>
+            a.y != b.y ? a.y.compareTo(b.y) : a.x.compareTo(b.x));
+        if (placements.isEmpty) {
+          return const Card(
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Text('This dashboard has no widgets yet.'),
+            ),
+          );
+        }
+
+        final columns = layout.columns <= 0 ? 1 : layout.columns;
+        final gap = layout.gap;
+        final cellWidth =
+            ((constraints.maxWidth - (gap * (columns - 1))) / columns)
+                .clamp(1.0, double.infinity);
+        final maxRow = placements.fold<int>(
+          0,
+          (current, placement) => placement.y + placement.h > current
+              ? placement.y + placement.h
+              : current,
+        );
+        final totalHeight =
+            (maxRow * layout.rowHeight) + ((maxRow - 1).clamp(0, 999) * gap);
+
+        return SizedBox(
+          width: double.infinity,
+          height: totalHeight,
+          child: Stack(
+            children: [
+              for (final placement in placements)
+                if (dashboard.widgetById(placement.widgetId) case final widget?)
+                  Positioned(
+                    left: (placement.x * cellWidth) + (placement.x * gap),
+                    top:
+                        (placement.y * layout.rowHeight) + (placement.y * gap),
+                    width:
+                        (placement.w * cellWidth) + ((placement.w - 1) * gap),
+                    height: (placement.h * layout.rowHeight) +
+                        ((placement.h - 1) * gap),
+                    child: _DashboardWidgetCard(
+                      dashboard: dashboard,
+                      widgetModel: widget,
+                    ),
+                  ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
@@ -138,6 +194,8 @@ class _DashboardWidgetCard extends ConsumerWidget {
     };
 
     return Card(
+      margin: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -152,7 +210,11 @@ class _DashboardWidgetCard extends ConsumerWidget {
                   style: Theme.of(context).textTheme.bodySmall),
             ],
             const SizedBox(height: 12),
-            body,
+            Expanded(
+              child: SingleChildScrollView(
+                child: body,
+              ),
+            ),
           ],
         ),
       ),
