@@ -10,9 +10,22 @@ void main() {
       expect(templates.length, 1);
       expect(templates.single.isDefault, isTrue);
       expect(templates.single.name, 'Getting Started');
+      expect(templates.single.widgets.length, greaterThanOrEqualTo(8));
       expect(
         templates.single.widgets.any(
           (widget) => widget.type == DashboardWidgetType.markdown,
+        ),
+        isTrue,
+      );
+      expect(
+        templates.single.widgets.any(
+          (widget) => widget.type == DashboardWidgetType.deviceGrid,
+        ),
+        isTrue,
+      );
+      expect(
+        templates.single.widgets.any(
+          (widget) => widget.type == DashboardWidgetType.dashboardLink,
         ),
         isTrue,
       );

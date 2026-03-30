@@ -383,7 +383,7 @@ class DashboardTemplateFactory {
           refreshPolicy: DashboardRefreshPolicy.passive,
           config: {
             'markdown':
-                '## Welcome to HomeCore\nStart here:\n- Open **Devices** to confirm devices are online and assigned to areas.\n- Use **Scenes** and **Modes** to organize common actions.\n- Edit this dashboard to add room views, media controls, or security widgets.\n- Create additional dashboards for rooms, wall tablets, or monitoring.'
+                '## Welcome to HomeCore\nThis starter dashboard is your shared baseline for learning the system and shaping your own views.\n\n### Start here\n- Open **Devices** to confirm devices are online, named clearly, and assigned to areas.\n- Review **Scenes** and **Modes** so common actions have one-tap controls.\n- Open **Automations** to verify existing rules and watch for anything disabled.\n\n### Customize next\n- Edit this dashboard to add room-specific widgets, media controls, cameras, or notes.\n- Create separate dashboards for **Security**, **Living Room**, wall tablets, or focused monitoring.\n- Use the dashboard manager to duplicate a layout before customizing it for another room or purpose.'
           },
         ),
         DashboardWidgetModel(
@@ -410,6 +410,19 @@ class DashboardTemplateFactory {
           config: {},
         ),
         DashboardWidgetModel(
+          id: 'starter_grid',
+          type: DashboardWidgetType.deviceGrid,
+          title: 'Quick Device View',
+          subtitle: 'A starter example of a device-grid widget.',
+          refreshPolicy: DashboardRefreshPolicy.live,
+          config: {
+            'selection_mode': 'query',
+            'query': '',
+            'show_offline': false,
+            'limit': 6,
+          },
+        ),
+        DashboardWidgetModel(
           id: 'starter_devices',
           type: DashboardWidgetType.deviceList,
           title: 'Recent Devices',
@@ -431,7 +444,9 @@ class DashboardTemplateFactory {
         DashboardWidgetModel(
           id: 'starter_links',
           type: DashboardWidgetType.dashboardLink,
-          title: 'Explore Dashboards',
+          title: 'Next Dashboard Steps',
+          subtitle:
+              'Open the dashboard manager, create a new dashboard, or switch to another saved view.',
           refreshPolicy: DashboardRefreshPolicy.passive,
           config: {},
         ),
@@ -441,9 +456,10 @@ class DashboardTemplateFactory {
         'starter_summary': [0, 2, 12, 1],
         'starter_modes': [0, 3, 12, 1],
         'starter_scenes': [0, 4, 12, 1],
-        'starter_devices': [0, 5, 7, 2],
-        'starter_events': [7, 5, 5, 2],
-        'starter_links': [0, 7, 12, 1],
+        'starter_grid': [0, 5, 12, 2],
+        'starter_devices': [0, 7, 7, 2],
+        'starter_events': [7, 7, 5, 2],
+        'starter_links': [0, 9, 12, 1],
       }),
     );
   }

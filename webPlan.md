@@ -292,6 +292,17 @@ belong in HomeCore, not browser-only storage, so other clients can consume the s
 `hc-web` should treat dashboard editing/rendering as a client of the shared `/api/v1/dashboards`
 resource.
 
+On first-run, `hc-web` should ensure a generic **Getting Started** dashboard exists. That starter
+dashboard should be valid against the shared API schema, useful even when it is the only dashboard,
+and include:
+- onboarding/help markdown
+- at least one summary widget
+- modes and scenes examples
+- device-list or device-grid examples
+- recent events
+- dashboard-management/navigation actions so the page still feels actionable before additional
+  dashboards are created
+
 #### Dashboard platform model
 
 **Core entities**
@@ -750,6 +761,7 @@ The `NavigationRail` / `BottomNavigationBar` swap is handled in `AppShell`.
 - [ ] Define and document security policy for `web_embed` and `camera_video`
 - [ ] Add starter dashboard templates
 - [ ] Add a generic "Getting Started" default dashboard with basic status, recent activity, and onboarding/help content
+- [ ] Verify dashboard lifecycle end to end with API tests plus at least one non-web client consuming `/api/v1/dashboards`
 
 **Deliverable:** Users can create, store, navigate, and render multiple dashboards with empty/basic widgets.
 

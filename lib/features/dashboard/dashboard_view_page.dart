@@ -128,7 +128,7 @@ class _DashboardWidgetCard extends ConsumerWidget {
         _MediaPlayerDashboardWidget(widgetModel: widgetModel),
       DashboardWidgetType.markdown => _MarkdownWidget(widgetModel: widgetModel),
       DashboardWidgetType.dashboardLink =>
-        _DashboardLinkWidget(current: dashboard),
+        _DashboardLinkWidget(current: dashboard, widgetModel: widgetModel),
       DashboardWidgetType.cameraVideo =>
         _CameraVideoWidget(widgetModel: widgetModel),
       DashboardWidgetType.webEmbed => _WebEmbedWidget(widgetModel: widgetModel),
@@ -574,26 +574,69 @@ class _MarkdownWidget extends StatelessWidget {
 
 class _DashboardLinkWidget extends ConsumerWidget {
   final DashboardDefinition current;
-  const _DashboardLinkWidget({required this.current});
+  final DashboardWidgetModel widgetModel;
+  const _DashboardLinkWidget({
+    required this.current,
+    required this.widgetModel,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final dashboards = ref.watch(dashboardsProvider).valueOrNull ??
         const <DashboardDefinition>[];
-    final others =
-        dashboards.where((dashboard) => dashboard.id != current.id).toList();
-    if (others.isEmpty) {
-      return const Text('No other dashboards available.');
+    final configuredIds =
+        ((widgetModel.config['dashboard_ids'] as List?) ?? const [])
+            .whereType<String>()
+            .toSet();
+    var others = dashboards.where((dashboard) => dashboard.id != current.id);
+    if (configuredIds.isNotEmpty) {
+      others =
+          others.where((dashboard) => configuredIds.contains(dashboard.id));
     }
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: others
-          .map((dashboard) => OutlinedButton(
-                onPressed: () => context.go('/dashboards/${dashboard.id}'),
-                child: Text(dashboard.name),
-              ))
-          .toList(),
+    final otherDashboards = others.toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            FilledButton.icon(
+              onPressed: () => context.go('/dashboards'),
+              icon: const Icon(Icons.dashboard_customize_outlined),
+              label: const Text('Manage Dashboards'),
+            ),
+            OutlinedButton.icon(
+              onPressed: () => context.go('/dashboards/new/edit'),
+              icon: const Icon(Icons.add),
+              label: const Text('New Dashboard'),
+            ),
+            OutlinedButton.icon(
+              onPressed: () => context.go('/dashboards/${current.id}/edit'),
+              icon: const Icon(Icons.edit_outlined),
+              label: const Text('Edit This Dashboard'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        if (otherDashboards.isEmpty)
+          const Text(
+            'No other dashboards are saved yet. Create one for a room, media zone, or security view.',
+          )
+        else
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: otherDashboards
+                .map((dashboard) => OutlinedButton(
+                      onPressed: () =>
+                          context.go('/dashboards/${dashboard.id}'),
+                      child: Text(dashboard.name),
+                    ))
+                .toList(),
+          ),
+      ],
     );
   }
 }
