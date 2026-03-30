@@ -14,6 +14,9 @@ import 'features/automations/automation_editor_page.dart';
 import 'features/automations/automation_groups_page.dart';
 import 'features/automations/automation_list_page.dart';
 import 'features/dashboard/dashboard_page.dart';
+import 'features/dashboard/dashboard_editor_page.dart';
+import 'features/dashboard/dashboard_view_page.dart';
+import 'features/dashboard/dashboards_page.dart';
 import 'features/devices/device_detail_page.dart';
 import 'features/devices/device_history_page.dart';
 import 'features/devices/device_list_page.dart';
@@ -47,11 +50,28 @@ GoRouter _buildRouter(Ref ref) {
         builder: (context, state, child) => AppShell(child: child),
         routes: [
           GoRoute(
-              path: '/dashboard',
-              builder: (_, __) => const DashboardPage()),
+            path: '/dashboard',
+            builder: (_, __) => const DashboardPage(),
+          ),
           GoRoute(
-              path: '/devices',
-              builder: (_, __) => const DeviceListPage()),
+            path: '/dashboards',
+            builder: (_, __) => const DashboardsPage(),
+          ),
+          GoRoute(
+            path: '/dashboards/new/edit',
+            builder: (_, __) => const DashboardEditorPage(dashboardId: 'new'),
+          ),
+          GoRoute(
+            path: '/dashboards/:id',
+            builder: (_, state) =>
+                DashboardViewPage(dashboardId: state.pathParameters['id']!),
+          ),
+          GoRoute(
+            path: '/dashboards/:id/edit',
+            builder: (_, state) =>
+                DashboardEditorPage(dashboardId: state.pathParameters['id']!),
+          ),
+          GoRoute(path: '/devices', builder: (_, __) => const DeviceListPage()),
           GoRoute(
               path: '/automations',
               builder: (_, __) => const AutomationListPage()),
@@ -60,29 +80,21 @@ GoRouter _buildRouter(Ref ref) {
               builder: (_, __) => const AutomationGroupsPage()),
           GoRoute(
               path: '/automations/new',
-              builder: (_, __) =>
-                  const AutomationEditorPage(ruleId: 'new')),
+              builder: (_, __) => const AutomationEditorPage(ruleId: 'new')),
           GoRoute(
               path: '/automations/:id',
-              builder: (_, state) => AutomationEditorPage(
-                  ruleId: state.pathParameters['id'])),
-          GoRoute(
-              path: '/scenes',
-              builder: (_, __) => const ScenesPage()),
+              builder: (_, state) =>
+                  AutomationEditorPage(ruleId: state.pathParameters['id'])),
+          GoRoute(path: '/scenes', builder: (_, __) => const ScenesPage()),
           GoRoute(
               path: '/scenes/new',
-              builder: (_, __) =>
-                  const SceneEditorPage(sceneId: 'new')),
+              builder: (_, __) => const SceneEditorPage(sceneId: 'new')),
           GoRoute(
               path: '/scenes/:id',
               builder: (_, state) =>
                   SceneEditorPage(sceneId: state.pathParameters['id'])),
-          GoRoute(
-              path: '/modes',
-              builder: (_, __) => const ModesPage()),
-          GoRoute(
-              path: '/events',
-              builder: (_, __) => const EventsPage()),
+          GoRoute(path: '/modes', builder: (_, __) => const ModesPage()),
+          GoRoute(path: '/events', builder: (_, __) => const EventsPage()),
           GoRoute(
               path: '/devices/:id',
               builder: (_, state) =>
@@ -96,20 +108,17 @@ GoRouter _buildRouter(Ref ref) {
             builder: (context, state, child) => AdminShell(child: child),
             routes: [
               GoRoute(
-                  path: '/admin/users',
-                  builder: (_, __) => const UsersPage()),
+                  path: '/admin/users', builder: (_, __) => const UsersPage()),
               GoRoute(
                   path: '/admin/plugins',
                   builder: (_, __) => const PluginsPage()),
               GoRoute(
-                  path: '/admin/areas',
-                  builder: (_, __) => const AreasPage()),
+                  path: '/admin/areas', builder: (_, __) => const AreasPage()),
               GoRoute(
                   path: '/admin/system',
                   builder: (_, __) => const SystemPage()),
               GoRoute(
-                  path: '/admin/logs',
-                  builder: (_, __) => const LogsPage()),
+                  path: '/admin/logs', builder: (_, __) => const LogsPage()),
             ],
           ),
         ],

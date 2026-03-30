@@ -24,7 +24,8 @@ class _AppShellState extends ConsumerState<AppShell> {
     super.initState();
     _checkExpiry();
     // Recheck every minute.
-    _expiryTimer = Timer.periodic(const Duration(minutes: 1), (_) => _checkExpiry());
+    _expiryTimer =
+        Timer.periodic(const Duration(minutes: 1), (_) => _checkExpiry());
   }
 
   Future<void> _checkExpiry() async {
@@ -48,8 +49,7 @@ class _AppShellState extends ConsumerState<AppShell> {
         payload += '=';
     }
     try {
-      final decoded =
-          utf8.decode(base64Url.decode(payload));
+      final decoded = utf8.decode(base64Url.decode(payload));
       final json = jsonDecode(decoded) as Map<String, dynamic>;
       final exp = json['exp'] as int?;
       if (exp == null) return null;
@@ -74,7 +74,7 @@ class _AppShellState extends ConsumerState<AppShell> {
 
     final destinations = [
       const NavigationDestination(
-          icon: Icon(Icons.dashboard), label: 'Dashboard'),
+          icon: Icon(Icons.dashboard_customize_outlined), label: 'Dashboards'),
       const NavigationDestination(icon: Icon(Icons.devices), label: 'Devices'),
       const NavigationDestination(
           icon: Icon(Icons.auto_awesome), label: 'Automations'),
@@ -88,7 +88,7 @@ class _AppShellState extends ConsumerState<AppShell> {
     ];
 
     final routes = [
-      '/dashboard',
+      '/dashboards',
       '/devices',
       '/automations',
       '/scenes',
@@ -186,9 +186,7 @@ class _WsIndicator extends StatelessWidget {
       child: Icon(
         connected ? Icons.circle : Icons.circle_outlined,
         size: 10,
-        color: connected
-            ? Colors.green
-            : Theme.of(context).colorScheme.error,
+        color: connected ? Colors.green : Theme.of(context).colorScheme.error,
       ),
     );
   }
@@ -210,22 +208,18 @@ class _ExpiryBanner extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
         child: Row(children: [
           Icon(Icons.warning_amber_outlined,
-              size: 16,
-              color: Theme.of(context).colorScheme.onErrorContainer),
+              size: 16, color: Theme.of(context).colorScheme.onErrorContainer),
           const SizedBox(width: 8),
           Expanded(
             child: Text(label,
                 style: TextStyle(
                     fontSize: 13,
-                    color:
-                        Theme.of(context).colorScheme.onErrorContainer)),
+                    color: Theme.of(context).colorScheme.onErrorContainer)),
           ),
           TextButton(
             style: TextButton.styleFrom(
-              foregroundColor:
-                  Theme.of(context).colorScheme.onErrorContainer,
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              foregroundColor: Theme.of(context).colorScheme.onErrorContainer,
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             ),
             onPressed: onRelogin,
             child: const Text('Re-login'),

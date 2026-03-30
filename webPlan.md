@@ -275,17 +275,222 @@ hc-web/
 
 ---
 
-### Dashboard
-The landing page after login.  At-a-glance home status.
+### Dashboards
+The landing experience is no longer a single hard-coded page. `hc-web` should support a dashboard
+platform with multiple user-defined dashboards for different purposes, such as:
+- whole-home overview
+- security monitoring
+- room-specific control surfaces
+- media/control dashboards
+- wall-tablet / TV optimized dashboards
 
-**Layout:**
-- Top row: mode chips (`mode_night`, custom modes) — tap to toggle manual modes
-- Summary cards: `Lights on (3)`, `Doors open (1)`, `Offline devices (0)`
-- Quick scenes row: horizontally scrollable scene activation buttons
-- Recent events panel: last 10 events from WS stream (live-updating)
-- Offline/unavailable devices alert banner (if any)
+Each user can have multiple dashboards, choose a default dashboard, and optionally access shared
+dashboards created by admins or other users with permission.
 
-**Data sources:** `GET /devices`, `GET /modes`, `GET /scenes`, WS stream
+#### Dashboard platform model
+
+**Core entities**
+
+1. `DashboardDefinition`
+- `id`
+- `name`
+- `description`
+- `owner_user_id`
+- `visibility`: `private | shared | public`
+- `tags`: e.g. `security`, `living_room`, `tablet`, `wall_display`
+- `icon`
+- `is_default`
+- `created_at`
+- `updated_at`
+
+2. `DashboardLayout`
+- `breakpoint`: `mobile | tablet | desktop | tv`
+- `columns`
+- `row_height`
+- `gap`
+- `widgets`: ordered list of widget placements
+
+3. `DashboardWidgetPlacement`
+- `widget_id`
+- `x`
+- `y`
+- `w`
+- `h`
+- optional layout overrides per breakpoint
+
+4. `DashboardWidget`
+- `id`
+- `type`
+- `title`
+- `subtitle`
+- `refresh_policy`
+- `config` (type-specific)
+
+5. `DashboardLink`
+- optional widget type that links one dashboard to another
+- used for room/security drill-down flows without forcing nested dashboards in storage
+
+#### Widget type catalog
+
+The platform must use typed widgets, not free-form page sections. Initial widget types:
+
+- `device_grid`
+  - grid of selected devices or devices resolved from an area/query
+- `device_list`
+  - compact list with optional filters and inline controls
+- `device_tile`
+  - one large device card, useful for a single important device
+- `scene_row`
+  - horizontally scrolling scene buttons
+- `mode_chips`
+  - manual and solar mode status/actions
+- `event_feed`
+  - rolling WS-driven event list
+- `history_chart`
+  - selected device attribute over time
+- `stat_summary`
+  - computed stats like offline count, doors open, lights on
+- `media_player`
+  - one or more media players, using the shared media contract
+- `camera_video`
+  - camera/video feed card
+- `web_embed`
+  - constrained embedded webpage/iframe
+- `markdown`
+  - static notes/instructions/status text
+- `dashboard_link`
+  - navigational tile to another dashboard
+
+All widget types must have explicit config schemas. Example:
+
+`device_grid.config`
+- `selection_mode`: `manual | area | query`
+- `device_ids`
+- `area_ids`
+- `query`
+- `show_offline`
+- `card_style`
+- `inline_controls`
+
+`camera_video.config`
+- `source_type`: `mjpeg | hls | image_refresh | iframe`
+- `url`
+- `poster_url`
+- `refresh_secs`
+- `allow_fullscreen`
+
+`web_embed.config`
+- `url`
+- `sandbox_profile`
+- `show_chrome`
+- `allow_interaction`
+
+#### Selection and binding model
+
+To support room and purpose-specific dashboards without duplication, widgets must support
+multiple binding strategies:
+
+- manual selection by IDs
+- area-based selection
+- tag/query-based selection
+- filtered selection by device type / plugin / availability / state
+
+Room dashboards should prefer area-bound widgets where possible so they adapt automatically as
+devices move in and out of a room.
+
+#### Navigation model
+
+- `/dashboards` → dashboard picker / manager
+- `/dashboards/:id` → render a dashboard
+- after login:
+  - if user has a default dashboard, navigate there
+  - otherwise navigate to dashboard picker or a system default dashboard
+- global app shell contains:
+  - `Dashboards`
+  - `Devices`
+  - `Scenes`
+  - `Automations`
+  - `Events`
+  - `Modes`
+  - `Admin`
+- dashboard switcher in app bar for fast context changes
+- dashboard links are preferred over recursive dashboard embedding
+
+#### Permissions and sharing
+
+Dashboard access must be separate from device/admin role checks.
+
+- `private`: only owner
+- `shared`: explicit user/role access list
+- `public`: visible to all authenticated users
+
+Editing rules:
+- owner can edit own dashboards
+- admin can edit/delete any dashboard
+- shared viewers can view but not edit unless granted editor rights
+
+Security-sensitive widget types such as `camera_video` and `web_embed` require explicit policy:
+- user must already have access to the dashboard
+- widget type must be allowed by role/policy
+- dashboard editor must validate allowed origins/source types
+
+#### Security rules for embeds and video
+
+`web_embed` and `camera_video` cannot be treated as simple arbitrary URLs.
+
+Required platform rules:
+- allowlist origins or URL patterns in config/admin policy
+- no credentials in stored URLs
+- iframe sandbox presets:
+  - `readonly_embed`
+  - `interactive_embed`
+  - `trusted_internal`
+- default deny for third-party arbitrary origins
+- Caddy/CSP policy must explicitly allow only approved frame/video sources
+
+#### Rendering and refresh model
+
+Not all widgets refresh the same way:
+
+- devices/media/modes/events → WebSocket-backed cached providers
+- charts/history → interval fetch or on-demand fetch
+- camera/video → source-specific stream lifecycle
+- web embeds → browser-managed iframe lifecycle
+- markdown/stat widgets → static or computed from cached state
+
+Each widget should declare:
+- `refresh_policy`: `live | poll | manual | passive`
+- optional `poll_interval_secs`
+- loading and error behavior
+
+#### Editor UX
+
+Users need a real dashboard editor, not a fixed settings form.
+
+Minimum editor capabilities:
+- create / rename / duplicate / delete dashboard
+- choose icon, tags, visibility, default status
+- add widget from catalog
+- remove widget
+- drag/reorder/reposition widgets
+- resize widgets in grid
+- configure widget source/options
+- preview per breakpoint
+
+Editing modes:
+- desktop/tablet: drag-resize grid editor
+- mobile: stacked simplified editor with layout presets
+
+#### Recommended initial presets
+
+The system should ship with starter templates users can clone:
+- `Home Overview`
+- `Security`
+- `Living Room`
+- `Media Room`
+- `Wall Tablet`
+
+Templates should be normal dashboard definitions, not hard-coded pages.
 
 ---
 
@@ -492,29 +697,65 @@ The `NavigationRail` / `BottomNavigationBar` swap is handled in `AppShell`.
 
 ---
 
-### Phase 2 — Dashboard & Device Control
-**Goal:** Users can see home status at a glance and control devices.
+### Phase 2 — Dashboard Platform Foundation
+**Goal:** Introduce the underlying dashboard platform before building dashboard content.
+
+- [ ] Define `DashboardDefinition`, `DashboardLayout`, `DashboardWidget`, and placement models
+- [ ] Add dashboard provider layer and repository abstraction
+- [ ] Define dashboard CRUD API contract or local-storage fallback plan
+- [ ] Add routes:
+  - [ ] `/dashboards`
+  - [ ] `/dashboards/:id`
+  - [ ] dashboard selection after login
+- [ ] Build dashboard picker / manager page
+  - [ ] list dashboards
+  - [ ] create / rename / duplicate / delete
+  - [ ] set default dashboard
+  - [ ] visibility and tags
+- [ ] Build widget catalog model and config schema registry
+- [ ] Implement responsive grid renderer for dashboard layouts
+- [ ] Add dashboard editor shell
+  - [ ] add/remove widgets
+  - [ ] move/resize widgets
+  - [ ] per-breakpoint preview
+- [ ] Define and document security policy for `web_embed` and `camera_video`
+- [ ] Add starter dashboard templates
+
+**Deliverable:** Users can create, store, navigate, and render multiple dashboards with empty/basic widgets.
+
+---
+
+### Phase 3 — Dashboard Widgets & Device Control
+**Goal:** Make dashboards useful by shipping the first widget set and full device control.
 
 - [ ] WebSocket `StreamProvider` — connect to `/api/v1/events/stream`
 - [ ] `devices_provider` — merge WS `device_state_changed` + `device_availability_changed` events into cached state (optimistic + live)
-- [ ] `features/dashboard/dashboard_page.dart`
-  - [ ] Mode chips row (GET /modes, WS updates)
-  - [ ] Summary cards: lights on count, offline count
-  - [ ] Recent events panel (last 10 from WS stream)
-  - [ ] Quick scenes row
 - [ ] `features/devices/device_detail_page.dart`
   - [ ] Attribute controls (bool → Switch, 0-100 numeric → Slider, other → text)
   - [ ] `PATCH /devices/{id}/state` on control change
   - [ ] Availability + last_seen display
 - [ ] Devices list: group by area, tap to detail
 - [ ] Inline on/off toggle in list tile (optimistic update)
-- [ ] Offline alert banner on dashboard
+- [ ] First dashboard widgets:
+  - [ ] `device_grid`
+  - [ ] `device_list`
+  - [ ] `device_tile`
+  - [ ] `stat_summary`
+  - [ ] `mode_chips`
+  - [ ] `scene_row`
+  - [ ] `event_feed`
+  - [ ] `dashboard_link`
+- [ ] Dashboard template implementations:
+  - [ ] `Home Overview`
+  - [ ] `Living Room`
+  - [ ] `Security`
+- [ ] Offline/unavailable devices alert widget/banner
 
-**Deliverable:** Full device control; dashboard shows real-time home state.
+**Deliverable:** Multiple dashboards render useful live home-control widgets and device state.
 
 ---
 
-### Phase 3 — Automations & Scenes
+### Phase 4 — Automations, Scenes, History, Events & Modes
 **Goal:** Users can manage all rules and scenes without touching TOML files.
 
 - [ ] `core/models/rule.dart` — freezed models for Rule, Trigger, Condition, Action (union types)
@@ -532,14 +773,6 @@ The `NavigationRail` / `BottomNavigationBar` swap is handled in `AppShell`.
 - [ ] `features/scenes/scenes_page.dart` — card grid, activate button
 - [ ] `features/scenes/scene_editor_page.dart` — name + device state rows
 - [ ] WS `rule_fired` / `scene_activated` → toast notification
-
-**Deliverable:** Full no-code automation authoring; scene management.
-
----
-
-### Phase 4 — History, Events & Modes
-**Goal:** Time-series visibility and mode management.
-
 - [ ] `features/devices/device_history_page.dart`
   - [ ] `GET /devices/{id}/history` with date range picker
   - [ ] `fl_chart` line chart (numeric) / step chart (boolean) per attribute tab
@@ -553,7 +786,13 @@ The `NavigationRail` / `BottomNavigationBar` swap is handled in `AppShell`.
   - [ ] Manual mode card: toggle
   - [ ] Create / delete modes
 
-**Deliverable:** Full observability — device history charts, live event stream, mode control.
+- [ ] Dashboard widgets:
+  - [ ] `history_chart`
+  - [ ] `media_player`
+  - [ ] richer `event_feed` filters
+  - [ ] room/security widget presets
+
+**Deliverable:** Full no-code automation authoring plus rich dashboard observability widgets.
 
 ---
 
@@ -565,13 +804,18 @@ The `NavigationRail` / `BottomNavigationBar` swap is handled in `AppShell`.
 - [ ] `features/admin/plugins_page.dart` — status table, WS live updates, deregister
 - [ ] `features/admin/areas_page.dart` — create/rename/delete, device assignment
 - [ ] `features/admin/system_page.dart` — health card, config display
+- [ ] Dashboard admin controls
+  - [ ] public/shared dashboard management
+  - [ ] origin allowlist for `web_embed` / `camera_video`
+  - [ ] dashboard ownership transfer
+  - [ ] dashboard templates management
 
 **Deliverable:** Full admin CRUD accessible in-app; no manual API calls needed.
 
 ---
 
-### Phase 6 — Polish, PWA & Hardening
-**Goal:** Production-ready, installable, resilient.
+### Phase 6 — Advanced Dashboard Media, Embeds & Hardening
+**Goal:** Production-ready dashboard platform with advanced embeds/media support.
 
 - [ ] PWA manifest (`web/manifest.json`) — installable to home screen / desktop
 - [ ] Service worker for offline "connection lost" page
@@ -585,8 +829,16 @@ The `NavigationRail` / `BottomNavigationBar` swap is handled in `AppShell`.
 - [ ] Keyboard shortcuts for power users (Space = toggle, R = refresh, etc.)
 - [ ] Accessibility audit: semantic labels on all interactive widgets
 - [ ] `flutter test` coverage for all providers and API clients
+- [ ] Advanced dashboard widgets:
+  - [ ] `camera_video`
+  - [ ] `web_embed`
+  - [ ] `markdown`
+- [ ] Full embed/video CSP and sandbox enforcement
+- [ ] TV / wall-tablet optimized layouts
+- [ ] Import/export dashboard definitions
+- [ ] Dashboard duplication from template or existing dashboard
 
-**Deliverable:** Polished, installable, production-hardened app.
+**Deliverable:** Polished, installable, production-hardened multi-dashboard platform.
 
 ---
 
