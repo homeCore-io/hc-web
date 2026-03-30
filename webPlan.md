@@ -741,6 +741,7 @@ The `NavigationRail` / `BottomNavigationBar` swap is handled in `AppShell`.
   - [ ] set default dashboard
   - [ ] visibility and tags
 - [ ] Build widget catalog model and config schema registry
+- [ ] Use typed widget editors in `hc-web` so widget config matches backend validation rules
 - [ ] Implement responsive grid renderer for dashboard layouts
 - [ ] Add dashboard editor shell
   - [ ] add/remove widgets

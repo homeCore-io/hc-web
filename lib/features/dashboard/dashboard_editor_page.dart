@@ -53,10 +53,14 @@ class _DashboardEditorPageState extends ConsumerState<DashboardEditorPage> {
 
   Future<void> _save() async {
     final currentUser = await ref.read(currentUserProvider.future);
-    final owner = currentUser?['username'] as String? ?? 'local_user';
+    final owner = currentUser?['id'] as String? ??
+        currentUser?['username'] as String? ??
+        'local_user';
     final now = DateTime.now();
     final templateLayouts =
-        DashboardTemplateFactory.templates(ownerUserId: owner).first.layouts;
+        DashboardTemplateFactory.starterDashboards(ownerUserId: owner)
+            .first
+            .layouts;
     final dashboard = (_loaded ??
             DashboardDefinition(
               id: widget.dashboardId == 'new'
@@ -348,27 +352,67 @@ class _DashboardWidgetConfigEditorState
   late final TextEditingController _titleCtrl;
   late final TextEditingController _queryCtrl;
   late final TextEditingController _areaCtrl;
+  late final TextEditingController _deviceIdsCtrl;
+  late final TextEditingController _metricsCtrl;
+  late final TextEditingController _eventTypesCtrl;
   late final TextEditingController _urlCtrl;
+  late final TextEditingController _refreshSecsCtrl;
+  late final TextEditingController _historyDeviceCtrl;
+  late final TextEditingController _historyAttributeCtrl;
+  late final TextEditingController _dashboardIdsCtrl;
   late final TextEditingController _markdownCtrl;
   late final TextEditingController _limitCtrl;
   late String _selectionMode;
+  late String _sourceType;
+  late String _sandboxProfile;
+  late bool _showOffline;
 
   @override
   void initState() {
     super.initState();
+    final config = widget.widgetModel.config;
     _titleCtrl = TextEditingController(text: widget.widgetModel.title);
-    _queryCtrl = TextEditingController(
-        text: widget.widgetModel.config['query'] as String? ?? '');
-    _areaCtrl = TextEditingController(
-        text: widget.widgetModel.config['area_name'] as String? ?? '');
-    _urlCtrl = TextEditingController(
-        text: widget.widgetModel.config['url'] as String? ?? '');
-    _markdownCtrl = TextEditingController(
-        text: widget.widgetModel.config['markdown'] as String? ?? '');
+    _queryCtrl = TextEditingController(text: config['query'] as String? ?? '');
+    _areaCtrl =
+        TextEditingController(text: config['area_name'] as String? ?? '');
+    _deviceIdsCtrl = TextEditingController(
+      text: ((config['device_ids'] as List?) ?? const [])
+          .whereType<String>()
+          .join(', '),
+    );
+    _metricsCtrl = TextEditingController(
+      text: ((config['metrics'] as List?) ?? const [])
+          .whereType<String>()
+          .join(', '),
+    );
+    _eventTypesCtrl = TextEditingController(
+      text: ((config['types'] as List?) ?? const [])
+          .whereType<String>()
+          .join(', '),
+    );
+    _urlCtrl = TextEditingController(text: config['url'] as String? ?? '');
+    _refreshSecsCtrl = TextEditingController(
+      text: (config['refresh_secs'] as int?)?.toString() ?? '',
+    );
+    _historyDeviceCtrl = TextEditingController(
+      text: config['device_id'] as String? ?? '',
+    );
+    _historyAttributeCtrl = TextEditingController(
+      text: config['attribute'] as String? ?? '',
+    );
+    _dashboardIdsCtrl = TextEditingController(
+      text: ((config['dashboard_ids'] as List?) ?? const [])
+          .whereType<String>()
+          .join(', '),
+    );
+    _markdownCtrl =
+        TextEditingController(text: config['markdown'] as String? ?? '');
     _limitCtrl = TextEditingController(
-        text: (widget.widgetModel.config['limit'] as int?)?.toString() ?? '');
-    _selectionMode =
-        widget.widgetModel.config['selection_mode'] as String? ?? 'query';
+        text: (config['limit'] as int?)?.toString() ?? '');
+    _selectionMode = config['selection_mode'] as String? ?? 'query';
+    _sourceType = config['source_type'] as String? ?? 'image_refresh';
+    _sandboxProfile = config['sandbox_profile'] as String? ?? 'readonly_embed';
+    _showOffline = config['show_offline'] as bool? ?? true;
   }
 
   @override
@@ -376,20 +420,78 @@ class _DashboardWidgetConfigEditorState
     _titleCtrl.dispose();
     _queryCtrl.dispose();
     _areaCtrl.dispose();
+    _deviceIdsCtrl.dispose();
+    _metricsCtrl.dispose();
+    _eventTypesCtrl.dispose();
     _urlCtrl.dispose();
+    _refreshSecsCtrl.dispose();
+    _historyDeviceCtrl.dispose();
+    _historyAttributeCtrl.dispose();
+    _dashboardIdsCtrl.dispose();
     _markdownCtrl.dispose();
     _limitCtrl.dispose();
     super.dispose();
   }
 
+  List<String> _csv(TextEditingController controller) => controller.text
+      .split(',')
+      .map((item) => item.trim())
+      .where((item) => item.isNotEmpty)
+      .toList();
+
   void _emit() {
-    final config = Map<String, dynamic>.from(widget.widgetModel.config)
-      ..['selection_mode'] = _selectionMode
-      ..['query'] = _queryCtrl.text.trim()
-      ..['area_name'] = _areaCtrl.text.trim()
-      ..['url'] = _urlCtrl.text.trim()
-      ..['markdown'] = _markdownCtrl.text
-      ..['limit'] = int.tryParse(_limitCtrl.text.trim());
+    final type = widget.widgetModel.type;
+    final limit = int.tryParse(_limitCtrl.text.trim());
+    Map<String, dynamic> config;
+    switch (type) {
+      case DashboardWidgetType.deviceGrid:
+      case DashboardWidgetType.deviceList:
+      case DashboardWidgetType.deviceTile:
+      case DashboardWidgetType.mediaPlayer:
+        config = {
+          'selection_mode': _selectionMode,
+          'show_offline': _showOffline,
+          if (_selectionMode == 'query') 'query': _queryCtrl.text.trim(),
+          if (_selectionMode == 'area') 'area_name': _areaCtrl.text.trim(),
+          if (_selectionMode == 'manual') 'device_ids': _csv(_deviceIdsCtrl),
+          if (limit != null) 'limit': limit,
+        };
+      case DashboardWidgetType.statSummary:
+        config = {'metrics': _csv(_metricsCtrl)};
+      case DashboardWidgetType.eventFeed:
+        config = {
+          if (limit != null) 'limit': limit,
+          if (_csv(_eventTypesCtrl).isNotEmpty) 'types': _csv(_eventTypesCtrl),
+        };
+      case DashboardWidgetType.cameraVideo:
+        config = {
+          'source_type': _sourceType,
+          'url': _urlCtrl.text.trim(),
+          if (int.tryParse(_refreshSecsCtrl.text.trim()) != null)
+            'refresh_secs': int.parse(_refreshSecsCtrl.text.trim()),
+        };
+      case DashboardWidgetType.webEmbed:
+        config = {
+          'url': _urlCtrl.text.trim(),
+          'sandbox_profile': _sandboxProfile,
+        };
+      case DashboardWidgetType.markdown:
+        config = {'markdown': _markdownCtrl.text};
+      case DashboardWidgetType.historyChart:
+        config = {
+          'device_id': _historyDeviceCtrl.text.trim(),
+          'attribute': _historyAttributeCtrl.text.trim(),
+          if (limit != null) 'limit': limit,
+        };
+      case DashboardWidgetType.dashboardLink:
+        config = {
+          if (_csv(_dashboardIdsCtrl).isNotEmpty)
+            'dashboard_ids': _csv(_dashboardIdsCtrl),
+        };
+      case DashboardWidgetType.modeChips:
+      case DashboardWidgetType.sceneRow:
+        config = {};
+    }
     widget.onChanged(config,
         _titleCtrl.text.trim().isEmpty ? 'Widget' : _titleCtrl.text.trim());
   }
@@ -424,8 +526,7 @@ class _DashboardWidgetConfigEditorState
             items: const [
               DropdownMenuItem(value: 'query', child: Text('Query')),
               DropdownMenuItem(value: 'area', child: Text('Area')),
-              DropdownMenuItem(
-                  value: 'manual', child: Text('Manual IDs (future)')),
+              DropdownMenuItem(value: 'manual', child: Text('Manual IDs')),
             ],
             onChanged: (value) {
               if (value != null) {
@@ -454,6 +555,26 @@ class _DashboardWidgetConfigEditorState
               ),
               onChanged: (_) => _emit(),
             ),
+          if (_selectionMode == 'manual')
+            TextField(
+              controller: _deviceIdsCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Device IDs',
+                hintText: 'device_one, device_two',
+                border: OutlineInputBorder(),
+              ),
+              onChanged: (_) => _emit(),
+            ),
+          const SizedBox(height: 12),
+          SwitchListTile(
+            value: _showOffline,
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Show offline devices'),
+            onChanged: (value) {
+              setState(() => _showOffline = value);
+              _emit();
+            },
+          ),
           const SizedBox(height: 12),
           TextField(
             controller: _limitCtrl,
@@ -465,10 +586,57 @@ class _DashboardWidgetConfigEditorState
             onChanged: (_) => _emit(),
           ),
         ],
+        if (type == DashboardWidgetType.statSummary) ...[
+          TextField(
+            controller: _metricsCtrl,
+            decoration: const InputDecoration(
+              labelText: 'Metrics',
+              hintText: 'devices, on, offline',
+              border: OutlineInputBorder(),
+            ),
+            onChanged: (_) => _emit(),
+          ),
+        ],
+        if (type == DashboardWidgetType.eventFeed) ...[
+          TextField(
+            controller: _eventTypesCtrl,
+            decoration: const InputDecoration(
+              labelText: 'Event types',
+              hintText: 'device_state_changed, system_alert',
+              border: OutlineInputBorder(),
+            ),
+            onChanged: (_) => _emit(),
+          ),
+        ],
         if ({
           DashboardWidgetType.cameraVideo,
           DashboardWidgetType.webEmbed,
         }.contains(type)) ...[
+          if (type == DashboardWidgetType.cameraVideo) ...[
+            DropdownButtonFormField<String>(
+              initialValue: _sourceType,
+              decoration: const InputDecoration(
+                labelText: 'Source type',
+                border: OutlineInputBorder(),
+              ),
+              items: const [
+                DropdownMenuItem(
+                  value: 'image_refresh',
+                  child: Text('Image Refresh'),
+                ),
+                DropdownMenuItem(value: 'mjpeg', child: Text('MJPEG')),
+                DropdownMenuItem(value: 'hls', child: Text('HLS')),
+                DropdownMenuItem(value: 'webrtc', child: Text('WebRTC')),
+              ],
+              onChanged: (value) {
+                if (value != null) {
+                  setState(() => _sourceType = value);
+                  _emit();
+                }
+              },
+            ),
+            const SizedBox(height: 12),
+          ],
           TextField(
             controller: _urlCtrl,
             decoration: const InputDecoration(
@@ -477,6 +645,48 @@ class _DashboardWidgetConfigEditorState
             ),
             onChanged: (_) => _emit(),
           ),
+          if (type == DashboardWidgetType.cameraVideo) ...[
+            const SizedBox(height: 12),
+            TextField(
+              controller: _refreshSecsCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Refresh seconds',
+                border: OutlineInputBorder(),
+              ),
+              keyboardType: TextInputType.number,
+              onChanged: (_) => _emit(),
+            ),
+          ],
+          if (type == DashboardWidgetType.webEmbed) ...[
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              initialValue: _sandboxProfile,
+              decoration: const InputDecoration(
+                labelText: 'Sandbox profile',
+                border: OutlineInputBorder(),
+              ),
+              items: const [
+                DropdownMenuItem(
+                  value: 'readonly_embed',
+                  child: Text('Read Only Embed'),
+                ),
+                DropdownMenuItem(
+                  value: 'trusted_internal',
+                  child: Text('Trusted Internal'),
+                ),
+                DropdownMenuItem(
+                  value: 'strict_isolated',
+                  child: Text('Strict Isolated'),
+                ),
+              ],
+              onChanged: (value) {
+                if (value != null) {
+                  setState(() => _sandboxProfile = value);
+                  _emit();
+                }
+              },
+            ),
+          ],
         ],
         if (type == DashboardWidgetType.markdown) ...[
           TextField(
@@ -487,6 +697,47 @@ class _DashboardWidgetConfigEditorState
             ),
             minLines: 3,
             maxLines: 5,
+            onChanged: (_) => _emit(),
+          ),
+        ],
+        if (type == DashboardWidgetType.historyChart) ...[
+          TextField(
+            controller: _historyDeviceCtrl,
+            decoration: const InputDecoration(
+              labelText: 'Device ID',
+              border: OutlineInputBorder(),
+            ),
+            onChanged: (_) => _emit(),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _historyAttributeCtrl,
+            decoration: const InputDecoration(
+              labelText: 'Attribute',
+              hintText: 'temperature, power, on',
+              border: OutlineInputBorder(),
+            ),
+            onChanged: (_) => _emit(),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _limitCtrl,
+            decoration: const InputDecoration(
+              labelText: 'Point limit',
+              border: OutlineInputBorder(),
+            ),
+            keyboardType: TextInputType.number,
+            onChanged: (_) => _emit(),
+          ),
+        ],
+        if (type == DashboardWidgetType.dashboardLink) ...[
+          TextField(
+            controller: _dashboardIdsCtrl,
+            decoration: const InputDecoration(
+              labelText: 'Dashboard IDs',
+              hintText: 'starter_getting_started, template_security',
+              border: OutlineInputBorder(),
+            ),
             onChanged: (_) => _emit(),
           ),
         ],
@@ -573,6 +824,10 @@ Map<String, dynamic> _defaultWidgetConfig(DashboardWidgetType type) {
       };
     case DashboardWidgetType.markdown:
       return {'markdown': ''};
+    case DashboardWidgetType.historyChart:
+      return {'device_id': '', 'attribute': '', 'limit': 50};
+    case DashboardWidgetType.dashboardLink:
+      return {'dashboard_ids': <String>[]};
     default:
       return {};
   }
