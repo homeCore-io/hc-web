@@ -329,14 +329,99 @@ DashboardBreakpoint dashboardBreakpointForWidth(double width) {
 }
 
 class DashboardTemplateFactory {
+  static List<DashboardDefinition> starterDashboards({
+    required String ownerUserId,
+  }) {
+    return [_gettingStarted(ownerUserId)];
+  }
+
   static List<DashboardDefinition> templates({required String ownerUserId}) {
     return [
+      _gettingStarted(ownerUserId),
       _homeOverview(ownerUserId),
       _security(ownerUserId),
       _livingRoom(ownerUserId),
       _mediaRoom(ownerUserId),
       _wallTablet(ownerUserId),
     ];
+  }
+
+  static DashboardDefinition _gettingStarted(String owner) {
+    final now = DateTime.now();
+    return DashboardDefinition(
+      id: 'starter_getting_started',
+      name: 'Getting Started',
+      description: 'Starter dashboard with basic home status and setup help.',
+      ownerUserId: owner,
+      visibility: DashboardVisibility.private,
+      tags: const ['starter', 'home', 'overview'],
+      icon: 'home',
+      isDefault: true,
+      createdAt: now,
+      updatedAt: now,
+      widgets: const [
+        DashboardWidgetModel(
+          id: 'welcome',
+          type: DashboardWidgetType.markdown,
+          title: 'Welcome',
+          refreshPolicy: DashboardRefreshPolicy.passive,
+          config: {
+            'markdown':
+                '## Welcome to HomeCore\nStart here:\n- Open **Devices** to confirm devices are online and assigned to areas.\n- Use **Scenes** and **Modes** to organize common actions.\n- Edit this dashboard to add room views, media controls, or security widgets.\n- Create additional dashboards for rooms, wall tablets, or monitoring.'
+          },
+        ),
+        DashboardWidgetModel(
+          id: 'starter_summary',
+          type: DashboardWidgetType.statSummary,
+          title: 'Home Summary',
+          refreshPolicy: DashboardRefreshPolicy.live,
+          config: {
+            'metrics': ['devices', 'on', 'offline']
+          },
+        ),
+        DashboardWidgetModel(
+          id: 'starter_modes',
+          type: DashboardWidgetType.modeChips,
+          title: 'Modes',
+          refreshPolicy: DashboardRefreshPolicy.live,
+          config: {},
+        ),
+        DashboardWidgetModel(
+          id: 'starter_scenes',
+          type: DashboardWidgetType.sceneRow,
+          title: 'Scenes',
+          refreshPolicy: DashboardRefreshPolicy.live,
+          config: {},
+        ),
+        DashboardWidgetModel(
+          id: 'starter_devices',
+          type: DashboardWidgetType.deviceList,
+          title: 'Recent Devices',
+          refreshPolicy: DashboardRefreshPolicy.live,
+          config: {
+            'selection_mode': 'query',
+            'query': '',
+            'show_offline': true,
+            'limit': 8,
+          },
+        ),
+        DashboardWidgetModel(
+          id: 'starter_events',
+          type: DashboardWidgetType.eventFeed,
+          title: 'Recent Events',
+          refreshPolicy: DashboardRefreshPolicy.live,
+          config: {'limit': 8},
+        ),
+      ],
+      layouts: _defaultLayouts(const {
+        'welcome': [0, 0, 12, 2],
+        'starter_summary': [0, 2, 12, 1],
+        'starter_modes': [0, 3, 12, 1],
+        'starter_scenes': [0, 4, 12, 1],
+        'starter_devices': [0, 5, 7, 2],
+        'starter_events': [7, 5, 5, 2],
+      }),
+    );
   }
 
   static DashboardDefinition _homeOverview(String owner) {
@@ -349,7 +434,7 @@ class DashboardTemplateFactory {
       visibility: DashboardVisibility.private,
       tags: const ['home', 'overview'],
       icon: 'dashboard',
-      isDefault: true,
+      isDefault: false,
       createdAt: now,
       updatedAt: now,
       widgets: const [
@@ -452,20 +537,19 @@ class DashboardTemplateFactory {
           },
         ),
         DashboardWidgetModel(
-          id: 'camera',
-          type: DashboardWidgetType.cameraVideo,
-          title: 'Camera',
+          id: 'security_help',
+          type: DashboardWidgetType.markdown,
+          title: 'Security Notes',
           refreshPolicy: DashboardRefreshPolicy.passive,
           config: {
-            'source_type': 'image_refresh',
-            'url': '',
-            'refresh_secs': 15,
+            'markdown':
+                'Add cameras or alert-specific widgets after configuring camera/video sources and embed policy.',
           },
         ),
       ],
       layouts: _defaultLayouts(const {
         'security_summary': [0, 0, 12, 1],
-        'camera': [0, 1, 7, 2],
+        'security_help': [0, 1, 7, 2],
         'security_events': [7, 1, 5, 2],
         'security_devices': [0, 3, 12, 2],
       }),
@@ -556,16 +640,19 @@ class DashboardTemplateFactory {
           },
         ),
         DashboardWidgetModel(
-          id: 'media_embed',
-          type: DashboardWidgetType.webEmbed,
-          title: 'Media Web',
+          id: 'media_help',
+          type: DashboardWidgetType.markdown,
+          title: 'Add Media Sources',
           refreshPolicy: DashboardRefreshPolicy.passive,
-          config: {'url': '', 'sandbox_profile': 'readonly_embed'},
+          config: {
+            'markdown':
+                'Add media web embeds after configuring approved embed origins. This starter template keeps the dashboard valid before those sources exist.',
+          },
         ),
       ],
       layouts: _defaultLayouts(const {
         'media_players': [0, 0, 7, 3],
-        'media_embed': [7, 0, 5, 3],
+        'media_help': [7, 0, 5, 3],
         'media_markdown': [0, 3, 12, 1],
       }),
     );

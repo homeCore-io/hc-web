@@ -3,16 +3,33 @@ import 'package:hc_web/core/models/dashboard.dart';
 
 void main() {
   group('DashboardTemplateFactory', () {
+    test('creates a valid starter dashboard', () {
+      final templates =
+          DashboardTemplateFactory.starterDashboards(ownerUserId: 'john');
+
+      expect(templates.length, 1);
+      expect(templates.single.isDefault, isTrue);
+      expect(templates.single.name, 'Getting Started');
+      expect(
+        templates.single.widgets.any(
+          (widget) => widget.type == DashboardWidgetType.markdown,
+        ),
+        isTrue,
+      );
+    });
+
     test('creates starter templates', () {
       final templates = DashboardTemplateFactory.templates(ownerUserId: 'john');
 
       expect(templates.length, greaterThanOrEqualTo(5));
       expect(templates.any((dashboard) => dashboard.isDefault), isTrue);
-      expect(templates.map((dashboard) => dashboard.name), contains('Security'));
+      expect(
+          templates.map((dashboard) => dashboard.name), contains('Security'));
     });
 
     test('encodes and decodes dashboard definitions', () {
-      final dashboards = DashboardTemplateFactory.templates(ownerUserId: 'john');
+      final dashboards =
+          DashboardTemplateFactory.templates(ownerUserId: 'john');
       final raw = DashboardTemplateFactory.encodeList(dashboards);
       final decoded = DashboardTemplateFactory.decodeList(raw);
 

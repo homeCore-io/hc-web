@@ -748,6 +748,7 @@ The `NavigationRail` / `BottomNavigationBar` swap is handled in `AppShell`.
   - [ ] per-breakpoint preview
 - [ ] Define and document security policy for `web_embed` and `camera_video`
 - [ ] Add starter dashboard templates
+- [ ] Add a generic "Getting Started" default dashboard with basic status, recent activity, and onboarding/help content
 
 **Deliverable:** Users can create, store, navigate, and render multiple dashboards with empty/basic widgets.
 
@@ -777,6 +778,9 @@ The `NavigationRail` / `BottomNavigationBar` swap is handled in `AppShell`.
   - [ ] `Home Overview`
   - [ ] `Living Room`
   - [ ] `Security`
+- [ ] Non-web client proof of API-first dashboard support
+  - [ ] Add read-only dashboard browsing/rendering in `hc-tui`
+  - [ ] Support generic widget categories first: summary, device lists, scenes, modes, media players
 - [ ] Offline/unavailable devices alert widget/banner
 
 **Deliverable:** Multiple dashboards render useful live home-control widgets and device state.

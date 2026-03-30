@@ -18,7 +18,7 @@ class DashboardsNotifier extends AsyncNotifier<List<DashboardDefinition>> {
     var dashboards = await api.listDashboards();
     if (dashboards.isEmpty) {
       for (final template
-          in DashboardTemplateFactory.templates(ownerUserId: owner)) {
+          in DashboardTemplateFactory.starterDashboards(ownerUserId: owner)) {
         await api.createDashboard(template);
       }
       dashboards = await api.listDashboards();
@@ -77,7 +77,7 @@ class DashboardsNotifier extends AsyncNotifier<List<DashboardDefinition>> {
       }
     }
     for (final template
-        in DashboardTemplateFactory.templates(ownerUserId: owner)) {
+        in DashboardTemplateFactory.starterDashboards(ownerUserId: owner)) {
       await ref.read(dashboardsApiProvider).createDashboard(template);
     }
     await reload();
