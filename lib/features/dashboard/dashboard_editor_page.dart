@@ -22,6 +22,7 @@ class _DashboardEditorPageState extends ConsumerState<DashboardEditorPage> {
   String _icon = 'dashboard';
   bool _isDefault = false;
   DashboardBreakpoint _layoutBreakpoint = DashboardBreakpoint.desktop;
+  String? _selectedPlacementWidgetId;
   DashboardDefinition? _loaded;
   List<DashboardWidgetModel> _widgets = [];
   List<DashboardLayout> _layouts = [];
@@ -127,6 +128,9 @@ class _DashboardEditorPageState extends ConsumerState<DashboardEditorPage> {
   void _removeWidget(String id) {
     setState(() {
       _widgets = _widgets.where((widget) => widget.id != id).toList();
+      if (_selectedPlacementWidgetId == id) {
+        _selectedPlacementWidgetId = null;
+      }
       _layouts = _layouts
           .map((layout) => layout.copyWith(
                 placements: layout.placements
@@ -165,7 +169,8 @@ class _DashboardEditorPageState extends ConsumerState<DashboardEditorPage> {
   }
 
   DashboardLayout _layoutForEditor(DashboardBreakpoint breakpoint) {
-    final existing = _layouts.where((layout) => layout.breakpoint == breakpoint);
+    final existing =
+        _layouts.where((layout) => layout.breakpoint == breakpoint);
     if (existing.isNotEmpty) return existing.first;
 
     final columns = breakpoint == DashboardBreakpoint.mobile ? 1 : 12;
@@ -249,6 +254,16 @@ class _DashboardEditorPageState extends ConsumerState<DashboardEditorPage> {
     _replaceLayout(layout.copyWith(placements: placements));
   }
 
+  DashboardWidgetPlacement? _placementFor(
+    DashboardBreakpoint breakpoint,
+    String widgetId,
+  ) {
+    final layout = _layoutForEditor(breakpoint);
+    return layout.placements
+        .where((item) => item.widgetId == widgetId)
+        .firstOrNull;
+  }
+
   void _syncLayoutFrom(
     DashboardBreakpoint source,
     DashboardBreakpoint destination,
@@ -278,8 +293,8 @@ class _DashboardEditorPageState extends ConsumerState<DashboardEditorPage> {
   @override
   Widget build(BuildContext context) {
     final activeLayout = _layoutForEditor(_layoutBreakpoint);
-    final sortedPlacements = [...activeLayout.placements]..sort((a, b) =>
-        a.y != b.y ? a.y.compareTo(b.y) : a.x.compareTo(b.x));
+    final sortedPlacements = [...activeLayout.placements]
+      ..sort((a, b) => a.y != b.y ? a.y.compareTo(b.y) : a.x.compareTo(b.x));
 
     return Scaffold(
       appBar: AppBar(
@@ -420,14 +435,15 @@ class _DashboardEditorPageState extends ConsumerState<DashboardEditorPage> {
                             labelText: 'Columns',
                             border: OutlineInputBorder(),
                           ),
-                          items: (_layoutBreakpoint == DashboardBreakpoint.mobile
-                                  ? const [1, 2]
-                                  : const [4, 6, 8, 12])
-                              .map((value) => DropdownMenuItem(
-                                    value: value,
-                                    child: Text('$value columns'),
-                                  ))
-                              .toList(),
+                          items:
+                              (_layoutBreakpoint == DashboardBreakpoint.mobile
+                                      ? const [1, 2]
+                                      : const [4, 6, 8, 12])
+                                  .map((value) => DropdownMenuItem(
+                                        value: value,
+                                        child: Text('$value columns'),
+                                      ))
+                                  .toList(),
                           onChanged: (value) {
                             if (value != null) {
                               _updateLayoutConfig(
@@ -443,7 +459,8 @@ class _DashboardEditorPageState extends ConsumerState<DashboardEditorPage> {
                         child: TextFormField(
                           key: ValueKey(
                               'rowHeight_${_layoutBreakpoint.name}_${activeLayout.rowHeight}'),
-                          initialValue: activeLayout.rowHeight.round().toString(),
+                          initialValue:
+                              activeLayout.rowHeight.round().toString(),
                           decoration: const InputDecoration(
                             labelText: 'Row height',
                             border: OutlineInputBorder(),
@@ -502,6 +519,42 @@ class _DashboardEditorPageState extends ConsumerState<DashboardEditorPage> {
                   _DashboardLayoutPreview(
                     layout: activeLayout,
                     widgets: _widgets,
+                    selectedWidgetId: _selectedPlacementWidgetId,
+                    onSelected: (widgetId) {
+                      setState(() => _selectedPlacementWidgetId = widgetId);
+                    },
+                    onMove: (widgetId, dx, dy) {
+                      final placement =
+                          _placementFor(_layoutBreakpoint, widgetId);
+                      if (placement == null) return;
+                      _updatePlacement(
+                        _layoutBreakpoint,
+                        widgetId,
+                        x: placement.x + dx,
+                        y: placement.y + dy,
+                      );
+                    },
+                    onResize: (widgetId, dw, dh) {
+                      final placement =
+                          _placementFor(_layoutBreakpoint, widgetId);
+                      final widget = _widgets
+                          .where((item) => item.id == widgetId)
+                          .firstOrNull;
+                      if (placement == null || widget == null) return;
+                      final sizeHint = dashboardWidgetSizeHint(widget.type);
+                      _updatePlacement(
+                        _layoutBreakpoint,
+                        widgetId,
+                        w: (placement.w + dw)
+                            .clamp(sizeHint.minW, activeLayout.columns),
+                        h: (placement.h + dh).clamp(sizeHint.minH, 12),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Drag tiles to move them. Drag the lower-right handle on the selected tile to resize.',
+                    style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ],
               ),
@@ -522,6 +575,12 @@ class _DashboardEditorPageState extends ConsumerState<DashboardEditorPage> {
               final sizeHint = dashboardWidgetSizeHint(widget.type);
               return Card(
                 margin: const EdgeInsets.only(bottom: 12),
+                color: _selectedPlacementWidgetId == placement.widgetId
+                    ? Theme.of(context)
+                        .colorScheme
+                        .secondaryContainer
+                        .withValues(alpha: 0.4)
+                    : null,
                 child: Padding(
                   padding: const EdgeInsets.all(16),
                   child: Column(
@@ -721,16 +780,24 @@ class _PlacementStepper extends StatelessWidget {
 class _DashboardLayoutPreview extends StatelessWidget {
   final DashboardLayout layout;
   final List<DashboardWidgetModel> widgets;
+  final String? selectedWidgetId;
+  final ValueChanged<String> onSelected;
+  final void Function(String widgetId, int dx, int dy) onMove;
+  final void Function(String widgetId, int dw, int dh) onResize;
 
   const _DashboardLayoutPreview({
     required this.layout,
     required this.widgets,
+    required this.selectedWidgetId,
+    required this.onSelected,
+    required this.onMove,
+    required this.onResize,
   });
 
   @override
   Widget build(BuildContext context) {
-    final placements = [...layout.placements]..sort((a, b) =>
-        a.y != b.y ? a.y.compareTo(b.y) : a.x.compareTo(b.x));
+    final placements = [...layout.placements]
+      ..sort((a, b) => a.y != b.y ? a.y.compareTo(b.y) : a.x.compareTo(b.x));
     final maxRow = placements.fold<int>(
       0,
       (current, placement) => placement.y + placement.h > current
@@ -756,103 +823,282 @@ class _DashboardLayoutPreview extends StatelessWidget {
           if (placements.isEmpty)
             const Text('No widgets placed yet.')
           else
-            ...List.generate(maxRow, (row) {
-              final rowPlacements =
-                  placements.where((placement) => placement.y == row).toList();
-              if (rowPlacements.isEmpty) {
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: _PreviewRowPlaceholder(columns: layout.columns),
-                );
-              }
-              var currentColumn = 0;
-              final children = <Widget>[];
-              for (final placement in rowPlacements) {
-                if (placement.x > currentColumn) {
-                  children.add(
-                    Expanded(
-                      flex: placement.x - currentColumn,
-                      child: const SizedBox.shrink(),
-                    ),
-                  );
-                }
-                final widget = widgets
-                    .where((item) => item.id == placement.widgetId)
-                    .firstOrNull;
-                final widthFactor = placement.w / layout.columns;
-                children.add(
-                  Expanded(
-                    flex: placement.w,
-                    child: Container(
-                      height: 48.0 * placement.h.clamp(1, 3),
-                      margin: const EdgeInsets.only(right: 8),
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .primaryContainer
-                            .withValues(alpha: 0.5),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            widget?.title ?? placement.widgetId,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.bodyMedium,
-                          ),
-                          Text(
-                            'x:${placement.x} y:${placement.y} w:${placement.w} h:${placement.h} • ${(widthFactor * 100).round()}%',
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-                currentColumn = placement.x + placement.w;
-              }
-              if (currentColumn < layout.columns) {
-                children.add(
-                  Expanded(
-                    flex: layout.columns - currentColumn,
-                    child: const SizedBox.shrink(),
-                  ),
-                );
-              }
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Row(children: children),
-              );
-            }),
+            _InteractiveDashboardLayoutPreview(
+              layout: layout,
+              placements: placements,
+              widgets: widgets,
+              selectedWidgetId: selectedWidgetId,
+              onSelected: onSelected,
+              onMove: onMove,
+              onResize: onResize,
+              maxRow: maxRow,
+            ),
         ],
       ),
     );
   }
 }
 
-class _PreviewRowPlaceholder extends StatelessWidget {
-  final int columns;
-  const _PreviewRowPlaceholder({required this.columns});
+class _InteractiveDashboardLayoutPreview extends StatefulWidget {
+  final DashboardLayout layout;
+  final List<DashboardWidgetPlacement> placements;
+  final List<DashboardWidgetModel> widgets;
+  final String? selectedWidgetId;
+  final ValueChanged<String> onSelected;
+  final void Function(String widgetId, int dx, int dy) onMove;
+  final void Function(String widgetId, int dw, int dh) onResize;
+  final int maxRow;
+
+  const _InteractiveDashboardLayoutPreview({
+    required this.layout,
+    required this.placements,
+    required this.widgets,
+    required this.selectedWidgetId,
+    required this.onSelected,
+    required this.onMove,
+    required this.onResize,
+    required this.maxRow,
+  });
+
+  @override
+  State<_InteractiveDashboardLayoutPreview> createState() =>
+      _InteractiveDashboardLayoutPreviewState();
+}
+
+class _InteractiveDashboardLayoutPreviewState
+    extends State<_InteractiveDashboardLayoutPreview> {
+  double _moveDxRemainder = 0;
+  double _moveDyRemainder = 0;
+  double _resizeDxRemainder = 0;
+  double _resizeDyRemainder = 0;
+
+  void _handleMoveDrag(
+      String widgetId, DragUpdateDetails details, double cellWidth) {
+    _moveDxRemainder += details.delta.dx;
+    _moveDyRemainder += details.delta.dy;
+    final stepX =
+        cellWidth <= 0 ? 0 : (_moveDxRemainder / cellWidth).truncate();
+    final stepY = widget.layout.rowHeight <= 0
+        ? 0
+        : (_moveDyRemainder / widget.layout.rowHeight).truncate();
+    if (stepX == 0 && stepY == 0) return;
+    _moveDxRemainder -= stepX * cellWidth;
+    _moveDyRemainder -= stepY * widget.layout.rowHeight;
+    widget.onMove(widgetId, stepX, stepY);
+  }
+
+  void _handleResizeDrag(
+    String widgetId,
+    DragUpdateDetails details,
+    double cellWidth,
+  ) {
+    _resizeDxRemainder += details.delta.dx;
+    _resizeDyRemainder += details.delta.dy;
+    final stepW =
+        cellWidth <= 0 ? 0 : (_resizeDxRemainder / cellWidth).truncate();
+    final stepH = widget.layout.rowHeight <= 0
+        ? 0
+        : (_resizeDyRemainder / widget.layout.rowHeight).truncate();
+    if (stepW == 0 && stepH == 0) return;
+    _resizeDxRemainder -= stepW * cellWidth;
+    _resizeDyRemainder -= stepH * widget.layout.rowHeight;
+    widget.onResize(widgetId, stepW, stepH);
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: List.generate(
-        columns.clamp(1, 12),
-        (index) => Expanded(
-          child: Container(
-            height: 18,
-            margin: EdgeInsets.only(right: index == columns - 1 ? 0 : 6),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(6),
-            ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final totalGap = (widget.layout.columns - 1) * widget.layout.gap;
+        final cellWidth =
+            (((constraints.maxWidth - totalGap) / widget.layout.columns)
+                    .clamp(24, double.infinity))
+                .toDouble();
+        final canvasHeight = (widget.maxRow * widget.layout.rowHeight) +
+            (((widget.maxRow - 1).clamp(0, 999)) * widget.layout.gap)
+                .toDouble();
+
+        return SizedBox(
+          height: canvasHeight + 8,
+          child: Stack(
+            children: [
+              for (var row = 0; row < widget.maxRow; row++)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  top: row * (widget.layout.rowHeight + widget.layout.gap),
+                  height: widget.layout.rowHeight,
+                  child: Row(
+                    children: List.generate(
+                      widget.layout.columns.clamp(1, 12),
+                      (index) => Expanded(
+                        child: Container(
+                          margin: EdgeInsets.only(
+                            right: index == widget.layout.columns - 1
+                                ? 0
+                                : widget.layout.gap,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .surfaceContainerHighest
+                                .withValues(alpha: 0.45),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              for (final placement in widget.placements)
+                _InteractivePlacementTile(
+                  placement: placement,
+                  widgetModel: widget.widgets
+                      .where((item) => item.id == placement.widgetId)
+                      .firstOrNull,
+                  layout: widget.layout,
+                  cellWidth: cellWidth,
+                  isSelected: widget.selectedWidgetId == placement.widgetId,
+                  onTap: () => widget.onSelected(placement.widgetId),
+                  onMoveUpdate: (details) =>
+                      _handleMoveDrag(placement.widgetId, details, cellWidth),
+                  onMoveEnd: () {
+                    _moveDxRemainder = 0;
+                    _moveDyRemainder = 0;
+                  },
+                  onResizeUpdate: (details) =>
+                      _handleResizeDrag(placement.widgetId, details, cellWidth),
+                  onResizeEnd: () {
+                    _resizeDxRemainder = 0;
+                    _resizeDyRemainder = 0;
+                  },
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _InteractivePlacementTile extends StatelessWidget {
+  final DashboardWidgetPlacement placement;
+  final DashboardWidgetModel? widgetModel;
+  final DashboardLayout layout;
+  final double cellWidth;
+  final bool isSelected;
+  final VoidCallback onTap;
+  final ValueChanged<DragUpdateDetails> onMoveUpdate;
+  final VoidCallback onMoveEnd;
+  final ValueChanged<DragUpdateDetails> onResizeUpdate;
+  final VoidCallback onResizeEnd;
+
+  const _InteractivePlacementTile({
+    required this.placement,
+    required this.widgetModel,
+    required this.layout,
+    required this.cellWidth,
+    required this.isSelected,
+    required this.onTap,
+    required this.onMoveUpdate,
+    required this.onMoveEnd,
+    required this.onResizeUpdate,
+    required this.onResizeEnd,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final width = (placement.w * cellWidth) + ((placement.w - 1) * layout.gap);
+    final height =
+        (placement.h * layout.rowHeight) + ((placement.h - 1) * layout.gap);
+    final left = placement.x * (cellWidth + layout.gap);
+    final top = placement.y * (layout.rowHeight + layout.gap);
+    final accentColor = isSelected
+        ? theme.colorScheme.primary
+        : theme.colorScheme.primary.withValues(alpha: 0.7);
+
+    return Positioned(
+      left: left,
+      top: top,
+      width: width,
+      height: height,
+      child: GestureDetector(
+        onTap: onTap,
+        onPanStart: (_) => onTap(),
+        onPanUpdate: onMoveUpdate,
+        onPanEnd: (_) => onMoveEnd(),
+        child: Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: (isSelected
+                    ? theme.colorScheme.secondaryContainer
+                    : theme.colorScheme.primaryContainer)
+                .withValues(alpha: 0.8),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: accentColor, width: isSelected ? 2 : 1),
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color: accentColor.withValues(alpha: 0.18),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widgetModel?.title ?? placement.widgetId,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'x:${placement.x} y:${placement.y} w:${placement.w} h:${placement.h}',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _enumName(
+                          widgetModel?.type ?? DashboardWidgetType.markdown),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+              if (isSelected)
+                Positioned(
+                  right: 0,
+                  bottom: 0,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onPanUpdate: onResizeUpdate,
+                    onPanEnd: (_) => onResizeEnd(),
+                    child: Container(
+                      width: 28,
+                      height: 28,
+                      decoration: BoxDecoration(
+                        color: accentColor,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(
+                        Icons.open_in_full,
+                        size: 16,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
           ),
         ),
       ),
