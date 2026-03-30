@@ -97,11 +97,14 @@ void main() {
     test('provides size guidance for dense dashboard widgets', () {
       final gridHint = dashboardWidgetSizeHint(DashboardWidgetType.deviceGrid);
       final eventHint = dashboardWidgetSizeHint(DashboardWidgetType.eventFeed);
+      final summaryHint =
+          dashboardWidgetSizeHint(DashboardWidgetType.statSummary);
 
       expect(gridHint.minW, greaterThanOrEqualTo(4));
       expect(gridHint.recommendedW, greaterThanOrEqualTo(gridHint.minW));
       expect(eventHint.minH, greaterThanOrEqualTo(2));
       expect(eventHint.recommendedH, greaterThanOrEqualTo(eventHint.minH));
+      expect(summaryHint.minH, greaterThanOrEqualTo(2));
     });
 
     test('normalizes dashboard layouts to resolve overlaps', () {

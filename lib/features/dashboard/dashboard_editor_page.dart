@@ -123,8 +123,11 @@ class _DashboardEditorPageState extends ConsumerState<DashboardEditorPage> {
       config: _defaultWidgetConfig(type),
     );
     setState(() {
-      _widgets = [..._widgets, widget];
-      _layouts = _ensurePlacementForNewWidget(_layouts, id);
+      final nextWidgets = [..._widgets, widget];
+      _widgets = nextWidgets;
+      _layouts = _ensurePlacementForNewWidget(_layouts, id)
+          .map((layout) => normalizeDashboardLayout(layout, nextWidgets))
+          .toList();
     });
   }
 
@@ -134,12 +137,14 @@ class _DashboardEditorPageState extends ConsumerState<DashboardEditorPage> {
       if (_selectedPlacementWidgetId == id) {
         _selectedPlacementWidgetId = null;
       }
+      final nextWidgets = _widgets;
       _layouts = _layouts
           .map((layout) => layout.copyWith(
                 placements: layout.placements
                     .where((placement) => placement.widgetId != id)
                     .toList(),
               ))
+          .map((layout) => normalizeDashboardLayout(layout, nextWidgets))
           .toList();
     });
   }
@@ -198,12 +203,13 @@ class _DashboardEditorPageState extends ConsumerState<DashboardEditorPage> {
   void _replaceLayout(DashboardLayout layout) {
     setState(() {
       final next = [..._layouts];
+      final normalized = normalizeDashboardLayout(layout, _widgets);
       final existingIndex =
-          next.indexWhere((item) => item.breakpoint == layout.breakpoint);
+          next.indexWhere((item) => item.breakpoint == normalized.breakpoint);
       if (existingIndex >= 0) {
-        next[existingIndex] = layout;
+        next[existingIndex] = normalized;
       } else {
-        next.add(layout);
+        next.add(normalized);
       }
       _layouts = next;
     });
@@ -267,7 +273,8 @@ class _DashboardEditorPageState extends ConsumerState<DashboardEditorPage> {
     DashboardBreakpoint breakpoint,
     String widgetId,
   ) {
-    final layout = _layoutForEditor(breakpoint);
+    final layout =
+        normalizeDashboardLayout(_layoutForEditor(breakpoint), _widgets);
     return layout.placements
         .where((item) => item.widgetId == widgetId)
         .firstOrNull;
@@ -303,7 +310,8 @@ class _DashboardEditorPageState extends ConsumerState<DashboardEditorPage> {
 
   @override
   Widget build(BuildContext context) {
-    final activeLayout = _layoutForEditor(_layoutBreakpoint);
+    final activeLayout =
+        normalizeDashboardLayout(_layoutForEditor(_layoutBreakpoint), _widgets);
     final sortedPlacements = [...activeLayout.placements]
       ..sort((a, b) => a.y != b.y ? a.y.compareTo(b.y) : a.x.compareTo(b.x));
 
@@ -921,6 +929,17 @@ class _InteractiveDashboardLayoutPreviewState
     return LayoutBuilder(
       builder: (context, constraints) {
         final totalGap = (widget.layout.columns - 1) * widget.layout.gap;
+        final placements = [...widget.placements]..sort((a, b) {
+            if (a.widgetId == widget.selectedWidgetId &&
+                b.widgetId != widget.selectedWidgetId) {
+              return 1;
+            }
+            if (b.widgetId == widget.selectedWidgetId &&
+                a.widgetId != widget.selectedWidgetId) {
+              return -1;
+            }
+            return a.y != b.y ? a.y.compareTo(b.y) : a.x.compareTo(b.x);
+          });
         final cellWidth =
             (((constraints.maxWidth - totalGap) / widget.layout.columns)
                     .clamp(24, double.infinity))
@@ -961,7 +980,7 @@ class _InteractiveDashboardLayoutPreviewState
                     ),
                   ),
                 ),
-              for (final placement in widget.placements)
+              for (final placement in placements)
                 _InteractivePlacementTile(
                   placement: placement,
                   widgetModel: widget.widgets

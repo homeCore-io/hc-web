@@ -80,7 +80,10 @@ class DashboardViewPage extends ConsumerWidget {
               builder: (context, constraints) {
                 final breakpoint =
                     dashboardBreakpointForWidth(constraints.maxWidth);
-                final layout = dashboard.layoutFor(breakpoint);
+                final layout = normalizeDashboardLayout(
+                  dashboard.layoutFor(breakpoint),
+                  dashboard.widgets,
+                );
                 return SingleChildScrollView(
                   physics: const AlwaysScrollableScrollPhysics(),
                   padding: const EdgeInsets.all(16),

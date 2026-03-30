@@ -113,9 +113,9 @@ DashboardWidgetSizeHint dashboardWidgetSizeHint(DashboardWidgetType type) {
     case DashboardWidgetType.statSummary:
       return const DashboardWidgetSizeHint(
         minW: 3,
-        minH: 1,
+        minH: 2,
         recommendedW: 6,
-        recommendedH: 1,
+        recommendedH: 2,
       );
   }
 }

@@ -526,6 +526,7 @@ Current implementation status:
 - Widget rendering now includes compact-mode adaptation and editor-side minimum size guidance for dense grid layouts.
 - The editor preview now supports pointer-driven tile movement and resize for persisted dashboard placements, while the explicit numeric placement controls remain available for precise adjustments.
 - Layout edits now normalize placements to resolve overlaps, preserve minimum widget sizes, and keep mobile layouts snapped to a single-column flow.
+- Dashboard rendering and editor preview now both consume normalized layout data so overlapping placements are corrected consistently instead of leaving hidden stacked widgets behind.
 - Advanced widgets now have richer first-pass behavior: `history_chart` renders device history, `media_player` exposes inline transport/volume controls, and `camera_video` / `web_embed` present clearer configured-source states instead of bare placeholders.
 - Widget config editors now use selection-driven controls for common dashboard inputs such as areas, devices, dashboard links, history devices/attributes, metrics, and common event types instead of relying on raw free-text entry for those cases.
 
