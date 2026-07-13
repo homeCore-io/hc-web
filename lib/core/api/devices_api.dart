@@ -4,8 +4,15 @@ class DevicesApi {
   final HomecoreClient client;
   DevicesApi(this.client);
 
-  Future<List<Map<String, dynamic>>> listDevices() async {
-    final response = await client.dio.get('/devices');
+  /// Inlining the schemas costs one request instead of N, and the payload only
+  /// grows for the devices that actually have one — 9 of 168 on a real install.
+  Future<List<Map<String, dynamic>>> listDevices({
+    bool includeSchema = true,
+  }) async {
+    final response = await client.dio.get(
+      '/devices',
+      queryParameters: includeSchema ? {'include_schema': true} : null,
+    );
     return List<Map<String, dynamic>>.from(response.data as List);
   }
 

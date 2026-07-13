@@ -4,6 +4,7 @@ import '../../core/models/plugin_entry.dart';
 import '../../core/providers/plugins_provider.dart';
 import '../../shared/widgets/skeleton.dart';
 import '../../core/providers/time_display_provider.dart';
+import '../plugins/plugin_actions.dart';
 
 class PluginsPage extends ConsumerWidget {
   const PluginsPage({super.key});
@@ -51,52 +52,60 @@ class _PluginTile extends ConsumerWidget {
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
-      child: ListTile(
-        leading: Icon(
-          Icons.extension,
-          color: statusColor,
-        ),
-        title: Text(plugin.pluginId),
-        subtitle: Text(
-          '$statusLabel  ·  registered ${_shortDate(plugin.registeredAt, ref.watch(timeUtcProvider))}',
-        ),
-        trailing: PopupMenuButton<String>(
-          onSelected: (action) async {
-            if (action == 'deregister') {
-              final ok = await showDialog<bool>(
-                context: context,
-                builder: (ctx) => AlertDialog(
-                  title: Text('Deregister ${plugin.pluginId}?'),
-                  content: const Text(
-                      'The plugin process is not stopped — only the registry entry is removed.'),
-                  actions: [
-                    TextButton(
-                        onPressed: () => Navigator.pop(ctx, false),
-                        child: const Text('Cancel')),
-                    FilledButton(
-                        onPressed: () => Navigator.pop(ctx, true),
-                        child: const Text('Deregister')),
-                  ],
-                ),
-              );
-              if (ok != true) return;
-              try {
-                await ref
-                    .read(pluginsApiProvider)
-                    .deregister(plugin.pluginId);
-                ref.invalidate(pluginsProvider);
-              } catch (e) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context)
-                      .showSnackBar(SnackBar(content: Text('Failed: $e')));
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ListTile(
+            leading: Icon(
+              Icons.extension,
+              color: statusColor,
+            ),
+            title: Text(plugin.pluginId),
+            subtitle: Text(
+              '$statusLabel  ·  registered ${_shortDate(plugin.registeredAt, ref.watch(timeUtcProvider))}',
+            ),
+            trailing: PopupMenuButton<String>(
+              onSelected: (action) async {
+                if (action == 'deregister') {
+                  final ok = await showDialog<bool>(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: Text('Deregister ${plugin.pluginId}?'),
+                      content: const Text(
+                          'The plugin process is not stopped — only the registry entry is removed.'),
+                      actions: [
+                        TextButton(
+                            onPressed: () => Navigator.pop(ctx, false),
+                            child: const Text('Cancel')),
+                        FilledButton(
+                            onPressed: () => Navigator.pop(ctx, true),
+                            child: const Text('Deregister')),
+                      ],
+                    ),
+                  );
+                  if (ok != true) return;
+                  try {
+                    await ref
+                        .read(pluginsApiProvider)
+                        .deregister(plugin.pluginId);
+                    ref.invalidate(pluginsProvider);
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context)
+                          .showSnackBar(SnackBar(content: Text('Failed: $e')));
+                    }
+                  }
                 }
-              }
-            }
-          },
-          itemBuilder: (_) => const [
-            PopupMenuItem(value: 'deregister', child: Text('Deregister')),
-          ],
-        ),
+              },
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: 'deregister', child: Text('Deregister')),
+              ],
+            ),
+          ),
+          // Whatever this plugin declared it can do. Renders nothing for the
+          // plugins that publish no manifest.
+          PluginActions(pluginId: plugin.pluginId),
+        ],
       ),
     );
   }

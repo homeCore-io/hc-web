@@ -1,3 +1,5 @@
+import '../schema/device_schema.dart';
+
 class DeviceState {
   final String id;
   final String? canonicalName;
@@ -5,8 +7,21 @@ class DeviceState {
   final String? name;
   final String? area;
   final String? deviceType;
+
+  /// The user's presentation override. Beats `device_type`, which plugins get
+  /// wrong often enough that this field exists — see `devices/presentation.dart`.
+  final String? uiHint;
+
+  /// A user-chosen icon name, overriding the one the facet would pick.
+  final String? statusIcon;
+
   final bool available;
   final Map<String, dynamic> state;
+
+  /// Present only when fetched with `?include_schema=true`. Most devices have
+  /// none — as of today, 9 of 168 on a real install — so every consumer must
+  /// cope with null rather than assuming a schema exists.
+  final DeviceSchema? schema;
 
   DeviceState({
     required this.id,
@@ -15,8 +30,11 @@ class DeviceState {
     this.name,
     this.area,
     this.deviceType,
+    this.uiHint,
+    this.statusIcon,
     required this.available,
     required this.state,
+    this.schema,
   });
 
   factory DeviceState.fromJson(Map<String, dynamic> json) => DeviceState(
@@ -26,8 +44,13 @@ class DeviceState {
         name: json['name'] as String?,
         area: json['area'] as String?,
         deviceType: json['device_type'] as String?,
+        uiHint: json['ui_hint'] as String?,
+        statusIcon: json['status_icon'] as String?,
         available: json['available'] as bool? ?? false,
         state: Map<String, dynamic>.from(json['attributes'] as Map? ?? {}),
+        schema: json['schema'] is Map
+            ? DeviceSchema.fromJson(json['schema'] as Map)
+            : null,
       );
 
   String get displayName => name ?? id;

@@ -19,6 +19,10 @@ dependencies:
   timeago: ^3.6.1
   freezed_annotation: ^2.4.1
   json_annotation: ^4.9.0
+  # EventSource, for streaming plugin actions. Dio's browser adapter buffers the
+  # whole response, so it cannot carry SSE; core accepts `?token=` on that path
+  # precisely because EventSource cannot set an Authorization header.
+  web: ^1.1.0
 
 dev_dependencies:
   flutter_test:
