@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../core/models/rule.dart';
+import '../../core/rules/rule.dart';
+import '../../core/rules/schema.dart';
 import '../../core/providers/automations_provider.dart';
 import '../../core/providers/name_resolver_provider.dart';
 import '../../shared/widgets/filter_bar.dart';
@@ -14,7 +15,8 @@ class _AutomationFilter {
   final String search;
   final String status; // 'all' | 'enabled' | 'disabled' | 'broken'
   final Set<String> triggerTypes;
-  final String sort; // 'priority_desc' | 'priority_asc' | 'name_asc' | 'name_desc'
+  final String
+      sort; // 'priority_desc' | 'priority_asc' | 'name_asc' | 'name_desc'
 
   const _AutomationFilter({
     this.search = '',
@@ -76,32 +78,18 @@ class _AutomationListPageState extends ConsumerState<AutomationListPage> {
   List<HcRule> _applyFilter(List<HcRule> rules, _AutomationFilter f) {
     var out = rules.where((r) {
       if (f.search.isNotEmpty &&
-          !r.name.toLowerCase().contains(f.search.toLowerCase())) return false;
+          !r.name.toLowerCase().contains(f.search.toLowerCase())) {
+        return false;
+      }
       if (f.status == 'enabled' && !r.enabled) return false;
       if (f.status == 'disabled' && r.enabled) return false;
       if (f.status == 'broken' && r.error == null) return false;
       if (f.triggerTypes.isNotEmpty) {
-        final type = r.trigger['type'] as String? ?? '';
-        bool matches = f.triggerTypes.any((chip) {
-          switch (chip) {
-            case 'device':
-              return type == 'device_state_changed' ||
-                  type == 'device_availability_changed';
-            case 'time':
-              return type == 'time_of_day' || type == 'cron' || type == 'periodic';
-            case 'sun':
-              return type == 'sun_event';
-            case 'webhook':
-              return type == 'webhook_received';
-            case 'manual':
-              return type == 'manual_trigger' || type == 'system_started';
-            case 'mqtt':
-              return type == 'mqtt_message';
-            default:
-              return false;
-          }
-        });
-        if (!matches) return false;
+        // Bucketed by the trigger's declared category rather than a hand-kept
+        // list of type names, so a new core trigger lands in the right chip the
+        // moment it is added to the schema.
+        final category = kTriggers[r.trigger.tag]?.category ?? '';
+        if (!f.triggerTypes.contains(category)) return false;
       }
       return true;
     }).toList();
@@ -188,8 +176,7 @@ class _AutomationListPageState extends ConsumerState<AutomationListPage> {
               FilterBar(
                 searchController: _searchCtrl,
                 searchHint: 'Search automations…',
-                countLabel:
-                    'Showing ${filtered.length} of ${rules.length}',
+                countLabel: 'Showing ${filtered.length} of ${rules.length}',
                 chips: [
                   // Status chips
                   for (final s in [
@@ -199,8 +186,7 @@ class _AutomationListPageState extends ConsumerState<AutomationListPage> {
                     ('broken', 'Broken'),
                   ])
                     FilterChip(
-                      label: Text(s.$2,
-                          style: const TextStyle(fontSize: 11)),
+                      label: Text(s.$2, style: const TextStyle(fontSize: 11)),
                       selected: filter.status == s.$1,
                       onSelected: (_) => ref
                           .read(_filterProvider.notifier)
@@ -208,22 +194,19 @@ class _AutomationListPageState extends ConsumerState<AutomationListPage> {
                       visualDensity: VisualDensity.compact,
                     ),
                   const SizedBox(width: 8),
-                  // Trigger type chips
-                  for (final t in [
-                    ('device', 'Device'),
-                    ('time', 'Time'),
-                    ('sun', 'Sun'),
-                    ('webhook', 'Webhook'),
-                    ('manual', 'Manual'),
-                    ('mqtt', 'MQTT'),
-                  ])
+                  // One chip per trigger category, straight from the schema.
+                  for (final category in kTriggerCategories)
                     FilterChip(
-                      label: Text(t.$2,
-                          style: const TextStyle(fontSize: 11)),
-                      selected: filter.triggerTypes.contains(t.$1),
+                      label:
+                          Text(category, style: const TextStyle(fontSize: 11)),
+                      selected: filter.triggerTypes.contains(category),
                       onSelected: (on) {
                         final next = Set<String>.from(filter.triggerTypes);
-                        if (on) next.add(t.$1); else next.remove(t.$1);
+                        if (on) {
+                          next.add(category);
+                        } else {
+                          next.remove(category);
+                        }
                         ref
                             .read(_filterProvider.notifier)
                             .update((f) => f.copyWith(triggerTypes: next));
@@ -238,16 +221,20 @@ class _AutomationListPageState extends ConsumerState<AutomationListPage> {
                   items: const [
                     DropdownMenuItem(
                         value: 'priority_desc',
-                        child: Text('Priority ↓', style: TextStyle(fontSize: 12))),
+                        child:
+                            Text('Priority ↓', style: TextStyle(fontSize: 12))),
                     DropdownMenuItem(
                         value: 'priority_asc',
-                        child: Text('Priority ↑', style: TextStyle(fontSize: 12))),
+                        child:
+                            Text('Priority ↑', style: TextStyle(fontSize: 12))),
                     DropdownMenuItem(
                         value: 'name_asc',
-                        child: Text('Name A→Z', style: TextStyle(fontSize: 12))),
+                        child:
+                            Text('Name A→Z', style: TextStyle(fontSize: 12))),
                     DropdownMenuItem(
                         value: 'name_desc',
-                        child: Text('Name Z→A', style: TextStyle(fontSize: 12))),
+                        child:
+                            Text('Name Z→A', style: TextStyle(fontSize: 12))),
                   ],
                   onChanged: (v) => ref
                       .read(_filterProvider.notifier)
@@ -273,8 +260,11 @@ class _AutomationListPageState extends ConsumerState<AutomationListPage> {
                           onToggleSelect: (id) {
                             ref.read(_selectionProvider.notifier).update((s) {
                               final next = Set<String>.from(s);
-                              if (next.contains(id)) next.remove(id);
-                              else next.add(id);
+                              if (next.contains(id)) {
+                                next.remove(id);
+                              } else {
+                                next.add(id);
+                              }
                               return next;
                             });
                           },
@@ -332,8 +322,7 @@ class _RuleTile extends ConsumerWidget {
   Future<void> _showHistory(BuildContext context, WidgetRef ref) async {
     List<Map<String, dynamic>>? history;
     try {
-      history =
-          await ref.read(automationsApiProvider).getRuleHistory(rule.id);
+      history = await ref.read(automationsApiProvider).getRuleHistory(rule.id);
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context)
@@ -363,11 +352,10 @@ class _RuleTile extends ConsumerWidget {
                       return ListTile(
                         dense: true,
                         leading: Icon(
-                          fired
-                              ? Icons.check_circle
-                              : Icons.cancel_outlined,
-                          color:
-                              fired ? Colors.green : Theme.of(ctx).colorScheme.error,
+                          fired ? Icons.check_circle : Icons.cancel_outlined,
+                          color: fired
+                              ? Colors.green
+                              : Theme.of(ctx).colorScheme.error,
                           size: 18,
                         ),
                         title: Text(
@@ -389,8 +377,7 @@ class _RuleTile extends ConsumerWidget {
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Close'))
+              onPressed: () => Navigator.pop(ctx), child: const Text('Close'))
         ],
       ),
     );
@@ -398,8 +385,7 @@ class _RuleTile extends ConsumerWidget {
 
   Future<void> _runTest(BuildContext context, WidgetRef ref) async {
     try {
-      final result =
-          await ref.read(automationsApiProvider).testRule(rule.id);
+      final result = await ref.read(automationsApiProvider).testRule(rule.id);
       if (!context.mounted) return;
       showDialog(
         context: context,
@@ -423,8 +409,7 @@ class _RuleTile extends ConsumerWidget {
           ),
           actions: [
             TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Close'))
+                onPressed: () => Navigator.pop(ctx), child: const Text('Close'))
           ],
         ),
       );
@@ -439,9 +424,9 @@ class _RuleTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final inBulk = ref.watch(_selectionProvider).isNotEmpty;
-    final summary = rule.resolvedTriggerSummary(
-      deviceResolver.resolve,
-      modeResolver.resolve,
+    final summary = rule.triggerSummary(
+      resolveDevice: deviceResolver.resolve,
+      resolveMode: modeResolver.resolve,
     );
 
     return ListTile(
@@ -463,8 +448,7 @@ class _RuleTile extends ConsumerWidget {
             Tooltip(
               message: rule.error!,
               child: Icon(Icons.warning_amber,
-                  size: 16,
-                  color: Theme.of(context).colorScheme.error),
+                  size: 16, color: Theme.of(context).colorScheme.error),
             ),
         ],
       ),
@@ -476,8 +460,10 @@ class _RuleTile extends ConsumerWidget {
           if (rule.error != null)
             Text(
               rule.error!,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(context).colorScheme.error),
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: Theme.of(context).colorScheme.error),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -487,11 +473,9 @@ class _RuleTile extends ConsumerWidget {
               spacing: 4,
               children: rule.tags
                   .map((t) => Chip(
-                        label: Text(t,
-                            style: const TextStyle(fontSize: 10)),
+                        label: Text(t, style: const TextStyle(fontSize: 10)),
                         padding: EdgeInsets.zero,
-                        materialTapTargetSize:
-                            MaterialTapTargetSize.shrinkWrap,
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         visualDensity: VisualDensity.compact,
                       ))
                   .toList(),
@@ -508,11 +492,11 @@ class _RuleTile extends ConsumerWidget {
                 Text('P${rule.priority}',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: Theme.of(context).colorScheme.outline)),
-                if (rule.runMode != 'parallel')
+                if (!rule.runMode.isParallel)
                   Padding(
                     padding: const EdgeInsets.only(left: 4),
                     child: Tooltip(
-                      message: 'Run mode: ${rule.runMode}',
+                      message: 'Run mode: ${rule.runMode.kind}',
                       child: Icon(Icons.layers_outlined,
                           size: 14,
                           color: Theme.of(context).colorScheme.secondary),
@@ -574,9 +558,7 @@ class _TestRow extends StatelessWidget {
   Widget build(BuildContext context) => Row(
         children: [
           Icon(value ? Icons.check_circle : Icons.cancel,
-              color: value
-                  ? Colors.green
-                  : Theme.of(context).colorScheme.error,
+              color: value ? Colors.green : Theme.of(context).colorScheme.error,
               size: 18),
           const SizedBox(width: 8),
           Text(label),
