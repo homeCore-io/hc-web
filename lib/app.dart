@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'core/providers/auth_provider.dart';
-import 'core/theme/app_theme.dart';
+import 'design/skins.dart';
 import 'features/admin/admin_shell.dart';
 import 'features/admin/areas_page.dart';
 import 'features/admin/logs_page.dart';
@@ -24,7 +24,7 @@ import 'features/events/events_page.dart';
 import 'features/modes/modes_page.dart';
 import 'features/scenes/scene_editor_page.dart';
 import 'features/scenes/scenes_page.dart';
-import 'shared/widgets/app_shell.dart';
+import 'shell/shell_scope.dart';
 
 class _RouterNotifier extends ChangeNotifier {
   _RouterNotifier(Ref ref) {
@@ -47,8 +47,22 @@ GoRouter _buildRouter(Ref ref) {
     routes: [
       GoRoute(path: '/login', builder: (_, __) => const LoginPage()),
       ShellRoute(
-        builder: (context, state, child) => AppShell(child: child),
+        // One scope for every route: it resolves which shell the location
+        // belongs to, applies that shell's skin, and wraps the page in the right
+        // chrome. The pages themselves know nothing about any of it.
+        builder: (context, state, child) => ShellScope(child: child),
         routes: [
+          // The wall panel. Same dashboard pages as everywhere else — only the
+          // shell and the skin differ.
+          GoRoute(
+            path: '/wall',
+            builder: (_, __) => const DashboardPage(),
+          ),
+          GoRoute(
+            path: '/wall/:id',
+            builder: (_, state) =>
+                DashboardViewPage(dashboardId: state.pathParameters['id']!),
+          ),
           GoRoute(
             path: '/dashboard',
             builder: (_, __) => const DashboardPage(),
@@ -135,10 +149,14 @@ class HomecoreApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(routerProvider);
+
     return MaterialApp.router(
       title: 'HomeCore',
-      theme: AppTheme.light,
-      darkTheme: AppTheme.dark,
+      // Only the base — every routed page is re-themed by [ShellScope], which
+      // knows which surface the route belongs to. This theme is what the login
+      // page (the one route outside any shell) renders in.
+      theme: hcTheme(HcSkin.softHome),
+      darkTheme: hcTheme(HcSkin.ambientGlass),
       routerConfig: router,
     );
   }
