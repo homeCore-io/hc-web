@@ -1,0 +1,108 @@
+name: Release
+
+# Publishes ghcr.io/homecore-io/hc-web.
+#
+# hc-web is NOT baked into core the way hc-web-leptos is — it has no reusable
+# Rust release to call, and its Dockerfile lives here rather than in
+# homeCore-io/docker. So this is a small, self-contained build rather than a
+# caller of rust-release.yml.
+#
+# Tag/image conventions are kept identical to rust-release.yml on purpose:
+#
+#   git tag v0.1.6  ->  ghcr.io/homecore-io/hc-web:0.1.6   (bare version, no `v`)
+#                       ghcr.io/homecore-io/hc-web:latest
+#   push to develop ->  ghcr.io/homecore-io/hc-web:dev-<sha7>  (immutable)
+#                       ghcr.io/homecore-io/hc-web:dev         (rolling)
+#
+# Release ordering: hc-web is independent of the core/docker/hc-web-leptos
+# lockstep — nothing else's build recipe reads from it, so it does not have to be
+# tagged before core. Tag it in the same round to keep versions aligned; if you
+# forget, nothing silently breaks.
+
+on:
+  push:
+    branches: [develop]
+    tags: ['v*']
+  workflow_dispatch: {}
+
+# packages:write to push to GHCR.
+#
+# issues:write is here because the `ci` job below calls flutter-ci.yml, whose job
+# requests it — and a called workflow can never hold more than its caller. Omit
+# it and the run dies at startup with zero jobs and no annotation, which is the
+# exact failure that left org CI dead for weeks (hc-scripts/README.md). The
+# tracking-issue steps themselves are gated on `push` to develop, so on a tag
+# push this scope simply goes unused.
+permissions:
+  contents: read
+  packages: write
+  issues: write
+
+jobs:
+  # Never publish an image that would not have passed CI. The Docker build runs
+  # `flutter build web` but not `analyze` or `test`, so without this a red
+  # develop could still ship.
+  ci:
+    uses: homeCore-io/hc-scripts/.github/workflows/flutter-ci.yml@main
+
+  publish:
+    needs: ci
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve image name + tag(s)
+        id: resolve
+        run: |
+          set -eux
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          BASE="ghcr.io/${OWNER}/hc-web"
+          # Strip the leading `v` so image tags carry the bare version (0.1.6),
+          # matching the convention in homeCore-io/docker's compose files. The
+          # git tag itself stays v0.1.6.
+          if [ "${{ github.event_name }}" = "push" ] && [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+              TAG="${GITHUB_REF_NAME#v}"
+              TAGS=$(printf '%s\n%s' "${BASE}:${TAG}" "${BASE}:latest")
+          else
+              TAG="dev-${GITHUB_SHA::7}"
+              TAGS=$(printf '%s\n%s' "${BASE}:${TAG}" "${BASE}:dev")
+          fi
+          {
+              echo "image=${BASE}:${TAG}"
+              echo "tags<<EOTAGS"
+              echo "${TAGS}"
+              echo "EOTAGS"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          # amd64-only, matching rust-release.yml's current FORCE_FAST setting.
+          # The Flutter builder image is heavy; add arm64 when something needs it.
+          platforms: linux/amd64
+          tags: ${{ steps.resolve.outputs.tags }}
+          push: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Image summary
+        run: |
+          {
+            echo "Pushed:"
+            echo '```'
+            echo "${{ steps.resolve.outputs.tags }}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

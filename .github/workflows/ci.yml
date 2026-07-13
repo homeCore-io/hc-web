@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+# The default workflow token is read-only, and a called workflow can never hold
+# more than its caller. flutter-ci.yml opens/closes a tracking issue when develop
+# goes red, so without issues:write granted here the whole run fails at startup
+# with no jobs and no annotation. (Same trap that had org CI silently dead for
+# weeks — see hc-scripts/README.md.)
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  ci:
+    # No flutter_version override — take flutter-ci.yml's pinned default so CI
+    # compiles with the same toolchain that ships. The Dockerfile builds from
+    # ghcr.io/cirruslabs/flutter:3.44.0 and the pin matches it; tracking "stable"
+    # here would gate merges on a toolchain we never ship with, and turn CI red
+    # on Flutter release day with no code change. Bump the pin deliberately, in
+    # lockstep with the Dockerfile.
+    uses: homeCore-io/hc-scripts/.github/workflows/flutter-ci.yml@main

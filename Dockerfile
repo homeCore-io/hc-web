@@ -21,7 +21,22 @@
 # -----------------------------------------------------------------------------
 # Stage 1 — Build Flutter web
 # -----------------------------------------------------------------------------
-FROM ghcr.io/cirruslabs/flutter:stable AS builder
+#
+# PINNED, on purpose. `:stable` moves, which meant a tagged hc-web image could
+# not be rebuilt from its own tag — rebuilding v0.1.5 today could quietly produce
+# a different bundle than v0.1.5 shipped, with nothing anywhere saying so. That
+# is the same reproducibility hole that `webui_ref`/`docker_repo_ref` used to
+# have (see hc-scripts/README.md), and it gets the same treatment.
+#
+# Keep this equal to `flutter_version` in hc-scripts/.github/workflows/
+# flutter-ci.yml, so CI compiles with the toolchain that actually ships. Bump the
+# two together, deliberately.
+#
+# Note the pin is bounded by what cirruslabs publishes, not by the newest SDK:
+# 3.44.4 exists upstream but the newest published image is 3.44.0. The image is
+# what builds the artifact, so the image wins. canary.yml runs against latest
+# stable weekly to warn us before a bump bites.
+FROM ghcr.io/cirruslabs/flutter:3.44.0 AS builder
 
 WORKDIR /app
 

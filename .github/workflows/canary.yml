@@ -1,0 +1,41 @@
+name: Canary (latest stable Flutter)
+
+# Early warning for the pinned toolchain.
+#
+# CI builds with flutter-ci.yml's pinned flutter_version, which matches the
+# ghcr.io/cirruslabs/flutter tag the Dockerfile builds from — so CI green means
+# the artifact we actually ship builds. The cost of pinning is that we stop
+# hearing about new lints and deprecations until someone bumps the pin, and then
+# they all arrive at once. (This repo just paid that bill: `onReorder` had been
+# deprecated since 3.41 and nothing said so.)
+#
+# This job buys that warning back: same checks, run against the latest stable on
+# a schedule. It is deliberately NOT part of CI — a red canary means "stable
+# moved", not "develop is broken", and it must never gate a merge. When it goes
+# red, read it as a preview of what bumping the pin will demand.
+#
+# Scheduled workflows only ever fire on the default branch, so we pass
+# ref: develop explicitly to check the branch work actually lands on.
+
+on:
+  schedule:
+    # Mondays 06:29 UTC. Off-the-hour to dodge the top-of-hour scheduling
+    # backlog GitHub applies to cron runs, and offset from the Rust repos' 06:17
+    # so the whole org does not wake up at once.
+    - cron: '29 6 * * 1'
+  workflow_dispatch: {}
+
+# flutter-ci.yml's job requests issues:write, and a called workflow can never
+# hold more than its caller — without this the run dies at startup with no jobs.
+# (The tracking-issue steps themselves are gated on `push`, so they stay dormant
+# here.)
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  canary:
+    uses: homeCore-io/hc-scripts/.github/workflows/flutter-ci.yml@main
+    with:
+      flutter_version: "stable"
+      ref: develop
