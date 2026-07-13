@@ -1,124 +1,13 @@
 import 'dart:convert';
 
+import '../dashboard/grid_engine.dart';
+import '../dashboard/widget_registry.dart';
+
 enum DashboardVisibility { private, shared, public }
 
 enum DashboardBreakpoint { mobile, tablet, desktop, tv }
 
 enum DashboardRefreshPolicy { live, poll, manual, passive }
-
-enum DashboardWidgetType {
-  deviceGrid,
-  deviceList,
-  deviceTile,
-  statSummary,
-  modeChips,
-  sceneRow,
-  eventFeed,
-  historyChart,
-  mediaPlayer,
-  cameraVideo,
-  webEmbed,
-  markdown,
-  dashboardLink,
-}
-
-class DashboardWidgetSizeHint {
-  final int minW;
-  final int minH;
-  final int recommendedW;
-  final int recommendedH;
-
-  const DashboardWidgetSizeHint({
-    required this.minW,
-    required this.minH,
-    required this.recommendedW,
-    required this.recommendedH,
-  });
-}
-
-DashboardWidgetSizeHint dashboardWidgetSizeHint(DashboardWidgetType type) {
-  switch (type) {
-    case DashboardWidgetType.deviceGrid:
-      return const DashboardWidgetSizeHint(
-        minW: 4,
-        minH: 2,
-        recommendedW: 8,
-        recommendedH: 2,
-      );
-    case DashboardWidgetType.eventFeed:
-      return const DashboardWidgetSizeHint(
-        minW: 4,
-        minH: 2,
-        recommendedW: 5,
-        recommendedH: 2,
-      );
-    case DashboardWidgetType.mediaPlayer:
-      return const DashboardWidgetSizeHint(
-        minW: 4,
-        minH: 2,
-        recommendedW: 6,
-        recommendedH: 2,
-      );
-    case DashboardWidgetType.dashboardLink:
-      return const DashboardWidgetSizeHint(
-        minW: 4,
-        minH: 1,
-        recommendedW: 6,
-        recommendedH: 2,
-      );
-    case DashboardWidgetType.cameraVideo:
-    case DashboardWidgetType.webEmbed:
-      return const DashboardWidgetSizeHint(
-        minW: 4,
-        minH: 2,
-        recommendedW: 6,
-        recommendedH: 3,
-      );
-    case DashboardWidgetType.historyChart:
-      return const DashboardWidgetSizeHint(
-        minW: 4,
-        minH: 2,
-        recommendedW: 8,
-        recommendedH: 2,
-      );
-    case DashboardWidgetType.markdown:
-      return const DashboardWidgetSizeHint(
-        minW: 3,
-        minH: 1,
-        recommendedW: 6,
-        recommendedH: 2,
-      );
-    case DashboardWidgetType.deviceList:
-      return const DashboardWidgetSizeHint(
-        minW: 3,
-        minH: 2,
-        recommendedW: 6,
-        recommendedH: 2,
-      );
-    case DashboardWidgetType.deviceTile:
-      return const DashboardWidgetSizeHint(
-        minW: 2,
-        minH: 1,
-        recommendedW: 3,
-        recommendedH: 1,
-      );
-    case DashboardWidgetType.modeChips:
-    case DashboardWidgetType.sceneRow:
-      return const DashboardWidgetSizeHint(
-        minW: 3,
-        minH: 1,
-        recommendedW: 6,
-        recommendedH: 1,
-      );
-    case DashboardWidgetType.statSummary:
-      return const DashboardWidgetSizeHint(
-        minW: 3,
-        minH: 2,
-        recommendedW: 6,
-        recommendedH: 2,
-      );
-  }
-}
 
 String _enumName(Object value) => value.toString().split('.').last;
 
@@ -252,97 +141,72 @@ class DashboardLayout {
       );
 }
 
-bool dashboardPlacementsOverlap(
-  DashboardWidgetPlacement a,
-  DashboardWidgetPlacement b,
-) {
-  return a.x < b.x + b.w &&
-      a.x + a.w > b.x &&
-      a.y < b.y + b.h &&
-      a.y + a.h > b.y;
-}
-
+/// Makes a layout legal, using the shared [GridEngine].
+///
+/// This used to be a bespoke pack-and-settle loop living in the model, separate
+/// from the one the editor ran while dragging — which is exactly how the two
+/// drifted apart and produced overlapping cards. There is now one engine, and
+/// both the editor and the save path call it.
+///
+/// [anchorWidgetId] is the card the user is holding: gravity must not move it,
+/// or it squirms out from under the cursor.
 DashboardLayout normalizeDashboardLayout(
   DashboardLayout layout,
   List<DashboardWidgetModel> widgets, {
   String? anchorWidgetId,
 }) {
-  final hintsByWidgetId = {
-    for (final widget in widgets)
-      widget.id: dashboardWidgetSizeHint(widget.type),
+  final hints = {
+    for (final w in widgets)
+      w.id: WidgetRegistry.lookup(w.type)?.sizeHint ?? const WidgetSizeHint(),
   };
 
-  DashboardWidgetPlacement sanitize(DashboardWidgetPlacement placement) {
-    final hint = hintsByWidgetId[placement.widgetId];
-    final minH = hint?.minH ?? 1;
-    final minW = hint?.minW ?? 1;
-    final width = layout.breakpoint == DashboardBreakpoint.mobile
-        ? layout.columns
-        : placement.w.clamp(minW, layout.columns);
-    final x = layout.breakpoint == DashboardBreakpoint.mobile
-        ? 0
-        : placement.x.clamp(0, layout.columns - width);
-    return placement.copyWith(
-      x: x,
-      y: placement.y.clamp(0, 999),
-      w: width,
-      h: placement.h.clamp(minH, 12),
-    );
-  }
+  // On mobile core still stores a single column, so every card is full width and
+  // x is always 0. Honour that here rather than letting the engine invent a
+  // horizontal position that the phone layout cannot show.
+  final mobile = layout.breakpoint == DashboardBreakpoint.mobile;
 
-  final originalOrder = <String, int>{
-    for (var index = 0; index < layout.placements.length; index++)
-      layout.placements[index].widgetId: index,
-  };
-  final sanitized = layout.placements.map(sanitize).toList();
-  sanitized.sort((a, b) {
-    if (a.widgetId == anchorWidgetId) return -1;
-    if (b.widgetId == anchorWidgetId) return 1;
-    return a.y != b.y ? a.y.compareTo(b.y) : a.x.compareTo(b.x);
-  });
+  final items = [
+    for (final p in layout.placements)
+      GridItem(
+        id: p.widgetId,
+        x: mobile ? 0 : p.x,
+        y: p.y,
+        w: mobile ? layout.columns : p.w,
+        h: p.h,
+        minW: mobile ? layout.columns : (hints[p.widgetId]?.minW ?? 1),
+        minH: hints[p.widgetId]?.minH ?? 1,
+      ),
+  ];
 
-  final resolved = <DashboardWidgetPlacement>[];
-  for (final placement in sanitized) {
-    var candidate = placement;
-    while (true) {
-      final overlaps = resolved
-          .where((other) => dashboardPlacementsOverlap(candidate, other))
-          .toList();
-      if (overlaps.isEmpty) break;
-      final nextY = overlaps.fold<int>(
-        candidate.y,
-        (maxBottom, other) {
-          final bottom = other.y + other.h;
-          return bottom > maxBottom ? bottom : maxBottom;
-        },
-      );
-      candidate = candidate.copyWith(y: nextY);
-    }
+  final engine = GridEngine(columns: layout.columns);
+  final packed = engine.normalize(items);
 
-    if (candidate.widgetId != anchorWidgetId) {
-      while (candidate.y > 0) {
-        final trial = candidate.copyWith(y: candidate.y - 1);
-        final hasOverlap =
-            resolved.any((other) => dashboardPlacementsOverlap(trial, other));
-        if (hasOverlap) break;
-        candidate = trial;
-      }
-    }
-
-    resolved.add(candidate);
-  }
-
-  resolved.sort((a, b) {
-    final left = originalOrder[a.widgetId] ?? 0;
-    final right = originalOrder[b.widgetId] ?? 0;
-    return left.compareTo(right);
-  });
-  return layout.copyWith(placements: resolved);
+  // Preserve the incoming order so a save does not reshuffle the JSON for no
+  // reason, which would show up as a spurious diff on every edit.
+  final byId = {for (final i in packed) i.id: i};
+  return layout.copyWith(
+    placements: [
+      for (final p in layout.placements)
+        if (byId[p.widgetId] case final i?)
+          p.copyWith(x: i.x, y: i.y, w: i.w, h: i.h)
+        else
+          p,
+    ],
+  );
 }
 
 class DashboardWidgetModel {
   final String id;
-  final DashboardWidgetType type;
+
+  /// The wire type, e.g. `device_grid`.
+  ///
+  /// A plain string, not a closed enum, and **never coerced**. The enum used to
+  /// fall back to `markdown` for anything it did not recognise, which meant
+  /// core's own `house_status_hero` — on the default dashboard — rendered as a
+  /// markdown card and would have been saved back as one. An unknown type now
+  /// round-trips untouched; the registry decides how (or whether) to draw it.
+  final String type;
+
   final String title;
   final String? subtitle;
   final DashboardRefreshPolicy refreshPolicy;
@@ -359,7 +223,7 @@ class DashboardWidgetModel {
 
   DashboardWidgetModel copyWith({
     String? id,
-    DashboardWidgetType? type,
+    String? type,
     String? title,
     String? subtitle,
     DashboardRefreshPolicy? refreshPolicy,
@@ -377,7 +241,7 @@ class DashboardWidgetModel {
 
   Map<String, dynamic> toJson() => {
         'id': id,
-        'type': _toSnakeCase(_enumName(type)),
+        'type': type,
         'title': title,
         'subtitle': subtitle,
         'refresh_policy': _toSnakeCase(_enumName(refreshPolicy)),
@@ -387,11 +251,8 @@ class DashboardWidgetModel {
   factory DashboardWidgetModel.fromJson(Map<String, dynamic> json) =>
       DashboardWidgetModel(
         id: json['id'] as String,
-        type: _enumByName(
-          DashboardWidgetType.values,
-          json['type'] as String?,
-          DashboardWidgetType.markdown,
-        ),
+        // Verbatim. Coercing an unrecognised type is how a user loses a card.
+        type: json['type'] as String? ?? 'markdown',
         title: json['title'] as String? ?? 'Widget',
         subtitle: json['subtitle'] as String?,
         refreshPolicy: _enumByName(
@@ -564,7 +425,7 @@ class DashboardTemplateFactory {
       widgets: const [
         DashboardWidgetModel(
           id: 'welcome',
-          type: DashboardWidgetType.markdown,
+          type: 'markdown',
           title: 'Welcome',
           refreshPolicy: DashboardRefreshPolicy.passive,
           config: {
@@ -574,7 +435,7 @@ class DashboardTemplateFactory {
         ),
         DashboardWidgetModel(
           id: 'starter_summary',
-          type: DashboardWidgetType.statSummary,
+          type: 'stat_summary',
           title: 'Home Summary',
           refreshPolicy: DashboardRefreshPolicy.live,
           config: {
@@ -583,21 +444,21 @@ class DashboardTemplateFactory {
         ),
         DashboardWidgetModel(
           id: 'starter_modes',
-          type: DashboardWidgetType.modeChips,
+          type: 'mode_chips',
           title: 'Modes',
           refreshPolicy: DashboardRefreshPolicy.live,
           config: {},
         ),
         DashboardWidgetModel(
           id: 'starter_scenes',
-          type: DashboardWidgetType.sceneRow,
+          type: 'scene_row',
           title: 'Scenes',
           refreshPolicy: DashboardRefreshPolicy.live,
           config: {},
         ),
         DashboardWidgetModel(
           id: 'starter_grid',
-          type: DashboardWidgetType.deviceGrid,
+          type: 'device_grid',
           title: 'Quick Device View',
           subtitle: 'A starter example of a device-grid widget.',
           refreshPolicy: DashboardRefreshPolicy.live,
@@ -610,7 +471,7 @@ class DashboardTemplateFactory {
         ),
         DashboardWidgetModel(
           id: 'starter_devices',
-          type: DashboardWidgetType.deviceList,
+          type: 'device_list',
           title: 'Recent Devices',
           refreshPolicy: DashboardRefreshPolicy.live,
           config: {
@@ -622,14 +483,14 @@ class DashboardTemplateFactory {
         ),
         DashboardWidgetModel(
           id: 'starter_events',
-          type: DashboardWidgetType.eventFeed,
+          type: 'event_feed',
           title: 'Recent Events',
           refreshPolicy: DashboardRefreshPolicy.live,
           config: {'limit': 8},
         ),
         DashboardWidgetModel(
           id: 'starter_links',
-          type: DashboardWidgetType.dashboardLink,
+          type: 'dashboard_link',
           title: 'Next Dashboard Steps',
           subtitle:
               'Open the dashboard manager, create a new dashboard, or switch to another saved view.',
@@ -666,7 +527,7 @@ class DashboardTemplateFactory {
       widgets: const [
         DashboardWidgetModel(
           id: 'summary',
-          type: DashboardWidgetType.statSummary,
+          type: 'stat_summary',
           title: 'Home Summary',
           refreshPolicy: DashboardRefreshPolicy.live,
           config: {
@@ -675,21 +536,21 @@ class DashboardTemplateFactory {
         ),
         DashboardWidgetModel(
           id: 'scenes',
-          type: DashboardWidgetType.sceneRow,
+          type: 'scene_row',
           title: 'Scenes',
           refreshPolicy: DashboardRefreshPolicy.live,
           config: {},
         ),
         DashboardWidgetModel(
           id: 'modes',
-          type: DashboardWidgetType.modeChips,
+          type: 'mode_chips',
           title: 'Modes',
           refreshPolicy: DashboardRefreshPolicy.live,
           config: {},
         ),
         DashboardWidgetModel(
           id: 'devices',
-          type: DashboardWidgetType.deviceGrid,
+          type: 'device_grid',
           title: 'Devices',
           refreshPolicy: DashboardRefreshPolicy.live,
           config: {
@@ -701,7 +562,7 @@ class DashboardTemplateFactory {
         ),
         DashboardWidgetModel(
           id: 'events',
-          type: DashboardWidgetType.eventFeed,
+          type: 'event_feed',
           title: 'Recent Events',
           refreshPolicy: DashboardRefreshPolicy.live,
           config: {'limit': 8},
@@ -733,7 +594,7 @@ class DashboardTemplateFactory {
       widgets: const [
         DashboardWidgetModel(
           id: 'security_summary',
-          type: DashboardWidgetType.statSummary,
+          type: 'stat_summary',
           title: 'Security Summary',
           refreshPolicy: DashboardRefreshPolicy.live,
           config: {
@@ -742,7 +603,7 @@ class DashboardTemplateFactory {
         ),
         DashboardWidgetModel(
           id: 'security_devices',
-          type: DashboardWidgetType.deviceList,
+          type: 'device_list',
           title: 'Security Devices',
           refreshPolicy: DashboardRefreshPolicy.live,
           config: {
@@ -754,7 +615,7 @@ class DashboardTemplateFactory {
         ),
         DashboardWidgetModel(
           id: 'security_events',
-          type: DashboardWidgetType.eventFeed,
+          type: 'event_feed',
           title: 'Alerts',
           refreshPolicy: DashboardRefreshPolicy.live,
           config: {
@@ -764,7 +625,7 @@ class DashboardTemplateFactory {
         ),
         DashboardWidgetModel(
           id: 'security_help',
-          type: DashboardWidgetType.markdown,
+          type: 'markdown',
           title: 'Security Notes',
           refreshPolicy: DashboardRefreshPolicy.passive,
           config: {
@@ -798,7 +659,7 @@ class DashboardTemplateFactory {
       widgets: const [
         DashboardWidgetModel(
           id: 'room_devices',
-          type: DashboardWidgetType.deviceGrid,
+          type: 'device_grid',
           title: 'Living Room Devices',
           refreshPolicy: DashboardRefreshPolicy.live,
           config: {
@@ -810,7 +671,7 @@ class DashboardTemplateFactory {
         ),
         DashboardWidgetModel(
           id: 'room_media',
-          type: DashboardWidgetType.mediaPlayer,
+          type: 'media_player',
           title: 'Media',
           refreshPolicy: DashboardRefreshPolicy.live,
           config: {
@@ -820,7 +681,7 @@ class DashboardTemplateFactory {
         ),
         DashboardWidgetModel(
           id: 'room_scenes',
-          type: DashboardWidgetType.sceneRow,
+          type: 'scene_row',
           title: 'Scenes',
           refreshPolicy: DashboardRefreshPolicy.live,
           config: {},
@@ -850,14 +711,14 @@ class DashboardTemplateFactory {
       widgets: const [
         DashboardWidgetModel(
           id: 'media_players',
-          type: DashboardWidgetType.mediaPlayer,
+          type: 'media_player',
           title: 'Now Playing',
           refreshPolicy: DashboardRefreshPolicy.live,
           config: {'selection_mode': 'query', 'query': 'media_player'},
         ),
         DashboardWidgetModel(
           id: 'media_markdown',
-          type: DashboardWidgetType.markdown,
+          type: 'markdown',
           title: 'Instructions',
           refreshPolicy: DashboardRefreshPolicy.passive,
           config: {
@@ -867,7 +728,7 @@ class DashboardTemplateFactory {
         ),
         DashboardWidgetModel(
           id: 'media_help',
-          type: DashboardWidgetType.markdown,
+          type: 'markdown',
           title: 'Add Media Sources',
           refreshPolicy: DashboardRefreshPolicy.passive,
           config: {
@@ -900,7 +761,7 @@ class DashboardTemplateFactory {
       widgets: const [
         DashboardWidgetModel(
           id: 'wall_summary',
-          type: DashboardWidgetType.statSummary,
+          type: 'stat_summary',
           title: 'Overview',
           refreshPolicy: DashboardRefreshPolicy.live,
           config: {
@@ -909,14 +770,14 @@ class DashboardTemplateFactory {
         ),
         DashboardWidgetModel(
           id: 'wall_links',
-          type: DashboardWidgetType.dashboardLink,
+          type: 'dashboard_link',
           title: 'Dashboards',
           refreshPolicy: DashboardRefreshPolicy.passive,
           config: {},
         ),
         DashboardWidgetModel(
           id: 'wall_devices',
-          type: DashboardWidgetType.deviceGrid,
+          type: 'device_grid',
           title: 'Quick Controls',
           refreshPolicy: DashboardRefreshPolicy.live,
           config: {'selection_mode': 'query', 'query': '', 'limit': 8},

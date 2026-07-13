@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/dashboard/widget_registry.dart';
 import '../../core/models/dashboard.dart';
 import '../../core/models/device_state.dart';
 import '../../core/providers/auth_provider.dart';
@@ -113,12 +114,13 @@ class _DashboardEditorPageState extends ConsumerState<DashboardEditorPage> {
     if (mounted) context.go('/dashboards/${dashboard.id}');
   }
 
-  void _addWidget(DashboardWidgetType type) {
-    final id = '${_enumName(type)}_${DateTime.now().microsecondsSinceEpoch}';
+  void _addWidget(WidgetDescriptor descriptor) {
+    final type = descriptor.type;
+    final id = '${type}_${DateTime.now().microsecondsSinceEpoch}';
     final widget = DashboardWidgetModel(
       id: id,
       type: type,
-      title: _defaultWidgetTitle(type),
+      title: descriptor.title,
       refreshPolicy: _defaultRefreshPolicy(type),
       config: _defaultWidgetConfig(type),
     );
@@ -149,9 +151,15 @@ class _DashboardEditorPageState extends ConsumerState<DashboardEditorPage> {
     });
   }
 
+  /// Reorders the widget list.
+  ///
+  /// Wired to `onReorderItem`, not the deprecated `onReorder` — the newer
+  /// callback hands back an index that already accounts for the dragged item
+  /// having been lifted out, so the classic `if (newIndex > oldIndex) newIndex--`
+  /// fixup must NOT be applied here. Keeping it would shift every downward drag
+  /// by one.
   void _moveWidget(int oldIndex, int newIndex) {
     setState(() {
-      if (newIndex > oldIndex) newIndex -= 1;
       final copy = [..._widgets];
       final item = copy.removeAt(oldIndex);
       copy.insert(newIndex, item);
@@ -328,13 +336,22 @@ class _DashboardEditorPageState extends ConsumerState<DashboardEditorPage> {
             ),
         ],
       ),
-      floatingActionButton: PopupMenuButton<DashboardWidgetType>(
+      floatingActionButton: PopupMenuButton<WidgetDescriptor>(
         tooltip: 'Add widget',
         onSelected: _addWidget,
-        itemBuilder: (_) => DashboardWidgetType.values
-            .map((type) => PopupMenuItem(
-                  value: type,
-                  child: Text(_defaultWidgetTitle(type)),
+        // Whatever is registered, in one list. A plugin-contributed card appears
+        // here on exactly the same footing as a built-in — that is the point.
+        itemBuilder: (_) => WidgetRegistry.all
+            .map((d) => PopupMenuItem(
+                  value: d,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(d.icon, size: 16),
+                      const SizedBox(width: 8),
+                      Text(d.title),
+                    ],
+                  ),
                 ))
             .toList(),
         child: const FloatingActionButton.extended(
@@ -560,7 +577,9 @@ class _DashboardEditorPageState extends ConsumerState<DashboardEditorPage> {
                           .where((item) => item.id == widgetId)
                           .firstOrNull;
                       if (placement == null || widget == null) return;
-                      final sizeHint = dashboardWidgetSizeHint(widget.type);
+                      final sizeHint =
+                          (WidgetRegistry.lookup(widget.type)?.sizeHint ??
+                              const WidgetSizeHint());
                       _updatePlacement(
                         _layoutBreakpoint,
                         widgetId,
@@ -591,7 +610,8 @@ class _DashboardEditorPageState extends ConsumerState<DashboardEditorPage> {
                   .where((item) => item.id == placement.widgetId)
                   .firstOrNull;
               if (widget == null) return const SizedBox.shrink();
-              final sizeHint = dashboardWidgetSizeHint(widget.type);
+              final sizeHint = (WidgetRegistry.lookup(widget.type)?.sizeHint ??
+                  const WidgetSizeHint());
               return Card(
                 margin: const EdgeInsets.only(bottom: 12),
                 color: _selectedPlacementWidgetId == placement.widgetId
@@ -695,7 +715,7 @@ class _DashboardEditorPageState extends ConsumerState<DashboardEditorPage> {
             ReorderableListView.builder(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              onReorder: _moveWidget,
+              onReorderItem: _moveWidget,
               itemCount: _widgets.length,
               itemBuilder: (context, index) {
                 final widget = _widgets[index];
@@ -1096,8 +1116,7 @@ class _InteractivePlacementTile extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      _enumName(
-                          widgetModel?.type ?? DashboardWidgetType.markdown),
+                      widgetModel?.type ?? 'markdown',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.bodySmall,
@@ -1265,10 +1284,10 @@ class _DashboardWidgetConfigEditorState
     final limit = int.tryParse(_limitCtrl.text.trim());
     Map<String, dynamic> config;
     switch (type) {
-      case DashboardWidgetType.deviceGrid:
-      case DashboardWidgetType.deviceList:
-      case DashboardWidgetType.deviceTile:
-      case DashboardWidgetType.mediaPlayer:
+      case 'device_grid':
+      case 'device_list':
+      case 'device_tile':
+      case 'media_player':
         config = {
           'selection_mode': _selectionMode,
           'show_offline': _showOffline,
@@ -1277,9 +1296,9 @@ class _DashboardWidgetConfigEditorState
           if (_selectionMode == 'manual') 'device_ids': _csv(_deviceIdsCtrl),
           if (limit != null) 'limit': limit,
         };
-      case DashboardWidgetType.statSummary:
+      case 'stat_summary':
         config = {'metrics': _csv(_metricsCtrl)};
-      case DashboardWidgetType.eventFeed:
+      case 'event_feed':
         config = {
           if (limit != null) 'limit': limit,
           if (_csv(_eventTypesCtrl).isNotEmpty) 'types': _csv(_eventTypesCtrl),
@@ -1289,35 +1308,39 @@ class _DashboardWidgetConfigEditorState
             'device_ids': _csv(_deviceIdsCtrl),
           if (_eventGroupBy != 'none') 'group_by': _eventGroupBy,
         };
-      case DashboardWidgetType.cameraVideo:
+      case 'camera_video':
         config = {
           'source_type': _sourceType,
           'url': _urlCtrl.text.trim(),
           if (int.tryParse(_refreshSecsCtrl.text.trim()) != null)
             'refresh_secs': int.parse(_refreshSecsCtrl.text.trim()),
         };
-      case DashboardWidgetType.webEmbed:
+      case 'web_embed':
         config = {
           'url': _urlCtrl.text.trim(),
           'sandbox_profile': _sandboxProfile,
         };
-      case DashboardWidgetType.markdown:
+      case 'markdown':
         config = {'markdown': _markdownCtrl.text};
-      case DashboardWidgetType.historyChart:
+      case 'history_chart':
         config = {
           'device_id': _historyDeviceCtrl.text.trim(),
           'attribute': _historyAttributeCtrl.text.trim(),
           if (limit != null) 'limit': limit,
           'timeframe_hours': _historyTimeframeHours,
         };
-      case DashboardWidgetType.dashboardLink:
+      case 'dashboard_link':
         config = {
           if (_csv(_dashboardIdsCtrl).isNotEmpty)
             'dashboard_ids': _csv(_dashboardIdsCtrl),
         };
-      case DashboardWidgetType.modeChips:
-      case DashboardWidgetType.sceneRow:
+      case 'mode_chips':
+      case 'scene_row':
         config = {};
+      default:
+        // An unknown card (a newer core's, or a plugin's) keeps whatever config
+        // it arrived with. Rewriting it to {} would quietly destroy it.
+        config = Map<String, dynamic>.from(widget.widgetModel.config);
     }
     widget.onChanged(config,
         _titleCtrl.text.trim().isEmpty ? 'Widget' : _titleCtrl.text.trim());
@@ -1378,10 +1401,10 @@ class _DashboardWidgetConfigEditorState
         ),
         const SizedBox(height: 12),
         if ({
-          DashboardWidgetType.deviceGrid,
-          DashboardWidgetType.deviceList,
-          DashboardWidgetType.deviceTile,
-          DashboardWidgetType.mediaPlayer,
+          'device_grid',
+          'device_list',
+          'device_tile',
+          'media_player',
         }.contains(type)) ...[
           DropdownButtonFormField<String>(
             initialValue: _selectionMode,
@@ -1462,7 +1485,7 @@ class _DashboardWidgetConfigEditorState
             onChanged: (_) => _emit(),
           ),
         ],
-        if (type == DashboardWidgetType.statSummary) ...[
+        if (type == 'stat_summary') ...[
           Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -1485,7 +1508,7 @@ class _DashboardWidgetConfigEditorState
                 .toList(),
           ),
         ],
-        if (type == DashboardWidgetType.eventFeed) ...[
+        if (type == 'event_feed') ...[
           Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -1572,10 +1595,10 @@ class _DashboardWidgetConfigEditorState
           ),
         ],
         if ({
-          DashboardWidgetType.cameraVideo,
-          DashboardWidgetType.webEmbed,
+          'camera_video',
+          'web_embed',
         }.contains(type)) ...[
-          if (type == DashboardWidgetType.cameraVideo) ...[
+          if (type == 'camera_video') ...[
             DropdownButtonFormField<String>(
               initialValue: _sourceType,
               decoration: const InputDecoration(
@@ -1608,7 +1631,7 @@ class _DashboardWidgetConfigEditorState
             ),
             onChanged: (_) => _emit(),
           ),
-          if (type == DashboardWidgetType.cameraVideo) ...[
+          if (type == 'camera_video') ...[
             const SizedBox(height: 12),
             TextField(
               controller: _refreshSecsCtrl,
@@ -1620,7 +1643,7 @@ class _DashboardWidgetConfigEditorState
               onChanged: (_) => _emit(),
             ),
           ],
-          if (type == DashboardWidgetType.webEmbed) ...[
+          if (type == 'web_embed') ...[
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               initialValue: _sandboxProfile,
@@ -1651,7 +1674,7 @@ class _DashboardWidgetConfigEditorState
             ),
           ],
         ],
-        if (type == DashboardWidgetType.markdown) ...[
+        if (type == 'markdown') ...[
           TextField(
             controller: _markdownCtrl,
             decoration: const InputDecoration(
@@ -1663,7 +1686,7 @@ class _DashboardWidgetConfigEditorState
             onChanged: (_) => _emit(),
           ),
         ],
-        if (type == DashboardWidgetType.historyChart) ...[
+        if (type == 'history_chart') ...[
           DropdownButtonFormField<String>(
             initialValue: devices.any(
                     (device) => device.id == _historyDeviceCtrl.text.trim())
@@ -1760,7 +1783,7 @@ class _DashboardWidgetConfigEditorState
             onChanged: (_) => _emit(),
           ),
         ],
-        if (type == DashboardWidgetType.dashboardLink) ...[
+        if (type == 'dashboard_link') ...[
           _DashboardMultiSelectField(
             dashboards: dashboards,
             selectedIds: _csv(_dashboardIdsCtrl).toSet(),
@@ -2055,56 +2078,25 @@ class _DashboardSelectionDialogState extends State<_DashboardSelectionDialog> {
 
 String _enumName(Object value) => value.toString().split('.').last;
 
-String _defaultWidgetTitle(DashboardWidgetType type) {
+DashboardRefreshPolicy _defaultRefreshPolicy(String type) {
   switch (type) {
-    case DashboardWidgetType.deviceGrid:
-      return 'Device Grid';
-    case DashboardWidgetType.deviceList:
-      return 'Device List';
-    case DashboardWidgetType.deviceTile:
-      return 'Device Tile';
-    case DashboardWidgetType.statSummary:
-      return 'Summary';
-    case DashboardWidgetType.modeChips:
-      return 'Modes';
-    case DashboardWidgetType.sceneRow:
-      return 'Scenes';
-    case DashboardWidgetType.eventFeed:
-      return 'Events';
-    case DashboardWidgetType.historyChart:
-      return 'History';
-    case DashboardWidgetType.mediaPlayer:
-      return 'Media';
-    case DashboardWidgetType.cameraVideo:
-      return 'Camera';
-    case DashboardWidgetType.webEmbed:
-      return 'Web Embed';
-    case DashboardWidgetType.markdown:
-      return 'Notes';
-    case DashboardWidgetType.dashboardLink:
-      return 'Dashboard Links';
-  }
-}
-
-DashboardRefreshPolicy _defaultRefreshPolicy(DashboardWidgetType type) {
-  switch (type) {
-    case DashboardWidgetType.webEmbed:
-    case DashboardWidgetType.markdown:
-    case DashboardWidgetType.dashboardLink:
+    case 'web_embed':
+    case 'markdown':
+    case 'dashboard_link':
       return DashboardRefreshPolicy.passive;
-    case DashboardWidgetType.cameraVideo:
+    case 'camera_video':
       return DashboardRefreshPolicy.poll;
     default:
       return DashboardRefreshPolicy.live;
   }
 }
 
-Map<String, dynamic> _defaultWidgetConfig(DashboardWidgetType type) {
+Map<String, dynamic> _defaultWidgetConfig(String type) {
   switch (type) {
-    case DashboardWidgetType.deviceGrid:
-    case DashboardWidgetType.deviceList:
-    case DashboardWidgetType.deviceTile:
-    case DashboardWidgetType.mediaPlayer:
+    case 'device_grid':
+    case 'device_list':
+    case 'device_tile':
+    case 'media_player':
       return {
         'selection_mode': 'query',
         'query': '',
@@ -2112,33 +2104,33 @@ Map<String, dynamic> _defaultWidgetConfig(DashboardWidgetType type) {
         'limit': 8,
         'show_offline': true,
       };
-    case DashboardWidgetType.statSummary:
+    case 'stat_summary':
       return {
         'metrics': ['devices', 'on', 'offline'],
       };
-    case DashboardWidgetType.eventFeed:
+    case 'event_feed':
       return {'limit': 10, 'group_by': 'none'};
-    case DashboardWidgetType.cameraVideo:
+    case 'camera_video':
       return {
         'source_type': 'image_refresh',
         'url': '',
         'refresh_secs': 15,
       };
-    case DashboardWidgetType.webEmbed:
+    case 'web_embed':
       return {
         'url': '',
         'sandbox_profile': 'readonly_embed',
       };
-    case DashboardWidgetType.markdown:
+    case 'markdown':
       return {'markdown': ''};
-    case DashboardWidgetType.historyChart:
+    case 'history_chart':
       return {
         'device_id': '',
         'attribute': '',
         'limit': 50,
         'timeframe_hours': 24,
       };
-    case DashboardWidgetType.dashboardLink:
+    case 'dashboard_link':
       return {'dashboard_ids': <String>[]};
     default:
       return {};

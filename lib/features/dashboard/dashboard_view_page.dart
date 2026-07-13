@@ -5,6 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/api/history_api.dart';
+import '../../core/dashboard/widget_registry.dart';
+import '../../core/devices/presentation.dart';
+import '../../design/components/hc_surface.dart';
+import '../../design/tokens.dart';
 import '../../core/models/dashboard.dart';
 import '../../core/models/device_state.dart';
 import '../../core/models/hc_event.dart';
@@ -183,40 +187,27 @@ class _DashboardWidgetCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final sizeHint = dashboardWidgetSizeHint(widgetModel.type);
-    final isCompact = placement.w < sizeHint.recommendedW ||
-        placement.h < sizeHint.recommendedH;
-    final isVeryCompact =
-        placement.w <= sizeHint.minW || placement.h <= sizeHint.minH;
-    final body = switch (widgetModel.type) {
-      DashboardWidgetType.statSummary =>
-        _StatSummaryWidget(widgetModel: widgetModel, compact: isCompact),
-      DashboardWidgetType.deviceGrid => _DeviceGridWidget(
-          widgetModel: widgetModel,
-          compact: isCompact,
-          veryCompact: isVeryCompact),
-      DashboardWidgetType.deviceList =>
-        _DeviceListWidget(widgetModel: widgetModel, compact: isCompact),
-      DashboardWidgetType.deviceTile =>
-        _DeviceTileWidget(widgetModel: widgetModel),
-      DashboardWidgetType.modeChips => const _ModeChipsWidget(),
-      DashboardWidgetType.sceneRow => const _SceneRowWidget(),
-      DashboardWidgetType.eventFeed =>
-        _EventFeedWidget(widgetModel: widgetModel, compact: isCompact),
-      DashboardWidgetType.mediaPlayer => _MediaPlayerDashboardWidget(
-          widgetModel: widgetModel, compact: isCompact),
-      DashboardWidgetType.markdown => _MarkdownWidget(widgetModel: widgetModel),
-      DashboardWidgetType.dashboardLink => _DashboardLinkWidget(
-          current: dashboard,
-          widgetModel: widgetModel,
-          compact: isCompact,
-          veryCompact: isVeryCompact),
-      DashboardWidgetType.cameraVideo =>
-        _CameraVideoWidget(widgetModel: widgetModel),
-      DashboardWidgetType.webEmbed => _WebEmbedWidget(widgetModel: widgetModel),
-      DashboardWidgetType.historyChart =>
-        _HistoryChartWidget(widgetModel: widgetModel, compact: isCompact),
-    };
+    // Dispatch by wire type through the registry. There is no exhaustive switch
+    // any more, so a type this build has never heard of — a newer core's card,
+    // or a plugin's — renders as [UnknownWidget] and keeps its config, rather
+    // than being silently coerced into a markdown card.
+    final descriptor = WidgetRegistry.lookup(widgetModel.type);
+    final sizeHint = descriptor?.sizeHint ?? const WidgetSizeHint();
+
+    final body = descriptor == null
+        ? UnknownWidget(type: widgetModel.type)
+        : descriptor.builder(
+            context,
+            WidgetRenderArgs(
+              id: widgetModel.id,
+              title: widgetModel.title,
+              subtitle: widgetModel.subtitle,
+              config: widgetModel.config,
+              w: placement.w,
+              h: placement.h,
+              sizeHint: sizeHint,
+            ),
+          );
 
     return Card(
       margin: EdgeInsets.zero,
@@ -1037,7 +1028,9 @@ class _MarkdownWidget extends StatelessWidget {
 }
 
 class _DashboardLinkWidget extends ConsumerWidget {
-  final DashboardDefinition current;
+  /// Null when rendered through the registry, which does not carry the enclosing
+  /// dashboard. Used only to omit a self-link, so its absence is harmless.
+  final DashboardDefinition? current;
   final DashboardWidgetModel widgetModel;
   final bool compact;
   final bool veryCompact;
@@ -1056,7 +1049,7 @@ class _DashboardLinkWidget extends ConsumerWidget {
         ((widgetModel.config['dashboard_ids'] as List?) ?? const [])
             .whereType<String>()
             .toSet();
-    var others = dashboards.where((dashboard) => dashboard.id != current.id);
+    var others = dashboards.where((dashboard) => dashboard.id != current?.id);
     if (configuredIds.isNotEmpty) {
       others =
           others.where((dashboard) => configuredIds.contains(dashboard.id));
@@ -1081,9 +1074,9 @@ class _DashboardLinkWidget extends ConsumerWidget {
               icon: const Icon(Icons.add),
               label: Text(compact ? 'New' : 'New Dashboard'),
             ),
-            if (!veryCompact)
+            if (!veryCompact && current != null)
               OutlinedButton.icon(
-                onPressed: () => context.go('/dashboards/${current.id}/edit'),
+                onPressed: () => context.go('/dashboards/${current!.id}/edit'),
                 icon: const Icon(Icons.edit_outlined),
                 label: Text(compact ? 'Edit' : 'Edit This Dashboard'),
               ),
@@ -1487,6 +1480,517 @@ class _PlaceholderWidget extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
       ),
       child: Text(message),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Built-in cards
+// ---------------------------------------------------------------------------
+
+/// Registers the cards this app ships with.
+///
+/// They go through exactly the same registry a plugin's card would, so there is
+/// no privileged path: if a built-in can do it, a contributed card can too.
+/// Called once from `main()`.
+void registerBuiltinDashboardWidgets() {
+  WidgetRegistry.registerAll([
+    WidgetDescriptor(
+      type: 'house_status_hero',
+      title: 'House status',
+      description: 'System tiles derived from the live device map.',
+      icon: Icons.home_outlined,
+      sizeHint: const WidgetSizeHint(
+          minW: 4, minH: 2, recommendedW: 12, recommendedH: 3),
+      // Core accepts any object (or null) here.
+      builder: (context, a) => _HouseStatusHeroWidget(config: a.config),
+    ),
+    WidgetDescriptor(
+      type: 'stat_summary',
+      title: 'Stat summary',
+      icon: Icons.numbers_outlined,
+      sizeHint: const WidgetSizeHint(
+          minW: 3, minH: 2, recommendedW: 6, recommendedH: 2),
+      configFields: const [
+        WidgetConfigField('metrics', WidgetConfigKind.stringList,
+            required: true, help: 'At least one metric.'),
+      ],
+      validate: (c) => (c['metrics'] as List?)?.isNotEmpty == true
+          ? null
+          : 'Pick at least one metric.',
+      builder: (context, a) => _StatSummaryWidget(
+        widgetModel: _modelOf(a, 'stat_summary'),
+        compact: a.isCompact,
+      ),
+    ),
+    WidgetDescriptor(
+      type: 'device_grid',
+      title: 'Device grid',
+      icon: Icons.grid_view_outlined,
+      sizeHint: const WidgetSizeHint(
+          minW: 4, minH: 2, recommendedW: 8, recommendedH: 2),
+      configFields: _selectionFields,
+      validate: _validateSelection,
+      builder: (context, a) => _DeviceGridWidget(
+        widgetModel: _modelOf(a, 'device_grid'),
+        compact: a.isCompact,
+        veryCompact: a.isVeryCompact,
+      ),
+    ),
+    WidgetDescriptor(
+      type: 'device_list',
+      title: 'Device list',
+      icon: Icons.list_alt_outlined,
+      sizeHint: const WidgetSizeHint(
+          minW: 3, minH: 2, recommendedW: 6, recommendedH: 2),
+      configFields: _selectionFields,
+      validate: _validateSelection,
+      builder: (context, a) => _DeviceListWidget(
+        widgetModel: _modelOf(a, 'device_list'),
+        compact: a.isCompact,
+      ),
+    ),
+    WidgetDescriptor(
+      type: 'device_tile',
+      title: 'Device tile',
+      icon: Icons.crop_square_outlined,
+      sizeHint: const WidgetSizeHint(
+          minW: 2, minH: 1, recommendedW: 3, recommendedH: 1),
+      configFields: _selectionFields,
+      validate: _validateSelection,
+      builder: (context, a) =>
+          _DeviceTileWidget(widgetModel: _modelOf(a, 'device_tile')),
+    ),
+    WidgetDescriptor(
+      type: 'media_player',
+      title: 'Media player',
+      icon: Icons.speaker_outlined,
+      sizeHint: const WidgetSizeHint(
+          minW: 4, minH: 2, recommendedW: 6, recommendedH: 2),
+      configFields: _selectionFields,
+      validate: _validateSelection,
+      builder: (context, a) => _MediaPlayerDashboardWidget(
+        widgetModel: _modelOf(a, 'media_player'),
+        compact: a.isCompact,
+      ),
+    ),
+    WidgetDescriptor(
+      type: 'mode_chips',
+      title: 'Modes',
+      icon: Icons.tune_outlined,
+      sizeHint: const WidgetSizeHint(
+          minW: 3, minH: 1, recommendedW: 6, recommendedH: 1),
+      builder: (context, a) => const _ModeChipsWidget(),
+    ),
+    WidgetDescriptor(
+      type: 'scene_row',
+      title: 'Scenes',
+      icon: Icons.movie_outlined,
+      sizeHint: const WidgetSizeHint(
+          minW: 3, minH: 1, recommendedW: 6, recommendedH: 1),
+      builder: (context, a) => const _SceneRowWidget(),
+    ),
+    WidgetDescriptor(
+      type: 'event_feed',
+      title: 'Event feed',
+      icon: Icons.event_note_outlined,
+      sizeHint: const WidgetSizeHint(
+          minW: 4, minH: 2, recommendedW: 5, recommendedH: 2),
+      configFields: const [
+        WidgetConfigField('limit', WidgetConfigKind.integer),
+        WidgetConfigField('group_by', WidgetConfigKind.choice,
+            options: ['none', 'type', 'device', 'area']),
+        WidgetConfigField('area_name', WidgetConfigKind.areaName),
+      ],
+      builder: (context, a) => _EventFeedWidget(
+        widgetModel: _modelOf(a, 'event_feed'),
+        compact: a.isCompact,
+      ),
+    ),
+    WidgetDescriptor(
+      type: 'history_chart',
+      title: 'History chart',
+      icon: Icons.show_chart_outlined,
+      sizeHint: const WidgetSizeHint(
+          minW: 4, minH: 2, recommendedW: 8, recommendedH: 2),
+      configFields: const [
+        WidgetConfigField('device_id', WidgetConfigKind.deviceRef,
+            required: true),
+        WidgetConfigField('attribute', WidgetConfigKind.attribute,
+            required: true),
+        WidgetConfigField('timeframe_hours', WidgetConfigKind.integer),
+      ],
+      // Core requires both; a chart missing either 400s the whole dashboard.
+      validate: (c) => (c['device_id'] as String?)?.isNotEmpty == true &&
+              (c['attribute'] as String?)?.isNotEmpty == true
+          ? null
+          : 'Pick a device and an attribute.',
+      builder: (context, a) => _HistoryChartWidget(
+        widgetModel: _modelOf(a, 'history_chart'),
+        compact: a.isCompact,
+      ),
+    ),
+    WidgetDescriptor(
+      type: 'markdown',
+      title: 'Markdown',
+      icon: Icons.notes_outlined,
+      sizeHint: const WidgetSizeHint(
+          minW: 3, minH: 1, recommendedW: 6, recommendedH: 2),
+      configFields: const [
+        WidgetConfigField('markdown', WidgetConfigKind.markdown,
+            required: true),
+      ],
+      validate: (c) => (c['markdown'] as String?)?.isNotEmpty == true
+          ? null
+          : 'Write something.',
+      builder: (context, a) =>
+          _MarkdownWidget(widgetModel: _modelOf(a, 'markdown')),
+    ),
+    WidgetDescriptor(
+      type: 'camera_video',
+      title: 'Camera',
+      icon: Icons.videocam_outlined,
+      sizeHint: const WidgetSizeHint(
+          minW: 4, minH: 2, recommendedW: 6, recommendedH: 3),
+      configFields: const [
+        WidgetConfigField('source_type', WidgetConfigKind.choice,
+            required: true,
+            options: ['image_refresh', 'mjpeg', 'hls', 'webrtc']),
+        WidgetConfigField('url', WidgetConfigKind.url, required: true),
+        WidgetConfigField('refresh_secs', WidgetConfigKind.integer),
+      ],
+      validate: (c) => (c['url'] as String?)?.isNotEmpty == true &&
+              (c['source_type'] as String?)?.isNotEmpty == true
+          ? null
+          : 'A camera needs a source type and a URL.',
+      builder: (context, a) =>
+          _CameraVideoWidget(widgetModel: _modelOf(a, 'camera_video')),
+    ),
+    WidgetDescriptor(
+      type: 'web_embed',
+      title: 'Web embed',
+      icon: Icons.public_outlined,
+      sizeHint: const WidgetSizeHint(
+          minW: 4, minH: 2, recommendedW: 6, recommendedH: 3),
+      configFields: const [
+        WidgetConfigField('url', WidgetConfigKind.url, required: true),
+        WidgetConfigField('sandbox_profile', WidgetConfigKind.choice, options: [
+          'readonly_embed',
+          'trusted_internal',
+          'strict_isolated',
+        ]),
+      ],
+      validate: (c) =>
+          (c['url'] as String?)?.isNotEmpty == true ? null : 'A URL is needed.',
+      builder: (context, a) =>
+          _WebEmbedWidget(widgetModel: _modelOf(a, 'web_embed')),
+    ),
+    WidgetDescriptor(
+      type: 'dashboard_link',
+      title: 'Dashboard links',
+      icon: Icons.link_outlined,
+      sizeHint: const WidgetSizeHint(
+          minW: 4, minH: 1, recommendedW: 6, recommendedH: 2),
+      configFields: const [
+        WidgetConfigField('dashboard_ids', WidgetConfigKind.stringList),
+      ],
+      builder: (context, a) => _DashboardLinkWidget(
+        current: null,
+        widgetModel: _modelOf(a, 'dashboard_link'),
+        compact: a.isCompact,
+        veryCompact: a.isVeryCompact,
+      ),
+    ),
+  ]);
+}
+
+/// The selection contract shared by the device-oriented cards. Core rejects any
+/// of them whose `selection_mode` is missing or unknown.
+const _selectionFields = [
+  WidgetConfigField('selection_mode', WidgetConfigKind.choice,
+      required: true,
+      defaultValue: 'manual',
+      options: ['manual', 'area', 'query']),
+  WidgetConfigField('device_ids', WidgetConfigKind.deviceRefs),
+  WidgetConfigField('area_name', WidgetConfigKind.areaName),
+  WidgetConfigField('query', WidgetConfigKind.text),
+  WidgetConfigField('limit', WidgetConfigKind.integer),
+  WidgetConfigField('show_offline', WidgetConfigKind.boolean),
+];
+
+String? _validateSelection(Map<String, dynamic> c) {
+  final mode = c['selection_mode'] as String?;
+  if (mode == null || !const ['manual', 'area', 'query'].contains(mode)) {
+    return 'Choose how devices are selected.';
+  }
+  // Core requires area_name specifically when the mode is `area`.
+  if (mode == 'area' && (c['area_name'] as String?)?.isNotEmpty != true) {
+    return 'Pick an area.';
+  }
+  return null;
+}
+
+/// Bridges the registry's args back to the model the existing card bodies take.
+DashboardWidgetModel _modelOf(WidgetRenderArgs a, String type) =>
+    DashboardWidgetModel(
+      id: a.id,
+      type: type,
+      title: a.title,
+      subtitle: a.subtitle,
+      refreshPolicy: DashboardRefreshPolicy.live,
+      config: a.config,
+    );
+
+/// The "House Status" hero.
+///
+/// Core has shipped `house_status_hero` on the default dashboard for a while,
+/// but this client never implemented it — the closed enum quietly rendered it as
+/// a *markdown* card instead. This is the card it was always supposed to be:
+/// a handful of whole-house tiles derived from the live device map, so a wall
+/// panel answers "is everything alright?" from across the room.
+///
+/// Every tile is computed from device *facets*, never from `device_type`, which
+/// plugins get wrong often enough that it cannot be trusted here.
+class _HouseStatusHeroWidget extends ConsumerWidget {
+  const _HouseStatusHeroWidget({required this.config});
+
+  final Map<String, dynamic> config;
+
+  static const _defaultSystems = [
+    'lighting',
+    'climate',
+    'security',
+    'battery',
+    'media',
+    'activity',
+  ];
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = HcTokens.of(context);
+    final devices = ref.watch(devicesProvider).valueOrNull ?? const [];
+
+    final systems = ((config['systems'] as List?) ?? _defaultSystems)
+        .map((s) => '$s')
+        .toList();
+
+    final tiles = [
+      for (final s in systems)
+        if (_tileFor(s, devices, t) case final tile?) tile,
+    ];
+
+    if (tiles.isEmpty) {
+      return const Center(child: Text('No systems to show.'));
+    }
+
+    return LayoutBuilder(
+      builder: (context, box) => Wrap(
+        spacing: t.space.md,
+        runSpacing: t.space.md,
+        children: [
+          for (final tile in tiles)
+            SizedBox(
+              width: box.maxWidth >= 640
+                  ? (box.maxWidth - t.space.md * (tiles.length - 1)) /
+                      tiles.length
+                  : (box.maxWidth - t.space.md) / 2,
+              child: tile,
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget? _tileFor(String system, List<DeviceState> devices, HcTokens t) {
+    switch (system) {
+      case 'lighting':
+        final lights = devices.where((d) {
+          final f = facetOf(d, d.schema);
+          return f == DeviceFacet.light ||
+              f == DeviceFacet.dimmableLight ||
+              f == DeviceFacet.colorLight;
+        }).toList();
+        final on = lights.where(isOn).length;
+        return _SystemTile(
+          icon: Icons.lightbulb_outline,
+          label: 'Lighting',
+          value: '$on',
+          detail: on == 0 ? 'all off' : 'of ${lights.length} on',
+          active: on > 0,
+        );
+
+      case 'climate':
+        final temps = [
+          for (final d in devices)
+            if (d.state['temperature'] case final num v) v.toDouble(),
+        ];
+        if (temps.isEmpty) return null;
+        final avg = temps.reduce((a, b) => a + b) / temps.length;
+        return _SystemTile(
+          icon: Icons.thermostat_outlined,
+          label: 'Climate',
+          value: avg.toStringAsFixed(1),
+          detail: 'average of ${temps.length}',
+          active: false,
+        );
+
+      case 'security':
+        // Anything open or unlocked. This is the tile someone actually walks
+        // over to read, so it must be unambiguous: zero is calm, non-zero is not.
+        final open = devices.where((d) {
+          if (d.state['open'] == true) return true;
+          if (d.state['locked'] == false) return true;
+          return false;
+        }).toList();
+        return _SystemTile(
+          icon: open.isEmpty ? Icons.lock_outline : Icons.lock_open_outlined,
+          label: 'Security',
+          value: open.isEmpty ? 'Secure' : '${open.length}',
+          detail: open.isEmpty
+              ? 'all closed'
+              : open.map((d) => d.displayName).take(2).join(', '),
+          active: open.isNotEmpty,
+          alert: open.isNotEmpty,
+        );
+
+      case 'battery':
+        final batteries = [
+          for (final d in devices)
+            if (d.state['battery'] case final num v) (d, v.toDouble()),
+        ];
+        if (batteries.isEmpty) return null;
+        batteries.sort((a, b) => a.$2.compareTo(b.$2));
+        final lowest = batteries.first;
+        final low = lowest.$2 <= 20;
+        return _SystemTile(
+          icon: low ? Icons.battery_alert_outlined : Icons.battery_full,
+          label: 'Battery',
+          value: '${lowest.$2.round()}%',
+          detail: low ? lowest.$1.displayName : 'lowest of ${batteries.length}',
+          active: false,
+          alert: low,
+        );
+
+      case 'media':
+        final players = devices
+            .where((d) => facetOf(d, d.schema) == DeviceFacet.mediaPlayer)
+            .toList();
+        if (players.isEmpty) return null;
+        final playing = players.where((d) => d.playbackState == 'playing');
+        return _SystemTile(
+          icon: Icons.speaker_outlined,
+          label: 'Media',
+          value: playing.isEmpty ? 'Idle' : '${playing.length}',
+          detail: playing.isEmpty
+              ? '${players.length} idle'
+              : playing.map((d) => d.displayName).take(2).join(', '),
+          active: playing.isNotEmpty,
+        );
+
+      case 'energy':
+        final watts = [
+          for (final d in devices)
+            if (d.state['power'] case final num v) v.toDouble(),
+        ];
+        if (watts.isEmpty) return null;
+        final total = watts.reduce((a, b) => a + b);
+        return _SystemTile(
+          icon: Icons.bolt_outlined,
+          label: 'Energy',
+          value: total.round().toString(),
+          detail: 'W across ${watts.length}',
+          active: total > 0,
+        );
+
+      case 'activity':
+        final motion = devices.where((d) {
+          final f = facetOf(d, d.schema);
+          return (f == DeviceFacet.motion || f == DeviceFacet.occupancy) &&
+              isOn(d);
+        }).toList();
+        return _SystemTile(
+          icon: Icons.sensors,
+          label: 'Activity',
+          value: motion.isEmpty ? 'Quiet' : '${motion.length}',
+          detail: motion.isEmpty
+              ? 'no motion'
+              : motion.map((d) => d.displayName).take(2).join(', '),
+          active: motion.isNotEmpty,
+        );
+
+      // An unrecognised system is skipped rather than guessed at.
+      default:
+        return null;
+    }
+  }
+}
+
+class _SystemTile extends StatelessWidget {
+  const _SystemTile({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.detail,
+    required this.active,
+    this.alert = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final String detail;
+  final bool active;
+  final bool alert;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    final accent = alert
+        ? t.accent.warn
+        : active
+            ? t.accent.active
+            : t.surface.onBaseMuted;
+
+    return HcSurface(
+      glowColor: alert ? t.accent.warn : t.accent.active,
+      glowIntensity: (alert || active) ? 0.7 : 0,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 16, color: accent),
+              SizedBox(width: t.space.sm),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: t.surface.onBaseMuted,
+                  letterSpacing: 0.4,
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: t.space.sm),
+          HcValue(
+            value,
+            style: TextStyle(
+              fontSize: 30,
+              fontWeight: FontWeight.w300,
+              height: 1,
+              color: accent,
+            ),
+          ),
+          SizedBox(height: t.space.xs),
+          Text(
+            detail,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 11, color: t.surface.onBaseMuted),
+          ),
+        ],
+      ),
     );
   }
 }
