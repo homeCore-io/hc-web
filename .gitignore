@@ -1,6 +1,15 @@
 # Miscellaneous
 *.class
 *.lock
+# ...but NOT pubspec.lock. The blanket *.lock above (a Rust-template leftover,
+# aimed at Cargo.lock) was silently excluding it, which meant the Dockerfile's
+# `COPY pubspec.yaml pubspec.lock ./` could never succeed from a clean checkout —
+# and nothing ever built the image, so nothing ever said so.
+#
+# hc-web is an application, not a library: the lockfile pins transitive
+# dependency resolution, so an image built from a tag resolves the same packages
+# it resolved on the day it shipped. Same reason the Flutter toolchain is pinned.
+!pubspec.lock
 *.log
 *.pyc
 *.swp
