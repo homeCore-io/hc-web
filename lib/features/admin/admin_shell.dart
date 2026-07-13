@@ -9,7 +9,11 @@ class AdminShell extends StatelessWidget {
     (label: 'Users', icon: Icons.people_outline, path: '/admin/users'),
     (label: 'Plugins', icon: Icons.extension_outlined, path: '/admin/plugins'),
     (label: 'Areas', icon: Icons.room_outlined, path: '/admin/areas'),
-    (label: 'System', icon: Icons.monitor_heart_outlined, path: '/admin/system'),
+    (
+      label: 'System',
+      icon: Icons.monitor_heart_outlined,
+      path: '/admin/system'
+    ),
     (label: 'Logs', icon: Icons.terminal_outlined, path: '/admin/logs'),
   ];
 

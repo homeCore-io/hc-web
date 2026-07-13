@@ -4,7 +4,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 const _kUtcKey = 'time_display_utc';
 
 class TimeDisplayNotifier extends StateNotifier<bool> {
-  TimeDisplayNotifier() : super(false) { _load(); }
+  TimeDisplayNotifier() : super(false) {
+    _load();
+  }
 
   Future<void> _load() async {
     final p = await SharedPreferences.getInstance();

@@ -87,8 +87,8 @@ class _ServerLogsPageState extends ConsumerState<_ServerLogsPage> {
         if (_autoScroll) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (_scrollController.hasClients) {
-              _scrollController.jumpTo(
-                  _scrollController.position.maxScrollExtent);
+              _scrollController
+                  .jumpTo(_scrollController.position.maxScrollExtent);
             }
           });
         }
@@ -122,14 +122,12 @@ class _ServerLogsPageState extends ConsumerState<_ServerLogsPage> {
 
   @override
   Widget build(BuildContext context) {
-    var filtered = _entries
-        .where((e) => e.severity >= _levelSeverity(_minLevel))
-        .toList();
+    var filtered =
+        _entries.where((e) => e.severity >= _levelSeverity(_minLevel)).toList();
     if (_moduleFilter.isNotEmpty) {
       final q = _moduleFilter.toLowerCase();
-      filtered = filtered
-          .where((e) => e.target.toLowerCase().contains(q))
-          .toList();
+      filtered =
+          filtered.where((e) => e.target.toLowerCase().contains(q)).toList();
     }
 
     return Column(
@@ -183,8 +181,7 @@ class _ServerLogsPageState extends ConsumerState<_ServerLogsPage> {
                       label: Text(level, style: const TextStyle(fontSize: 11)),
                       selected: _minLevel == level,
                       visualDensity: VisualDensity.compact,
-                      onSelected: (_) =>
-                          setState(() => _minLevel = level),
+                      onSelected: (_) => setState(() => _minLevel = level),
                     ),
                   ),
                 const SizedBox(width: 4),
@@ -197,13 +194,12 @@ class _ServerLogsPageState extends ConsumerState<_ServerLogsPage> {
                   icon: Icon(_autoScroll
                       ? Icons.vertical_align_bottom
                       : Icons.pause_outlined),
-                  tooltip:
-                      _autoScroll ? 'Auto-scroll on' : 'Auto-scroll off',
+                  tooltip: _autoScroll ? 'Auto-scroll on' : 'Auto-scroll off',
                   onPressed: () => setState(() {
                     _autoScroll = !_autoScroll;
                     if (_autoScroll && _scrollController.hasClients) {
-                      _scrollController.jumpTo(
-                          _scrollController.position.maxScrollExtent);
+                      _scrollController
+                          .jumpTo(_scrollController.position.maxScrollExtent);
                     }
                   }),
                 ),
@@ -223,11 +219,10 @@ class _ServerLogsPageState extends ConsumerState<_ServerLogsPage> {
               : SelectionArea(
                   child: ListView.builder(
                     controller: _scrollController,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     itemCount: filtered.length,
-                    itemBuilder: (context, i) =>
-                        _LogRow(entry: filtered[i]),
+                    itemBuilder: (context, i) => _LogRow(entry: filtered[i]),
                   ),
                 ),
         ),
@@ -252,7 +247,8 @@ class _ClientErrorsTab extends ConsumerWidget {
     final errors = ref.watch(clientErrorLogProvider);
 
     if (errors.isEmpty) {
-      return const Center(child: Text('No client errors recorded this session.'));
+      return const Center(
+          child: Text('No client errors recorded this session.'));
     }
 
     return Column(
@@ -277,8 +273,7 @@ class _ClientErrorsTab extends ConsumerWidget {
         Expanded(
           child: SelectionArea(
             child: ListView.separated(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               itemCount: errors.length,
               separatorBuilder: (_, __) => const Divider(height: 1),
               itemBuilder: (context, i) {
@@ -310,8 +305,7 @@ class _ClientErrorsTab extends ConsumerWidget {
                               fontFamily: 'monospace',
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
-                              color:
-                                  Theme.of(context).colorScheme.error,
+                              color: Theme.of(context).colorScheme.error,
                             ),
                           ),
                         ],
@@ -361,11 +355,10 @@ class _LogRow extends ConsumerWidget {
 
     return InkWell(
       onLongPress: () {
-        final text =
-            '[${entry.level}] ${entry.target}: ${entry.message}';
+        final text = '[${entry.level}] ${entry.target}: ${entry.message}';
         Clipboard.setData(ClipboardData(text: text));
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Copied'), duration: Duration(seconds: 1)));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Copied'), duration: Duration(seconds: 1)));
       },
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 1),

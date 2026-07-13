@@ -48,9 +48,7 @@ class ModeState {
       case 'mode_night':
         return 'Night Mode';
       default:
-        return id
-            .replaceFirst('mode_', '')
-            .replaceAll('_', ' ');
+        return id.replaceFirst('mode_', '').replaceAll('_', ' ');
     }
   }
 }

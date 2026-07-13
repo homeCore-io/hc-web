@@ -55,8 +55,7 @@ class AreasPage extends ConsumerWidget {
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel')),
+              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           FilledButton(
             onPressed: () async {
               if (ctrl.text.isEmpty) return;
@@ -103,8 +102,8 @@ class _AreaCard extends ConsumerWidget {
           children: [
             Row(children: [
               Expanded(
-                child: Text(name,
-                    style: Theme.of(context).textTheme.titleMedium),
+                child:
+                    Text(name, style: Theme.of(context).textTheme.titleMedium),
               ),
               IconButton(
                 icon: const Icon(Icons.edit_outlined),
@@ -114,8 +113,7 @@ class _AreaCard extends ConsumerWidget {
               IconButton(
                 icon: const Icon(Icons.devices_other),
                 tooltip: 'Manage devices',
-                onPressed: () =>
-                    _showDeviceDialog(context, ref, devices),
+                onPressed: () => _showDeviceDialog(context, ref, devices),
               ),
               IconButton(
                 icon: const Icon(Icons.delete_outline),
@@ -161,8 +159,7 @@ class _AreaCard extends ConsumerWidget {
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel')),
+              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           FilledButton(
             onPressed: () async {
               if (ctrl.text.isEmpty || ctrl.text == name) {

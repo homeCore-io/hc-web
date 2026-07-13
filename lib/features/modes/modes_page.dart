@@ -60,8 +60,7 @@ class ModesPage extends ConsumerWidget {
               const SizedBox(height: 8),
               TextField(
                   controller: nameCtrl,
-                  decoration:
-                      const InputDecoration(labelText: 'Display name')),
+                  decoration: const InputDecoration(labelText: 'Display name')),
               const SizedBox(height: 8),
               DropdownButton<String>(
                 value: kind,
@@ -88,8 +87,8 @@ class ModesPage extends ConsumerWidget {
                   ref.invalidate(modesProvider);
                 } catch (e) {
                   if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Failed: $e')));
+                    ScaffoldMessenger.of(context)
+                        .showSnackBar(SnackBar(content: Text('Failed: $e')));
                   }
                 }
               },
@@ -255,8 +254,7 @@ class _InfoRow extends StatelessWidget {
         child: Row(children: [
           SizedBox(
               width: 120,
-              child: Text(label,
-                  style: Theme.of(context).textTheme.bodySmall)),
+              child: Text(label, style: Theme.of(context).textTheme.bodySmall)),
           Text(value),
         ]),
       );

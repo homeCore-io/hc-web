@@ -16,7 +16,8 @@ class _SceneFilter {
   final String type; // 'all' | 'native' | 'plugin'
   final String sort; // 'name_asc' | 'name_desc'
 
-  const _SceneFilter({this.search = '', this.type = 'all', this.sort = 'name_asc'});
+  const _SceneFilter(
+      {this.search = '', this.type = 'all', this.sort = 'name_asc'});
 
   _SceneFilter copyWith({String? search, String? type, String? sort}) =>
       _SceneFilter(
@@ -35,6 +36,7 @@ final _sceneFilterProvider =
 class _DisplayScene {
   final String id;
   final String name;
+
   /// true = plugin-managed scene device; false = HomeCore-native scene
   final bool isPlugin;
   final List<String> deviceIds;
@@ -85,7 +87,9 @@ class _ScenesPageState extends ConsumerState<ScenesPage> {
   List<_DisplayScene> _applyFilter(List<_DisplayScene> scenes, _SceneFilter f) {
     var out = scenes.where((s) {
       if (f.search.isNotEmpty &&
-          !s.name.toLowerCase().contains(f.search.toLowerCase())) return false;
+          !s.name.toLowerCase().contains(f.search.toLowerCase())) {
+        return false;
+      }
       if (f.type == 'native' && s.isPlugin) return false;
       if (f.type == 'plugin' && !s.isPlugin) return false;
       return true;
@@ -329,10 +333,8 @@ class _SceneRowState extends ConsumerState<_SceneRow> {
   @override
   Widget build(BuildContext context) {
     final s = widget.scene;
-    final deviceNames = s.deviceIds
-        .take(3)
-        .map((id) => widget.resolver.resolve(id))
-        .join(', ');
+    final deviceNames =
+        s.deviceIds.take(3).map((id) => widget.resolver.resolve(id)).join(', ');
     final overflow =
         s.deviceIds.length > 3 ? ' +${s.deviceIds.length - 3}' : '';
 
@@ -342,8 +344,7 @@ class _SceneRowState extends ConsumerState<_SceneRow> {
         InkWell(
           onTap: s.isPlugin ? null : () => context.push('/scenes/${s.id}'),
           child: Padding(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             child: Row(
               children: [
                 // Name
@@ -367,9 +368,7 @@ class _SceneRowState extends ConsumerState<_SceneRow> {
                       if (!s.isPlugin && s.deviceIds.isNotEmpty)
                         IconButton(
                           icon: Icon(
-                            _expanded
-                                ? Icons.expand_less
-                                : Icons.expand_more,
+                            _expanded ? Icons.expand_less : Icons.expand_more,
                             size: 16,
                           ),
                           padding: EdgeInsets.zero,
@@ -390,13 +389,10 @@ class _SceneRowState extends ConsumerState<_SceneRow> {
                               .textTheme
                               .bodySmall
                               ?.copyWith(
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .secondary))
+                                  color:
+                                      Theme.of(context).colorScheme.secondary))
                       : Text(
-                          s.deviceIds.isEmpty
-                              ? '—'
-                              : '$deviceNames$overflow',
+                          s.deviceIds.isEmpty ? '—' : '$deviceNames$overflow',
                           style: Theme.of(context).textTheme.bodySmall,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -452,7 +448,10 @@ class _SceneRowState extends ConsumerState<_SceneRow> {
         // Expanded device list
         if (_expanded && s.deviceIds.isNotEmpty)
           Container(
-            color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+            color: Theme.of(context)
+                .colorScheme
+                .surfaceContainerHighest
+                .withValues(alpha: 0.3),
             padding: const EdgeInsets.only(left: 42, right: 16, bottom: 8),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

@@ -23,8 +23,8 @@ final _historyTypeFilterProvider = StateProvider<Set<String>>((ref) => {});
 final _historyDeviceSearchProvider = StateProvider<String>((ref) => '');
 
 // Historical events — family on limit so it re-fetches when limit changes
-final _historyEventsProvider =
-    FutureProvider.autoDispose.family<List<EventEntry>, int>((ref, limit) async {
+final _historyEventsProvider = FutureProvider.autoDispose
+    .family<List<EventEntry>, int>((ref, limit) async {
   final client = ref.watch(homecoreClientProvider);
   return EventsHistoryApi(client).listEvents(limit: limit);
 });
@@ -193,8 +193,7 @@ class _LiveTabState extends ConsumerState<_LiveTab> {
                     } else {
                       current.remove(t);
                     }
-                    ref.read(_liveTypeFilterProvider.notifier).state =
-                        current;
+                    ref.read(_liveTypeFilterProvider.notifier).state = current;
                   },
                 ),
               );
@@ -211,8 +210,7 @@ class _LiveTabState extends ConsumerState<_LiveTab> {
             child: ListView.builder(
               controller: _scrollCtrl,
               itemCount: filtered.length,
-              itemBuilder: (context, i) =>
-                  _LiveEventTile(event: filtered[i]),
+              itemBuilder: (context, i) => _LiveEventTile(event: filtered[i]),
             ),
           ),
       ],
@@ -252,10 +250,8 @@ class _LiveEventTile extends ConsumerWidget {
         width: 4,
         child: ColoredBox(color: _color(context)),
       ),
-      title: Text(event.type,
-          style: Theme.of(context).textTheme.bodyMedium),
-      subtitle:
-          event.deviceId != null ? Text(event.deviceId!) : null,
+      title: Text(event.type, style: Theme.of(context).textTheme.bodyMedium),
+      subtitle: event.deviceId != null ? Text(event.deviceId!) : null,
       trailing: Text(fmtTime(event.timestamp, utc: isUtc),
           style: Theme.of(context).textTheme.bodySmall),
     );
@@ -278,8 +274,7 @@ class _HistoryTabState extends ConsumerState<_HistoryTab> {
   void initState() {
     super.initState();
     _searchCtrl.addListener(() {
-      ref.read(_historyDeviceSearchProvider.notifier).state =
-          _searchCtrl.text;
+      ref.read(_historyDeviceSearchProvider.notifier).state = _searchCtrl.text;
     });
   }
 
@@ -359,7 +354,11 @@ class _HistoryTabState extends ConsumerState<_HistoryTab> {
                   visualDensity: VisualDensity.compact,
                   onSelected: (val) {
                     final current = Set<String>.from(typeFilter);
-                    if (val) current.add(t); else current.remove(t);
+                    if (val) {
+                      current.add(t);
+                    } else {
+                      current.remove(t);
+                    }
                     ref.read(_historyTypeFilterProvider.notifier).state =
                         current;
                   },
@@ -371,8 +370,7 @@ class _HistoryTabState extends ConsumerState<_HistoryTab> {
         const Divider(height: 1),
         Expanded(
           child: historyAsync.when(
-            loading: () =>
-                const Center(child: CircularProgressIndicator()),
+            loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, _) => Center(child: Text('Error: $e')),
             data: (entries) {
               var filtered = entries;
@@ -384,8 +382,7 @@ class _HistoryTabState extends ConsumerState<_HistoryTab> {
               if (deviceSearch.isNotEmpty) {
                 final q = deviceSearch.toLowerCase();
                 filtered = filtered
-                    .where(
-                        (e) => e.deviceId?.toLowerCase().contains(q) == true)
+                    .where((e) => e.deviceId?.toLowerCase().contains(q) == true)
                     .toList();
               }
               if (filtered.isEmpty) {
@@ -435,12 +432,10 @@ class _HistoryEventTile extends ConsumerWidget {
         width: 4,
         child: ColoredBox(color: _color(context)),
       ),
-      title: Text(entry.eventType,
-          style: Theme.of(context).textTheme.bodyMedium),
-      subtitle:
-          entry.deviceId != null ? Text(entry.deviceId!) : null,
-      trailing: Text(timeStr,
-          style: Theme.of(context).textTheme.bodySmall),
+      title:
+          Text(entry.eventType, style: Theme.of(context).textTheme.bodyMedium),
+      subtitle: entry.deviceId != null ? Text(entry.deviceId!) : null,
+      trailing: Text(timeStr, style: Theme.of(context).textTheme.bodySmall),
     );
   }
 }

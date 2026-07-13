@@ -15,8 +15,7 @@ class AreasApi {
   }
 
   Future<Map<String, dynamic>> renameArea(String id, String name) async {
-    final response =
-        await client.dio.patch('/areas/$id', data: {'name': name});
+    final response = await client.dio.patch('/areas/$id', data: {'name': name});
     return Map<String, dynamic>.from(response.data as Map);
   }
 

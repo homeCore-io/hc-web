@@ -127,13 +127,17 @@ class _SystemPageState extends ConsumerState<SystemPage> {
               return Card(
                 child: Column(
                   children: [
-                    _StatusRow(Icons.timer_outlined, 'Uptime', _fmtUptime(uptimeSecs)),
+                    _StatusRow(
+                        Icons.timer_outlined, 'Uptime', _fmtUptime(uptimeSecs)),
                     _StatusRow(Icons.info_outline, 'Version', version),
                     _StatusRow(Icons.rule_outlined, 'Rules', '$ruleCount'),
                     _StatusRow(Icons.device_hub, 'Devices', '$deviceCount'),
-                    _StatusRow(Icons.extension_outlined, 'Plugins', '$pluginCount'),
-                    _StatusRow(Icons.storage_outlined, 'State DB', _fmtBytes(stateDbBytes)),
-                    _StatusRow(Icons.history, 'History DB', _fmtBytes(historyDbBytes)),
+                    _StatusRow(
+                        Icons.extension_outlined, 'Plugins', '$pluginCount'),
+                    _StatusRow(Icons.storage_outlined, 'State DB',
+                        _fmtBytes(stateDbBytes)),
+                    _StatusRow(
+                        Icons.history, 'History DB', _fmtBytes(historyDbBytes)),
                   ],
                 ),
               );
@@ -145,7 +149,9 @@ class _SystemPageState extends ConsumerState<SystemPage> {
             child: SwitchListTile(
               secondary: const Icon(Icons.access_time_outlined),
               title: const Text('Show times in UTC'),
-              subtitle: Text(isUtc ? 'Timestamps shown as UTC (Z)' : 'Timestamps shown in local time'),
+              subtitle: Text(isUtc
+                  ? 'Timestamps shown as UTC (Z)'
+                  : 'Timestamps shown in local time'),
               value: isUtc,
               onChanged: (_) => ref.read(timeUtcProvider.notifier).toggle(),
             ),
@@ -156,8 +162,8 @@ class _SystemPageState extends ConsumerState<SystemPage> {
             child: ListTile(
               leading: const Icon(Icons.account_circle_outlined),
               title: Text(currentUser?['username'] as String? ?? '—'),
-              subtitle: Text(
-                  _displayRole(currentUser?['role'] as String? ?? '')),
+              subtitle:
+                  Text(_displayRole(currentUser?['role'] as String? ?? '')),
             ),
           ),
           const SizedBox(height: 16),
@@ -220,8 +226,10 @@ class _StatusRow extends StatelessWidget {
         leading: Icon(icon, size: 20),
         title: Text(label),
         trailing: Text(value,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Theme.of(context).colorScheme.primary)),
+            style: Theme.of(context)
+                .textTheme
+                .bodyMedium
+                ?.copyWith(color: Theme.of(context).colorScheme.primary)),
       );
 }
 

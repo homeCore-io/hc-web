@@ -5,9 +5,9 @@ import 'package:flutter/material.dart';
 class FilterBar extends StatelessWidget {
   final TextEditingController searchController;
   final String searchHint;
-  final List<Widget> chips;        // FilterChip / ChoiceChip widgets
-  final Widget? trailing;          // sort dropdown or other control
-  final String? countLabel;        // e.g. "Showing 4 of 12"
+  final List<Widget> chips; // FilterChip / ChoiceChip widgets
+  final Widget? trailing; // sort dropdown or other control
+  final String? countLabel; // e.g. "Showing 4 of 12"
 
   const FilterBar({
     super.key,
@@ -41,8 +41,8 @@ class FilterBar extends StatelessWidget {
                         : null,
                     isDense: true,
                     border: const OutlineInputBorder(),
-                    contentPadding: const EdgeInsets.symmetric(
-                        vertical: 8, horizontal: 8),
+                    contentPadding:
+                        const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
                   ),
                 ),
               ),

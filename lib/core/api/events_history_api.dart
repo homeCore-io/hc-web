@@ -5,7 +5,8 @@ class EventsHistoryApi {
   final HomecoreClient client;
   EventsHistoryApi(this.client);
 
-  Future<List<EventEntry>> listEvents({int limit = 50, String? type, String? deviceId}) async {
+  Future<List<EventEntry>> listEvents(
+      {int limit = 50, String? type, String? deviceId}) async {
     final params = <String, dynamic>{'limit': limit};
     if (type != null) params['type'] = type;
     if (deviceId != null) params['device_id'] = deviceId;

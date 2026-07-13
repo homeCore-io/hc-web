@@ -60,14 +60,13 @@ class UsersPage extends ConsumerWidget {
             children: [
               TextField(
                   controller: userCtrl,
-                  decoration:
-                      const InputDecoration(labelText: 'Username')),
+                  decoration: const InputDecoration(labelText: 'Username')),
               const SizedBox(height: 8),
               TextField(
                   controller: passCtrl,
                   obscureText: true,
-                  decoration:
-                      const InputDecoration(labelText: 'Password (min 8 chars)')),
+                  decoration: const InputDecoration(
+                      labelText: 'Password (min 8 chars)')),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
                 initialValue: role,
@@ -97,8 +96,8 @@ class UsersPage extends ConsumerWidget {
                   ref.invalidate(usersProvider);
                 } catch (e) {
                   if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Failed: $e')));
+                    ScaffoldMessenger.of(context)
+                        .showSnackBar(SnackBar(content: Text('Failed: $e')));
                   }
                 }
               },
@@ -130,10 +129,12 @@ class _UserTile extends ConsumerWidget {
           Text(user.username),
           if (isSelf) ...[
             const SizedBox(width: 8),
-            const Chip(label: Text('you'), visualDensity: VisualDensity.compact),
+            const Chip(
+                label: Text('you'), visualDensity: VisualDensity.compact),
           ],
         ]),
-        subtitle: Text('${user.displayRole}  ·  joined ${_shortDate(user.createdAt, ref.watch(timeUtcProvider))}'),
+        subtitle: Text(
+            '${user.displayRole}  ·  joined ${_shortDate(user.createdAt, ref.watch(timeUtcProvider))}'),
         trailing: isSelf
             ? null
             : PopupMenuButton<String>(
@@ -141,15 +142,14 @@ class _UserTile extends ConsumerWidget {
                 itemBuilder: (_) => [
                   if (user.role != 'admin')
                     const PopupMenuItem(
-                        value: 'promote',
-                        child: Text('Promote to Admin')),
+                        value: 'promote', child: Text('Promote to Admin')),
                   if (user.role == 'admin')
                     const PopupMenuItem(
                         value: 'demote', child: Text('Demote to User')),
                   const PopupMenuItem(
                       value: 'delete',
-                      child: Text('Delete',
-                          style: TextStyle(color: Colors.red))),
+                      child:
+                          Text('Delete', style: TextStyle(color: Colors.red))),
                 ],
               ),
       ),
