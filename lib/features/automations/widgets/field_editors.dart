@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
+import '../../../core/models/device_state.dart';
 import '../../../core/rules/schema.dart';
 import 'rule_refs.dart';
 
@@ -177,12 +178,27 @@ class FieldEditor extends StatelessWidget {
     final missing =
         current != null && current.isNotEmpty && !refs.isKnownDevice(current);
 
+    // A device can be referenced two ways — by `device_id`
+    // (`yolink_d88b4c0400064299`) or by `canonical_name`
+    // (`bathroom.bathroom_door_sensor`) — and core accepts either. Existing rules
+    // are written with raw ids, while `refFor` prefers the canonical name, so
+    // keying every item on `refFor` left nothing matching the stored value and
+    // the dropdown rendered blank on *every* rule.
+    //
+    // So the item for the currently-referenced device is keyed on the form this
+    // rule actually stores. That fixes the display, and it means saving a rule
+    // you did not retarget leaves its reference byte-for-byte as it was, rather
+    // than silently rewriting device_id into canonical_name.
+    String valueFor(DeviceState d) =>
+        (current != null && (d.id == current || d.canonicalName == current))
+            ? current
+            : refs.refFor(d);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         DropdownButtonFormField<String>(
-          initialValue:
-              refs.devices.map(refs.refFor).contains(current) ? current : null,
+          initialValue: refs.isKnownDevice(current ?? '') ? current : null,
           isExpanded: true,
           decoration: _dec(context, hint: 'Pick a device'),
           items: [
@@ -190,7 +206,7 @@ class FieldEditor extends StatelessWidget {
               const DropdownMenuItem(value: null, child: Text('— any —')),
             for (final d in refs.devices)
               DropdownMenuItem(
-                value: refs.refFor(d),
+                value: valueFor(d),
                 child: Text(
                   d.name?.isNotEmpty ?? false ? d.name! : d.id,
                   overflow: TextOverflow.ellipsis,
