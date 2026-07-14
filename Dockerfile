@@ -70,10 +70,34 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates curl git xz-utils \
     && rm -rf /var/lib/apt/lists/*
 
-# The SDK is its own layer, so it caches across source changes.
-RUN curl -fsSL \
-      "https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_${FLUTTER_VERSION}-stable.tar.xz" \
-    | tar -xJ -C /opt
+# The SDK, from a local cache if there is one.
+#
+# This used to be a plain `curl | tar -xJ` of the ~700 MB tarball on every cold
+# build. Measured from here, storage.googleapis.com serves it at ~425 kB/s — so
+# a build spent ~30 MINUTES downloading before compiling a line, and any
+# FLUTTER_VERSION bump, --no-cache, or fresh checkout paid it again. Two builds
+# racing each other made it an hour.
+#
+# So: run `tool/fetch-flutter-sdk.sh` once and the tarball lands in .flutter-sdk/
+# (gitignored, resumable, checksum-checked). This COPY then takes it from the
+# build context and the download never happens again.
+#
+# The directory always exists (it holds a .keep), so this COPY cannot fail on a
+# clean checkout — the RUN below falls back to downloading if the tarball is not
+# there. That keeps CI working without forcing everyone to run the script.
+COPY .flutter-sdk/ /tmp/flutter-sdk/
+
+RUN TARBALL="/tmp/flutter-sdk/flutter_linux_${FLUTTER_VERSION}-stable.tar.xz"; \
+    if [ -s "$TARBALL" ]; then \
+        echo "using cached SDK from the build context"; \
+        tar -xJf "$TARBALL" -C /opt; \
+    else \
+        echo "no cached SDK — downloading (run tool/fetch-flutter-sdk.sh to avoid this)"; \
+        curl -fL --retry 5 --retry-all-errors \
+          "https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_${FLUTTER_VERSION}-stable.tar.xz" \
+        | tar -xJ -C /opt; \
+    fi; \
+    rm -rf /tmp/flutter-sdk
 
 ENV PATH="/opt/flutter/bin:/opt/flutter/bin/cache/dart-sdk/bin:${PATH}"
 
@@ -156,6 +180,37 @@ server {
         # `awaiting_user` for minutes. The 60s default would sever both.
         proxy_read_timeout  3600s;
         proxy_send_timeout  3600s;
+    }
+
+    # The Flutter-web deploy trap, and it is a nasty one.
+    #
+    # Flutter's service worker learns that a new build exists from the
+    # `serviceWorkerVersion` constant baked into index.html. If the browser
+    # caches index.html, the worker never discovers the new version — and because
+    # the worker intercepts requests *before* the network, it keeps serving the
+    # old app forever. A hard reload does not necessarily fix it.
+    #
+    # So the three files that carry version information must never be cached.
+    # Everything else may be, because the worker manages it.
+    location = /index.html {
+        add_header Cache-Control "no-cache, no-store, must-revalidate" always;
+        try_files $uri =404;
+    }
+    location = /flutter_service_worker.js {
+        add_header Cache-Control "no-cache, no-store, must-revalidate" always;
+        try_files $uri =404;
+    }
+    location = /version.json {
+        add_header Cache-Control "no-cache, no-store, must-revalidate" always;
+        try_files $uri =404;
+    }
+
+    # main.dart.js is NOT content-hashed by Flutter, so it cannot be cached
+    # immutably — a new build reuses the same name. Revalidate it every time and
+    # let the ETag make that cheap.
+    location = /main.dart.js {
+        add_header Cache-Control "no-cache" always;
+        try_files $uri =404;
     }
 
     location / {
