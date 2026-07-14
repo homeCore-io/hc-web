@@ -35,7 +35,7 @@ List<Command> buildCommands(WidgetRef ref) {
   final rules = ref.watch(automationsProvider).valueOrNull ?? const [];
 
   return [
-    for (final i in kNavItems)
+    for (final i in kPlaces)
       Command(
         label: i.label,
         category: 'Go to',

@@ -26,6 +26,8 @@ import 'features/modes/modes_page.dart';
 import 'features/scenes/scene_editor_page.dart';
 import 'features/scenes/scenes_page.dart';
 import 'shell/shell_scope.dart';
+import 'features/home/home_page.dart';
+import 'features/manage/manage_page.dart';
 
 class _RouterNotifier extends ChangeNotifier {
   _RouterNotifier(Ref ref) {
@@ -36,7 +38,7 @@ class _RouterNotifier extends ChangeNotifier {
 GoRouter _buildRouter(Ref ref) {
   final notifier = _RouterNotifier(ref);
   return GoRouter(
-    initialLocation: '/dashboard',
+    initialLocation: '/',
     refreshListenable: notifier,
     redirect: (context, state) async {
       final isLoggedIn = await ref.read(authProvider.future);
@@ -64,6 +66,10 @@ GoRouter _buildRouter(Ref ref) {
             builder: (_, state) =>
                 DashboardViewPage(dashboardId: state.pathParameters['id']!),
           ),
+          // The house is the app's one primary surface, and it is where you
+          // land. `/dashboard` used to bounce you here through a redirector.
+          GoRoute(path: '/', builder: (_, __) => const HomePage()),
+          GoRoute(path: '/manage', builder: (_, __) => const ManagePage()),
           GoRoute(
             path: '/dashboard',
             builder: (_, __) => const DashboardPage(),

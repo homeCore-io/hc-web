@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../design/skins.dart';
+import '../design/hc_icons.dart';
 import 'admin_chrome.dart';
 import 'touch_chrome.dart';
 import 'wall_chrome.dart';
@@ -70,14 +71,36 @@ class NavItem {
   final bool adminOnly;
 }
 
+/// TWO destinations, deliberately.
+///
+/// There were eight, all peers: Dashboards, Devices, Automations, Media,
+/// Scenes, Modes, Events, Admin. Eight co-equal entries in a rail is a *site
+/// menu*, and it is the single biggest reason the app read as a website with
+/// sections rather than as one thing.
+///
+/// An app has one primary surface. Here that is the house. Everything else is
+/// configuration and lives behind [ManagePage] — which keeps every one of those
+/// routes, so this is a demotion, not a deletion.
 const kNavItems = [
-  NavItem('/dashboards', 'Dashboards', Icons.dashboard_customize_outlined),
-  NavItem('/devices', 'Devices', Icons.devices_outlined),
-  NavItem('/automations', 'Automations', Icons.auto_awesome_outlined),
-  NavItem('/media', 'Media', Icons.speaker_outlined),
-  NavItem('/scenes', 'Scenes', Icons.movie_outlined),
-  NavItem('/modes', 'Modes', Icons.tune_outlined),
-  NavItem('/events', 'Events', Icons.event_note_outlined),
-  NavItem('/admin/users', 'Admin', Icons.admin_panel_settings_outlined,
-      adminOnly: true),
+  NavItem('/', 'Home', HcIcons.home),
+  NavItem('/manage', 'Manage', HcIcons.sliders),
+];
+
+/// Every place you can go — which is NOT the same list as the rail.
+///
+/// The rail shows two destinations on purpose. But collapsing it must not make
+/// Automations or Scenes any *harder* to reach, or the app has simply hidden
+/// things. So the command palette knows every place, and typing three letters
+/// beats a menu that lists them all permanently. The rail is for orientation;
+/// the palette is for going somewhere.
+const kPlaces = [
+  NavItem('/', 'Home', HcIcons.home),
+  NavItem('/manage', 'Manage', HcIcons.sliders),
+  NavItem('/devices', 'Devices', HcIcons.devices),
+  NavItem('/automations', 'Automations', HcIcons.automations),
+  NavItem('/media', 'Media', HcIcons.media),
+  NavItem('/scenes', 'Scenes', HcIcons.scenes),
+  NavItem('/modes', 'Modes', HcIcons.modes),
+  NavItem('/events', 'Events', HcIcons.events),
+  NavItem('/admin/users', 'Admin', HcIcons.admin, adminOnly: true),
 ];
