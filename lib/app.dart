@@ -28,6 +28,7 @@ import 'features/scenes/scenes_page.dart';
 import 'shell/shell_scope.dart';
 import 'features/home/home_page.dart';
 import 'features/manage/manage_page.dart';
+import 'features/cameras/cameras_page.dart';
 
 class _RouterNotifier extends ChangeNotifier {
   _RouterNotifier(Ref ref) {
@@ -70,6 +71,7 @@ GoRouter _buildRouter(Ref ref) {
           // land. `/dashboard` used to bounce you here through a redirector.
           GoRoute(path: '/', builder: (_, __) => const HomePage()),
           GoRoute(path: '/manage', builder: (_, __) => const ManagePage()),
+          GoRoute(path: '/cameras', builder: (_, __) => const CamerasPage()),
           GoRoute(
             path: '/dashboard',
             builder: (_, __) => const DashboardPage(),

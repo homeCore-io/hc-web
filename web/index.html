@@ -14,6 +14,11 @@
   <link rel="manifest" href="manifest.json">
 </head>
 <body>
+  <!-- go2rtc's <video-stream> element, which auto-negotiates WebRTC -> MSE ->
+       MJPEG per camera. Vendored (web/vendor/go2rtc/), not fetched from the NVR.
+       Registered before Flutter boots so the element is defined by the time a
+       camera tile mounts one. -->
+  <script type="module" src="vendor/go2rtc/video-stream.js"></script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

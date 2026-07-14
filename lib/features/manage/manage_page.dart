@@ -53,6 +53,7 @@ class ManagePage extends ConsumerWidget {
       const _Entry(route: '/scenes', icon: HcIcons.scenes, title: 'Scenes'),
       const _Entry(route: '/modes', icon: HcIcons.modes, title: 'Modes'),
       const _Entry(route: '/media', icon: HcIcons.media, title: 'Media'),
+      const _Entry(route: '/cameras', icon: HcIcons.camera, title: 'Cameras'),
       const _Entry(route: '/events', icon: HcIcons.events, title: 'Events'),
       const _Entry(route: '/admin/users', icon: HcIcons.admin, title: 'Admin'),
     ];

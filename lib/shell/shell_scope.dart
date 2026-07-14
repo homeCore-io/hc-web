@@ -99,6 +99,7 @@ const kPlaces = [
   NavItem('/devices', 'Devices', HcIcons.devices),
   NavItem('/automations', 'Automations', HcIcons.automations),
   NavItem('/media', 'Media', HcIcons.media),
+  NavItem('/cameras', 'Cameras', HcIcons.camera),
   NavItem('/scenes', 'Scenes', HcIcons.scenes),
   NavItem('/modes', 'Modes', HcIcons.modes),
   NavItem('/events', 'Events', HcIcons.events),
