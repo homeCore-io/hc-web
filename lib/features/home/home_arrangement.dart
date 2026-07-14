@@ -20,24 +20,36 @@ class HomeArrangement {
 
   bool get isEmpty => order.isEmpty && hidden.isEmpty;
 
+  /// The bucket for devices with no area. It is not a room, so it never leads.
+  static const kNoRoom = 'No room';
+
   /// Orders [rooms] by the saved arrangement, appending anything it has never
   /// seen.
   ///
   /// Unknown rooms go to the END rather than being dropped: a room the
   /// arrangement does not mention is new, not deleted.
-  List<String> apply(Iterable<String> rooms) {
-    final present = rooms.toSet();
-    final known = order.where(present.contains);
-    final novel = present.where((r) => !order.contains(r)).toList()..sort();
-    return [...known, ...novel].where((r) => !hidden.contains(r)).toList();
-  }
+  List<String> apply(Iterable<String> rooms) =>
+      all(rooms).where((r) => !hidden.contains(r)).toList();
 
   /// Every room, including hidden ones — what the Arrange editor works on.
   List<String> all(Iterable<String> rooms) {
     final present = rooms.toSet();
     final known = order.where(present.contains);
-    final novel = present.where((r) => !order.contains(r)).toList()..sort();
+    final novel = present.where((r) => !order.contains(r)).toList()
+      ..sort(_byName);
     return [...known, ...novel];
+  }
+
+  /// "No room" is a dumping ground, not a room, and it sorts LAST.
+  ///
+  /// Plain alphabetical put it first — uppercase 'N' sorts before lowercase 'a'
+  /// in ASCII — so the 33 devices nobody has assigned an area to were the first
+  /// thing you saw when you opened your house, above the attic and the bathroom.
+  /// A default order should lead with the rooms you actually live in.
+  static int _byName(String a, String b) {
+    if (a == kNoRoom) return b == kNoRoom ? 0 : 1;
+    if (b == kNoRoom) return -1;
+    return a.toLowerCase().compareTo(b.toLowerCase());
   }
 
   HomeArrangement copyWith({List<String>? order, Set<String>? hidden}) =>

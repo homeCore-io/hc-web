@@ -36,6 +36,17 @@ void main() {
       expect(a.apply(['kitchen', 'bathroom']), ['bathroom', 'kitchen']);
     });
 
+    test('"No room" sorts last, never first', () {
+      // Plain alphabetical put it FIRST — uppercase 'N' beats lowercase 'a' in
+      // ASCII — so the devices nobody has assigned an area to led the house,
+      // above the attic and the bathroom.
+      const a = HomeArrangement();
+      expect(
+        a.apply(['No room', 'attic', 'kitchen']),
+        ['attic', 'kitchen', 'No room'],
+      );
+    });
+
     test('a room in the order that no longer exists is skipped, not empty', () {
       const a = HomeArrangement(order: ['attic', 'kitchen']);
       expect(a.apply(['kitchen']), ['kitchen']);
@@ -74,7 +85,10 @@ void main() {
             title: 'Driveway',
             subtitle: null,
             refreshPolicy: DashboardRefreshPolicy.live,
-            config: const {'url': 'http://go2rtc/driveway', 'source_type': 'mjpeg'},
+            config: const {
+              'url': 'http://go2rtc/driveway',
+              'source_type': 'mjpeg'
+            },
           ),
         ],
       );
