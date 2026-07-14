@@ -126,13 +126,7 @@ Phrase? triggerPhrase(HcNode n) => switch (n.tag) {
 
 /// The phrase for a condition.
 Phrase? conditionPhrase(HcNode n) => switch (n.tag) {
-      'DeviceState' => const Phrase([
-          'the',
-          Slot('device_id'),
-          Slot('attribute'),
-          Slot('op', verb: _compareVerb),
-          Slot('value'),
-        ]),
+      'DeviceState' => _deviceStateConditionPhrase(n),
       'ModeIs' => Phrase([
           const Slot('mode_id'),
           Slot('on', verb: (v) => v == true ? 'is on' : 'is off'),
@@ -160,10 +154,8 @@ Phrase? conditionPhrase(HcNode n) => switch (n.tag) {
 
 /// The phrase for an action.
 Phrase? actionPhrase(HcNode n) => switch (n.tag) {
-      'SetDeviceState' => const Phrase([
-          Slot('state', verb: _setVerb),
-          Slot('device_id'),
-        ]),
+      // Not a constant: the phrase depends on what the payload actually says.
+      'SetDeviceState' => _setDeviceStatePhrase(n),
       'Delay' => const Phrase(['wait', Slot('duration_secs'), 'seconds']),
       'Notify' => const Phrase([
           'notify',
@@ -192,6 +184,54 @@ Phrase? actionPhrase(HcNode n) => switch (n.tag) {
       'ExitRule' => const Phrase(['stop here']),
       _ => null,
     };
+
+/// A phrase as plain prose, with no chips.
+///
+/// The editor renders a [Phrase] as editable chips. A *list* needs the same
+/// sentence as flat text — and it must be the same sentence, from the same
+/// table, or the list and the editor start describing the rule differently. The
+/// list used to build its own summary and said `Device: Bathroom Door Sensor →
+/// open`, which is the raw field dump the sentence work existed to kill.
+String plainPhrase(
+  HcNode n,
+  Phrase p,
+  HcVariant variant, {
+  String Function(String ref)? label,
+}) {
+  String render(Slot slot) {
+    final value = n[slot.field];
+    if (slot.verb != null) return slot.verb!(value);
+    if (value == null) return '';
+
+    final field = variant.fields.where((f) => f.name == slot.field).firstOrNull;
+    // A device reads as its name, never as `lutron_54`.
+    if (field?.kind == HcFieldKind.deviceRef && value is String) {
+      return label?.call(value) ?? value;
+    }
+    if (value is List) return value.join(', ');
+    return '$value';
+  }
+
+  return p.parts
+      .map((part) => switch (part) {
+            String s => s,
+            Slot s => render(s),
+            _ => '',
+          })
+      .where((s) => s.isNotEmpty)
+      .join(' ');
+}
+
+/// What fires this rule, in one line: "the Bathroom Door Sensor closes".
+///
+/// Null when the trigger has no phrase, so the caller can fall back rather than
+/// print something wrong.
+String? triggerSentence(HcNode trigger, {String Function(String ref)? label}) {
+  final phrase = triggerPhrase(trigger);
+  final variant = kTriggers[trigger.tag];
+  if (phrase == null || variant == null) return null;
+  return plainPhrase(trigger, phrase, variant, label: label);
+}
 
 /// Turns `attribute` + `to` into a verb where the pairing has an obvious reading.
 ///
@@ -226,20 +266,235 @@ String _compareVerb(Object? op) => switch (op) {
       _ => 'compares',
     };
 
-/// `{"on": true}` reads as "turn on"; a richer state keeps its literal form.
-String _setVerb(Object? state) {
-  if (state is! Map || state.isEmpty) return 'set';
-  if (state.length == 1) {
-    return switch (state.entries.first) {
-      MapEntry(key: 'on', value: true) => 'turn on',
-      MapEntry(key: 'on', value: false) => 'turn off',
-      MapEntry(key: 'activate', value: true) => 'activate',
-      MapEntry(key: 'locked', value: true) => 'lock',
-      MapEntry(key: 'locked', value: false) => 'unlock',
-      _ => 'set',
+/// A device-state condition, said the way a person would say it.
+///
+/// The literal reading of the four fields is `the lamp on is true`, which is not
+/// a sentence. The boolean attributes are *states* with names of their own — a
+/// contact sensor is open or closed, not "open is false" — so when the condition
+/// is a boolean equality it collapses to "the Back Door is closed". Anything
+/// else keeps the general form, "the Thermostat's temperature is above 21".
+Phrase _deviceStateConditionPhrase(HcNode n) {
+  const device = Slot('device_id');
+  final attribute = n['attribute'];
+  final value = n['value'];
+  final eq = n['op'] == 'Eq' || n['op'] == null;
+
+  // "is open" / "is closed" / "detects motion" — the chip owns all three fields
+  // it speaks, so tapping the verb reaches every one of them.
+  if (eq && value is bool && attribute is String) {
+    final said = _boolStateVerb(attribute, value);
+    if (said != null) {
+      return Phrase([
+        'the',
+        device,
+        Slot('value',
+            verb: (v) =>
+                _boolStateVerb(attribute, v == true) ??
+                (v == true ? 'is on' : 'is off'),
+            alsoEdits: const ['attribute', 'op']),
+      ]);
+    }
+  }
+
+  // Attribute first, device second: "the brightness of Hall Lamp is above 50".
+  // A possessive ("the Hall Lamp's brightness") cannot work here — the parts are
+  // joined with spaces, so it would render as "the Hall Lamp 's brightness".
+  return const Phrase([
+    'the',
+    Slot('attribute', verb: _attributeName),
+    'of',
+    Slot('device_id'),
+    Slot('op', verb: _compareVerb),
+    Slot('value'),
+  ]);
+}
+
+String _attributeName(Object? v) =>
+    v == null ? 'value' : '$v'.replaceAll('_', ' ');
+
+/// The English name for a boolean attribute in each of its two states.
+///
+/// Null when the attribute has no such name, in which case the caller keeps the
+/// general form rather than inventing one.
+String? _boolStateVerb(String attribute, bool on) => switch (attribute) {
+      'on' => on ? 'is on' : 'is off',
+      'open' => on ? 'is open' : 'is closed',
+      'contact' => on ? 'is closed' : 'is open', // contact CLOSED = shut
+      'locked' => on ? 'is locked' : 'is unlocked',
+      'motion' => on ? 'detects motion' : 'detects no motion',
+      'occupancy' || 'occupied' => on ? 'is occupied' : 'is empty',
+      'leak' || 'water_detected' => on ? 'detects water' : 'is dry',
+      'smoke' => on ? 'detects smoke' : 'is clear',
+      'vibration' => on ? 'is vibrating' : 'is still',
+      'available' => on ? 'is online' : 'is offline',
+      _ => null,
+    };
+
+/// `SetDeviceState` is the workhorse: 60-odd of the actions in a real rule set,
+/// and its `state` payload is whatever the owning plugin decided to accept.
+///
+/// **A sentence must never lose information.** An earlier cut said "set Bathroom"
+/// for `{"action":"play_favorite","favorite":"Relaxing Classical Piano Music"}`,
+/// which is not merely ugly — it silently drops what the rule *does*, and is
+/// strictly worse than the form it replaced, which at least showed the JSON.
+///
+/// So: [describeState] speaks the payload when it can account for **every** key,
+/// and returns null the moment it cannot. A null falls back to showing the raw
+/// payload in a chip, which is honest.
+Phrase _setDeviceStatePhrase(HcNode n) {
+  const device = Slot('device_id');
+  final said = describeState(n['state']);
+
+  if (said == null) {
+    // We cannot name it, so we show it. Never swallow it.
+    return const Phrase([
+      'set',
+      device,
+      'to',
+      Slot('state', verb: _jsonish),
+    ]);
+  }
+
+  // The preposition depends on the payload. "turn on" takes the device directly
+  // ("turn on the Mirror"); a command needs one ("set the volume to 15 ON the
+  // Bathroom"). Getting this wrong produces "turn on on the Mirror".
+  final prep = _prepositionFor(n['state']);
+
+  return Phrase([
+    Slot('state', verb: (v) => describeState(v) ?? 'set'),
+    if (prep != null) prep,
+    device,
+  ]);
+}
+
+/// Null when the verb takes the device as a direct object.
+String? _prepositionFor(Object? state) {
+  if (state is! Map) return 'on';
+  // Plain attribute writes read as "turn on X" / "activate X" / "lock X".
+  if (state.containsKey('on') ||
+      state.containsKey('activate') ||
+      state.containsKey('locked')) {
+    return null;
+  }
+  // Commands and LED writes read as "<do something> on X".
+  return 'on';
+}
+
+/// A human reading of a device-command payload, or null if we cannot account for
+/// every key in it.
+///
+/// Null is the important half. Returning a partial reading would be the same bug
+/// in a nicer coat: the rule would look like it says everything while quietly
+/// omitting a field that changes what it does.
+String? describeState(Object? state) {
+  if (state is! Map || state.isEmpty) return null;
+  final s = Map<String, Object?>.from(state);
+
+  String? take(String k) {
+    final v = s.remove(k);
+    return v == null ? null : '$v';
+  }
+
+  // -- plain attribute writes ---------------------------------------------
+  if (s.containsKey('on')) {
+    final on = s.remove('on') == true;
+    final preset = s.remove('preset');
+    if (s.isNotEmpty) return null;
+    final base = on ? 'turn on' : 'turn off';
+    return preset == null ? base : '$base with preset $preset';
+  }
+
+  if (s.containsKey('activate')) {
+    final v = s.remove('activate') == true;
+    return s.isEmpty ? (v ? 'activate' : 'deactivate') : null;
+  }
+
+  if (s.containsKey('locked')) {
+    final v = s.remove('locked') == true;
+    return s.isEmpty ? (v ? 'lock' : 'unlock') : null;
+  }
+
+  // -- a Lutron keypad LED -------------------------------------------------
+  if (s['set_led'] case final Map led) {
+    s.remove('set_led');
+    if (s.isNotEmpty) return null;
+    final button = led['button'];
+    final on = led['state'] == 1 || led['state'] == true;
+    // Phrased so the preposition that follows still parses:
+    // "set the button 3 LED to on ON the Keypad".
+    return 'set the button $button LED to ${on ? 'on' : 'off'}';
+  }
+
+  // -- a core timer --------------------------------------------------------
+  if (s.containsKey('command')) {
+    final cmd = take('command');
+    final secs = s.remove('duration_secs');
+    final label = s.remove('label');
+    if (s.isNotEmpty) return null;
+
+    return switch (cmd) {
+      'start' when secs is num =>
+        'start a ${_duration(secs)} timer${label == null ? '' : ' ($label)'}',
+      'start' => 'start the timer',
+      'cancel' => 'cancel the timer',
+      'pause' => 'pause the timer',
+      'resume' => 'resume the timer',
+      _ => cmd == null ? null : 'send $cmd',
     };
   }
-  return 'set';
+
+  // -- a media command (the plugin `action` convention) ---------------------
+  if (s.containsKey('action')) {
+    final action = take('action');
+
+    String? done(String phrase) => s.isEmpty ? phrase : null;
+
+    return switch (action) {
+      'set_volume' when s['volume'] is num =>
+        done('set the volume to ${s.remove('volume')}'),
+      'set_mute' => done((s.remove('muted') == true) ? 'mute' : 'unmute'),
+      // "enable", not "turn ... on": the preposition that follows would give
+      // "turn shuffle on ON the Bathroom".
+      'set_shuffle' => done(
+          s.remove('shuffle') == true ? 'enable shuffle' : 'disable shuffle'),
+      'set_repeat' => done('set repeat to ${s.remove('repeat')}'),
+      'play_favorite' when s['favorite'] != null =>
+        done('play “${s.remove('favorite')}”'),
+      'play_media' ||
+      'play_uri' =>
+        done('play ${s.remove('uri') ?? s.remove('media')}'),
+      'play' => done('play'),
+      'pause' => done('pause'),
+      'stop' => done('stop'),
+      'next' => done('skip forward'),
+      'previous' => done('skip back'),
+      // A command we do not know is still a command; name it rather than
+      // pretending the action does nothing.
+      _ => action == null ? null : done(action.replaceAll('_', ' ')),
+    };
+  }
+
+  return null;
+}
+
+/// Seconds as something a person says out loud.
+String _duration(num secs) {
+  final s = secs.round();
+  if (s % 3600 == 0 && s >= 3600) {
+    return '${s ~/ 3600}-hour';
+  }
+  if (s % 60 == 0 && s >= 60) {
+    return '${s ~/ 60}-minute';
+  }
+  return '$s-second';
+}
+
+/// The payload, shown rather than swallowed.
+String _jsonish(Object? v) {
+  if (v is Map) {
+    return v.entries.map((e) => '${e.key}: ${e.value}').join(', ');
+  }
+  return '$v';
 }
 
 /// Actions that contain other actions. The sentence stops here and the tree

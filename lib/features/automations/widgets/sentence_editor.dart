@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 
 import '../../../core/rules/node.dart';
@@ -49,7 +51,8 @@ class _SentenceNodeState extends State<SentenceNode> {
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
     final hidden = refinements(widget.variant, widget.phrase);
-    final set = hidden.where((f) => widget.node[f.name] != null).length;
+    final set =
+        hidden.where((f) => _isNoteworthy(f, widget.node[f.name])).length;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -137,6 +140,21 @@ class _SentenceNodeState extends State<SentenceNode> {
         ],
       ],
     );
+  }
+
+  /// Whether a hidden field holding [value] is worth warning about.
+  ///
+  /// The "· N set" badge exists to catch a collapsed field that quietly holds a
+  /// value. A *required* field sitting at its own default is not that: every
+  /// `SetDeviceState` carries `track_event_value: false`, so counting it made
+  /// all three actions of a working rule read "Refine · 1 set" forever — a
+  /// warning that fires always is a warning you learn to ignore.
+  static bool _isNoteworthy(HcField field, Object? value) {
+    if (value == null) return false;
+    if (field.defaultValue == null) return true;
+    // Values here are JSON-shaped (a `state` payload is a Map), so compare them
+    // structurally rather than by identity.
+    return jsonEncode(value) != jsonEncode(field.defaultValue);
   }
 
   static String _names(List<HcField> fs) {

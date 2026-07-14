@@ -4,6 +4,8 @@ import '../../../core/rules/node.dart';
 import '../../../core/rules/rule.dart';
 import '../../../core/rules/schema.dart';
 import '../../../design/components/hc_sentence.dart';
+import '../../../design/hc_icons.dart';
+import '../../../design/tokens.dart';
 import 'field_editors.dart';
 import '../rule_phrasing.dart';
 import 'rule_refs.dart';
@@ -24,6 +26,219 @@ Color _depthColor(int depth) => _depthColors[depth % _depthColors.length];
 
 /// Conditions that contain other conditions.
 const _booleanTags = {'And', 'Or', 'Xor'};
+
+// ---------------------------------------------------------------------------
+// The frame around a node
+// ---------------------------------------------------------------------------
+
+/// A **leaf** node gets no frame at all.
+///
+/// It used to get four things: a coloured rail, a tinted box, a bold title, and
+/// a permanently-visible row of buttons — so `set the volume to 15 on Bathroom`
+/// arrived underneath a heading that read **Set device state**, inside a box
+/// whose only message was "this is a node". The heading restated the sentence,
+/// the box restated the rail, and the buttons shouted at a control you touch
+/// once a month. Strip all four and what remains is a list of sentences, which
+/// is what a rule actually is.
+///
+/// A **branching** node keeps the rail, the tint and the label, because there
+/// the structure *is* the information: you cannot tell from prose alone that you
+/// are inside the `Not` inside the `Or`.
+class _NodeShell extends StatefulWidget {
+  const _NodeShell({
+    required this.branching,
+    required this.depth,
+    required this.child,
+    required this.controls,
+    this.title,
+    this.ordinal,
+    this.dimmed = false,
+  });
+
+  final bool branching;
+  final int depth;
+  final Widget child;
+
+  /// Shown quietly, and brought up on hover. See [_Controls].
+  final List<Widget> controls;
+
+  /// Branching nodes only — a leaf's sentence already is its title.
+  final String? title;
+
+  /// Actions run in sequence, so their position is real information and is
+  /// numbered. Conditions are ANDed, so they are not.
+  final int? ordinal;
+
+  final bool dimmed;
+
+  @override
+  State<_NodeShell> createState() => _NodeShellState();
+}
+
+class _NodeShellState extends State<_NodeShell> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    final color = _depthColor(widget.depth);
+
+    final controls = _Controls(shown: _hover, children: widget.controls);
+
+    final Widget body = widget.branching
+        ? Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  // Not upper-cased: the labels already carry their own casing —
+                  // "ALL of", "ANY of", "IF / ELSE" — and shouting them would
+                  // lose the distinction the author drew.
+                  Text(
+                    widget.title ?? '',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.6,
+                      color: color,
+                    ),
+                  ),
+                  const Spacer(),
+                  controls,
+                ],
+              ),
+              SizedBox(height: t.space.sm),
+              widget.child,
+            ],
+          )
+        : Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (widget.ordinal != null) ...[
+                Padding(
+                  padding: const EdgeInsets.only(top: 3),
+                  child: SizedBox(
+                    width: 18,
+                    child: Text(
+                      '${widget.ordinal}',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: t.surface.onBaseMuted.withValues(alpha: 0.55),
+                        fontFeatures: t.numericFontFeatures,
+                      ),
+                    ),
+                  ),
+                ),
+                SizedBox(width: t.space.xs),
+              ],
+              Expanded(child: widget.child),
+              SizedBox(width: t.space.sm),
+              Padding(
+                padding: const EdgeInsets.only(top: 1),
+                child: controls,
+              ),
+            ],
+          );
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: AnimatedOpacity(
+        opacity: widget.dimmed ? 0.4 : 1,
+        duration: t.motion.fast,
+        child: Container(
+          margin: EdgeInsets.only(bottom: widget.branching ? t.space.sm : 0),
+          padding: widget.branching
+              ? EdgeInsets.fromLTRB(
+                  t.space.sm, t.space.sm, t.space.sm, t.space.sm)
+              : EdgeInsets.symmetric(vertical: t.space.sm),
+          decoration: widget.branching
+              ? BoxDecoration(
+                  border: Border(left: BorderSide(color: color, width: 2)),
+                  color: color.withValues(alpha: 0.05),
+                  borderRadius:
+                      BorderRadius.horizontal(right: t.radius.smR.topRight),
+                )
+              // A leaf is separated from its neighbour by a hairline, not a box.
+              // Rules read as a list; boxes make them read as a form.
+              : BoxDecoration(
+                  color: _hover
+                      ? t.surface.raised.withValues(alpha: 0.5)
+                      : Colors.transparent,
+                  borderRadius: t.radius.smR,
+                ),
+          child: body,
+        ),
+      ),
+    );
+  }
+}
+
+/// Node controls, kept quiet until you reach for them.
+///
+/// Idle opacity is deliberately not zero: on a touch screen there is no hover,
+/// and a control you cannot discover is a control you do not have.
+class _Controls extends StatelessWidget {
+  const _Controls({required this.shown, required this.children});
+
+  final bool shown;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    if (children.isEmpty) return const SizedBox.shrink();
+    final t = HcTokens.of(context);
+
+    return AnimatedOpacity(
+      opacity: shown ? 1 : 0.25,
+      duration: t.motion.fast,
+      child: Row(mainAxisSize: MainAxisSize.min, children: children),
+    );
+  }
+}
+
+/// One control. Small, flat, and no `IconButton` — its 48px minimum tap target
+/// is what made the old control row taller than the sentence it decorated.
+class _CtlButton extends StatelessWidget {
+  const _CtlButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+    this.danger = false,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback? onPressed;
+  final bool danger;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+
+    return Tooltip(
+      message: tooltip,
+      waitDuration: const Duration(milliseconds: 500),
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: t.radius.smR,
+        child: Padding(
+          padding: const EdgeInsets.all(5),
+          child: Icon(
+            icon,
+            size: 15,
+            color: onPressed == null
+                ? t.surface.onBaseMuted.withValues(alpha: 0.55)
+                : danger
+                    ? t.accent.danger
+                    : t.surface.onBaseMuted,
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 /// Actions that contain other actions, mapped to the field holding them.
 /// `Conditional` and `PingHost` have two branches and are handled separately.
@@ -127,58 +342,60 @@ class ConditionNode extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final variant = kConditions[node.tag];
-    final color = _depthColor(depth);
     final isBoolean = _booleanTags.contains(node.tag);
     final isNot = node.tag == 'Not';
+    final branching = isBoolean || isNot;
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 4),
-      decoration: BoxDecoration(
-        border: Border(left: BorderSide(color: color, width: 3)),
-        color: color.withValues(alpha: 0.04),
-        borderRadius: const BorderRadius.horizontal(right: Radius.circular(6)),
+    final controls = [
+      _CtlButton(
+        icon: HcIcons.trash,
+        tooltip: 'Remove',
+        danger: true,
+        onPressed: onRemove,
       ),
-      padding: const EdgeInsets.fromLTRB(10, 8, 8, 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(
-                variant?.label ?? node.tag,
-                style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                      color: color,
-                      fontWeight: FontWeight.w700,
-                    ),
-              ),
-              const SizedBox(width: 8),
-              if (result != null) _ResultChip(result: result!),
-              const Spacer(),
-              IconButton(
-                icon: const Icon(Icons.delete_outline, size: 18),
-                tooltip: 'Remove',
-                onPressed: onRemove,
-              ),
-            ],
-          ),
-          // A leaf condition is a sentence; only the boolean nodes get the
-          // tree. Prose stops scaling about two levels deep, so it hands over
-          // exactly where it would start to hurt — and the chips are identical
-          // on both sides of that line.
-          if (variant != null && !isBoolean && !isNot)
-            NodeBody(
-              node: node,
-              registry: kConditions,
-              refs: refs,
-              onChanged: onChanged,
-              phraseFor: conditionPhrase,
-              size: HcSentenceSize.small,
-            ),
+    ];
 
-          // NOT — exactly one child.
-          if (isNot) ...[
-            const SizedBox(height: 4),
-            Builder(builder: (context) {
+    // A leaf condition is a sentence; only the boolean nodes get the tree. Prose
+    // stops scaling about two levels deep, so it hands over exactly where it
+    // would start to hurt — and the chips are identical on both sides.
+    if (!branching) {
+      return _NodeShell(
+        branching: false,
+        depth: depth,
+        controls: controls,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (variant != null)
+              NodeBody(
+                node: node,
+                registry: kConditions,
+                refs: refs,
+                onChanged: onChanged,
+                phraseFor: conditionPhrase,
+                size: HcSentenceSize.small,
+              )
+            else
+              Text('Unsupported: ${node.tag}'),
+            // The dry-run verdict belongs under the sentence it judges, not in a
+            // header — core hands us `actual` and `expected` and this is the one
+            // place they mean anything.
+            if (result != null) ...[
+              SizedBox(height: HcTokens.of(context).space.xs),
+              _ResultChip(result: result!),
+            ],
+          ],
+        ),
+      );
+    }
+
+    return _NodeShell(
+      branching: true,
+      depth: depth,
+      title: variant?.label ?? node.tag,
+      controls: controls,
+      child: isNot
+          ? Builder(builder: (context) {
               final child = node['condition'];
               if (child is! HcNode) {
                 return AddNodeButton(
@@ -205,13 +422,8 @@ class ConditionNode extends StatelessWidget {
                   onChanged();
                 },
               );
-            }),
-          ],
-
-          // AND / OR / XOR — a list of children.
-          if (isBoolean) ...[
-            const SizedBox(height: 4),
-            Builder(builder: (context) {
+            })
+          : Builder(builder: (context) {
               final children =
                   (node['conditions'] as List?)?.cast<HcNode>() ?? <HcNode>[];
               return Column(
@@ -246,9 +458,6 @@ class ConditionNode extends StatelessWidget {
                 ],
               );
             }),
-          ],
-        ],
-      ),
     );
   }
 }
@@ -303,7 +512,7 @@ class _ResultChip extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(ok ? Icons.check : Icons.close,
+            Icon(ok ? HcIcons.check : HcIcons.x,
                 size: 12, color: ok ? scheme.primary : scheme.error),
             if (detail != null) ...[
               const SizedBox(width: 4),
@@ -353,6 +562,7 @@ class ActionTree extends StatelessWidget {
               node: actions[i].action,
               refs: refs,
               depth: 0,
+              ordinal: i + 1,
               enabled: actions[i].enabled,
               onToggleEnabled: (v) {
                 actions[i].enabled = v;
@@ -397,6 +607,7 @@ class ActionNode extends StatelessWidget {
     this.enabled,
     this.onToggleEnabled,
     this.onMove,
+    this.ordinal,
   });
 
   final HcNode node;
@@ -410,133 +621,140 @@ class ActionNode extends StatelessWidget {
   final ValueChanged<bool>? onToggleEnabled;
   final ValueChanged<int>? onMove;
 
+  /// Its 1-based position in the list it belongs to. Actions run in sequence, so
+  /// where a step sits is real information and gets a number. Conditions are
+  /// ANDed, so they do not.
+  final int? ordinal;
+
   @override
   Widget build(BuildContext context) {
     final variant = kActions[node.tag];
-    final color = _depthColor(depth);
     final off = enabled == false;
+    final branching = kBranchingActions.contains(node.tag);
 
-    return Opacity(
-      opacity: off ? 0.45 : 1,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 4),
-        decoration: BoxDecoration(
-          border: Border(left: BorderSide(color: color, width: 3)),
-          color: color.withValues(alpha: 0.04),
-          borderRadius:
-              const BorderRadius.horizontal(right: Radius.circular(6)),
+    final controls = [
+      if (onMove != null) ...[
+        _CtlButton(
+          icon: HcIcons.caretUp,
+          tooltip: 'Move up',
+          onPressed: () => onMove!(-1),
         ),
-        padding: const EdgeInsets.fromLTRB(10, 8, 8, 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Text(
-                  variant?.label ?? node.tag,
-                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                        color: color,
-                        fontWeight: FontWeight.w700,
-                      ),
-                ),
-                const Spacer(),
-                if (onMove != null) ...[
-                  IconButton(
-                    icon: const Icon(Icons.arrow_upward, size: 16),
-                    tooltip: 'Move up',
-                    onPressed: () => onMove!(-1),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.arrow_downward, size: 16),
-                    tooltip: 'Move down',
-                    onPressed: () => onMove!(1),
-                  ),
-                ],
-                if (onToggleEnabled != null)
-                  Switch(
-                    value: enabled ?? true,
-                    onChanged: onToggleEnabled,
-                  ),
-                IconButton(
-                  icon: const Icon(Icons.delete_outline, size: 18),
-                  tooltip: 'Remove',
-                  onPressed: onRemove,
-                ),
-              ],
-            ),
-            // A leaf action is a sentence — "turn on Bathroom Exhaust Fan".
-            // A branching one keeps its header and lets the tree carry the
-            // structure below.
-            if (variant != null && !kBranchingActions.contains(node.tag))
-              NodeBody(
+        _CtlButton(
+          icon: HcIcons.caretDown,
+          tooltip: 'Move down',
+          onPressed: () => onMove!(1),
+        ),
+      ],
+      // An eye, not a Switch. Only top-level actions can be disabled (core wraps
+      // those in `RuleAction { enabled, action }` and leaves nested ones bare),
+      // and a Material Switch is a heavy, permanently-lit control for something
+      // touched about once a month.
+      if (onToggleEnabled != null)
+        _CtlButton(
+          icon: off ? HcIcons.eyeSlash : HcIcons.eye,
+          tooltip: off ? 'Skipped — click to enable' : 'Disable this step',
+          onPressed: () => onToggleEnabled!(off),
+        ),
+      _CtlButton(
+        icon: HcIcons.trash,
+        tooltip: 'Remove',
+        danger: true,
+        onPressed: onRemove,
+      ),
+    ];
+
+    // A leaf action is a sentence — "turn on Bathroom Exhaust Fan". Nothing else
+    // is needed to say what it does, so nothing else is drawn.
+    if (!branching) {
+      return _NodeShell(
+        branching: false,
+        depth: depth,
+        ordinal: ordinal,
+        dimmed: off,
+        controls: controls,
+        child: variant == null
+            ? Text('Unsupported: ${node.tag}')
+            : NodeBody(
                 node: node,
                 registry: kActions,
                 refs: refs,
                 onChanged: onChanged,
                 phraseFor: actionPhrase,
-              )
-            else if (variant != null)
-              NodeFields(
-                variant: variant,
-                fields: node.fields,
-                refs: refs,
-                onChanged: onChanged,
               ),
+      );
+    }
 
-            // Simple containers: one nested action list.
-            for (final field in _nestedActionFields[node.tag] ?? const [])
-              _NestedActions(
-                title: 'Do',
-                node: node,
-                field: field,
-                refs: refs,
-                depth: depth,
-                onChanged: onChanged,
-              ),
+    // A branching action keeps its label and lets the tree carry the structure.
+    return _NodeShell(
+      branching: true,
+      depth: depth,
+      dimmed: off,
+      title: variant?.label ?? node.tag,
+      controls: controls,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (variant != null)
+            NodeFields(
+              variant: variant,
+              fields: node.fields,
+              refs: refs,
+              onChanged: onChanged,
+            ),
 
-            // Conditional: THEN / ELSE-IF* / ELSE.
-            if (node.tag == 'Conditional') ...[
-              _NestedActions(
-                title: 'Then',
-                node: node,
-                field: 'then_actions',
-                refs: refs,
-                depth: depth,
-                onChanged: onChanged,
-              ),
-              _ElseIfChain(
-                  node: node, refs: refs, depth: depth, onChanged: onChanged),
-              _NestedActions(
-                title: 'Else',
-                node: node,
-                field: 'else_actions',
-                refs: refs,
-                depth: depth,
-                onChanged: onChanged,
-              ),
-            ],
+          // Simple containers: one nested action list.
+          for (final field in _nestedActionFields[node.tag] ?? const [])
+            _NestedActions(
+              title: 'Do',
+              node: node,
+              field: field,
+              refs: refs,
+              depth: depth,
+              onChanged: onChanged,
+            ),
 
-            // PingHost branches on reachability.
-            if (node.tag == 'PingHost') ...[
-              _NestedActions(
-                title: 'If reachable',
-                node: node,
-                field: 'then_actions',
-                refs: refs,
-                depth: depth,
-                onChanged: onChanged,
-              ),
-              _NestedActions(
-                title: 'If unreachable',
-                node: node,
-                field: 'else_actions',
-                refs: refs,
-                depth: depth,
-                onChanged: onChanged,
-              ),
-            ],
+          // Conditional: THEN / ELSE-IF* / ELSE.
+          if (node.tag == 'Conditional') ...[
+            _NestedActions(
+              title: 'Then',
+              node: node,
+              field: 'then_actions',
+              refs: refs,
+              depth: depth,
+              onChanged: onChanged,
+            ),
+            _ElseIfChain(
+                node: node, refs: refs, depth: depth, onChanged: onChanged),
+            _NestedActions(
+              title: 'Else',
+              node: node,
+              field: 'else_actions',
+              refs: refs,
+              depth: depth,
+              onChanged: onChanged,
+            ),
           ],
-        ),
+
+          // PingHost branches on reachability.
+          if (node.tag == 'PingHost') ...[
+            _NestedActions(
+              title: 'If reachable',
+              node: node,
+              field: 'then_actions',
+              refs: refs,
+              depth: depth,
+              onChanged: onChanged,
+            ),
+            _NestedActions(
+              title: 'If unreachable',
+              node: node,
+              field: 'else_actions',
+              refs: refs,
+              depth: depth,
+              onChanged: onChanged,
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -583,6 +801,7 @@ class _NestedActions extends StatelessWidget {
               node: children[i],
               refs: refs,
               depth: depth + 1,
+              ordinal: i + 1,
               onChanged: onChanged,
               onRemove: () {
                 children.removeAt(i);
@@ -743,8 +962,12 @@ class AddNodeButton extends StatelessWidget {
   Widget build(BuildContext context) => Align(
         alignment: Alignment.centerLeft,
         child: TextButton.icon(
-          icon: const Icon(Icons.add, size: 16),
-          label: Text(label),
+          icon: const Icon(HcIcons.plus, size: 14),
+          label: Text(label, style: const TextStyle(fontSize: 13)),
+          style: TextButton.styleFrom(
+            visualDensity: VisualDensity.compact,
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          ),
           onPressed: () async {
             final picked = await showDialog<HcVariant>(
               context: context,
@@ -794,7 +1017,7 @@ class _PaletteState extends State<_Palette> {
               child: TextField(
                 autofocus: true,
                 decoration: const InputDecoration(
-                  prefixIcon: Icon(Icons.search),
+                  prefixIcon: Icon(HcIcons.search, size: 18),
                   hintText: 'Search',
                   isDense: true,
                   border: OutlineInputBorder(),

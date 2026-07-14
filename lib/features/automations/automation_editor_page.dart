@@ -7,6 +7,7 @@ import '../../core/rules/node.dart';
 import '../../core/rules/rule.dart';
 import '../../core/rules/schema.dart';
 import '../../design/components/hc_sentence.dart';
+import '../../design/tokens.dart';
 import 'rule_phrasing.dart';
 import 'widgets/node_trees.dart';
 import 'widgets/rule_refs.dart';
@@ -74,32 +75,39 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
 
     final rule = _rule!;
 
+    final t = HcTokens.of(context);
+
     return Scaffold(
+      // The bar says where you ARE, not what you are called — the rule's own
+      // name is the page's title, in the body, and printing it twice was one of
+      // the things that made this read like a web form with a header.
       appBar: AppBar(
-        title: Text(_isNew
-            ? 'New automation'
-            : (rule.name.isEmpty ? 'Automation' : rule.name)),
+        titleSpacing: 0,
+        title: Text(
+          'Automations',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: t.surface.onBaseMuted,
+          ),
+        ),
         actions: [
           if (!_isNew)
-            TextButton.icon(
-              icon: const Icon(Icons.science_outlined, size: 18),
-              label: const Text('Test'),
+            TextButton(
               onPressed: _saving ? null : _test,
+              child: const Text('Dry run'),
             ),
-          const SizedBox(width: 8),
-          FilledButton.icon(
-            icon: _saving
-                ? const SizedBox(
-                    width: 14,
-                    height: 14,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.save_outlined, size: 18),
-            label: const Text('Save'),
-            onPressed: _saving || !_dirty ? null : _save,
-          ),
-          const SizedBox(width: 12),
+          SizedBox(width: t.space.sm),
         ],
+      ),
+      // Save arrives when there is something to save, and leaves when there
+      // isn't. A permanently-greyed Save button in the corner is a web form
+      // telling you about itself.
+      bottomNavigationBar: _SaveBar(
+        visible: _dirty || _isNew,
+        saving: _saving,
+        onSave: _saving ? null : _save,
+        onDiscard: _saving ? null : () => context.pop(),
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
@@ -109,47 +117,38 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
           if (rule.hasError) _banner(context, rule.error!, isError: true),
           if (_saveError != null) _banner(context, _saveError!, isError: true),
           if (_wouldFire != null) _testBanner(context),
-          _Section(title: 'Rule', child: _ruleHeader(rule)),
+          _ruleHeader(rule),
 
           // The clauses read down the page as one sentence about the house,
-          // joined by a rail. A card per clause turned that into a form.
-          Card(
-            margin: const EdgeInsets.only(bottom: 16),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(0, 8, 16, 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  HcClause(
-                    label: 'When',
-                    // The rail node lights when the trigger's device is already
-                    // in the state the rule waits for, so a rule shows you where
-                    // the house actually IS, standing still.
-                    live: _triggerIsLive(rule, refs),
-                    child: _triggerEditor(rule, refs),
-                  ),
-                  HcClause(
-                    label: 'And if',
-                    child: ConditionTree(
-                      conditions: rule.conditions,
-                      refs: refs,
-                      results: _testResults,
-                      onChanged: _touch,
-                    ),
-                  ),
-                  HcClause(
-                    label: 'Then',
-                    last: true,
-                    child: ActionTree(
-                      actions: rule.actions,
-                      refs: refs,
-                      onChanged: _touch,
-                    ),
-                  ),
-                ],
-              ),
+          // joined by a rail. There is no card around them: a card says "this is
+          // a form", and the whole point is that a rule is a paragraph.
+          HcClause(
+            label: 'When',
+            // The rail node lights when the trigger's device is already in the
+            // state the rule waits for, so a rule shows you where the house
+            // actually IS, standing still.
+            live: _triggerIsLive(rule, refs),
+            child: _triggerEditor(rule, refs),
+          ),
+          HcClause(
+            label: 'And if',
+            child: ConditionTree(
+              conditions: rule.conditions,
+              refs: refs,
+              results: _testResults,
+              onChanged: _touch,
             ),
           ),
+          HcClause(
+            label: 'Then',
+            last: true,
+            child: ActionTree(
+              actions: rule.actions,
+              refs: refs,
+              onChanged: _touch,
+            ),
+          ),
+          const SizedBox(height: 8),
           _Section(
             title: 'Advanced',
             initiallyExpanded: false,
@@ -162,122 +161,54 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
 
   // -- header --------------------------------------------------------------
 
-  Widget _ruleHeader(HcRule rule) => Column(
+  /// The rule's name, as a title you type into — not a labelled box.
+  ///
+  /// The name is the only one of these five fields anyone edits more than once,
+  /// so it gets the weight of a heading and the other four get demoted to the
+  /// meta line below. They used to be three outlined `TextFormField`s and a
+  /// `Switch` given exactly as much visual weight as the rule's own name, which
+  /// is how a rule ended up looking like a settings screen.
+  Widget _ruleHeader(HcRule rule) {
+    final t = HcTokens.of(context);
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(0, t.space.sm, 0, t.space.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           TextFormField(
             initialValue: rule.name,
-            decoration: const InputDecoration(
-              labelText: 'Name',
+            style: TextStyle(
+              fontSize: 26,
+              fontWeight: FontWeight.w700,
+              letterSpacing: -0.6,
+              color: t.surface.onBase,
+            ),
+            decoration: InputDecoration(
+              hintText: 'Name this automation',
+              hintStyle: TextStyle(
+                fontSize: 26,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.6,
+                color: t.surface.onBaseMuted.withValues(alpha: 0.4),
+              ),
               isDense: true,
-              border: OutlineInputBorder(),
+              contentPadding: EdgeInsets.zero,
+              border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none,
             ),
             onChanged: (v) {
               rule.name = v;
               _touch();
             },
           ),
-          const SizedBox(height: 12),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: TextFormField(
-                  initialValue: '${rule.priority}',
-                  decoration: const InputDecoration(
-                    labelText: 'Priority',
-                    helperText: 'Higher runs first. −1000 to 1000.',
-                    helperMaxLines: 2,
-                    isDense: true,
-                    border: OutlineInputBorder(),
-                  ),
-                  keyboardType: TextInputType.number,
-                  onChanged: (v) {
-                    final p = int.tryParse(v);
-                    if (p != null) {
-                      rule.priority = p;
-                      _touch();
-                    }
-                  },
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: TextFormField(
-                  initialValue: rule.cooldownSecs?.toString() ?? '',
-                  decoration: const InputDecoration(
-                    labelText: 'Cooldown (s)',
-                    isDense: true,
-                    border: OutlineInputBorder(),
-                  ),
-                  keyboardType: TextInputType.number,
-                  onChanged: (v) {
-                    rule.cooldownSecs = v.isEmpty ? null : int.tryParse(v);
-                    _touch();
-                  },
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(child: _runModeField(rule)),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Switch(
-                value: rule.enabled,
-                onChanged: (v) {
-                  rule.enabled = v;
-                  _touch();
-                },
-              ),
-              Text(rule.enabled ? 'Enabled' : 'Disabled'),
-            ],
-          ),
+          SizedBox(height: t.space.sm),
+          _MetaLine(rule: rule, onChanged: _touch),
         ],
-      );
-
-  Widget _runModeField(HcRule rule) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          DropdownButtonFormField<String>(
-            initialValue: rule.runMode.kind,
-            decoration: const InputDecoration(
-              labelText: 'Run mode',
-              isDense: true,
-              border: OutlineInputBorder(),
-            ),
-            items: [
-              for (final k in RunMode.kinds)
-                DropdownMenuItem(value: k, child: Text(k)),
-            ],
-            onChanged: (v) {
-              if (v == null) return;
-              rule.runMode = RunMode(v, maxQueue: rule.runMode.maxQueue);
-              _touch();
-            },
-          ),
-          if (rule.runMode.kind == 'Queued')
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: TextFormField(
-                initialValue: '${rule.runMode.maxQueue}',
-                decoration: const InputDecoration(
-                  labelText: 'Max queue',
-                  isDense: true,
-                  border: OutlineInputBorder(),
-                ),
-                keyboardType: TextInputType.number,
-                onChanged: (v) {
-                  final n = int.tryParse(v);
-                  if (n != null) {
-                    rule.runMode = RunMode('Queued', maxQueue: n);
-                    _touch();
-                  }
-                },
-              ),
-            ),
-        ],
-      );
+      ),
+    );
+  }
 
   // -- trigger -------------------------------------------------------------
 
@@ -544,6 +475,344 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
 }
 
 /// Trigger picker, grouped by the category each trigger declares.
+/// The unsaved-changes bar.
+///
+/// It slides up the moment the rule differs from what the server holds, and it
+/// is the only place Save exists. That is the difference between an app and a
+/// form: a form shows you a disabled Save button forever, an app tells you when
+/// you have something to lose.
+class _SaveBar extends StatelessWidget {
+  const _SaveBar({
+    required this.visible,
+    required this.saving,
+    required this.onSave,
+    required this.onDiscard,
+  });
+
+  final bool visible;
+  final bool saving;
+  final VoidCallback? onSave;
+  final VoidCallback? onDiscard;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+
+    return AnimatedSlide(
+      offset: visible ? Offset.zero : const Offset(0, 1),
+      duration: t.motion.base,
+      curve: Curves.easeOutCubic,
+      child: AnimatedOpacity(
+        opacity: visible ? 1 : 0,
+        duration: t.motion.base,
+        child: Container(
+          padding: EdgeInsets.fromLTRB(
+              t.space.md, t.space.sm, t.space.md, t.space.sm),
+          decoration: BoxDecoration(
+            color: t.surface.raised,
+            border: Border(top: BorderSide(color: t.stroke.hairline)),
+          ),
+          child: SafeArea(
+            top: false,
+            child: Row(
+              children: [
+                Container(
+                  width: 7,
+                  height: 7,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: t.accent.warn,
+                  ),
+                ),
+                SizedBox(width: t.space.sm),
+                Text(
+                  'Unsaved changes',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: t.surface.onBase,
+                  ),
+                ),
+                const Spacer(),
+                TextButton(
+                  onPressed: onDiscard,
+                  child: Text(
+                    'Discard',
+                    style: TextStyle(color: t.surface.onBaseMuted),
+                  ),
+                ),
+                SizedBox(width: t.space.xs),
+                FilledButton(
+                  onPressed: onSave,
+                  child: saving
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Save'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Everything about the rule that is not its name, said in one line.
+///
+/// Priority, cooldown and run mode are set once and then forgotten, so they read
+/// as prose and open an editor when tapped rather than occupying three permanent
+/// labelled boxes. The line states the *effect* — "at most once every 5 min" —
+/// not the field name and its raw value.
+class _MetaLine extends StatelessWidget {
+  const _MetaLine({required this.rule, required this.onChanged});
+
+  final HcRule rule;
+  final VoidCallback onChanged;
+
+  static String _cooldown(int? secs) {
+    if (secs == null || secs == 0) return 'no cooldown';
+    if (secs % 3600 == 0) {
+      final h = secs ~/ 3600;
+      return 'at most once every $h ${h == 1 ? 'hour' : 'hours'}';
+    }
+    if (secs % 60 == 0) {
+      final m = secs ~/ 60;
+      return 'at most once every $m ${m == 1 ? 'minute' : 'minutes'}';
+    }
+    return 'at most once every ${secs}s';
+  }
+
+  static String _runMode(RunMode m) => switch (m.kind) {
+        'Queued' => 'queue up to ${m.maxQueue}',
+        'Parallel' => 'run in parallel',
+        'Restart' => 'restart if re-triggered',
+        _ => 'one run at a time',
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+
+    return Wrap(
+      spacing: t.space.xs,
+      runSpacing: t.space.xs,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        // Enabled is the one meta field with a consequence you care about at a
+        // glance, so it keeps a colour and a dot. The rest are grey.
+        _MetaChip(
+          label: rule.enabled ? 'Enabled' : 'Disabled',
+          lit: rule.enabled,
+          dot: true,
+          onTap: () {
+            rule.enabled = !rule.enabled;
+            onChanged();
+          },
+        ),
+        _dot(t),
+        _MetaChip(
+          label: rule.priority == 0
+              ? 'normal priority'
+              : 'priority ${rule.priority}',
+          onTap: () => _editNumber(
+            context,
+            title: 'Priority',
+            help: 'Higher runs first. −1000 to 1000.',
+            value: rule.priority,
+            onSet: (v) {
+              rule.priority = (v ?? 0).clamp(-1000, 1000);
+              onChanged();
+            },
+          ),
+        ),
+        _dot(t),
+        _MetaChip(
+          label: _cooldown(rule.cooldownSecs),
+          onTap: () => _editNumber(
+            context,
+            title: 'Cooldown (seconds)',
+            help: 'Leave empty for none.',
+            value: rule.cooldownSecs,
+            nullable: true,
+            onSet: (v) {
+              rule.cooldownSecs = v;
+              onChanged();
+            },
+          ),
+        ),
+        _dot(t),
+        _MetaChip(
+          label: _runMode(rule.runMode),
+          onTap: () => _editRunMode(context),
+        ),
+      ],
+    );
+  }
+
+  Widget _dot(HcTokens t) => Text(
+        '·',
+        style: TextStyle(color: t.surface.onBaseMuted.withValues(alpha: 0.5)),
+      );
+
+  Future<void> _editNumber(
+    BuildContext context, {
+    required String title,
+    required String help,
+    required int? value,
+    required ValueChanged<int?> onSet,
+    bool nullable = false,
+  }) async {
+    final controller = TextEditingController(text: value?.toString() ?? '');
+    final t = HcTokens.of(context);
+
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: t.surface.overlay,
+        title: Text(title),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType: TextInputType.number,
+          decoration: InputDecoration(helperText: help),
+          onSubmitted: (_) => Navigator.pop(context),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Done'),
+          ),
+        ],
+      ),
+    );
+
+    final text = controller.text.trim();
+    if (text.isEmpty && nullable) {
+      onSet(null);
+    } else {
+      final parsed = int.tryParse(text);
+      if (parsed != null) onSet(parsed);
+    }
+    controller.dispose();
+  }
+
+  Future<void> _editRunMode(BuildContext context) async {
+    final t = HcTokens.of(context);
+
+    await showDialog<void>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setInner) => AlertDialog(
+          backgroundColor: t.surface.overlay,
+          title: const Text('When it fires again'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (final k in RunMode.kinds)
+                RadioListTile<String>(
+                  value: k,
+                  // ignore: deprecated_member_use
+                  groupValue: rule.runMode.kind,
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(
+                      _runMode(RunMode(k, maxQueue: rule.runMode.maxQueue))),
+                  // ignore: deprecated_member_use
+                  onChanged: (v) {
+                    if (v == null) return;
+                    rule.runMode = RunMode(v, maxQueue: rule.runMode.maxQueue);
+                    setInner(() {});
+                    onChanged();
+                  },
+                ),
+              if (rule.runMode.kind == 'Queued')
+                TextFormField(
+                  initialValue: '${rule.runMode.maxQueue}',
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Max queued'),
+                  onChanged: (v) {
+                    final n = int.tryParse(v);
+                    if (n == null) return;
+                    rule.runMode = RunMode('Queued', maxQueue: n);
+                    setInner(() {});
+                    onChanged();
+                  },
+                ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Done'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MetaChip extends StatelessWidget {
+  const _MetaChip({
+    required this.label,
+    required this.onTap,
+    this.lit = false,
+    this.dot = false,
+  });
+
+  final String label;
+  final VoidCallback onTap;
+  final bool lit;
+  final bool dot;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    final colour = dot
+        ? (lit ? t.accent.success : t.surface.onBaseMuted)
+        : t.surface.onBaseMuted;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: t.radius.smR,
+      child: Padding(
+        padding: EdgeInsets.symmetric(
+          horizontal: t.space.xs,
+          vertical: 2,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (dot) ...[
+              Container(
+                width: 6,
+                height: 6,
+                decoration:
+                    BoxDecoration(shape: BoxShape.circle, color: colour),
+              ),
+              SizedBox(width: t.space.xs),
+            ],
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12.5,
+                color: colour,
+                fontWeight: dot ? FontWeight.w600 : FontWeight.w400,
+                fontFeatures: t.numericFontFeatures,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _TriggerPalette extends StatelessWidget {
   const _TriggerPalette({required this.current});
 

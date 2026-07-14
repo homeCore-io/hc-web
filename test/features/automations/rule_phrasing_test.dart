@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hc_web/core/rules/node.dart';
 import 'package:hc_web/core/rules/schema.dart';
@@ -63,7 +65,35 @@ void main() {
         'op': 'Eq',
         'value': true,
       });
-      expect(say(n, conditionPhrase(n)!), 'the lamp on is true');
+      expect(say(n, conditionPhrase(n)!), 'the lamp is on');
+    });
+
+    test('a boolean attribute is named, not compared', () {
+      // `the back_door open is false` is not a sentence. A contact sensor is
+      // open or closed; a leak sensor is wet or dry. Those are the words.
+      String cond(String attribute, Object value, {String op = 'Eq'}) {
+        final n = HcNode('DeviceState', {
+          'device_id': 'd',
+          'attribute': attribute,
+          'op': op,
+          'value': value,
+        });
+        return say(n, conditionPhrase(n)!);
+      }
+
+      expect(cond('open', false), 'the d is closed');
+      expect(cond('locked', true), 'the d is locked');
+      expect(cond('motion', false), 'the d detects no motion');
+      expect(cond('water_detected', true), 'the d detects water');
+      expect(cond('occupancy', false), 'the d is empty');
+
+      // A non-boolean keeps the general comparison, attribute first so it reads:
+      // "the temperature of d is above 21".
+      expect(cond('temperature', 21, op: 'Gt'),
+          'the temperature of d is above 21');
+
+      // An attribute with no English name of its own does NOT get invented one.
+      expect(cond('color_temp', 370), 'the color temp of d is 370');
     });
 
     test('an action says what it does to the house', () {
@@ -125,6 +155,8 @@ void main() {
     });
   });
 
+  _payloadShapes();
+
   group('refinements — the six boxes that used to shout', () {
     test('everything the sentence does not say hides behind Refine', () {
       final n = HcNode('DeviceStateChanged', {
@@ -159,6 +191,120 @@ void main() {
       expect(hidden, isNot(contains('then_actions')));
       expect(hidden, isNot(contains('else_actions')));
       expect(hidden, isNot(contains('else_if')));
+    });
+  });
+}
+
+/// Every `SetDeviceState` payload shape that exists across the 42 live rules.
+/// The bug this pins: an earlier cut said "set Bathroom" for all of them.
+void _payloadShapes() {
+  group('SetDeviceState says what it actually does', () {
+    test('every payload shape in the real rule set reads as English', () {
+      const cases = {
+        // 26x — the common case
+        '{"on":true}': 'turn on',
+        '{"on":false}': 'turn off',
+        // 1x — WLED
+        '{"on":true,"preset":12}': 'turn on with preset 12',
+        // 7x — a Lutron scene
+        '{"activate":true}': 'activate',
+        // 17x — a Lutron keypad LED
+        '{"set_led":{"button":3,"state":1}}': 'set the button 3 LED to on',
+        '{"set_led":{"button":6,"state":0}}': 'set the button 6 LED to off',
+        // 4x + 2x — core timers
+        '{"command":"start","duration_secs":300,"label":"Deck lights off"}':
+            'start a 5-minute timer (Deck lights off)',
+        '{"command":"start","duration_secs":300}': 'start a 5-minute timer',
+        '{"command":"cancel"}': 'cancel the timer',
+        // the Sonos rule that started this
+        '{"action":"set_volume","volume":15}': 'set the volume to 15',
+        '{"action":"set_shuffle","shuffle":true}': 'enable shuffle',
+        '{"action":"play_favorite","favorite":"Relaxing Classical Piano Music"}':
+            'play “Relaxing Classical Piano Music”',
+        '{"action":"stop"}': 'stop',
+      };
+
+      for (final e in cases.entries) {
+        expect(
+          describeState(jsonDecode(e.key)),
+          e.value,
+          reason: e.key,
+        );
+      }
+    });
+
+    test('the WHOLE sentence reads, prepositions and all', () {
+      // describeState alone is not enough: "turn shuffle on" + the "on"
+      // preposition produced "turn shuffle on on the Bathroom". The sentence is
+      // the thing the user reads, so the sentence is the thing to assert.
+      String sentence(Map<String, Object?> state) {
+        final n = HcNode('SetDeviceState', {
+          'device_id': 'Bathroom',
+          'state': state,
+        });
+        return say(n, actionPhrase(n)!);
+      }
+
+      expect(sentence({'on': true}), 'turn on Bathroom');
+      expect(sentence({'activate': true}), 'activate Bathroom');
+      expect(sentence({'action': 'set_volume', 'volume': 15}),
+          'set the volume to 15 on Bathroom');
+      expect(sentence({'action': 'set_shuffle', 'shuffle': true}),
+          'enable shuffle on Bathroom');
+      expect(
+          sentence({
+            'action': 'play_favorite',
+            'favorite': 'Relaxing Classical Piano Music',
+          }),
+          'play “Relaxing Classical Piano Music” on Bathroom');
+      expect(sentence({'command': 'cancel'}), 'cancel the timer on Bathroom');
+      expect(
+          sentence({
+            'set_led': {'button': 3, 'state': 1},
+          }),
+          'set the button 3 LED to on on Bathroom');
+
+      // No sentence anywhere may contain a doubled preposition.
+      for (final s in [
+        sentence({'on': false}),
+        sentence({'action': 'stop'}),
+        sentence({'command': 'start', 'duration_secs': 300}),
+      ]) {
+        expect(s, isNot(contains(' on on ')), reason: s);
+        expect(s, isNot(contains(' to to ')), reason: s);
+      }
+    });
+
+    test('an unaccounted key returns null rather than a partial lie', () {
+      // The important half. A partial reading is the same bug in a nicer coat:
+      // the rule would look like it said everything while quietly omitting a
+      // field that changes what it does.
+      expect(describeState({'on': true, 'mystery': 42}), isNull);
+      expect(describeState({'action': 'set_volume', 'volume': 15, 'x': 1}),
+          isNull);
+      expect(describeState({'totally': 'unknown'}), isNull);
+      expect(describeState({}), isNull);
+    });
+
+    test('an unnamed payload is SHOWN, never swallowed', () {
+      final n = HcNode('SetDeviceState', {
+        'device_id': 'd',
+        'state': {'totally': 'unknown', 'other': 2},
+      });
+      // It falls back to "set d to totally: unknown, other: 2" — honest, and
+      // strictly better than the "set d" that dropped it.
+      final said = say(n, actionPhrase(n)!);
+      expect(said, contains('totally: unknown'));
+      expect(said, contains('other: 2'));
+    });
+
+    test('durations are said the way a person says them', () {
+      expect(describeState({'command': 'start', 'duration_secs': 3600}),
+          contains('1-hour'));
+      expect(describeState({'command': 'start', 'duration_secs': 600}),
+          contains('10-minute'));
+      expect(describeState({'command': 'start', 'duration_secs': 45}),
+          contains('45-second'));
     });
   });
 }

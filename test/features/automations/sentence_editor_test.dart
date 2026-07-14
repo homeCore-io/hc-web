@@ -159,6 +159,55 @@ void main() {
       expect(find.text('is on'), findsOneWidget);
     });
 
+    testWidgets('a field at its default is not flagged as "set"',
+        (tester) async {
+      // SetDeviceState carries a REQUIRED `track_event_value: false`. It is not
+      // spoken by the sentence, so it is a refinement — but it is sitting at its
+      // own default, and counting it made every action of a working rule read
+      // "Refine · 1 set" forever. A warning that always fires is not a warning.
+      await tester.pumpWidget(_host(ActionTree(
+        actions: [
+          HcRuleAction(
+            action: HcNode.fromJson({
+              'SetDeviceState': {
+                'device_id': 'lutron_54',
+                'state': {'action': 'set_volume', 'volume': 15},
+                'track_event_value': false,
+              }
+            }, kActions),
+          ),
+        ],
+        refs: _refs,
+        onChanged: () {},
+      )));
+      await tester.pump(const Duration(milliseconds: 50));
+
+      expect(find.text('set the volume to 15'), findsOneWidget);
+      expect(find.textContaining('1 set'), findsNothing);
+      expect(find.textContaining('Refine'), findsOneWidget);
+    });
+
+    testWidgets('a field away from its default IS flagged', (tester) async {
+      await tester.pumpWidget(_host(ActionTree(
+        actions: [
+          HcRuleAction(
+            action: HcNode.fromJson({
+              'SetDeviceState': {
+                'device_id': 'lutron_54',
+                'state': {'on': true},
+                'track_event_value': true, // <- not the default
+              }
+            }, kActions),
+          ),
+        ],
+        refs: _refs,
+        onChanged: () {},
+      )));
+      await tester.pump(const Duration(milliseconds: 50));
+
+      expect(find.textContaining('1 set'), findsOneWidget);
+    });
+
     testWidgets('a boolean condition keeps the tree, and its leaves speak',
         (tester) async {
       await tester.pumpWidget(_host(ConditionTree(
@@ -188,9 +237,17 @@ void main() {
 
       // The container is still the tree — prose does not survive nesting...
       expect(find.text('ANY of'), findsOneWidget);
-      // ...but its leaves are sentences, with the same chips.
-      expect(find.text('is on'), findsOneWidget);
-      expect(find.text('is'), findsOneWidget);
+
+      // ...but its leaves are sentences, with the same chips: "mode_night is on"
+      // and "the Bathroom Exhaust Fan is on" — the device named, not its raw id.
+      // That leaf used to read "lutron_54 on is true", which is not English.
+      expect(find.text('mode_night'), findsOneWidget);
+      expect(find.text('Bathroom Exhaust Fan'), findsOneWidget);
+      expect(find.text('is on'), findsNWidgets(2));
+
+      // The leaves carry no heading of their own; the sentence is the heading.
+      expect(find.text('Device state is'), findsNothing);
+      expect(find.text('Mode is'), findsNothing);
     });
 
     testWidgets('a branching action keeps its header and nests below',

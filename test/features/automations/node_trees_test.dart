@@ -54,12 +54,20 @@ void main() {
       )));
       await tester.pumpAndSettle();
 
-      // Every level is drawn with its own label...
+      // The boolean nodes keep their labels, because at that point the
+      // structure IS the information.
       expect(find.text('ANY of'), findsOneWidget);
       expect(find.text('NOT'), findsOneWidget);
-      expect(find.text('Device state is'), findsOneWidget);
-      // ...including the grandchild inside the NOT.
-      expect(find.text('Mode is'), findsOneWidget);
+
+      // The leaves do NOT. A leaf says what it checks and nothing else — no
+      // "Device state is" heading restating the sentence beneath it.
+      expect(find.text('Device state is'), findsNothing);
+      expect(find.text('Mode is'), findsNothing);
+
+      // What it says instead, including the grandchild inside the NOT.
+      expect(find.text('lamp'), findsOneWidget);
+      expect(find.text('mode_night'), findsOneWidget);
+      expect(find.text('is on'), findsNWidgets(2));
 
       // And nothing anywhere is a raw JSON editor for the boolean itself.
       expect(find.text('Not valid JSON'), findsNothing);
@@ -154,14 +162,20 @@ void main() {
       )));
       await tester.pumpAndSettle();
 
+      // The branch keeps its label and its arms.
       expect(find.text('IF / ELSE'), findsOneWidget);
       expect(find.text('THEN'), findsOneWidget);
       expect(find.text('ELSE'), findsOneWidget);
-      expect(find.text('Set device state'), findsOneWidget);
-      expect(find.text('Write to the log'), findsOneWidget);
+
+      // Its leaves speak, rather than being titled.
+      expect(find.text('turn on'), findsOneWidget);
+      expect(find.text('lamp'), findsOneWidget);
+      expect(find.text('log'), findsOneWidget);
+      expect(find.text('nope'), findsOneWidget);
+      expect(find.text('Set device state'), findsNothing);
     });
 
-    testWidgets('the enabled switch exists only at the top level',
+    testWidgets('the enable toggle exists only at the top level',
         (tester) async {
       // Core wraps top-level actions in RuleAction{enabled, action}; nested
       // ones are bare Actions with no such flag. Offering a toggle on a nested
@@ -190,28 +204,39 @@ void main() {
       )));
       await tester.pumpAndSettle();
 
-      // Three actions on screen (Parallel + two children), one switch.
-      expect(find.text('Write to the log'), findsNWidgets(2));
-      expect(find.byType(Switch), findsOneWidget);
+      // Three actions on screen (Parallel + its two children), one toggle.
+      expect(find.text('log'), findsNWidgets(2));
+      expect(find.byTooltip('Disable this step'), findsOneWidget);
+
+      // And no Material Switch anywhere: a heavyweight, permanently-lit control
+      // for something touched about once a month.
+      expect(find.byType(Switch), findsNothing);
     });
 
-    testWidgets('toggling the top-level switch encodes enabled: false',
+    testWidgets('toggling the top-level action encodes enabled: false',
         (tester) async {
       final actions = [
         HcRuleAction(action: HcNode('StopRuleChain')),
       ];
 
-      await tester.pumpWidget(_host(ActionTree(
-        actions: actions,
-        refs: _refs,
-        onChanged: () {},
+      // Rebuilt on change, like the real page does — otherwise the toggle's own
+      // feedback could never be asserted, and a control that mutates state but
+      // never redraws would pass.
+      await tester.pumpWidget(_host(StatefulBuilder(
+        builder: (context, setState) => ActionTree(
+          actions: actions,
+          refs: _refs,
+          onChanged: () => setState(() {}),
+        ),
       )));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byType(Switch));
+      await tester.tap(find.byTooltip('Disable this step'));
       await tester.pumpAndSettle();
 
       expect(actions.single.enabled, isFalse);
+      // ...and it now offers the way back, rather than becoming a dead end.
+      expect(find.byTooltip('Skipped — click to enable'), findsOneWidget);
       expect(actions.single.toJson(), {
         'enabled': false,
         // A unit variant, still a bare string.

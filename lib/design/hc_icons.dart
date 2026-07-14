@@ -137,6 +137,38 @@ class HcIcons {
   static const previous = IconData(0xe5a4, fontFamily: _fill);
   static const volume = IconData(0xe44a, fontFamily: _regular);
 
+  /// The speaker glyph as a const, for nav lists that must be compile-time
+  /// constant. [forFacetMedia] is a getter and cannot appear in a `const` list.
+  static const media = IconData(0xea08, fontFamily: _regular);
+
+  // -- editing ---------------------------------------------------------------
+  //
+  // Phosphor's TTF names its glyphs `uniE4A6`, not `trash`, so a codepoint
+  // cannot be checked by reading the font — a wrong one renders a plausible
+  // WRONG icon and nothing complains. Every value below was confirmed by
+  // rasterising the glyph and looking at it. Three of the first guesses were off
+  // by one slot (0xe180 is a chat bubble, not a check). Do the same before
+  // adding one.
+  static const trash = IconData(0xe4a6, fontFamily: _regular);
+  static const plus = IconData(0xe3d4, fontFamily: _regular);
+  static const caretUp = IconData(0xe13c, fontFamily: _regular);
+  static const caretDown = IconData(0xe136, fontFamily: _regular);
+  static const caretRight = IconData(0xe13a, fontFamily: _regular);
+  static const eye = IconData(0xe220, fontFamily: _regular);
+  static const eyeSlash = IconData(0xe224, fontFamily: _regular);
+  static const check = IconData(0xe182, fontFamily: _regular);
+  static const x = IconData(0xe4f6, fontFamily: _regular);
+  static const pencil = IconData(0xe3aa, fontFamily: _regular);
+  static const sliders = IconData(0xe434, fontFamily: _regular);
+  static const clock = IconData(0xe19a, fontFamily: _regular);
+  static const lightning = IconData(0xe2de, fontFamily: _regular);
+  static const funnel = IconData(0xe266, fontFamily: _regular);
+  static const copy = IconData(0xe1ca, fontFamily: _regular);
+
+  /// The house. Verified by eye: 0xe2c2 is `house`, 0xe2c4 is `house-line`.
+  static const home = IconData(0xe2c2, fontFamily: _regular);
+  static const homeFill = IconData(0xe2c2, fontFamily: _fill);
+
   // navigation
   static const dashboards = IconData(0xe464, fontFamily: _regular);
   static const devices = IconData(0xeba4, fontFamily: _regular);
