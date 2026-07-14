@@ -1,16 +1,21 @@
 /// Pure camera-source logic, with no browser imports, so it is testable on the
-/// Dart VM. The widget that actually mounts a `<video-stream>` or `<img>` lives
-/// in `camera_view.dart` and depends on this.
+/// Dart VM. The widget that actually mounts an `<iframe>` or `<img>` lives in
+/// `camera_view.dart` and depends on this.
 library;
 
 /// How a camera delivers its picture.
 enum CameraTransport {
-  /// go2rtc's negotiating element: WebRTC → MSE → MJPEG, best-first. The right
-  /// choice for a security wall — sub-second latency when WebRTC lands.
+  /// A go2rtc stream, shown by embedding go2rtc's own `stream.html` in an
+  /// iframe. This is the important trick: the embedded page runs at go2rtc's
+  /// OWN origin, so its WebSocket back to go2rtc is same-origin and its Origin
+  /// check passes — WebRTC works with no `api.origin` config at all. Mounting
+  /// go2rtc's `<video-stream>` element in our own page instead runs at OUR
+  /// origin, so its WebSocket is cross-origin and go2rtc answers 403. Same
+  /// component, opposite result, entirely because of who is hosting it.
   go2rtc,
 
-  /// A plain never-ending MJPEG image (a generic IP camera, or a go2rtc that has
-  /// not enabled cross-origin WebSockets). The browser animates it natively.
+  /// A plain never-ending MJPEG image (a generic IP camera). The browser
+  /// animates it natively; no negotiation, no iframe.
   mjpeg,
 
   /// A single still, re-fetched on a timer.
@@ -23,22 +28,37 @@ CameraTransport transportFor(String sourceType) => switch (sourceType) {
       _ => CameraTransport.mjpeg,
     };
 
-/// The MJPEG URL a go2rtc `/api/ws?src=X` endpoint corresponds to.
+/// The go2rtc embed URL to put in an iframe, from whatever form the camera URL
+/// was entered in.
 ///
-/// go2rtc's WebSocket (WebRTC/MSE) enforces an Origin check and refuses a
-/// cross-origin browser with 403 unless `api.origin` is configured. Its plain
-/// HTTP `stream.mjpeg` does NOT — it serves any origin. So when the socket is
-/// refused we can still show the camera, at MJPEG quality, with zero server
-/// config. This derives that fallback URL from the stream endpoint.
+/// A person reaches for `stream.html` — it is the page they can already open in
+/// a browser tab — so that is accepted as-is. But `api/ws?src=X` (the WebSocket
+/// endpoint) and a bare `?src=X` on some other go2rtc page are the same stream
+/// said differently, so those are rewritten to the embed page rather than
+/// rejected. Returns the input unchanged if it is not recognisably go2rtc.
+String go2rtcEmbedUrl(String url) {
+  // Already the embed page.
+  if (url.contains('/stream.html')) return url;
+
+  // The WebSocket endpoint, or any other go2rtc path carrying ?src= — rewrite
+  // the path to stream.html, keep host and the src query.
+  final m =
+      RegExp(r'^(https?://[^/]+)/[^?]*\?(.*\bsrc=[^&]+.*)$').firstMatch(url);
+  if (m != null) {
+    final src = RegExp(r'\bsrc=([^&]+)').firstMatch(m.group(2)!)?.group(1);
+    if (src != null) return '${m.group(1)}/stream.html?src=$src';
+  }
+  return url;
+}
+
+/// The MJPEG still/stream URL for a go2rtc source, for the non-iframe path.
 ///
-/// Returns null when the URL is not a recognisable go2rtc ws endpoint — there is
-/// then no fallback to invent, and guessing a path on a generic camera would
-/// just 404.
-String? go2rtcMjpegFallback(String wsUrl) {
-  final match = RegExp(r'^(https?)://([^/]+)/api/ws\?(?:.*&)?src=([^&]+)')
-      .firstMatch(wsUrl);
-  if (match == null) return null;
-  return '${match.group(1)}://${match.group(2)}/api/stream.mjpeg?src=${match.group(3)}';
+/// Returns null when the URL is not a recognisable go2rtc endpoint.
+String? go2rtcMjpegUrl(String url) {
+  final m =
+      RegExp(r'^(https?)://([^/]+)/[^?]*\?(?:.*&)?src=([^&]+)').firstMatch(url);
+  if (m == null) return null;
+  return '${m.group(1)}://${m.group(2)}/api/stream.mjpeg?src=${m.group(3)}';
 }
 
 /// The URL to fetch for a given frame of an image source.

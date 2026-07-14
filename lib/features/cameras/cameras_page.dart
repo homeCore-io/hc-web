@@ -239,8 +239,7 @@ class _AddCameraDialogState extends State<_AddCameraDialog> {
               decoration: const InputDecoration(labelText: 'Type'),
               items: const [
                 DropdownMenuItem(
-                    value: 'webrtc',
-                    child: Text('go2rtc (WebRTC, falls back to MJPEG)')),
+                    value: 'webrtc', child: Text('go2rtc (WebRTC)')),
                 DropdownMenuItem(value: 'mjpeg', child: Text('MJPEG stream')),
                 DropdownMenuItem(
                     value: 'image_refresh', child: Text('Snapshot (still)')),
@@ -254,7 +253,8 @@ class _AddCameraDialogState extends State<_AddCameraDialog> {
                 labelText: 'URL',
                 helperText: switch (_type) {
                   'webrtc' =>
-                    'go2rtc stream, e.g. http://10.0.10.150:1984/api/ws?src=driveway',
+                    'The go2rtc stream page you can open in a browser, e.g. '
+                        'http://10.0.10.150:1984/stream.html?src=driveway',
                   'image_refresh' => 'Snapshot URL, re-fetched every ~2s',
                   _ => 'MJPEG stream URL',
                 },
@@ -281,10 +281,11 @@ class _AddCameraDialogState extends State<_AddCameraDialog> {
         FilledButton(
           onPressed: _valid
               ? () {
-                  // A stable-enough id without dart:math — the wall is small and
-                  // ids only need to be unique within it.
-                  final id =
-                      'cam_${_name.text.trim().toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '_')}';
+                  // Unique per add, NOT derived from the name — two cameras can
+                  // share a name (front and back "Door") and a name-derived id
+                  // made the second silently overwrite the first, which is why
+                  // "add the same camera again" appeared to do nothing.
+                  final id = 'cam_${DateTime.now().microsecondsSinceEpoch}';
                   Navigator.pop(
                     context,
                     Camera(

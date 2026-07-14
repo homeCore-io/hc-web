@@ -83,12 +83,11 @@ class CamerasNotifier extends AsyncNotifier<List<Camera>> {
     final dashboards = await ref.read(dashboardsProvider.future);
     final wall = _wallIn(dashboards);
 
+    final widgets = [...?wall?.widgets, camera.toWidget()];
     if (wall == null) {
-      await notifier.createDashboard(_newWall([camera.toWidget()]));
+      await notifier.createDashboard(_wallWith(_blankWall(), widgets));
     } else {
-      await notifier.updateDashboard(
-        wall.copyWith(widgets: [...wall.widgets, camera.toWidget()]),
-      );
+      await notifier.updateDashboard(_wallWith(wall, widgets));
     }
     ref.invalidateSelf();
   }
@@ -99,16 +98,48 @@ class CamerasNotifier extends AsyncNotifier<List<Camera>> {
     final wall = _wallIn(dashboards);
     if (wall == null) return;
 
-    await notifier.updateDashboard(
-      wall.copyWith(
-        widgets: wall.widgets.where((w) => w.id != id).toList(),
-      ),
-    );
+    final widgets = wall.widgets.where((w) => w.id != id).toList();
+    await notifier.updateDashboard(_wallWith(wall, widgets));
     ref.invalidateSelf();
   }
 
-  DashboardDefinition _newWall(List<DashboardWidgetModel> widgets) =>
-      DashboardDefinition(
+  /// Rebuilds the wall with [widgets] AND a layout that places them.
+  ///
+  /// The layout is not optional. Core accepts a *create* with no layouts but
+  /// rejects an *update* with `dashboard must define at least one layout` (400)
+  /// — so a wall born with an empty layout could never be edited again, which is
+  /// exactly the bug that made delete and the second Add silently do nothing.
+  /// One camera per row is enough; the page renders its own responsive grid and
+  /// ignores these placements, but core must see a valid one.
+  DashboardDefinition _wallWith(
+    DashboardDefinition base,
+    List<DashboardWidgetModel> widgets,
+  ) {
+    final placements = [
+      for (var i = 0; i < widgets.length; i++)
+        DashboardWidgetPlacement(
+          widgetId: widgets[i].id,
+          x: 0,
+          y: i,
+          w: 12,
+          h: 1,
+        ),
+    ];
+    return base.copyWith(
+      widgets: widgets,
+      layouts: [
+        DashboardLayout(
+          breakpoint: DashboardBreakpoint.desktop,
+          columns: 12,
+          rowHeight: 120,
+          gap: 12,
+          placements: placements,
+        ),
+      ],
+    );
+  }
+
+  DashboardDefinition _blankWall() => DashboardDefinition(
         id: '',
         name: _kWallName,
         description: 'Live cameras, arranged as a wall.',
@@ -120,7 +151,7 @@ class CamerasNotifier extends AsyncNotifier<List<Camera>> {
         createdAt: DateTime.utc(2026),
         updatedAt: DateTime.utc(2026),
         layouts: const [],
-        widgets: widgets,
+        widgets: const [],
       );
 }
 
