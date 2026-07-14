@@ -8,6 +8,10 @@ import '../../core/providers/name_resolver_provider.dart';
 import '../../shared/widgets/filter_bar.dart';
 import '../../shared/widgets/skeleton.dart';
 import '../../core/providers/time_display_provider.dart';
+import '../../design/components/hc_controls.dart';
+import '../../design/hc_icons.dart';
+import '../../design/tokens.dart';
+import 'rule_phrasing.dart';
 
 // ── Filter state ─────────────────────────────────────────────────────────────
 
@@ -421,97 +425,129 @@ class _RuleTile extends ConsumerWidget {
     }
   }
 
+  /// What fires this rule, in the SAME words the editor uses.
+  ///
+  /// It used to build its own summary and produce `Device: Bathroom Door Sensor
+  /// → open` — the raw field dump that the sentence work exists to kill. Reading
+  /// it from the same phrase table means the list and the editor can never drift
+  /// into describing a rule two different ways.
+  String _sentence() =>
+      triggerSentence(rule.trigger, label: deviceResolver.resolve) ??
+      rule.triggerSummary(
+        resolveDevice: deviceResolver.resolve,
+        resolveMode: modeResolver.resolve,
+      );
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final t = HcTokens.of(context);
     final inBulk = ref.watch(_selectionProvider).isNotEmpty;
-    final summary = rule.triggerSummary(
-      resolveDevice: deviceResolver.resolve,
-      resolveMode: modeResolver.resolve,
-    );
+    final broken = rule.error != null;
 
-    return ListTile(
+    return _HoverRow(
       selected: selected,
-      leading: inBulk
-          ? Checkbox(
+      onTap: inBulk
+          ? () => onToggleSelect(rule.id)
+          : () => context.push('/automations/${rule.id}'),
+      onLongPress: inBulk ? null : onLongPress,
+      builder: (context, hovered) => Row(
+        children: [
+          if (inBulk)
+            Checkbox(
               value: selected,
               onChanged: (_) => onToggleSelect(rule.id),
             )
-          : Switch(
+          else
+            // A disabled rule is dimmed rather than merely un-ticked: the state
+            // that matters is "this does nothing", and it should read at a
+            // glance down a list of 42.
+            HcToggle(
               value: rule.enabled,
-              onChanged: (val) =>
-                  ref.read(automationsProvider.notifier).toggle(rule.id, val),
+              semanticLabel: rule.name,
+              onChanged: (v) =>
+                  ref.read(automationsProvider.notifier).toggle(rule.id, v),
             ),
-      title: Row(
-        children: [
-          Expanded(child: Text(rule.name)),
-          if (rule.error != null)
-            Tooltip(
-              message: rule.error!,
-              child: Icon(Icons.warning_amber,
-                  size: 16, color: Theme.of(context).colorScheme.error),
-            ),
-        ],
-      ),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(summary, style: Theme.of(context).textTheme.bodySmall),
-          if (rule.error != null)
-            Text(
-              rule.error!,
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
-                  ?.copyWith(color: Theme.of(context).colorScheme.error),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          if (rule.tags.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            Wrap(
-              spacing: 4,
-              children: rule.tags
-                  .map((t) => Chip(
-                        label: Text(t, style: const TextStyle(fontSize: 10)),
-                        padding: EdgeInsets.zero,
-                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        visualDensity: VisualDensity.compact,
-                      ))
-                  .toList(),
-            ),
-          ],
-        ],
-      ),
-      isThreeLine: rule.tags.isNotEmpty || rule.error != null,
-      trailing: inBulk
-          ? null
-          : Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text('P${rule.priority}',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.outline)),
-                if (!rule.runMode.isParallel)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 4),
-                    child: Tooltip(
-                      message: 'Run mode: ${rule.runMode.kind}',
-                      child: Icon(Icons.layers_outlined,
-                          size: 14,
-                          color: Theme.of(context).colorScheme.secondary),
+          SizedBox(width: t.space.md),
+          Expanded(
+            child: AnimatedOpacity(
+              opacity: rule.enabled ? 1 : 0.45,
+              duration: t.motion.fast,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          rule.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: broken ? t.accent.danger : t.surface.onBase,
+                          ),
+                        ),
+                      ),
+                      if (broken) ...[
+                        SizedBox(width: t.space.xs),
+                        Tooltip(
+                          message: rule.error!,
+                          child: Icon(HcIcons.warning,
+                              size: 13, color: t.accent.danger),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    // "the Bathroom Door Sensor closes"
+                    broken ? rule.error! : _sentence(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      color: broken
+                          ? t.accent.danger.withValues(alpha: 0.8)
+                          : t.surface.onBaseMuted,
                     ),
                   ),
-                IconButton(
-                  icon: const Icon(Icons.history_outlined),
+                ],
+              ),
+            ),
+          ),
+          if (!inBulk) ...[
+            // Priority only earns space when it is not the default — a column of
+            // "P0" down 42 rows is noise pretending to be information.
+            if (rule.priority != 0)
+              Padding(
+                padding: EdgeInsets.only(right: t.space.sm),
+                child: Text(
+                  'P${rule.priority}',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: t.surface.onBaseMuted.withValues(alpha: 0.6),
+                    fontFeatures: t.numericFontFeatures,
+                  ),
+                ),
+              ),
+            HcHoverControls(
+              shown: hovered,
+              children: [
+                HcIconButton(
+                  icon: HcIcons.clock,
                   tooltip: 'Fire history',
-                  iconSize: 18,
                   onPressed: () => _showHistory(context, ref),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.copy_outlined),
-                  tooltip: 'Clone',
-                  iconSize: 18,
+                HcIconButton(
+                  icon: HcIcons.play,
+                  tooltip: 'Dry run',
+                  onPressed: () => _runTest(context, ref),
+                ),
+                HcIconButton(
+                  icon: HcIcons.copy,
+                  tooltip: 'Duplicate',
                   onPressed: () async {
                     try {
                       final newId = await ref
@@ -528,24 +564,72 @@ class _RuleTile extends ConsumerWidget {
                     }
                   },
                 ),
-                IconButton(
-                  icon: const Icon(Icons.play_arrow_outlined),
-                  tooltip: 'Test (dry run)',
-                  iconSize: 18,
-                  onPressed: () => _runTest(context, ref),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.delete_outline),
+                HcIconButton(
+                  icon: HcIcons.trash,
                   tooltip: 'Delete',
-                  iconSize: 18,
+                  danger: true,
                   onPressed: () => _confirmDelete(context, ref),
                 ),
               ],
             ),
-      onTap: inBulk
-          ? () => onToggleSelect(rule.id)
-          : () => context.push('/automations/${rule.id}'),
-      onLongPress: inBulk ? null : onLongPress,
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// A row that lifts under the pointer and tells its child whether it is hovered.
+class _HoverRow extends StatefulWidget {
+  const _HoverRow({
+    required this.builder,
+    required this.onTap,
+    required this.selected,
+    this.onLongPress,
+  });
+
+  final Widget Function(BuildContext context, bool hovered) builder;
+  final VoidCallback onTap;
+  final VoidCallback? onLongPress;
+  final bool selected;
+
+  @override
+  State<_HoverRow> createState() => _HoverRowState();
+}
+
+class _HoverRowState extends State<_HoverRow> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        onLongPress: widget.onLongPress,
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedContainer(
+          duration: t.motion.fast,
+          padding: EdgeInsets.symmetric(
+            horizontal: t.space.md,
+            vertical: t.space.sm + 2,
+          ),
+          decoration: BoxDecoration(
+            color: widget.selected
+                ? t.accent.primary.withValues(alpha: 0.10)
+                : _hover
+                    ? t.surface.raised
+                    : Colors.transparent,
+            // Rows are separated by a hairline, not boxed into cards. A list of
+            // rules is a list, and a card per row is how it became a web page.
+            border: Border(bottom: BorderSide(color: t.stroke.hairline)),
+          ),
+          child: widget.builder(context, _hover),
+        ),
+      ),
     );
   }
 }
