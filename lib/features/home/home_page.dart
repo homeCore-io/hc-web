@@ -10,6 +10,9 @@ import '../../design/hc_icons.dart';
 import '../../design/tokens.dart';
 import '../devices/device_query.dart';
 import '../devices/device_sheet.dart';
+import '../../core/providers/dashboards_provider.dart';
+import '../../design/components/hc_controls.dart';
+import 'home_arrangement.dart';
 
 /// The house.
 ///
@@ -23,15 +26,43 @@ import '../devices/device_sheet.dart';
 /// thing, and everything else is either laid over it or tucked behind it.
 ///
 /// So: rooms, devices, live, directly manipulable. Tap a light and it lights.
-class HomePage extends ConsumerWidget {
+class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends ConsumerState<HomePage> {
+  /// Non-null while arranging — a working copy, so abandoning Arrange leaves the
+  /// saved layout exactly as it was.
+  HomeArrangement? _draft;
+  bool _saving = false;
+
+  bool get _arranging => _draft != null;
+
+  @override
+  Widget build(BuildContext context) {
     final t = HcTokens.of(context);
     final devicesAsync = ref.watch(devicesProvider);
+    final saved =
+        HomeArrangement.fromDashboard(ref.watch(defaultDashboardProvider));
 
     return Scaffold(
+      floatingActionButton: _arranging
+          ? null
+          : FloatingActionButton.extended(
+              icon: const Icon(HcIcons.grip, size: 16),
+              label: const Text('Arrange'),
+              onPressed: () => setState(() => _draft = saved),
+            ),
+      bottomNavigationBar: !_arranging
+          ? null
+          : _ArrangeBar(
+              saving: _saving,
+              onCancel: () => setState(() => _draft = null),
+              onDone: _save,
+            ),
       body: devicesAsync.when(
         // A skeleton, not a zero. The old dashboard rendered `0 Devices` while
         // loading, which is a confident lie about your house — and it fooled me
@@ -51,16 +82,129 @@ class HomePage extends ConsumerWidget {
             ],
           ),
         ),
-        data: (devices) => _House(devices: devices),
+        data: (devices) => _House(
+          devices: devices,
+          arrangement: _draft ?? saved,
+          arranging: _arranging,
+          onReorder: (from, to) => setState(() {
+            final rooms = _roomKeys(devices);
+            final order = _draft!.all(rooms);
+            if (to > from) to--;
+            final moved = order.removeAt(from);
+            order.insert(to, moved);
+            _draft = _draft!.copyWith(order: order);
+          }),
+          onToggleHidden: (room) => setState(() {
+            final hidden = {..._draft!.hidden};
+            hidden.contains(room) ? hidden.remove(room) : hidden.add(room);
+            _draft = _draft!.copyWith(hidden: hidden);
+          }),
+        ),
+      ),
+    );
+  }
+
+  static List<String> _roomKeys(List<DeviceState> devices) => runQuery(
+        devices,
+        const DeviceQuery(
+            group: DeviceGroup.room, sort: DeviceSort.activeFirst),
+      ).map((g) => g.key).toList();
+
+  Future<void> _save() async {
+    final draft = _draft;
+    final dashboard = ref.read(defaultDashboardProvider);
+    final devices = ref.read(devicesProvider).valueOrNull ?? const [];
+    if (draft == null || dashboard == null) {
+      setState(() => _draft = null);
+      return;
+    }
+
+    setState(() => _saving = true);
+    try {
+      await ref.read(dashboardsProvider.notifier).updateDashboard(
+            draft.toDashboard(dashboard, _roomKeys(devices)),
+          );
+      if (mounted) setState(() => _draft = null);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Could not save: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+}
+
+/// The bar that owns Arrange mode, so there is always a way out of it.
+class _ArrangeBar extends StatelessWidget {
+  const _ArrangeBar({
+    required this.saving,
+    required this.onCancel,
+    required this.onDone,
+  });
+
+  final bool saving;
+  final VoidCallback onCancel;
+  final VoidCallback onDone;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+
+    return Container(
+      padding:
+          EdgeInsets.fromLTRB(t.space.lg, t.space.sm, t.space.lg, t.space.sm),
+      decoration: BoxDecoration(
+        color: t.surface.raised,
+        border: Border(top: BorderSide(color: t.stroke.hairline)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Row(
+          children: [
+            Icon(HcIcons.grip, size: 14, color: t.accent.primary),
+            SizedBox(width: t.space.sm),
+            Expanded(
+              child: Text(
+                'Drag a room to reorder it. Hide one with the eye.',
+                style: TextStyle(fontSize: 12.5, color: t.surface.onBaseMuted),
+              ),
+            ),
+            TextButton(
+                onPressed: saving ? null : onCancel,
+                child: const Text('Cancel')),
+            SizedBox(width: t.space.xs),
+            FilledButton(
+              onPressed: saving ? null : onDone,
+              child: saving
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Text('Done'),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
 class _House extends ConsumerWidget {
-  const _House({required this.devices});
+  const _House({
+    required this.devices,
+    required this.arrangement,
+    required this.arranging,
+    required this.onReorder,
+    required this.onToggleHidden,
+  });
 
   final List<DeviceState> devices;
+  final HomeArrangement arrangement;
+  final bool arranging;
+  final void Function(int from, int to) onReorder;
+  final ValueChanged<String> onToggleHidden;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -69,11 +213,38 @@ class _House extends ConsumerWidget {
 
     // Rooms, not "sections". The house already has a structure; inventing a
     // second one in a dashboard document was the original mistake.
-    final rooms = runQuery(
+    final groups = runQuery(
       devices,
       const DeviceQuery(group: DeviceGroup.room, sort: DeviceSort.activeFirst),
     );
+    final byKey = {for (final g in groups) g.key: g};
+
+    // While arranging you see every room INCLUDING the hidden ones, or you could
+    // never bring one back.
+    final keys =
+        arranging ? arrangement.all(byKey.keys) : arrangement.apply(byKey.keys);
+    final rooms = [for (final k in keys) byKey[k]!];
     final problems = problemsIn(devices);
+
+    if (arranging) {
+      return ReorderableListView.builder(
+        padding: EdgeInsets.fromLTRB(t.space.lg, t.space.lg, t.space.lg, 0),
+        itemCount: rooms.length,
+        onReorderItem: onReorder,
+        itemBuilder: (context, i) {
+          final key = rooms[i].key;
+          final hidden = arrangement.hidden.contains(key);
+          return _ArrangeRow(
+            key: ValueKey(key),
+            index: i,
+            room: key,
+            count: rooms[i].devices.length,
+            hidden: hidden,
+            onToggleHidden: () => onToggleHidden(key),
+          );
+        },
+      );
+    }
 
     return CustomScrollView(
       slivers: [
@@ -342,6 +513,87 @@ class _SceneChip extends StatelessWidget {
               style: TextStyle(fontSize: 12, color: t.surface.onBase),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// One room, while you are arranging the house.
+///
+/// Deliberately NOT the room itself with its tiles: dragging a 200px-tall grid
+/// of live devices around is fiddly and slow, and you cannot see the shape of
+/// the house while you do it. Arranging is about ORDER, so it shows order.
+class _ArrangeRow extends StatelessWidget {
+  const _ArrangeRow({
+    super.key,
+    required this.index,
+    required this.room,
+    required this.count,
+    required this.hidden,
+    required this.onToggleHidden,
+  });
+
+  final int index;
+  final String room;
+  final int count;
+  final bool hidden;
+  final VoidCallback onToggleHidden;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: t.space.sm),
+      child: AnimatedOpacity(
+        opacity: hidden ? 0.4 : 1,
+        duration: t.motion.fast,
+        child: Container(
+          padding: EdgeInsets.symmetric(
+              horizontal: t.space.md, vertical: t.space.sm + 2),
+          decoration: BoxDecoration(
+            color: t.surface.raised,
+            borderRadius: t.radius.mdR,
+            border: Border.all(color: t.stroke.hairline),
+          ),
+          child: Row(
+            children: [
+              ReorderableDragStartListener(
+                index: index,
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.grab,
+                  child: Icon(HcIcons.grip,
+                      size: 15, color: t.surface.onBaseMuted),
+                ),
+              ),
+              SizedBox(width: t.space.md),
+              Expanded(
+                child: Text(
+                  room.replaceAll('_', ' '),
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: t.surface.onBase,
+                  ),
+                ),
+              ),
+              Text(
+                count == 1 ? '1 device' : '$count devices',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: t.surface.onBaseMuted,
+                  fontFeatures: t.numericFontFeatures,
+                ),
+              ),
+              SizedBox(width: t.space.sm),
+              HcIconButton(
+                icon: hidden ? HcIcons.eyeSlash : HcIcons.eye,
+                tooltip: hidden ? 'Show on Home' : 'Hide from Home',
+                onPressed: onToggleHidden,
+              ),
+            ],
+          ),
         ),
       ),
     );

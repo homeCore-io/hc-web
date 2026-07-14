@@ -1,0 +1,101 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:hc_web/core/models/dashboard.dart';
+import 'package:hc_web/features/home/home_arrangement.dart';
+
+DashboardDefinition _blank() => DashboardDefinition(
+      id: 'd',
+      name: 'Home',
+      description: null,
+      ownerUserId: 'u',
+      visibility: DashboardVisibility.private,
+      tags: const [],
+      icon: 'home',
+      isDefault: true,
+      createdAt: DateTime(2026),
+      updatedAt: DateTime(2026),
+      layouts: const [],
+      widgets: const [],
+    );
+
+void main() {
+  group('a room you have never arranged still appears', () {
+    test('an unknown room is appended, never dropped', () {
+      // THE bug every persisted-layout system has waiting in it: you install a
+      // device in a new room, the saved order does not mention it, and the app
+      // silently hides it. There is no way for the user to discover that.
+      const a = HomeArrangement(order: ['kitchen', 'bathroom']);
+
+      expect(
+        a.apply(['bathroom', 'kitchen', 'garage']),
+        ['kitchen', 'bathroom', 'garage'],
+      );
+    });
+
+    test('an empty arrangement shows every room, alphabetically', () {
+      const a = HomeArrangement();
+      expect(a.apply(['kitchen', 'bathroom']), ['bathroom', 'kitchen']);
+    });
+
+    test('a room in the order that no longer exists is skipped, not empty', () {
+      const a = HomeArrangement(order: ['attic', 'kitchen']);
+      expect(a.apply(['kitchen']), ['kitchen']);
+    });
+
+    test('only an explicit hide hides a room', () {
+      const a = HomeArrangement(order: ['kitchen'], hidden: {'kitchen'});
+      expect(a.apply(['kitchen', 'garage']), ['garage']);
+      // ...but Arrange still has to be able to show it again.
+      expect(a.all(['kitchen', 'garage']), ['kitchen', 'garage']);
+    });
+  });
+
+  group('persistence', () {
+    test('survives a round trip through the dashboard document', () {
+      const a = HomeArrangement(
+        order: ['kitchen', 'bathroom', 'garage'],
+        hidden: {'garage'},
+      );
+
+      final saved = a.toDashboard(_blank(), ['kitchen', 'bathroom', 'garage']);
+      final read = HomeArrangement.fromDashboard(saved);
+
+      expect(read.order, ['kitchen', 'bathroom', 'garage']);
+      expect(read.hidden, {'garage'});
+    });
+
+    test('a reorder does not eat other cards on the dashboard', () {
+      // Someone put a camera on the wall. Re-ordering rooms must not delete it —
+      // rebuilding the widget list from scratch is the obvious way to lose it.
+      final withCamera = _blank().copyWith(
+        widgets: [
+          DashboardWidgetModel(
+            id: 'cam_driveway',
+            type: 'camera_video',
+            title: 'Driveway',
+            subtitle: null,
+            refreshPolicy: DashboardRefreshPolicy.live,
+            config: const {'url': 'http://go2rtc/driveway', 'source_type': 'mjpeg'},
+          ),
+        ],
+      );
+
+      const a = HomeArrangement(order: ['kitchen']);
+      final saved = a.toDashboard(withCamera, ['kitchen']);
+
+      expect(
+        saved.widgets.map((w) => w.id),
+        containsAll(['cam_driveway', 'room_kitchen']),
+      );
+      expect(
+        saved.widgets.firstWhere((w) => w.id == 'cam_driveway').config['url'],
+        'http://go2rtc/driveway',
+      );
+    });
+
+    test('reading a dashboard with no room widgets yields an empty arrangement',
+        () {
+      expect(HomeArrangement.fromDashboard(_blank()).isEmpty, isTrue);
+      expect(HomeArrangement.fromDashboard(null).isEmpty, isTrue);
+    });
+  });
+}

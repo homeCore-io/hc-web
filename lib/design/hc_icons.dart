@@ -125,7 +125,14 @@ class HcIcons {
   static const battery = IconData(0xe0c8, fontFamily: _fill);
   static const offline = IconData(0xeb5a, fontFamily: _regular);
   static const search = IconData(0xe30c, fontFamily: _regular);
-  static const grip = IconData(0xeae2, fontFamily: _fill);
+
+  /// The drag handle — six dots, OUTLINE weight.
+  ///
+  /// The fill weight is a solid plate with the dots knocked out of it, which at
+  /// the 15px this is actually drawn at collapses into a black rectangle. A
+  /// glyph that reads fine in a specimen sheet can still be wrong at the size it
+  /// ships; check it at the size it ships.
+  static const grip = IconData(0xeae2, fontFamily: _regular);
 
   /// The media glyph, for cards that are always about a speaker.
   static IconData get forFacetMedia => forFacet(DeviceFacet.mediaPlayer);
