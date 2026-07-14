@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/api/history_api.dart';
 import '../../core/dashboard/widget_registry.dart';
+import 'camera_card.dart';
 import '../../core/devices/presentation.dart';
 import '../../design/components/hc_surface.dart';
 import '../../design/tokens.dart';
@@ -1663,8 +1664,14 @@ void registerBuiltinDashboardWidgets() {
               (c['source_type'] as String?)?.isNotEmpty == true
           ? null
           : 'A camera needs a source type and a URL.',
-      builder: (context, a) =>
-          _CameraVideoWidget(widgetModel: _modelOf(a, 'camera_video')),
+      // Display only — the NVR (go2rtc) owns motion and recording, so the
+      // frontend is a wall of live streams and nothing more.
+      builder: (context, a) => CameraCard(
+        name: a.title,
+        url: '${a.config['url'] ?? ''}',
+        sourceType: '${a.config['source_type'] ?? 'image_refresh'}',
+        refreshSecs: a.config['refresh_secs'] as int?,
+      ),
     ),
     WidgetDescriptor(
       type: 'web_embed',

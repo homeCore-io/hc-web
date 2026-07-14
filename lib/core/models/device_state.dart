@@ -129,6 +129,19 @@ class DeviceState {
           .whereType<String>()
           .toList();
 
+  /// The speaker the rest of the group follows. hc-sonos publishes this, and
+  /// grouping is the whole point of a multi-room system — it belongs on the card,
+  /// not buried in a menu.
+  String? get groupCoordinator => state['group_coordinator'] as String?;
+
+  List<String> get groupMembers =>
+      ((state['group_members'] as List?) ?? const [])
+          .whereType<String>()
+          .toList();
+
+  /// True when this speaker leads its group, or stands alone.
+  bool get isGroupLead => groupCoordinator == null || groupCoordinator == id;
+
   Map<String, dynamic> get sonos =>
       Map<String, dynamic>.from(state['sonos'] as Map? ?? const {});
 

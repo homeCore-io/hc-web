@@ -74,6 +74,7 @@ const kNavItems = [
   NavItem('/dashboards', 'Dashboards', Icons.dashboard_customize_outlined),
   NavItem('/devices', 'Devices', Icons.devices_outlined),
   NavItem('/automations', 'Automations', Icons.auto_awesome_outlined),
+  NavItem('/media', 'Media', Icons.speaker_outlined),
   NavItem('/scenes', 'Scenes', Icons.movie_outlined),
   NavItem('/modes', 'Modes', Icons.tune_outlined),
   NavItem('/events', 'Events', Icons.event_note_outlined),

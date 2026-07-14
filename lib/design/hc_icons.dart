@@ -127,6 +127,9 @@ class HcIcons {
   static const search = IconData(0xe30c, fontFamily: _regular);
   static const grip = IconData(0xeae2, fontFamily: _fill);
 
+  /// The media glyph, for cards that are always about a speaker.
+  static IconData get forFacetMedia => forFacet(DeviceFacet.mediaPlayer);
+
   // media transport — always filled; a transport control is a button, not a state
   static const play = IconData(0xe3d0, fontFamily: _fill);
   static const pause = IconData(0xe39e, fontFamily: _fill);

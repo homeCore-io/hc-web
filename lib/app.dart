@@ -21,6 +21,7 @@ import 'features/devices/device_detail_page.dart';
 import 'features/devices/device_history_page.dart';
 import 'features/devices/device_list_page.dart';
 import 'features/events/events_page.dart';
+import 'features/media/media_page.dart';
 import 'features/modes/modes_page.dart';
 import 'features/scenes/scene_editor_page.dart';
 import 'features/scenes/scenes_page.dart';
@@ -109,6 +110,7 @@ GoRouter _buildRouter(Ref ref) {
                   SceneEditorPage(sceneId: state.pathParameters['id'])),
           GoRoute(path: '/modes', builder: (_, __) => const ModesPage()),
           GoRoute(path: '/events', builder: (_, __) => const EventsPage()),
+          GoRoute(path: '/media', builder: (_, __) => const MediaPage()),
           GoRoute(
               path: '/devices/:id',
               builder: (_, state) =>
