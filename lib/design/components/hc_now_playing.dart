@@ -57,6 +57,22 @@ class HcNowPlaying extends StatelessWidget {
     final t = HcTokens.of(context);
     final title = device.title;
 
+    // An idle speaker collapses to a row.
+    //
+    // It used to get the full treatment regardless — a 128px cover well, a
+    // progress bar, a transport deck — so five silent Sonos filled the page with
+    // ~290px each of mostly nothing, and the one that WAS playing had no more
+    // presence than the four that weren't. A card should be as big as it has
+    // something to say.
+    if (title == null || title.isEmpty) {
+      return _IdleSpeaker(
+        device: device,
+        group: group,
+        onPlayPause: onPlayPause,
+        onVolume: onVolume,
+      );
+    }
+
     return ClipRRect(
       borderRadius: t.radius.lgR,
       child: Stack(
@@ -115,11 +131,8 @@ class HcNowPlaying extends StatelessWidget {
                           ),
                           SizedBox(height: t.space.sm),
                           Text(
-                            // Nothing playing is a legitimate state and gets said
-                            // plainly, rather than showing an empty card.
-                            title?.isNotEmpty == true
-                                ? title!
-                                : 'Nothing playing',
+                            // Non-null past the idle early-return above.
+                            title,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
@@ -213,6 +226,73 @@ class _ArtBloom extends StatelessWidget {
           imageFilter: ui.ImageFilter.blur(sigmaX: 46, sigmaY: 46),
           child: Transform.scale(scale: 1.6, child: child),
         ),
+      ),
+    );
+  }
+}
+
+/// A speaker with nothing to say, said briefly.
+class _IdleSpeaker extends StatelessWidget {
+  const _IdleSpeaker({
+    required this.device,
+    required this.group,
+    this.onPlayPause,
+    this.onVolume,
+  });
+
+  final DeviceState device;
+  final List<DeviceState> group;
+  final VoidCallback? onPlayPause;
+  final void Function(String id, double volume)? onVolume;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    final rooms = group.length > 1 ? ' · ${group.length} rooms' : '';
+
+    return Container(
+      padding: EdgeInsets.symmetric(
+          horizontal: t.space.md, vertical: t.space.sm + 2),
+      decoration: BoxDecoration(
+        color: t.surface.raised,
+        borderRadius: t.radius.mdR,
+        border: Border.all(color: t.stroke.hairline),
+      ),
+      child: Row(
+        children: [
+          Icon(HcIcons.forFacetMedia, size: 16, color: t.surface.onBaseMuted),
+          SizedBox(width: t.space.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '${device.displayName}$rooms',
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w600,
+                    color: t.surface.onBase,
+                  ),
+                ),
+                Text(
+                  device.available ? 'Nothing playing' : 'Offline',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: t.surface.onBaseMuted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (onPlayPause != null && device.available)
+            IconButton(
+              icon: const Icon(HcIcons.play, size: 15),
+              tooltip: 'Play',
+              color: t.surface.onBaseMuted,
+              onPressed: onPlayPause,
+            ),
+        ],
       ),
     );
   }
