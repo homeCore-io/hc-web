@@ -3,8 +3,11 @@ import 'package:flutter/material.dart';
 import '../../../core/rules/node.dart';
 import '../../../core/rules/rule.dart';
 import '../../../core/rules/schema.dart';
+import '../../../design/components/hc_sentence.dart';
 import 'field_editors.dart';
+import '../rule_phrasing.dart';
 import 'rule_refs.dart';
+import 'sentence_editor.dart';
 
 /// Nesting colours. Depth is the only thing that tells you whether you are
 /// inside the `Or` or inside the `Not` inside the `Or`, so it gets a colour and
@@ -158,12 +161,18 @@ class ConditionNode extends StatelessWidget {
               ),
             ],
           ),
-          if (variant != null)
-            NodeFields(
-              variant: variant,
-              fields: node.fields,
+          // A leaf condition is a sentence; only the boolean nodes get the
+          // tree. Prose stops scaling about two levels deep, so it hands over
+          // exactly where it would start to hurt — and the chips are identical
+          // on both sides of that line.
+          if (variant != null && !isBoolean && !isNot)
+            NodeBody(
+              node: node,
+              registry: kConditions,
               refs: refs,
               onChanged: onChanged,
+              phraseFor: conditionPhrase,
+              size: HcSentenceSize.small,
             ),
 
           // NOT — exactly one child.
@@ -455,7 +464,18 @@ class ActionNode extends StatelessWidget {
                 ),
               ],
             ),
-            if (variant != null)
+            // A leaf action is a sentence — "turn on Bathroom Exhaust Fan".
+            // A branching one keeps its header and lets the tree carry the
+            // structure below.
+            if (variant != null && !kBranchingActions.contains(node.tag))
+              NodeBody(
+                node: node,
+                registry: kActions,
+                refs: refs,
+                onChanged: onChanged,
+                phraseFor: actionPhrase,
+              )
+            else if (variant != null)
               NodeFields(
                 variant: variant,
                 fields: node.fields,

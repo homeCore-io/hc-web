@@ -43,6 +43,15 @@ class RuleRefs {
   bool isKnownDevice(String ref) =>
       devices.any((d) => d.id == ref || d.canonicalName == ref);
 
+  /// The device behind a reference, in either form. A chip needs the whole
+  /// device, not just its name, because it renders that device's *live* state.
+  DeviceState? deviceFor(String ref) {
+    for (final d in devices) {
+      if (d.id == ref || d.canonicalName == ref) return d;
+    }
+    return null;
+  }
+
   /// Attribute names seen on a device, so the attribute field can suggest
   /// rather than demand that the user remember `color_temp`.
   List<String> attributesOf(String ref) {

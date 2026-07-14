@@ -6,9 +6,11 @@ import '../../core/providers/automations_provider.dart';
 import '../../core/rules/node.dart';
 import '../../core/rules/rule.dart';
 import '../../core/rules/schema.dart';
-import 'widgets/field_editors.dart';
+import '../../design/components/hc_sentence.dart';
+import 'rule_phrasing.dart';
 import 'widgets/node_trees.dart';
 import 'widgets/rule_refs.dart';
+import 'widgets/sentence_editor.dart';
 
 /// The rule editor.
 ///
@@ -108,28 +110,44 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
           if (_saveError != null) _banner(context, _saveError!, isError: true),
           if (_wouldFire != null) _testBanner(context),
           _Section(title: 'Rule', child: _ruleHeader(rule)),
-          _Section(
-            title: 'When',
-            subtitle: 'A rule has exactly one trigger.',
-            child: _triggerEditor(rule, refs),
-          ),
-          _Section(
-            title: 'And if',
-            subtitle:
-                'Every condition must pass. Use ANY / NOT for richer logic.',
-            child: ConditionTree(
-              conditions: rule.conditions,
-              refs: refs,
-              results: _testResults,
-              onChanged: _touch,
-            ),
-          ),
-          _Section(
-            title: 'Then',
-            child: ActionTree(
-              actions: rule.actions,
-              refs: refs,
-              onChanged: _touch,
+
+          // The clauses read down the page as one sentence about the house,
+          // joined by a rail. A card per clause turned that into a form.
+          Card(
+            margin: const EdgeInsets.only(bottom: 16),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(0, 8, 16, 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  HcClause(
+                    label: 'When',
+                    // The rail node lights when the trigger's device is already
+                    // in the state the rule waits for, so a rule shows you where
+                    // the house actually IS, standing still.
+                    live: _triggerIsLive(rule, refs),
+                    child: _triggerEditor(rule, refs),
+                  ),
+                  HcClause(
+                    label: 'And if',
+                    child: ConditionTree(
+                      conditions: rule.conditions,
+                      refs: refs,
+                      results: _testResults,
+                      onChanged: _touch,
+                    ),
+                  ),
+                  HcClause(
+                    label: 'Then',
+                    last: true,
+                    child: ActionTree(
+                      actions: rule.actions,
+                      refs: refs,
+                      onChanged: _touch,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
           _Section(
@@ -263,56 +281,78 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
 
   // -- trigger -------------------------------------------------------------
 
-  Widget _triggerEditor(HcRule rule, RuleRefs refs) {
-    final variant = kTriggers[rule.trigger.tag];
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                variant?.label ?? rule.trigger.tag,
-                style: Theme.of(context).textTheme.titleSmall,
-              ),
-            ),
-            TextButton.icon(
-              icon: const Icon(Icons.swap_horiz, size: 16),
-              label: const Text('Change'),
-              onPressed: () async {
-                final picked = await showDialog<HcVariant>(
-                  context: context,
-                  builder: (_) => _TriggerPalette(current: rule.trigger.tag),
-                );
-                if (picked != null && picked.tag != rule.trigger.tag) {
-                  rule.trigger = HcNode.blank(picked);
-                  _touch();
-                }
-              },
-            ),
-          ],
+  Widget _triggerEditor(HcRule rule, RuleRefs refs) => NodeBody(
+        node: rule.trigger,
+        registry: kTriggers,
+        refs: refs,
+        onChanged: _touch,
+        phraseFor: (n) => _withLiveSummary(triggerPhrase(n), n, refs),
+        size: HcSentenceSize.large,
+        // A rule has exactly one trigger, so swapping it is a *replace*, not an
+        // add — and it lives on the sentence rather than above it.
+        trailing: IconButton(
+          tooltip: 'Change the trigger',
+          icon: const Icon(Icons.swap_horiz, size: 17),
+          onPressed: () async {
+            final picked = await showDialog<HcVariant>(
+              context: context,
+              builder: (_) => _TriggerPalette(current: rule.trigger.tag),
+            );
+            if (picked != null && picked.tag != rule.trigger.tag) {
+              rule.trigger = HcNode.blank(picked);
+              _touch();
+            }
+          },
         ),
-        if (variant?.help != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 2, bottom: 8),
-            child: Text(
-              variant!.help!,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.outline,
-                  ),
-            ),
-          ),
-        const SizedBox(height: 8),
-        if (variant != null)
-          NodeFields(
-            variant: variant,
-            fields: rule.trigger.fields,
-            refs: refs,
-            onChanged: _touch,
-          ),
-      ],
-    );
+      );
+
+  /// Glosses the trigger with what the device is doing *right now*.
+  ///
+  /// A rule that says "when the Bathroom Door Sensor closes" is more useful when
+  /// it also says "currently closed · 14:02" — you can see whether it is armed.
+  Phrase? _withLiveSummary(Phrase? p, HcNode n, RuleRefs refs) {
+    if (p == null) return null;
+    final ref = n['device_id'] as String?;
+    if (ref == null) return p;
+    final d = refs.deviceFor(ref);
+    if (d == null) return p;
+
+    final bits = <String>[];
+    if (!d.available) {
+      bits.add('offline');
+    } else {
+      final attr = n['attribute'] as String?;
+      if (attr != null && d.state.containsKey(attr)) {
+        bits.add('currently ${_say(attr, d.state[attr])}');
+      }
+    }
+    bits.add(d.canonicalName ?? d.id);
+    return Phrase(p.parts, summary: bits.join(' · '));
+  }
+
+  static String _say(String attr, Object? v) => switch ((attr, v)) {
+        ('open', true) => 'open',
+        ('open', false) => 'closed',
+        ('on', true) => 'on',
+        ('on', false) => 'off',
+        ('locked', true) => 'locked',
+        ('locked', false) => 'unlocked',
+        _ => '$v',
+      };
+
+  /// True when the trigger's device already sits at the value the rule waits for.
+  bool _triggerIsLive(HcRule rule, RuleRefs refs) {
+    final n = rule.trigger;
+    final ref = n['device_id'] as String?;
+    final attr = n['attribute'] as String?;
+    if (ref == null || attr == null) return false;
+
+    final d = refs.deviceFor(ref);
+    if (d == null || !d.available) return false;
+
+    final want = n['to'];
+    // No target value means "any change", which is never *currently* true.
+    return want != null && d.state[attr] == want;
   }
 
   // -- advanced ------------------------------------------------------------
@@ -550,12 +590,10 @@ class _Section extends StatelessWidget {
   const _Section({
     required this.title,
     required this.child,
-    this.subtitle,
     this.initiallyExpanded = true,
   });
 
   final String title;
-  final String? subtitle;
   final Widget child;
   final bool initiallyExpanded;
 
@@ -587,13 +625,6 @@ class _Section extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(title, style: Theme.of(context).textTheme.titleMedium),
-                if (subtitle != null)
-                  Text(
-                    subtitle!,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context).colorScheme.outline,
-                        ),
-                  ),
               ],
             ),
           ),
