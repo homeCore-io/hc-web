@@ -123,6 +123,19 @@ while (Date.now() < deadline) {
 }
 await sleep(SETTLE);
 
+// Optional click before capturing — for things that are not routes.
+// A sheet, a menu, a palette: they are STATE, not URLs, so the only way to see
+// one is to open it. There is no DOM to query, so the click is a coordinate.
+const click = arg('click', null);
+if (click) {
+  const [cx, cy] = click.split(',').map(Number);
+  for (const type of ['mousePressed', 'mouseReleased']) {
+    await send('Input.dispatchMouseEvent',
+        {type, x: cx, y: cy, button: 'left', clickCount: 1});
+  }
+  await sleep(1200); // let the sheet finish sliding in
+}
+
 const {data} = await send('Page.captureScreenshot', {format: 'png'});
 writeFileSync(out, Buffer.from(data, 'base64'));
 console.log(out);

@@ -9,6 +9,7 @@ import '../../design/components/hc_tile.dart';
 import '../../design/hc_icons.dart';
 import '../../design/tokens.dart';
 import 'device_query.dart';
+import 'device_sheet.dart';
 
 final _queryProvider = StateProvider<DeviceQuery>((_) => const DeviceQuery());
 
@@ -134,7 +135,7 @@ class _Tile extends ConsumerWidget {
 
     return HcTile(
       device: device,
-      onTap: () => context.go('/devices/${device.id}'),
+      onTap: () => showDeviceSheet(context, device.id),
       onToggle: facet.isActuator
           ? () => notifier.command(device.id, {'on': !isOn(device)})
           : null,
@@ -495,7 +496,7 @@ class _NeedsAttention extends ConsumerWidget {
             Padding(
               padding: EdgeInsets.symmetric(vertical: t.space.xs - 1),
               child: GestureDetector(
-                onTap: () => context.go('/devices/${p.device.id}'),
+                onTap: () => showDeviceSheet(context, p.device.id),
                 child: Row(
                   children: [
                     Icon(

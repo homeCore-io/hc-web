@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../core/devices/presentation.dart';
 import '../../core/models/device_state.dart';
@@ -10,6 +9,7 @@ import '../../design/components/hc_tile.dart';
 import '../../design/hc_icons.dart';
 import '../../design/tokens.dart';
 import '../devices/device_query.dart';
+import '../devices/device_sheet.dart';
 
 /// The house.
 ///
@@ -88,7 +88,9 @@ class _House extends ConsumerWidget {
           SliverToBoxAdapter(
             child: _Room(
               room: room,
-              onTap: (d) => context.push('/devices/${d.id}'),
+              // A sheet OVER the house, not a route away from it. You look, you
+              // act, you dismiss — and the house is still lit where it was.
+              onTap: (d) => showDeviceSheet(context, d.id),
               onToggle: (d) => notifier.command(d.id, {'on': !isOn(d)}),
               // Scene duality: a plugin scene-device is activated by a
               // plugin-specific payload. Lutron wants {"activate": true};
