@@ -12,6 +12,7 @@ import '../../design/components/hc_controls.dart';
 import '../../design/hc_icons.dart';
 import '../../design/tokens.dart';
 import 'rule_phrasing.dart';
+import 'widgets/drift_notice.dart';
 
 // ── Filter state ─────────────────────────────────────────────────────────────
 
@@ -177,6 +178,9 @@ class _AutomationListPageState extends ConsumerState<AutomationListPage> {
           final filtered = _applyFilter(rules, filter);
           return Column(
             children: [
+              // Silent unless this app and the core in front of it actually
+              // disagree about what a rule may contain. See DriftNotice.
+              const DriftNotice(),
               FilterBar(
                 searchController: _searchCtrl,
                 searchHint: 'Search automations…',
