@@ -8,6 +8,7 @@ import '../../../design/hc_icons.dart';
 import '../../../design/tokens.dart';
 import 'field_editors.dart';
 import '../rule_phrasing.dart';
+import 'rhai_condition.dart';
 import 'rule_refs.dart';
 import 'sentence_editor.dart';
 
@@ -694,7 +695,21 @@ class ActionNode extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (variant != null)
+          // `Conditional`'s predicate is a Rhai string, and rendering it through
+          // the generic form gave it a labelled Material textarea — the most
+          // form-like thing in the editor, stating in code what the rule states
+          // in English three lines above. It gets a sentence when we can read
+          // it, and its code when we cannot.
+          if (node.tag == 'Conditional')
+            RhaiConditionField(
+              source: (node['condition'] as String?) ?? '',
+              refs: refs,
+              onChanged: (v) {
+                node['condition'] = v;
+                onChanged();
+              },
+            )
+          else if (variant != null)
             NodeFields(
               variant: variant,
               fields: node.fields,

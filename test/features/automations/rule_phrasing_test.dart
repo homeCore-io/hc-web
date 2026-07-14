@@ -5,17 +5,17 @@ import 'package:hc_web/core/rules/node.dart';
 import 'package:hc_web/core/rules/schema.dart';
 import 'package:hc_web/features/automations/rule_phrasing.dart';
 
-/// Reads a phrase back as plain text, resolving verbs against the node — the
-/// same thing the widget does, minus the widgets.
-String say(HcNode n, Phrase p) => p.parts
-    .map((part) => switch (part) {
-          String s => s,
-          Slot(field: final f, verb: final v) =>
-            v != null ? v(n[f]) : '${n[f] ?? ''}',
-          _ => '',
-        })
-    .where((s) => s.isNotEmpty)
-    .join(' ');
+/// Reads a phrase back as plain text — through the SAME renderer the app uses.
+///
+/// This used to be a hand-rolled loop over `p.parts`, and it quietly disagreed
+/// with the real one: it read a device slot as `n['device_id']` and so could not
+/// see the three other devices a multi-device trigger watches. A test helper
+/// that renders differently from the app is a test that passes while the app
+/// lies.
+String say(HcNode n, Phrase p) {
+  final variant = kTriggers[n.tag] ?? kConditions[n.tag] ?? kActions[n.tag];
+  return plainPhrase(n, p, variant!);
+}
 
 void main() {
   group('a rule reads as a sentence about the house', () {
@@ -56,6 +56,40 @@ void main() {
       final n = HcNode(
           'DeviceStateChanged', {'device_id': 'd', 'attribute': 'brightness'});
       expect(say(n, triggerPhrase(n)!), 'the d changes');
+    });
+
+    test('a trigger watching FOUR doors does not name one and hide three', () {
+      // Verbatim from "Deck Door Opened (Any) — Night Lights". It watches four
+      // sensors: one in `device_id`, three in `device_ids`. The sentence used to
+      // say "the Dining Room Door Sensor opens" and bury the rest behind a
+      // Refine disclosure — which is not a summary, it is a lie, and six of the
+      // 42 live rules are shaped like this.
+      final n = HcNode('DeviceStateChanged', {
+        'device_id': 'deck',
+        'device_ids': ['dining', 'living', 'family'],
+        'attribute': 'open',
+        'to': true,
+      });
+
+      expect(devicesOf(n), ['deck', 'dining', 'living', 'family']);
+      expect(watchesMany(n), isTrue);
+
+      final said = say(n, triggerPhrase(n)!);
+      expect(said, startsWith('any of'));
+      for (final d in ['deck', 'dining', 'living', 'family']) {
+        expect(said, contains(d), reason: 'dropped $d');
+      }
+      expect(said, endsWith('opens'));
+    });
+
+    test('a single-device trigger still reads as one', () {
+      final n = HcNode('DeviceStateChanged', {
+        'device_id': 'bathroom.door',
+        'attribute': 'open',
+        'to': false,
+      });
+      expect(watchesMany(n), isFalse);
+      expect(say(n, triggerPhrase(n)!), 'the bathroom.door closes');
     });
 
     test('a condition compares in words', () {

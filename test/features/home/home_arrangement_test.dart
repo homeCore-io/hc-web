@@ -79,16 +79,13 @@ void main() {
       // rebuilding the widget list from scratch is the obvious way to lose it.
       final withCamera = _blank().copyWith(
         widgets: [
-          DashboardWidgetModel(
+          const DashboardWidgetModel(
             id: 'cam_driveway',
             type: 'camera_video',
             title: 'Driveway',
             subtitle: null,
             refreshPolicy: DashboardRefreshPolicy.live,
-            config: const {
-              'url': 'http://go2rtc/driveway',
-              'source_type': 'mjpeg'
-            },
+            config: {'url': 'http://go2rtc/driveway', 'source_type': 'mjpeg'},
           ),
         ],
       );

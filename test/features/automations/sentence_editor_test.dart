@@ -70,10 +70,13 @@ void main() {
 
     testWidgets('the six optional fields collapse behind Refine',
         (tester) async {
+      // A node with a refinement actually SET: the disclosure has something to
+      // tell you, so it shows itself without being asked.
       final node = HcNode('DeviceStateChanged', {
         'device_id': 'yolink_d88b4c0400064299',
         'attribute': 'open',
         'to': false,
+        'for_duration_secs': 30,
       });
 
       await tester.pumpWidget(_host(NodeBody(
@@ -94,6 +97,32 @@ void main() {
       await tester.tap(find.textContaining('Refine'));
       await tester.pump(const Duration(milliseconds: 50));
       expect(find.textContaining('Not from'), findsWidgets);
+    });
+
+    testWidgets('a disclosure with nothing to say stays quiet', (tester) async {
+      // Every action carries a required `track_event_value: false`, so showing
+      // the disclosure unconditionally printed "Refine — track event value" on
+      // every single row of every single rule. A control that is always there
+      // saying nothing is noise wearing a label. It appears on hover.
+      final node = HcNode('DeviceStateChanged', {
+        'device_id': 'yolink_d88b4c0400064299',
+        'attribute': 'open',
+        'to': false,
+      });
+
+      await tester.pumpWidget(_host(NodeBody(
+        node: node,
+        registry: kTriggers,
+        refs: _refs,
+        onChanged: () {},
+        phraseFor: triggerPhrase,
+      )));
+      await tester.pump(const Duration(milliseconds: 50));
+
+      expect(find.textContaining('Refine'), findsNothing);
+
+      // The sentence itself is untouched.
+      expect(find.text('closes'), findsOneWidget);
     });
 
     testWidgets('a set refinement announces itself rather than hiding',
@@ -184,7 +213,11 @@ void main() {
 
       expect(find.text('set the volume to 15'), findsOneWidget);
       expect(find.textContaining('1 set'), findsNothing);
-      expect(find.textContaining('Refine'), findsOneWidget);
+
+      // And because nothing hidden is noteworthy, the disclosure keeps quiet
+      // altogether rather than printing "Refine — track event value" on every
+      // row of every rule. It comes back on hover.
+      expect(find.textContaining('Refine'), findsNothing);
     });
 
     testWidgets('a field away from its default IS flagged', (tester) async {

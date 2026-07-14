@@ -243,22 +243,48 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
   /// it also says "currently closed · 14:02" — you can see whether it is armed.
   Phrase? _withLiveSummary(Phrase? p, HcNode n, RuleRefs refs) {
     if (p == null) return null;
-    final ref = n['device_id'] as String?;
-    if (ref == null) return p;
-    final d = refs.deviceFor(ref);
-    if (d == null) return p;
 
-    final bits = <String>[];
-    if (!d.available) {
-      bits.add('offline');
+    // EVERY device the trigger watches, not just the first. The gloss used to
+    // read `currently closed · dining_room.dining_room_door_sensor` beneath a
+    // sentence naming four doors — the same lie the sentence had just stopped
+    // telling, in smaller type.
+    final devices = [
+      for (final ref in devicesOf(n))
+        if (refs.deviceFor(ref) case final d?) d,
+    ];
+    if (devices.isEmpty) return p;
+
+    final attr = n['attribute'] as String?;
+    final offline = devices.where((d) => !d.available).toList();
+
+    // One device: say exactly what it is doing. Several: say whether they AGREE,
+    // because "3 of 4 open" is the fact you actually want when a rule fires on
+    // any of them.
+    String gloss;
+    if (devices.length == 1) {
+      final d = devices.single;
+      gloss = !d.available
+          ? 'offline'
+          : (attr != null && d.state.containsKey(attr))
+              ? 'currently ${_say(attr, d.state[attr])}'
+              : (d.canonicalName ?? d.id);
+    } else if (attr == null) {
+      gloss = '${devices.length} devices';
     } else {
-      final attr = n['attribute'] as String?;
-      if (attr != null && d.state.containsKey(attr)) {
-        bits.add('currently ${_say(attr, d.state[attr])}');
-      }
+      final known =
+          devices.where((d) => d.available && d.state.containsKey(attr));
+      final values = known.map((d) => _say(attr, d.state[attr])).toSet();
+      gloss = values.length == 1
+          ? 'all ${devices.length} currently ${values.single}'
+          : known
+              .map((d) => '${d.displayName}: ${_say(attr, d.state[attr])}')
+              .join(' · ');
     }
-    bits.add(d.canonicalName ?? d.id);
-    return Phrase(p.parts, summary: bits.join(' · '));
+
+    if (offline.isNotEmpty) {
+      gloss = '$gloss · ${offline.length} offline';
+    }
+    return Phrase(p.parts, summary: gloss);
   }
 
   static String _say(String attr, Object? v) => switch ((attr, v)) {

@@ -46,6 +46,7 @@ class SentenceNode extends StatefulWidget {
 
 class _SentenceNodeState extends State<SentenceNode> {
   bool _refining = false;
+  bool _hover = false;
 
   @override
   Widget build(BuildContext context) {
@@ -54,91 +55,101 @@ class _SentenceNodeState extends State<SentenceNode> {
     final set =
         hidden.where((f) => _isNoteworthy(f, widget.node[f.name])).length;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(child: _sentence(context)),
-            if (widget.trailing != null) widget.trailing!,
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: _sentence(context)),
+              if (widget.trailing != null) widget.trailing!,
+            ],
+          ),
+          if (widget.phrase.summary != null) ...[
+            SizedBox(height: t.space.sm),
+            Text(
+              widget.phrase.summary!,
+              style: TextStyle(
+                fontSize: 12,
+                color: t.surface.onBaseMuted,
+                fontFeatures: t.numericFontFeatures,
+              ),
+            ),
           ],
-        ),
-        if (widget.phrase.summary != null) ...[
-          SizedBox(height: t.space.sm),
-          Text(
-            widget.phrase.summary!,
-            style: TextStyle(
-              fontSize: 12,
-              color: t.surface.onBaseMuted,
-              fontFeatures: t.numericFontFeatures,
-            ),
-          ),
-        ],
-        if (hidden.isNotEmpty) ...[
-          SizedBox(height: t.space.sm),
-          GestureDetector(
-            onTap: () => setState(() => _refining = !_refining),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  _refining ? Icons.expand_less : Icons.add,
-                  size: 14,
-                  color: t.surface.onBaseMuted,
-                ),
-                SizedBox(width: t.space.xs),
-                Text(
-                  // Say what's in there, and say when some of it is *set* — a
-                  // collapsed field that quietly holds a value is a trap.
-                  _refining
-                      ? 'Hide refinements'
-                      : set > 0
-                          ? 'Refine · $set set'
-                          : 'Refine — ${_names(hidden)}',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: set > 0 ? t.accent.primary : t.surface.onBaseMuted,
+          // The disclosure appears when it has something to TELL you — a hidden
+          // field holding a non-default value — and otherwise only when you reach
+          // for it. Every action carries a required `track_event_value: false`, so
+          // showing it unconditionally printed "Refine — track event value" on
+          // every single row of every single rule. A control that is always there
+          // saying nothing is just noise wearing a label.
+          if (hidden.isNotEmpty && (set > 0 || _hover || _refining)) ...[
+            SizedBox(height: t.space.sm),
+            GestureDetector(
+              onTap: () => setState(() => _refining = !_refining),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    _refining ? Icons.expand_less : Icons.add,
+                    size: 14,
+                    color: t.surface.onBaseMuted,
                   ),
-                ),
-              ],
-            ),
-          ),
-        ],
-        if (_refining) ...[
-          SizedBox(height: t.space.sm),
-          Container(
-            padding: EdgeInsets.all(t.space.md),
-            decoration: BoxDecoration(
-              color: t.surface.sunken,
-              borderRadius: t.radius.smR,
-              border: Border.all(color: t.stroke.hairline),
-            ),
-            child: Column(
-              children: [
-                for (final f in hidden)
-                  Padding(
-                    padding: EdgeInsets.only(bottom: t.space.sm),
-                    child: FieldEditor(
-                      field: f,
-                      value: widget.node[f.name],
-                      refs: widget.refs,
-                      siblingDeviceRef: widget.node['device_id'] as String?,
-                      onChanged: (v) {
-                        if (v == null && !f.required) {
-                          widget.node.fields.remove(f.name);
-                        } else {
-                          widget.node[f.name] = v;
-                        }
-                        widget.onChanged();
-                      },
+                  SizedBox(width: t.space.xs),
+                  Text(
+                    // Say what's in there, and say when some of it is *set* — a
+                    // collapsed field that quietly holds a value is a trap.
+                    _refining
+                        ? 'Hide refinements'
+                        : set > 0
+                            ? 'Refine · $set set'
+                            : 'Refine — ${_names(hidden)}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: set > 0 ? t.accent.primary : t.surface.onBaseMuted,
                     ),
                   ),
-              ],
+                ],
+              ),
             ),
-          ),
+          ],
+          if (_refining) ...[
+            SizedBox(height: t.space.sm),
+            Container(
+              padding: EdgeInsets.all(t.space.md),
+              decoration: BoxDecoration(
+                color: t.surface.sunken,
+                borderRadius: t.radius.smR,
+                border: Border.all(color: t.stroke.hairline),
+              ),
+              child: Column(
+                children: [
+                  for (final f in hidden)
+                    Padding(
+                      padding: EdgeInsets.only(bottom: t.space.sm),
+                      child: FieldEditor(
+                        field: f,
+                        value: widget.node[f.name],
+                        refs: widget.refs,
+                        siblingDeviceRef: widget.node['device_id'] as String?,
+                        onChanged: (v) {
+                          if (v == null && !f.required) {
+                            widget.node.fields.remove(f.name);
+                          } else {
+                            widget.node[f.name] = v;
+                          }
+                          widget.onChanged();
+                        },
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
         ],
-      ],
+      ),
     );
   }
 
@@ -195,15 +206,56 @@ class _SentenceNodeState extends State<SentenceNode> {
     }
 
     if (field?.kind == HcFieldKind.deviceRef) {
-      final ref = value as String?;
-      final device = ref == null ? null : widget.refs.deviceFor(ref);
-      return HcChip.device(
-        label: ref == null ? 'pick a device' : widget.refs.labelFor(ref),
-        // The chip carries the device's LIVE state. This is what makes a rule
-        // show you the house rather than merely its own configuration.
-        on: device != null && device.available && _isOn(device.state),
-        tooltip: ref,
-        onTap: field == null ? null : () => _edit(context, field),
+      // A slot that owns `device_ids` speaks EVERY device the node watches, one
+      // chip each. It used to render only `device_id` — so a rule watching four
+      // door sensors said "the Dining Room Door Sensor opens" and buried the
+      // other three behind a disclosure. Four chips is longer than one; being
+      // right is worth the width.
+      final owned = [
+        for (final name in slot.fields)
+          if (widget.variant.fields.where((f) => f.name == name).firstOrNull
+              case final f?)
+            f,
+      ];
+      final refs = slot.alsoEdits.contains('device_ids')
+          ? devicesOf(widget.node)
+          : (value is String ? [value] : const <String>[]);
+
+      if (refs.isEmpty) {
+        return HcChip.device(
+          label: 'pick a device',
+          on: false,
+          onTap: field == null ? null : () => _editAll(context, owned),
+        );
+      }
+
+      return Wrap(
+        spacing: 4,
+        runSpacing: 4,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          for (var i = 0; i < refs.length; i++) ...[
+            if (i > 0 && i == refs.length - 1)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 2),
+                child: Text('or',
+                    style: TextStyle(
+                        fontSize: 13,
+                        color: HcTokens.of(context).surface.onBaseMuted)),
+              ),
+            Builder(builder: (context) {
+              final device = widget.refs.deviceFor(refs[i]);
+              return HcChip.device(
+                label: widget.refs.labelFor(refs[i]),
+                // The chip carries the device's LIVE state. This is what makes a
+                // rule show you the house rather than merely its own config.
+                on: device != null && device.available && _isOn(device.state),
+                tooltip: refs[i],
+                onTap: owned.isEmpty ? null : () => _editAll(context, owned),
+              );
+            }),
+          ],
+        ],
       );
     }
 

@@ -52,9 +52,14 @@ class Slot {
 
 /// The phrase for a trigger, or null if it has none worth the trouble.
 Phrase? triggerPhrase(HcNode n) => switch (n.tag) {
+      // A trigger may watch MORE THAN ONE device: `device_id` plus a
+      // `device_ids` list. Six of the 42 live rules do, including one literally
+      // called "(Any)" — and the sentence used to name the first device and say
+      // nothing about the other three, which is not a summary, it is a lie. The
+      // device slot owns both fields and speaks all of them.
       'DeviceStateChanged' => Phrase([
-          'the',
-          const Slot('device_id'),
+          watchesMany(n) ? 'any of' : 'the',
+          const Slot('device_id', alsoEdits: ['device_ids']),
           // The attribute and its target value collapse into a single verb where
           // we can: a contact sensor going to `false` on `open` is "closes". The
           // chip owns both, so tapping the verb lets you change either.
@@ -185,6 +190,19 @@ Phrase? actionPhrase(HcNode n) => switch (n.tag) {
       _ => null,
     };
 
+/// Every device a node watches: `device_id` plus anything in `device_ids`.
+///
+/// These are one idea with two storage slots, and treating them as two fields is
+/// how the second one ended up hidden behind a "Refine" disclosure while the
+/// sentence confidently named only the first.
+List<String> devicesOf(HcNode n) => [
+      if (n['device_id'] case final String id) id,
+      ...?(n['device_ids'] as List?)?.whereType<String>(),
+    ];
+
+/// Whether this node watches more than one device.
+bool watchesMany(HcNode n) => devicesOf(n).length > 1;
+
 /// A phrase as plain prose, with no chips.
 ///
 /// The editor renders a [Phrase] as editable chips. A *list* needs the same
@@ -204,10 +222,19 @@ String plainPhrase(
     if (value == null) return '';
 
     final field = variant.fields.where((f) => f.name == slot.field).firstOrNull;
-    // A device reads as its name, never as `lutron_54`.
-    if (field?.kind == HcFieldKind.deviceRef && value is String) {
-      return label?.call(value) ?? value;
+
+    // A device reads as its name, never as `lutron_54` — and a slot that owns
+    // `device_ids` reads as ALL of them. Otherwise the list would say "the
+    // Dining Room Door Sensor opens" about a rule that watches four doors,
+    // while the editor beside it said the truth.
+    if (field?.kind == HcFieldKind.deviceRef) {
+      final refs = slot.alsoEdits.contains('device_ids')
+          ? devicesOf(n)
+          : (value is String ? [value] : const <String>[]);
+      if (refs.isEmpty) return '';
+      return refs.map((r) => label?.call(r) ?? r).join(', ');
     }
+
     if (value is List) return value.join(', ');
     return '$value';
   }
