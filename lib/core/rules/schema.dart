@@ -313,10 +313,10 @@ final Map<String, HcVariant> kTriggers = _index([
       HcField('calendar_id', HcFieldKind.text,
           help: 'Stem of the .ics filename. Empty matches any calendar.'),
       HcField('title_contains', HcFieldKind.text),
+      // NOT required: core defaults it. Demanding it here forced the user to
+      // fill in a field that has a perfectly good default.
       HcField('offset_minutes', HcFieldKind.integer,
-          required: true,
-          defaultValue: 0,
-          help: 'Negative fires before start.'),
+          defaultValue: 0, help: 'Negative fires before start.'),
     ],
   ),
   const HcVariant(
@@ -524,8 +524,10 @@ final Map<String, HcVariant> kActions = _index([
       HcField('device_id', HcFieldKind.deviceRef, required: true),
       HcField('state', HcFieldKind.json,
           required: true, defaultValue: {'on': true}),
+      // NOT required: core defaults it. Marking it required is what put it in
+      // every node the editor created, which is what made "Refine · 1 set" fire
+      // on every action of every rule.
       HcField('track_event_value', HcFieldKind.boolean,
-          required: true,
           defaultValue: false,
           label: 'Mirror the trigger value',
           help:
@@ -645,8 +647,8 @@ final Map<String, HcVariant> kActions = _index([
     fields: [
       HcField('duration_secs', HcFieldKind.integer,
           required: true, defaultValue: 60),
-      HcField('cancelable', HcFieldKind.boolean,
-          required: true, defaultValue: false),
+      // NOT required: core defaults it.
+      HcField('cancelable', HcFieldKind.boolean, defaultValue: false),
       HcField('cancel_key', HcFieldKind.text),
     ],
   ),

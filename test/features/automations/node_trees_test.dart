@@ -312,7 +312,16 @@ void main() {
     });
 
     test('the schema covers core\'s whole vocabulary', () {
-      // If core grows a variant, these counts are the tripwire.
+      // These counts are NOT the tripwire, and it is worth being blunt about
+      // why: asserting that OUR table has 18 triggers in it measures the mirror,
+      // not the thing being mirrored. It passes happily while core grows a
+      // nineteenth, which then renders as "Unsupported".
+      //
+      // The real check is vocabulary_test.dart, which compares this table
+      // against a fixture DERIVED from core's Rust types. It found three fields
+      // this one had wrong on its first run.
+      //
+      // These stay as a cheap smoke test, nothing more.
       expect(kTriggers, hasLength(18));
       expect(kConditions, hasLength(13));
       expect(kActions, hasLength(34));
