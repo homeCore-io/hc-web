@@ -19,6 +19,7 @@ enum HcShell {
 /// default but the user can override it, so "Control Room on the wall" or
 /// "Ambient Glass on a phone" are both one setting away.
 enum HcSkin {
+  midnight,
   ambientGlass,
   controlRoom,
   softHome;
@@ -26,21 +27,106 @@ enum HcSkin {
   static HcSkin defaultFor(HcShell shell) => switch (shell) {
         HcShell.wall => HcSkin.ambientGlass,
         HcShell.admin => HcSkin.controlRoom,
-        HcShell.touch => HcSkin.softHome,
+        // Dark by default. Soft Home is still here for anyone who wants a light
+        // app, but the design was drawn dark and a warm halo on a light ground
+        // has nothing to bleed into — the glow, which is the whole language,
+        // simply does not read.
+        HcShell.touch => HcSkin.midnight,
       };
 
   String get label => switch (this) {
+        HcSkin.midnight => 'Midnight',
         HcSkin.ambientGlass => 'Ambient Glass',
         HcSkin.controlRoom => 'Control Room',
         HcSkin.softHome => 'Soft Home',
       };
 
   HcTokens get tokens => switch (this) {
+        HcSkin.midnight => _midnight,
         HcSkin.ambientGlass => _ambientGlass,
         HcSkin.controlRoom => _controlRoom,
         HcSkin.softHome => _softHome,
       };
 }
+
+// ---------------------------------------------------------------------------
+// Midnight — the everyday dark skin
+//
+// Ambient Glass with the glass taken out. That is not a cosmetic difference: its
+// `glassBlur` puts a BackdropFilter behind every surface, and the device list
+// renders 167 of them. On a wall panel showing a dozen cards that is a beautiful
+// effect; on a scrolling grid it is a frame-rate cliff.
+//
+// So: the same charcoal ground and the same warm "on" amber, painted with opaque
+// surfaces and hairlines instead of blur. This is the skin the mockups actually
+// were.
+// ---------------------------------------------------------------------------
+
+const _midnight = HcTokens(
+  name: 'midnight',
+  brightness: Brightness.dark,
+  surface: HcSurfaces(
+    base: Color(0xFF0B0E13),
+    raised: Color(0xFF141922),
+    sunken: Color(0xFF0D1116),
+    overlay: Color(0xFF1A202A),
+    glassTint: Color(0x00000000),
+    // Zero. This is the entire reason Midnight exists apart from Ambient Glass.
+    glassBlur: 0,
+    onBase: Color(0xFFE9EDF2),
+    onBaseMuted: Color(0xFF8B95A4),
+  ),
+  accent: HcAccents(
+    primary: Color(0xFF7CC4FF),
+    onPrimary: Color(0xFF06131F),
+    active: Color(0xFFFFB661),
+    inactive: Color(0xFF2A313B),
+    success: Color(0xFF6FD1A6),
+    warn: Color(0xFFFFC978),
+    danger: Color(0xFFFF7B72),
+    offline: Color(0xFF7A4A50),
+  ),
+  stroke: HcStroke(
+    hairline: Color(0xFF262D38),
+    width: 1,
+    focus: Color(0xFF7CC4FF),
+  ),
+  radius: HcRadii(sm: 8, md: 14, lg: 22, pill: 999),
+  space: HcSpace(unit: 8),
+  motion: HcMotion(
+    fast: Duration(milliseconds: 140),
+    base: Duration(milliseconds: 260),
+    slow: Duration(milliseconds: 460),
+    curve: Curves.easeOutCubic,
+    emphasized: Curves.easeOutBack,
+    enabled: true,
+  ),
+  // Full bloom, because a dark ground is what a halo needs to bleed into.
+  glow: HcGlow(strength: 1, radius: 34),
+  density: HcDensity(
+    rowHeight: 52,
+    controlHeight: 44,
+    minTapTarget: 44,
+    cardPadding: 14,
+  ),
+  elevation: HcElevation(
+    card: [
+      BoxShadow(
+        color: Color(0x59000000),
+        blurRadius: 20,
+        offset: Offset(0, 8),
+      ),
+    ],
+    overlay: [
+      BoxShadow(
+        color: Color(0x8C000000),
+        blurRadius: 40,
+        offset: Offset(0, 18),
+      ),
+    ],
+  ),
+  numericFontFeatures: _tabular,
+);
 
 const _tabular = [FontFeature.tabularFigures()];
 

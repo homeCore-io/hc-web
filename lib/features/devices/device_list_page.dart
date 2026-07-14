@@ -102,9 +102,11 @@ class _DeviceListPageState extends ConsumerState<DeviceListPage> {
         SliverPadding(
           padding: EdgeInsets.fromLTRB(t.space.md, 0, t.space.md, t.space.lg),
           sliver: SliverGrid(
+            // Wide enough for a real device name, tall enough for two lines of
+            // it plus the dimmer bar.
             gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-              maxCrossAxisExtent: 260,
-              mainAxisExtent: 104,
+              maxCrossAxisExtent: 300,
+              mainAxisExtent: 116,
               crossAxisSpacing: 10,
               mainAxisSpacing: 10,
             ),

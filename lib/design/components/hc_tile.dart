@@ -99,10 +99,14 @@ class HcTile extends StatelessWidget {
         children: [
           Text(
             device.displayName,
-            maxLines: 1,
+            // Two lines. "Bathroom Occupancy" and "Dining Room Door Sensor" are
+            // ordinary names in this house and were being cut to "Bathroom
+            // Occupan…" — a device you cannot read is a device you cannot use.
+            maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              fontSize: 14,
+              fontSize: 13.5,
+              height: 1.2,
               fontWeight: FontWeight.w600,
               letterSpacing: -0.1,
               color: offline ? t.surface.onBaseMuted : t.surface.onBase,
@@ -357,11 +361,32 @@ String summarise(DeviceState d) {
   if (s['locked'] case final bool l) bits.add(l ? 'locked' : 'unlocked');
   if (s['open'] case final bool o) bits.add(o ? 'open' : 'closed');
   if (s['motion'] case final bool m) bits.add(m ? 'motion' : 'clear');
+
+  // Every sensor kind on the real install publishes its own vocabulary, and a
+  // reading we cannot name renders as "—" — which is exactly as useless as no
+  // tile at all. Occupancy sensors say `occupancy`/`occupied`; leak sensors say
+  // `leak`/`water_detected`.
+  if ((s['occupancy'] ?? s['occupied']) case final bool o) {
+    bits.add(o ? 'occupied' : 'empty');
+  }
+  if ((s['leak'] ?? s['water_detected']) case final bool w) {
+    bits.add(w ? 'WATER' : 'dry');
+  }
+  if (s['smoke'] case final bool sm) bits.add(sm ? 'SMOKE' : 'clear');
+  if (s['contact'] case final bool c) bits.add(c ? 'closed' : 'open');
+  if (s['vibration'] case final bool v) bits.add(v ? 'vibration' : 'still');
+
   if (s['state'] case final String st when d.isMediaPlayer) bits.add(st);
   if (s['volume'] case final num v when d.isMediaPlayer) bits.add('vol $v');
 
   if (s['temperature'] case final num tmp) {
-    bits.add('${tmp.toStringAsFixed(1)}°');
+    // The unit is published; a bare degree sign next to 75.0 is ambiguous enough
+    // to matter in a house.
+    final unit = switch (s['temperature_unit']) {
+      final String u when u.isNotEmpty => u.toUpperCase().replaceAll('°', ''),
+      _ => '',
+    };
+    bits.add('${tmp.toStringAsFixed(1)}°$unit');
   }
   if (s['humidity'] case final num h) bits.add('${h.round()}%');
   if (s['position'] case final num p) bits.add('${p.round()}% open');

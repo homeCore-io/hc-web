@@ -32,16 +32,29 @@ void main() {
       };
       expect(skins[HcShell.wall], HcSkin.ambientGlass);
       expect(skins[HcShell.admin], HcSkin.controlRoom);
-      expect(skins[HcShell.touch], HcSkin.softHome);
+      // Dark by default: a warm halo on a light ground has nothing to bleed
+      // into, and the glow is the whole language.
+      expect(skins[HcShell.touch], HcSkin.midnight);
       expect(skins.values.toSet(), hasLength(3));
     });
 
     test('only the wall skin frosts; the flat skins opt out via blur = 0', () {
-      // This is the mechanism that keeps one widget serving three skins: a flat
+      // This is the mechanism that keeps one widget serving every skin: a flat
       // skin sets glassBlur to 0 and HcSurface skips the BackdropFilter.
       expect(HcSkin.ambientGlass.tokens.surface.isGlass, isTrue);
       expect(HcSkin.controlRoom.tokens.surface.isGlass, isFalse);
       expect(HcSkin.softHome.tokens.surface.isGlass, isFalse);
+      // Midnight exists precisely BECAUSE it must not frost: the device list
+      // renders 167 surfaces, and a BackdropFilter behind each one is a
+      // frame-rate cliff. It is Ambient Glass with the glass taken out.
+      expect(HcSkin.midnight.tokens.surface.isGlass, isFalse);
+    });
+
+    test('Midnight still glows — a dark ground is what a halo needs', () {
+      expect(HcSkin.midnight.tokens.glow.enabled, isTrue);
+      expect(HcSkin.midnight.tokens.brightness, Brightness.dark);
+      expect(HcSkin.midnight.tokens.accent.active,
+          HcSkin.ambientGlass.tokens.accent.active);
     });
 
     test('glow is full on the wall, absent in the admin portal', () {

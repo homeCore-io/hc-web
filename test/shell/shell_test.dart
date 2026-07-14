@@ -33,7 +33,7 @@ Widget _app({String at = '/devices'}) {
 
   return ProviderScope(
     child: MaterialApp.router(
-      theme: hcTheme(HcSkin.softHome),
+      theme: hcTheme(HcSkin.midnight),
       routerConfig: router,
     ),
   );
@@ -73,7 +73,7 @@ void main() {
       // souls, and no `if (shell == ...)` inside any page.
       await tester.pumpWidget(_app(at: '/devices'));
       await tester.pumpAndSettle();
-      expect(find.text('skin=soft_home'), findsOneWidget);
+      expect(find.text('skin=midnight'), findsOneWidget);
 
       await tester.pumpWidget(_app(at: '/admin/users'));
       await tester.pumpAndSettle();

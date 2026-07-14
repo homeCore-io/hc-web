@@ -157,8 +157,10 @@ class HomecoreApp extends ConsumerWidget {
       // Only the base — every routed page is re-themed by [ShellScope], which
       // knows which surface the route belongs to. This theme is what the login
       // page (the one route outside any shell) renders in.
-      theme: hcTheme(HcSkin.softHome),
-      darkTheme: hcTheme(HcSkin.ambientGlass),
+      // Dark by default — the design was drawn dark, and the login page is the
+      // one route that renders outside any shell.
+      theme: hcTheme(HcSkin.midnight),
+      darkTheme: hcTheme(HcSkin.midnight),
       routerConfig: router,
     );
   }
