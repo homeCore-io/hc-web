@@ -23,6 +23,10 @@ class DeviceState {
   /// cope with null rather than assuming a schema exists.
   final DeviceSchema? schema;
 
+  /// When core last heard from the device. Drives "recently changed" sorting and
+  /// the staleness read on a wall panel.
+  final DateTime lastSeen;
+
   DeviceState({
     required this.id,
     this.canonicalName,
@@ -35,7 +39,8 @@ class DeviceState {
     required this.available,
     required this.state,
     this.schema,
-  });
+    DateTime? lastSeen,
+  }) : lastSeen = lastSeen ?? DateTime.fromMillisecondsSinceEpoch(0);
 
   factory DeviceState.fromJson(Map<String, dynamic> json) => DeviceState(
         id: json['device_id'] as String,
@@ -51,6 +56,39 @@ class DeviceState {
         schema: json['schema'] is Map
             ? DeviceSchema.fromJson(json['schema'] as Map)
             : null,
+        lastSeen: DateTime.tryParse('${json['last_seen'] ?? ''}'),
+      );
+
+  /// Copies with overrides.
+  ///
+  /// The WS handler used to rebuild DeviceState field-by-field, which silently
+  /// dropped `schema`, `uiHint`, `statusIcon` and `lastSeen` — so an availability
+  /// event wiped a device's capability schema and its controls reverted to
+  /// heuristics. Anything that mutates a device goes through here.
+  DeviceState copyWith({
+    String? name,
+    String? area,
+    String? deviceType,
+    String? uiHint,
+    String? statusIcon,
+    bool? available,
+    Map<String, dynamic>? state,
+    DeviceSchema? schema,
+    DateTime? lastSeen,
+  }) =>
+      DeviceState(
+        id: id,
+        canonicalName: canonicalName,
+        pluginId: pluginId,
+        name: name ?? this.name,
+        area: area ?? this.area,
+        deviceType: deviceType ?? this.deviceType,
+        uiHint: uiHint ?? this.uiHint,
+        statusIcon: statusIcon ?? this.statusIcon,
+        available: available ?? this.available,
+        state: state ?? this.state,
+        schema: schema ?? this.schema,
+        lastSeen: lastSeen ?? this.lastSeen,
       );
 
   String get displayName => name ?? id;

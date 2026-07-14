@@ -20,36 +20,32 @@ class DevicesNotifier extends AsyncNotifier<List<DeviceState>> {
         if (event.type == 'device_state_changed' &&
             event.deviceId != null &&
             event.current != null) {
-          final updated = current.map((d) {
-            if (d.id != event.deviceId) return d;
-            return DeviceState(
-              id: d.id,
-              canonicalName: d.canonicalName,
-              pluginId: d.pluginId,
-              name: d.name,
-              area: d.area,
-              deviceType: d.deviceType,
-              available: true,
-              state: Map<String, dynamic>.from(d.state)..addAll(event.current!),
-            );
-          }).toList();
+          // copyWith, not a hand-rolled rebuild. The old code dropped `schema`
+          // on every state change — and state changes are constant — so
+          // schema-driven controls degraded to heuristics within seconds of the
+          // app loading. It dropped ui_hint, status_icon and last_seen too.
+          final updated = current
+              .map((d) => d.id == event.deviceId
+                  ? d.copyWith(
+                      available: true,
+                      state: Map<String, dynamic>.from(d.state)
+                        ..addAll(event.current!),
+                      lastSeen: DateTime.now(),
+                    )
+                  : d)
+              .toList();
           state = AsyncData(updated);
         } else if (event.type == 'device_availability_changed' &&
             event.deviceId != null) {
           final avail = event.available ?? false;
-          final updated = current.map((d) {
-            if (d.id != event.deviceId) return d;
-            return DeviceState(
-              id: d.id,
-              canonicalName: d.canonicalName,
-              pluginId: d.pluginId,
-              name: d.name,
-              area: d.area,
-              deviceType: d.deviceType,
-              available: avail,
-              state: d.state,
-            );
-          }).toList();
+          // copyWith, not a hand-rolled rebuild: the old code dropped schema,
+          // ui_hint, status_icon and last_seen, so an availability event silently
+          // wiped a device's capability schema and its controls fell back to
+          // heuristics.
+          final updated = current
+              .map((d) =>
+                  d.id == event.deviceId ? d.copyWith(available: avail) : d)
+              .toList();
           state = AsyncData(updated);
         }
       });
@@ -60,11 +56,38 @@ class DevicesNotifier extends AsyncNotifier<List<DeviceState>> {
     return raw.map(DeviceState.fromJson).toList();
   }
 
+  /// Sends a command, and applies it optimistically.
+  ///
+  /// The tile must move the instant you touch it — waiting for the round trip
+  /// through MQTT and back makes a light switch feel broken. If core rejects it,
+  /// the next WS frame corrects us.
+  Future<void> command(String id, Map<String, dynamic> patch) async {
+    final current = state.valueOrNull ?? [];
+    state = AsyncData([
+      for (final d in current)
+        if (d.id == id)
+          d.copyWith(state: Map<String, dynamic>.from(d.state)..addAll(patch))
+        else
+          d,
+    ]);
+    await ref.read(devicesApiProvider).setDeviceState(id, patch);
+  }
+
   Future<void> updateDevice(String id, Map<String, dynamic> body) async {
     final raw = await ref.read(devicesApiProvider).updateDevice(id, body);
     final updated = DeviceState.fromJson(raw);
     final current = state.valueOrNull ?? [];
-    state = AsyncData(current.map((d) => d.id == id ? updated : d).toList());
+
+    state = AsyncData([
+      for (final d in current)
+        if (d.id == id)
+          // PATCH /devices/:id does not echo the schema (only ?include_schema=
+          // does), so taking the response wholesale would drop it — renaming a
+          // device would quietly cost it its controls. Carry the old one over.
+          updated.copyWith(schema: d.schema)
+        else
+          d,
+    ]);
   }
 
   Future<void> deleteDevice(String id) async {
