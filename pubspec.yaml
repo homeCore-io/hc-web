@@ -37,3 +37,16 @@ flutter:
   uses-material-design: true
   assets:
     - assets/images/
+
+  # Phosphor icons, used straight from the fonts. We do NOT depend on
+  # phosphor_flutter: it does not compile on Flutter 3.44, where IconData became
+  # a `final class` and the package declares `PhosphorIconData extends IconData`.
+  # Two families give us the weight axis we picked Phosphor for — outline when a
+  # device is off, solid when it is on. MIT; see assets/fonts/PHOSPHOR-LICENSE.
+  fonts:
+    - family: Phosphor
+      fonts:
+        - asset: assets/fonts/Phosphor.ttf
+    - family: PhosphorFill
+      fonts:
+        - asset: assets/fonts/Phosphor-Fill.ttf
