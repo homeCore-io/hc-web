@@ -4,7 +4,7 @@
 
 :8090 {
 	# Serve Flutter web build
-	root * /home/john/RustroverProjects/homeCore/clients/hc-web/build/web
+	root * /home/john/Github/homeCore/clients/hc-web/build/web
 	encode gzip
 
 	# Proxy API calls to HomeCore

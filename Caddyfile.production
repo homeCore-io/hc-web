@@ -3,7 +3,7 @@
 }
 
 homecore.example.com {
-    root * /home/john/work/homeCore/web
+    root * /home/john/Github/homeCore/clients/hc-web/build/web
     encode gzip
 
     handle /api/v1/* {
