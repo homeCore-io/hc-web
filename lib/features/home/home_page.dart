@@ -5,8 +5,7 @@ import '../../core/devices/presentation.dart';
 import '../../core/models/device_state.dart';
 import '../../core/providers/devices_provider.dart';
 import '../../core/providers/modes_provider.dart';
-import '../../design/components/hc_sensor_chip.dart';
-import '../../design/components/hc_tile.dart';
+import '../../core/text/humanize.dart';
 import '../../design/hc_icons.dart';
 import '../../design/tokens.dart';
 import '../devices/device_query.dart';
@@ -15,7 +14,7 @@ import '../../core/providers/dashboards_provider.dart';
 import '../../design/components/hc_controls.dart';
 import '../../shell/hc_sheet.dart';
 import 'home_arrangement.dart';
-import 'home_rich_cards.dart';
+import 'home_entity_row.dart';
 
 /// The house.
 ///
@@ -299,10 +298,6 @@ class _HouseState extends ConsumerState<_House> {
                       room: room,
                       collapsed: _collapsed.contains(room.key),
                       onToggleCollapse: () => _toggle(room.key),
-                      // A sheet OVER the house, not a route away. You look, you
-                      // act, you dismiss — the house is still lit where it was.
-                      onTap: (d) => showDeviceSheet(context, d.id),
-                      onToggle: (d) => notifier.command(d.id, {'on': !isOn(d)}),
                       // Scene duality: Lutron wants {"activate": true}; Hue
                       // wants {"action": "activate_scene"}. Pick by owner.
                       onActivate: (d) => notifier.command(
@@ -311,8 +306,6 @@ class _HouseState extends ConsumerState<_House> {
                             ? {'action': 'activate_scene'}
                             : {'activate': true},
                       ),
-                      onLevel: (d, v) => notifier
-                          .command(d.id, {'on': true, 'brightness': v.round()}),
                     ),
                   );
                 }
@@ -340,31 +333,20 @@ class _HouseState extends ConsumerState<_House> {
     );
   }
 
-  /// A rough height for a room, only to balance the masonry columns — exactness
-  /// does not matter, only which column is currently shortest.
+  /// A rough height for a room card, only to balance the masonry columns —
+  /// exactness does not matter, only which column is currently shortest. Each
+  /// device is a ~44px row; scenes add a small block.
   double _estimateHeight(DeviceGroupResult room) {
-    if (_collapsed.contains(room.key)) return 54;
-    var rich = 0, ctrl = 0, read = 0, scene = 0;
+    if (_collapsed.contains(room.key)) return 48;
+    var rows = 0, scenes = 0;
     for (final d in room.devices) {
-      switch (facetOf(d, d.schema).presentation) {
-        case TilePresentation.rich:
-          rich++;
-        case TilePresentation.control:
-        case TilePresentation.button:
-          ctrl++;
-        case TilePresentation.readout:
-          read++;
-        case TilePresentation.scene:
-          scene++;
+      if (facetOf(d, d.schema) == DeviceFacet.scene) {
+        scenes++;
+      } else {
+        rows++;
       }
     }
-    // A column is ~340px wide: controls sit 2-up (~92px/row), readouts 2-up
-    // (~60px/row), a rich card ~150px.
-    return 54 +
-        rich * 150 +
-        (ctrl / 2).ceil() * 92 +
-        (read / 2).ceil() * 60 +
-        (scene > 0 ? 44 : 0);
+    return 46 + rows * 44 + (scenes > 0 ? 74 : 0) + 12;
   }
 }
 
@@ -588,209 +570,159 @@ class _Room extends StatelessWidget {
     required this.room,
     required this.collapsed,
     required this.onToggleCollapse,
-    required this.onTap,
-    required this.onToggle,
     required this.onActivate,
-    required this.onLevel,
   });
 
   final DeviceGroupResult room;
   final bool collapsed;
   final VoidCallback onToggleCollapse;
-  final ValueChanged<DeviceState> onTap;
-  final ValueChanged<DeviceState> onToggle;
   final ValueChanged<DeviceState> onActivate;
-  final void Function(DeviceState, double) onLevel;
 
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
 
-    // A device earns its space by what it *is*. A leak sensor is a reading, not
-    // a control, so it gets a dense chip; a scene is a button, so it gets a
-    // chip; a light gets a card. Bucketing by presentation tier is what stops a
-    // room's two lamps being buried under twenty scenes and a shelf of sensors.
-    final byTier = <TilePresentation, List<DeviceState>>{};
-    for (final d in room.devices) {
-      byTier.putIfAbsent(facetOf(d, d.schema).presentation, () => []).add(d);
-    }
-
-    // Rich: a speaker or a thermostat, each its own wider card.
-    final rich = byTier[TilePresentation.rich] ?? const [];
-    // Cards: things you switch, dim, open, lock; press-buttons ride along.
-    final cards = [
-      ...?byTier[TilePresentation.control],
-      ...?byTier[TilePresentation.button],
-    ];
-    final readouts = byTier[TilePresentation.readout] ?? const [];
-    final scenes = byTier[TilePresentation.scene] ?? const [];
-
-    final actuators = [...rich, ...cards]
-        .where((d) => facetOf(d, d.schema).isActuator)
+    // A room is a container of rows now, not a loose grid: an icon and a name
+    // on the left, its control or reading on the right, hairlines between. It
+    // scans like the list it is, and the card's border is the room separation
+    // the grid never had.
+    final scenes = room.devices
+        .where((d) => facetOf(d, d.schema) == DeviceFacet.scene)
         .toList();
+    final devices = room.devices
+        .where((d) => facetOf(d, d.schema) != DeviceFacet.scene)
+        .toList();
+
+    // Things you operate lead — the on ones first — then the sensors you read.
+    final actuators =
+        devices.where((d) => facetOf(d, d.schema).isActuator).toList()
+          ..sort((a, b) {
+            final byOn = (isOn(b) ? 1 : 0).compareTo(isOn(a) ? 1 : 0);
+            return byOn != 0 ? byOn : a.displayName.compareTo(b.displayName);
+          });
+    final sensors = devices
+        .where((d) => !facetOf(d, d.schema).isActuator)
+        .toList()
+      ..sort((a, b) => a.displayName.compareTo(b.displayName));
+    final entities = [...actuators, ...sensors];
     final on = actuators.where(isOn).length;
 
+    Widget divider() =>
+        Divider(height: 1, thickness: 1, color: t.stroke.hairline);
+
     return Padding(
-      // Horizontal spacing is owned by the masonry column now; a room only pads
-      // itself below.
-      padding: EdgeInsets.only(bottom: t.space.lg),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // The room name is also the fold. Tapping it collapses the room to
-          // this one line — the way you see past a room you are not using right
-          // now without hiding it for good.
-          MouseRegion(
-            cursor: SystemMouseCursors.click,
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: onToggleCollapse,
-              child: Padding(
-                padding: EdgeInsets.symmetric(vertical: t.space.xs),
-                child: Row(
-                  children: [
-                    AnimatedRotation(
-                      turns: collapsed ? -0.25 : 0,
-                      duration: t.motion.d(t.motion.fast),
-                      child: Icon(HcIcons.caretDown,
-                          size: 12, color: t.surface.onBaseMuted),
-                    ),
-                    SizedBox(width: t.space.xs + 1),
-                    Text(
-                      room.key.replaceAll('_', ' '),
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.1,
-                        color: t.accent.primary,
+      padding: EdgeInsets.only(bottom: t.space.md),
+      child: Container(
+        decoration: BoxDecoration(
+          color: t.surface.raised,
+          borderRadius: t.radius.lgR,
+          border: Border.all(color: t.stroke.hairline),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // The header is also the fold — tap it to collapse the room to this
+            // one line without hiding it for good.
+            MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: onToggleCollapse,
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                      t.space.md, t.space.sm + 2, t.space.md, t.space.sm + 2),
+                  child: Row(
+                    children: [
+                      AnimatedRotation(
+                        turns: collapsed ? -0.25 : 0,
+                        duration: t.motion.d(t.motion.fast),
+                        child: Icon(HcIcons.caretDown,
+                            size: 12, color: t.surface.onBaseMuted),
                       ),
-                    ),
-                    SizedBox(width: t.space.sm),
-                    if (actuators.isNotEmpty)
-                      Text(
-                        '$on of ${actuators.length} on',
-                        style: TextStyle(
-                          fontSize: 11.5,
-                          color: t.surface.onBaseMuted,
-                          fontFeatures: t.numericFontFeatures,
-                        ),
-                      ),
-                    // Folded, the room still says how much it holds, so you know
-                    // there is something behind the line.
-                    if (collapsed) ...[
                       SizedBox(width: t.space.sm),
-                      Text(
-                        '· ${room.devices.length} devices',
-                        style: TextStyle(
-                          fontSize: 11.5,
-                          color: t.surface.onBaseMuted.withValues(alpha: 0.6),
-                          fontFeatures: t.numericFontFeatures,
+                      Expanded(
+                        child: Text(
+                          // Normalised English, never the raw `family_room`.
+                          humanize(room.key),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.1,
+                            color: t.surface.onBase,
+                          ),
                         ),
                       ),
+                      SizedBox(width: t.space.sm),
+                      if (actuators.isNotEmpty)
+                        Text.rich(
+                          TextSpan(children: [
+                            TextSpan(
+                              text: '$on',
+                              style: TextStyle(
+                                color: on > 0
+                                    ? t.accent.active
+                                    : t.surface.onBaseMuted,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            TextSpan(text: ' of ${actuators.length} on'),
+                          ]),
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            color: t.surface.onBaseMuted,
+                            fontFeatures: t.numericFontFeatures,
+                          ),
+                        )
+                      else
+                        Text(
+                          '${room.devices.length} devices',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            color: t.surface.onBaseMuted,
+                            fontFeatures: t.numericFontFeatures,
+                          ),
+                        ),
                     ],
-                  ],
+                  ),
                 ),
               ),
             ),
-          ),
-          if (!collapsed && rich.isNotEmpty) ...[
-            SizedBox(height: t.space.sm),
-            LayoutBuilder(
-              builder: (context, c) {
-                // Rich cards want breathing room but not the whole wall — two up
-                // on a desktop, one on a phone.
-                final columns = (c.maxWidth / 360).floor().clamp(1, 2);
-                final width =
-                    (c.maxWidth - (columns - 1) * t.space.sm) / columns;
-                return Wrap(
-                  spacing: t.space.sm,
-                  runSpacing: t.space.sm,
-                  children: [
-                    for (final d in rich)
-                      SizedBox(width: width, child: _richCard(d)),
-                  ],
-                );
-              },
-            ),
-          ],
-          if (!collapsed && cards.isNotEmpty) ...[
-            SizedBox(height: t.space.sm),
-            LayoutBuilder(
-              builder: (context, c) {
-                // Tiles size themselves to the space, so the same surface is a
-                // phone, a laptop and a wall panel without a breakpoint document
-                // describing all three.
-                const target = 200.0;
-                final columns = (c.maxWidth / target).floor().clamp(1, 8);
-                final width =
-                    (c.maxWidth - (columns - 1) * t.space.sm) / columns;
-
-                return Wrap(
-                  spacing: t.space.sm,
-                  runSpacing: t.space.sm,
-                  children: [
-                    for (final d in cards)
-                      SizedBox(
-                        width: width,
-                        height: 76,
-                        child: HcTile(
-                          device: d,
-                          onTap: () => onTap(d),
-                          onToggle: facetOf(d, d.schema).isActuator
-                              ? () => onToggle(d)
-                              : null,
-                          onLevel: (v) => onLevel(d, v),
+            if (!collapsed) ...[
+              for (final d in entities) ...[
+                divider(),
+                HomeEntityRow(device: d),
+              ],
+              if (scenes.isNotEmpty) ...[
+                divider(),
+                Padding(
+                  padding: EdgeInsets.fromLTRB(
+                      t.space.md, t.space.sm + 2, t.space.md, t.space.md),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'SCENES',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1.3,
+                          color: t.surface.onBaseMuted,
                         ),
                       ),
-                  ],
-                );
-              },
-            ),
+                      SizedBox(height: t.space.sm),
+                      _SceneChips(scenes: scenes, onActivate: onActivate),
+                    ],
+                  ),
+                ),
+              ],
+            ],
           ],
-          if (!collapsed && readouts.isNotEmpty) ...[
-            SizedBox(height: t.space.sm),
-            LayoutBuilder(
-              builder: (context, c) {
-                // Sensors pack tighter than controls — a reading needs less room
-                // than a slider — so a smaller target fits more per row.
-                const target = 162.0;
-                final columns = (c.maxWidth / target).floor().clamp(2, 8);
-                final width =
-                    (c.maxWidth - (columns - 1) * t.space.sm) / columns;
-
-                return Wrap(
-                  spacing: t.space.sm,
-                  runSpacing: t.space.sm,
-                  children: [
-                    for (final d in readouts)
-                      SizedBox(
-                        width: width,
-                        child: HcSensorChip(
-                          device: d,
-                          onTap: () => onTap(d),
-                        ),
-                      ),
-                  ],
-                );
-              },
-            ),
-          ],
-          if (!collapsed && scenes.isNotEmpty) ...[
-            SizedBox(height: t.space.sm),
-            _SceneChips(scenes: scenes, onActivate: onActivate),
-          ],
-        ],
+        ),
       ),
     );
-  }
-
-  /// The right rich card for a device — a now-playing card for a speaker, a
-  /// climate card for a thermostat.
-  Widget _richCard(DeviceState d) {
-    if (facetOf(d, d.schema) == DeviceFacet.mediaPlayer) {
-      return HomeMediaCard(device: d);
-    }
-    return HomeClimateCard(device: d, onTap: () => onTap(d));
   }
 }
 
