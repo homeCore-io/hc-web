@@ -274,40 +274,30 @@ class _HouseState extends ConsumerState<_House> {
 
   // Direct drag: long-press a card to lift it; a ghost chip follows the cursor
   // and a bright bar shows where it will land. Reordering the greedy masonry
-  // live re-packs every card and reads as chaos, so the board stays still during
-  // the drag and only settles on drop. `_baseOrder` is the sequence captured at
-  // pickup; `_dropBefore` is the key the lifted card will land in front of.
-  String? _dragKey;
-  List<String>? _baseOrder;
-  String? _dropBefore;
+  // live re-packs every card and reads as chaos, so the board holds still and
+  // only settles on drop.
+  //
+  // The drop is handled by DragTarget.onAccept — the target Flutter reports under
+  // the pointer at release — and the landing bar by its `candidateData`, which it
+  // rebuilds on its own. An earlier version tracked the target in state and
+  // setState'd on every hover, which rebuilt every DragTarget mid-drag and made
+  // the drag machinery lose the target when crossing between columns. No hover
+  // state now: nothing to lose.
 
-  void _beginDrag(String key, List<String> from) => setState(() {
-        _dragKey = key;
-        _baseOrder = [...from];
-        _dropBefore = null;
-      });
-
-  /// The lifted card will land just before [target].
-  void _dragOver(String target) {
-    if (_dragKey == null || target == _dragKey || _dropBefore == target) return;
-    setState(() => _dropBefore = target);
+  /// Reorder so [dragged] lands just before [before], within [keys], and save.
+  void _commitDrop(String dragged, String before, List<String> keys) {
+    if (dragged == before) return;
+    final order = [...keys]..remove(dragged);
+    final at = order.indexOf(before);
+    order.insert(at < 0 ? order.length : at, dragged);
+    if (!_sameOrder(order, keys)) widget.onCommitOrder(order);
   }
 
-  void _endDrag() {
-    final dragged = _dragKey;
-    final base = _baseOrder;
-    final before = _dropBefore;
-    setState(() {
-      _dragKey = null;
-      _baseOrder = null;
-      _dropBefore = null;
-    });
-    if (dragged == null || base == null) return;
-
-    final order = [...base]..remove(dragged);
-    final at = before == null ? -1 : order.indexOf(before);
-    order.insert(at < 0 ? order.length : at, dragged);
-    if (!_sameOrder(order, base)) widget.onCommitOrder(order);
+  /// Reorder so [dragged] lands at the very end (dropped past every card).
+  void _commitToEnd(String dragged, List<String> keys) {
+    final order = [...keys]..remove(dragged);
+    order.add(dragged);
+    if (!_sameOrder(order, keys)) widget.onCommitOrder(order);
   }
 
   static bool _sameOrder(List<String> a, List<String> b) {
@@ -319,7 +309,7 @@ class _HouseState extends ConsumerState<_House> {
   }
 
   /// Wraps a card so it can be picked up and dropped onto. [label] names the
-  /// ghost chip; [keys] is the sequence at pickup.
+  /// ghost chip; [keys] is the current sequence (stable during a drag).
   Widget _arrangeable(
     String key,
     String label,
@@ -327,50 +317,46 @@ class _HouseState extends ConsumerState<_House> {
     Widget card,
   ) {
     final t = HcTokens.of(context);
-    final showBar = _dragKey != null && _dragKey != key && _dropBefore == key;
 
     return DragTarget<String>(
-      onWillAcceptWithDetails: (d) {
-        _dragOver(key);
-        return d.data != key;
-      },
-      onMove: (d) => _dragOver(key),
-      builder: (context, _, __) => LongPressDraggable<String>(
-        data: key,
-        onDragStarted: () => _beginDrag(key, keys),
-        onDragEnd: (_) => _endDrag(),
-        onDraggableCanceled: (_, __) => _endDrag(),
-        hapticFeedbackOnStart: true,
-        feedback: _DragChip(label: label),
-        childWhenDragging:
-            Opacity(opacity: 0.35, child: IgnorePointer(child: card)),
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            card,
-            // The landing bar sits at the top edge of the card the lift will
-            // drop in front of — a clear "it goes here", no guessing.
-            if (showBar)
-              Positioned(
-                left: t.space.xs,
-                right: t.space.xs,
-                top: -3,
-                child: Container(
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: t.accent.active,
-                    borderRadius: BorderRadius.circular(2),
-                    boxShadow: [
-                      BoxShadow(
-                          color: t.accent.active.withValues(alpha: 0.5),
-                          blurRadius: 6),
-                    ],
+      onWillAcceptWithDetails: (d) => d.data != key,
+      onAcceptWithDetails: (d) => _commitDrop(d.data, key, keys),
+      builder: (context, candidate, rejected) {
+        final active = candidate.any((c) => c != null && c != key);
+        return LongPressDraggable<String>(
+          data: key,
+          hapticFeedbackOnStart: true,
+          feedback: _DragChip(label: label),
+          childWhenDragging:
+              Opacity(opacity: 0.35, child: IgnorePointer(child: card)),
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              card,
+              // The landing bar sits at the top edge of the card the lift will
+              // drop in front of — a clear "it goes here", no guessing.
+              if (active)
+                Positioned(
+                  left: t.space.xs,
+                  right: t.space.xs,
+                  top: -3,
+                  child: Container(
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: t.accent.active,
+                      borderRadius: BorderRadius.circular(2),
+                      boxShadow: [
+                        BoxShadow(
+                            color: t.accent.active.withValues(alpha: 0.5),
+                            blurRadius: 6),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-          ],
-        ),
-      ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -556,7 +542,32 @@ class _HouseState extends ConsumerState<_House> {
 
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: bands,
+                  children: [
+                    ...bands,
+                    // A tail zone so a card can be dropped at the very end —
+                    // there is no card below the last one to drop "before".
+                    DragTarget<String>(
+                      onWillAcceptWithDetails: (d) => true,
+                      onAcceptWithDetails: (d) => _commitToEnd(d.data, keys),
+                      builder: (context, candidate, rejected) =>
+                          AnimatedContainer(
+                        duration: t.motion.d(t.motion.fast),
+                        height: candidate.isNotEmpty ? 40 : 12,
+                        alignment: Alignment.topCenter,
+                        child: candidate.isNotEmpty
+                            ? Container(
+                                height: 4,
+                                margin: EdgeInsets.symmetric(
+                                    horizontal: t.space.xs),
+                                decoration: BoxDecoration(
+                                  color: t.accent.active,
+                                  borderRadius: BorderRadius.circular(2),
+                                ),
+                              )
+                            : null,
+                      ),
+                    ),
+                  ],
                 );
               },
             ),
