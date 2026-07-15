@@ -1,3 +1,4 @@
+import '../../core/text/humanize.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/schema/plugin_capabilities.dart';
@@ -134,7 +135,8 @@ class _ActionFormState extends State<ActionForm> {
           border: const OutlineInputBorder(),
         ),
         items: [
-          for (final o in options) DropdownMenuItem(value: o, child: Text(o)),
+          for (final o in options)
+            DropdownMenuItem(value: o, child: Text(humanize(o))),
         ],
         onChanged: (v) => setState(() => _values[p.name] = v),
       );

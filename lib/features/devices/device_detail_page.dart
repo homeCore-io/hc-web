@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/text/humanize.dart';
 import '../../core/models/device_state.dart';
 import '../../core/providers/devices_provider.dart';
 
@@ -84,9 +85,13 @@ class _DeviceDetailView extends ConsumerWidget {
                       device.canonicalName!.isNotEmpty)
                     _InfoRow(label: 'Canonical', value: device.canonicalName!),
                   _InfoRow(label: 'Plugin', value: device.pluginId),
-                  _InfoRow(label: 'Area', value: device.area ?? '—'),
+                  _InfoRow(
+                      label: 'Area',
+                      value:
+                          device.area != null ? humanize(device.area!) : '—'),
                   if (device.deviceType != null)
-                    _InfoRow(label: 'Type', value: device.deviceType!),
+                    _InfoRow(
+                        label: 'Type', value: humanize(device.deviceType!)),
                 ],
               ),
             ),

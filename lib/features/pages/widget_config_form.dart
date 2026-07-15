@@ -5,6 +5,7 @@ import '../../core/dashboard/widget_registry.dart';
 import '../../core/models/device_state.dart';
 import '../../core/providers/areas_provider.dart';
 import '../../core/providers/devices_provider.dart';
+import '../../core/text/humanize.dart';
 import '../../design/tokens.dart';
 import '../../shell/hc_sheet.dart';
 
@@ -161,7 +162,7 @@ class _ConfigFormState extends ConsumerState<_ConfigForm> {
     );
   }
 
-  String _title(WidgetConfigField f) => f.label ?? f.name.replaceAll('_', ' ');
+  String _title(WidgetConfigField f) => f.label ?? humanize(f.name);
 
   Widget _help(WidgetConfigField f) {
     final t = HcTokens.of(context);
@@ -228,7 +229,8 @@ class _ConfigFormState extends ConsumerState<_ConfigForm> {
           decoration: const InputDecoration(
               isDense: true, border: OutlineInputBorder()),
           items: [
-            for (final o in options) DropdownMenuItem(value: o, child: Text(o)),
+            for (final o in options)
+              DropdownMenuItem(value: o, child: Text(humanize(o))),
           ],
           onChanged: (v) => _set(f.name, v),
         ),
@@ -281,7 +283,8 @@ class _ConfigFormState extends ConsumerState<_ConfigForm> {
           decoration: const InputDecoration(
               isDense: true, border: OutlineInputBorder()),
           items: [
-            for (final n in names) DropdownMenuItem(value: n, child: Text(n)),
+            for (final n in names)
+              DropdownMenuItem(value: n, child: Text(humanize(n))),
           ],
           onChanged: (v) => _set(f.name, v),
         ),
@@ -373,7 +376,8 @@ class _ConfigFormState extends ConsumerState<_ConfigForm> {
             hintText: device == null ? 'Pick a device first' : null,
           ),
           items: [
-            for (final a in attrs) DropdownMenuItem(value: a, child: Text(a)),
+            for (final a in attrs)
+              DropdownMenuItem(value: a, child: Text(humanize(a))),
           ],
           onChanged: (v) => _set(f.name, v),
         ),
@@ -456,7 +460,7 @@ class _DevicePickerState extends State<_DevicePicker> {
                     style: TextStyle(fontSize: 13.5, color: t.surface.onBase)),
                 subtitle: (d.area ?? '').isEmpty
                     ? null
-                    : Text(d.area!.replaceAll('_', ' '),
+                    : Text(humanize(d.area!),
                         style: TextStyle(
                             fontSize: 11, color: t.surface.onBaseMuted)),
                 onChanged: (_) => setState(() {

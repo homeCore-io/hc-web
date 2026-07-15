@@ -417,7 +417,7 @@ class _HouseHeader extends ConsumerWidget {
     final modes = ref.watch(modesProvider).valueOrNull ?? const [];
     final active = modes
         .where((m) => m.on)
-        .map((m) => m.id.replaceFirst('mode_', ''))
+        .map((m) => humanize(m.id.replaceFirst('mode_', '')))
         .toList();
 
     return Column(
@@ -551,7 +551,7 @@ class _NeedsAttentionSheet extends StatelessWidget {
               final p = problems[i];
               final offline = p.reason == 'offline';
               final colour = offline ? t.accent.offline : t.accent.warn;
-              final area = (p.device.area ?? '').replaceAll('_', ' ');
+              final area = humanize(p.device.area ?? '');
 
               return InkWell(
                 borderRadius: t.radius.mdR,

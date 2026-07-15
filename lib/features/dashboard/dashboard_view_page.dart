@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/api/history_api.dart';
+import '../../core/text/humanize.dart';
 import '../../core/dashboard/widget_registry.dart';
 import 'camera_card.dart';
 import '../../core/devices/presentation.dart';
@@ -450,7 +451,9 @@ class _DeviceGridWidget extends ConsumerWidget {
                     Text(
                       device.isMediaPlayer
                           ? device.title ?? device.playbackState
-                          : device.area ?? device.id,
+                          : device.area != null
+                              ? humanize(device.area!)
+                              : device.id,
                       style: Theme.of(context).textTheme.bodySmall,
                       maxLines: veryCompact ? 1 : 2,
                       overflow: TextOverflow.ellipsis,
@@ -487,7 +490,9 @@ class _DeviceListWidget extends ConsumerWidget {
                 title: Text(device.displayName),
                 subtitle: Text(device.isMediaPlayer
                     ? (device.title ?? device.playbackState)
-                    : (device.area ?? device.id)),
+                    : (device.area != null
+                        ? humanize(device.area!)
+                        : device.id)),
                 trailing: Icon(
                   device.available ? Icons.circle : Icons.circle_outlined,
                   size: 10,
@@ -518,7 +523,8 @@ class _DeviceTileWidget extends ConsumerWidget {
     return ListTile(
       contentPadding: EdgeInsets.zero,
       title: Text(device.displayName),
-      subtitle: Text(device.title ?? device.area ?? device.id),
+      subtitle: Text(device.title ??
+          (device.area != null ? humanize(device.area!) : device.id)),
       trailing: Icon(
         device.available ? Icons.circle : Icons.circle_outlined,
         size: 10,
@@ -687,7 +693,7 @@ class _EventFeedWidgetState extends ConsumerState<_EventFeedWidget> {
         contentPadding: EdgeInsets.zero,
         visualDensity:
             widget.compact ? VisualDensity.compact : VisualDensity.standard,
-        title: Text(event.type),
+        title: Text(humanize(event.type)),
         subtitle: Text(
           event.deviceId == null
               ? event.data['rule_id']?.toString() ??
@@ -696,7 +702,7 @@ class _EventFeedWidgetState extends ConsumerState<_EventFeedWidget> {
               : [
                   deviceById[event.deviceId!]?.displayName ?? event.deviceId!,
                   if ((deviceById[event.deviceId!]?.area ?? '').isNotEmpty)
-                    deviceById[event.deviceId!]?.area,
+                    humanize(deviceById[event.deviceId!]?.area ?? ''),
                 ].whereType<String>().join(' • '),
         ),
       ));

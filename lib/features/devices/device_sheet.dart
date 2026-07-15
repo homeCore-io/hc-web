@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/text/humanize.dart';
 import '../../core/api/history_api.dart';
 import '../../core/devices/presentation.dart';
 import '../../core/models/device_state.dart';
@@ -66,8 +67,8 @@ class _DeviceSheet extends ConsumerWidget {
           HcSheetHeader(
             title: device.displayName,
             subtitle: [
-              if (device.area != null) device.area!.replaceAll('_', ' '),
-              device.deviceType,
+              if (device.area != null) humanize(device.area!),
+              if (device.deviceType != null) humanize(device.deviceType!),
               if (!device.available) 'offline',
             ].join(' · '),
             trailing: facet.isActuator && device.available

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/text/humanize.dart';
 import '../../core/devices/presentation.dart';
 import '../../core/models/device_state.dart';
 import '../../core/providers/devices_provider.dart';
@@ -585,7 +586,7 @@ class _GroupHeader extends ConsumerWidget {
       child: Row(
         children: [
           Text(
-            group.key,
+            humanize(group.key),
             style: TextStyle(
               fontSize: 13.5,
               fontWeight: FontWeight.w700,
@@ -665,7 +666,7 @@ class _Table extends ConsumerWidget {
               onSelectChanged: (_) => context.go('/devices/${d.id}'),
               cells: [
                 DataCell(Text(d.displayName)),
-                DataCell(Text(d.area ?? '—')),
+                DataCell(Text(d.area != null ? humanize(d.area!) : '—')),
                 DataCell(Text(facetOf(d, d.schema).label)),
                 DataCell(Text(
                   d.available ? summarise(d) : 'offline',

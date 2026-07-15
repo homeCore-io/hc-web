@@ -1,4 +1,5 @@
 import '../../core/models/dashboard.dart';
+import '../../core/text/humanize.dart';
 
 /// How the house is laid out — which rooms, in what order, and which are hidden.
 ///
@@ -113,7 +114,7 @@ class HomeArrangement {
         DashboardWidgetModel(
           id: '$_kRoomPrefix$area',
           type: 'device_grid',
-          title: area.replaceAll('_', ' '),
+          title: humanize(area),
           subtitle: null,
           refreshPolicy: DashboardRefreshPolicy.live,
           config: {

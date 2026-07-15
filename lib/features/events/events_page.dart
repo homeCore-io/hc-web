@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/events_history_api.dart';
 import '../../core/models/event_entry.dart';
 import '../../core/providers/auth_provider.dart';
+import '../../core/text/humanize.dart';
 import '../../core/models/hc_event.dart';
 import '../../core/providers/events_provider.dart';
 import '../../core/providers/time_display_provider.dart';
@@ -182,8 +183,8 @@ class _LiveTabState extends ConsumerState<_LiveTab> {
               return Padding(
                 padding: const EdgeInsets.only(right: 4),
                 child: FilterChip(
-                  label: Text(t.replaceAll('_', ' '),
-                      style: const TextStyle(fontSize: 11)),
+                  label:
+                      Text(humanize(t), style: const TextStyle(fontSize: 11)),
                   selected: selected,
                   visualDensity: VisualDensity.compact,
                   onSelected: (val) {
@@ -250,7 +251,8 @@ class _LiveEventTile extends ConsumerWidget {
         width: 4,
         child: ColoredBox(color: _color(context)),
       ),
-      title: Text(event.type, style: Theme.of(context).textTheme.bodyMedium),
+      title: Text(humanize(event.type),
+          style: Theme.of(context).textTheme.bodyMedium),
       subtitle: event.deviceId != null ? Text(event.deviceId!) : null,
       trailing: Text(fmtTime(event.timestamp, utc: isUtc),
           style: Theme.of(context).textTheme.bodySmall),
@@ -348,8 +350,8 @@ class _HistoryTabState extends ConsumerState<_HistoryTab> {
               return Padding(
                 padding: const EdgeInsets.only(right: 4),
                 child: FilterChip(
-                  label: Text(t.replaceAll('_', ' '),
-                      style: const TextStyle(fontSize: 11)),
+                  label:
+                      Text(humanize(t), style: const TextStyle(fontSize: 11)),
                   selected: selected,
                   visualDensity: VisualDensity.compact,
                   onSelected: (val) {
@@ -432,8 +434,8 @@ class _HistoryEventTile extends ConsumerWidget {
         width: 4,
         child: ColoredBox(color: _color(context)),
       ),
-      title:
-          Text(entry.eventType, style: Theme.of(context).textTheme.bodyMedium),
+      title: Text(humanize(entry.eventType),
+          style: Theme.of(context).textTheme.bodyMedium),
       subtitle: entry.deviceId != null ? Text(entry.deviceId!) : null,
       trailing: Text(timeStr, style: Theme.of(context).textTheme.bodySmall),
     );
