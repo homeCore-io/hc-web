@@ -110,9 +110,34 @@ class _HomePageState extends ConsumerState<HomePage> {
             hidden.contains(room) ? hidden.remove(room) : hidden.add(room);
             _draft = _draft!.copyWith(hidden: hidden);
           }),
+          onCommitOrder: (order) => _persistOrder(devices, homeCams, order),
         ),
       ),
     );
+  }
+
+  /// Save the order from a direct card drag straight away — no Arrange mode.
+  /// Hidden rooms are not in the dragged list (they are not on screen), so their
+  /// hidden state is preserved and they append in the arrangement.
+  Future<void> _persistOrder(
+    List<DeviceState> devices,
+    List<Camera> homeCams,
+    List<String> order,
+  ) async {
+    final dashboard = ref.read(defaultDashboardProvider);
+    if (dashboard == null) return;
+    final current = HomeArrangement.fromDashboard(dashboard);
+    final next = current.copyWith(order: order);
+    try {
+      await ref.read(dashboardsProvider.notifier).updateDashboard(
+            next.toDashboard(dashboard, _orderKeys(devices, homeCams)),
+          );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Could not save order: $e')));
+      }
+    }
   }
 
   /// Every draggable card's key, in default order: the rooms, then one key per
@@ -219,6 +244,7 @@ class _House extends ConsumerStatefulWidget {
     required this.arranging,
     required this.onReorder,
     required this.onToggleHidden,
+    required this.onCommitOrder,
   });
 
   final List<DeviceState> devices;
@@ -226,6 +252,10 @@ class _House extends ConsumerStatefulWidget {
   final bool arranging;
   final void Function(int from, int to) onReorder;
   final ValueChanged<String> onToggleHidden;
+
+  /// Persist a new order after a direct card drag. The list is the visible keys
+  /// in their new sequence; hidden rooms keep their state and append.
+  final ValueChanged<List<String>> onCommitOrder;
 
   @override
   ConsumerState<_House> createState() => _HouseState();
@@ -241,6 +271,76 @@ class _HouseState extends ConsumerState<_House> {
   void _toggle(String key) => setState(() {
         _collapsed.contains(key) ? _collapsed.remove(key) : _collapsed.add(key);
       });
+
+  // Direct drag: long-press a card to pick it up, drag over another to drop it
+  // there, and the board reflows live. No Arrange mode, no list. `_liveOrder` is
+  // the working sequence while a drag is in flight; committed on drop.
+  String? _dragKey;
+  List<String>? _liveOrder;
+
+  void _beginDrag(String key, List<String> from) => setState(() {
+        _dragKey = key;
+        _liveOrder = [...from];
+      });
+
+  /// Move the dragged key to just before [target] as the pointer passes over it.
+  void _dragOver(String target) {
+    final o = _liveOrder;
+    final dragged = _dragKey;
+    if (o == null || dragged == null || dragged == target) return;
+    final di = o.indexOf(dragged);
+    final ti = o.indexOf(target);
+    if (di < 0 || ti < 0 || di + 1 == ti) {
+      return; // gone, or already sitting just before the target
+    }
+    setState(() {
+      o.removeAt(di);
+      o.insert(o.indexOf(target), dragged);
+    });
+  }
+
+  void _endDrag() {
+    final order = _liveOrder;
+    final dragged = _dragKey;
+    setState(() {
+      _dragKey = null;
+      _liveOrder = null;
+    });
+    if (dragged != null && order != null) widget.onCommitOrder(order);
+  }
+
+  /// Wraps a card so it can be picked up and so a drag can be dropped onto it.
+  /// [keys] is the sequence the drag starts from; [width] sizes the lifted copy.
+  Widget _arrangeable(
+    String key,
+    double width,
+    List<String> keys,
+    Widget card,
+  ) {
+    return DragTarget<String>(
+      onWillAcceptWithDetails: (d) {
+        _dragOver(key);
+        return d.data != key;
+      },
+      builder: (context, _, __) => LongPressDraggable<String>(
+        data: key,
+        onDragStarted: () => _beginDrag(key, keys),
+        onDragEnd: (_) => _endDrag(),
+        onDraggableCanceled: (_, __) => _endDrag(),
+        hapticFeedbackOnStart: true,
+        feedback: SizedBox(
+          width: width,
+          child: Material(
+            color: Colors.transparent,
+            child: Opacity(opacity: 0.92, child: card),
+          ),
+        ),
+        childWhenDragging:
+            Opacity(opacity: 0.3, child: IgnorePointer(child: card)),
+        child: card,
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -345,8 +445,9 @@ class _HouseState extends ConsumerState<_House> {
                     );
 
                 // Pack a run of single-column cards (rooms + small cameras) into
-                // balanced columns.
-                Widget masonry(List<String> ks) {
+                // balanced columns. [full] is the whole drag order so a card can
+                // be dropped anywhere, not just within this band.
+                Widget masonry(List<String> ks, List<String> full) {
                   final columns = List.generate(colCount, (_) => <Widget>[]);
                   final heights = List<double>.filled(colCount, 0);
                   for (final key in ks) {
@@ -359,10 +460,12 @@ class _HouseState extends ConsumerState<_House> {
                       heights[shortest] += _collapsed.contains(key)
                           ? 48
                           : 46 + colW / (16 / 10) + 14;
-                      columns[shortest].add(smallCamera(key, cam));
+                      columns[shortest].add(
+                          _arrangeable(key, colW, full, smallCamera(key, cam)));
                     } else {
                       heights[shortest] += _estimateHeight(byKey[key]!);
-                      columns[shortest].add(room(key));
+                      columns[shortest]
+                          .add(_arrangeable(key, colW, full, room(key)));
                     }
                   }
                   return Row(
@@ -381,6 +484,10 @@ class _HouseState extends ConsumerState<_House> {
                   );
                 }
 
+                // While a card is being dragged the board lays out from the live
+                // order, so the others reflow around the drop point in real time.
+                final order = _liveOrder ?? keys;
+
                 // A large camera is a full-width hero, so it breaks the column
                 // flow: small cards pack into a masonry band, a hero spans the
                 // whole width, then packing resumes below it.
@@ -388,20 +495,25 @@ class _HouseState extends ConsumerState<_House> {
                 var band = <String>[];
                 void flush() {
                   if (band.isNotEmpty) {
-                    bands.add(masonry(band));
+                    bands.add(masonry(band, order));
                     band = [];
                   }
                 }
 
-                for (final key in keys) {
+                for (final key in order) {
                   final cam = camById[cameraIdFromKey(key) ?? ''];
                   if (cam != null && cam.homeLarge) {
                     flush();
-                    bands.add(HomeCameraCard(
-                      camera: cam,
-                      large: true,
-                      collapsed: _collapsed.contains(key),
-                      onToggleCollapse: () => _toggle(key),
+                    bands.add(_arrangeable(
+                      key,
+                      c.maxWidth,
+                      order,
+                      HomeCameraCard(
+                        camera: cam,
+                        large: true,
+                        collapsed: _collapsed.contains(key),
+                        onToggleCollapse: () => _toggle(key),
+                      ),
                     ));
                   } else {
                     band.add(key);
