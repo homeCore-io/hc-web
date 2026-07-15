@@ -15,16 +15,11 @@ import '../../design/components/hc_controls.dart';
 import '../../shell/hc_sheet.dart';
 import '../cameras/camera_store.dart';
 import 'home_arrangement.dart';
-import 'home_cameras.dart';
+import 'home_camera_card.dart';
 import 'home_color_light.dart';
 import 'home_entity_row.dart';
 import 'home_rich_cards.dart';
 import 'home_thermostat.dart';
-
-/// The arrangement key for the Cameras area — not a real room, so it needs a
-/// reserved key no `area` can collide with. It orders, hides, and drags exactly
-/// like a room.
-const _kCamerasKey = '__cameras__';
 
 /// The house.
 ///
@@ -59,8 +54,9 @@ class _HomePageState extends ConsumerState<HomePage> {
     final devicesAsync = ref.watch(devicesProvider);
     final saved =
         HomeArrangement.fromDashboard(ref.watch(defaultDashboardProvider));
-    final hasCameras =
-        (ref.watch(camerasProvider).valueOrNull ?? const []).isNotEmpty;
+    // Only the cameras the user put on Home get a card; the rest live on the
+    // Cameras page. Each is its own arrangeable card.
+    final homeCams = ref.watch(homeCamerasProvider);
 
     return Scaffold(
       floatingActionButton: _arranging
@@ -101,7 +97,7 @@ class _HomePageState extends ConsumerState<HomePage> {
           arrangement: _draft ?? saved,
           arranging: _arranging,
           onReorder: (from, to) => setState(() {
-            final rooms = _orderKeys(devices, hasCameras);
+            final rooms = _orderKeys(devices, homeCams);
             final order = _draft!.all(rooms);
             if (to > from) to--;
             final moved = order.removeAt(from);
@@ -118,11 +114,11 @@ class _HomePageState extends ConsumerState<HomePage> {
     );
   }
 
-  /// Every draggable card's key, in default order: the rooms, then the Cameras
-  /// area if there is one. What Arrange reorders and the masonry lays out.
+  /// Every draggable card's key, in default order: the rooms, then one key per
+  /// camera the user put on Home. What Arrange reorders and the masonry lays out.
   static List<String> _orderKeys(
     List<DeviceState> devices,
-    bool hasCameras,
+    List<Camera> homeCams,
   ) =>
       [
         ...runQuery(
@@ -130,15 +126,14 @@ class _HomePageState extends ConsumerState<HomePage> {
           const DeviceQuery(
               group: DeviceGroup.room, sort: DeviceSort.activeFirst),
         ).map((g) => g.key),
-        if (hasCameras) _kCamerasKey,
+        for (final c in homeCams) homeCameraKey(c.id),
       ];
 
   Future<void> _save() async {
     final draft = _draft;
     final dashboard = ref.read(defaultDashboardProvider);
     final devices = ref.read(devicesProvider).valueOrNull ?? const [];
-    final hasCameras =
-        (ref.read(camerasProvider).valueOrNull ?? const []).isNotEmpty;
+    final homeCams = ref.read(homeCamerasProvider);
     if (draft == null || dashboard == null) {
       setState(() => _draft = null);
       return;
@@ -147,7 +142,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     setState(() => _saving = true);
     try {
       await ref.read(dashboardsProvider.notifier).updateDashboard(
-            draft.toDashboard(dashboard, _orderKeys(devices, hasCameras)),
+            draft.toDashboard(dashboard, _orderKeys(devices, homeCams)),
           );
       if (mounted) setState(() => _draft = null);
     } catch (e) {
@@ -260,11 +255,16 @@ class _HouseState extends ConsumerState<_House> {
     );
     final byKey = {for (final g in groups) g.key: g};
     final problems = problemsIn(devices);
-    final cameras = ref.watch(camerasProvider).valueOrNull ?? const <Camera>[];
+    // Only the cameras chosen for Home get a card, each keyed by its id.
+    final homeCams = ref.watch(homeCamerasProvider);
+    final camById = {for (final c in homeCams) c.id: c};
 
-    // Every arrangeable card: the rooms, plus the Cameras area when there is
-    // one. Cameras order, hide, and drag exactly like a room.
-    final areaKeys = [...byKey.keys, if (cameras.isNotEmpty) _kCamerasKey];
+    // Every arrangeable card: the rooms, plus one per Home camera. Cameras
+    // order, hide, resize, and drag exactly like a room.
+    final areaKeys = [
+      ...byKey.keys,
+      for (final c in homeCams) homeCameraKey(c.id),
+    ];
 
     // While arranging you see every area INCLUDING the hidden ones, or you could
     // never bring one back.
@@ -279,13 +279,15 @@ class _HouseState extends ConsumerState<_House> {
         onReorderItem: widget.onReorder,
         itemBuilder: (context, i) {
           final key = keys[i];
-          final isCameras = key == _kCamerasKey;
+          final cam = camById[cameraIdFromKey(key) ?? ''];
           return _ArrangeRow(
             key: ValueKey(key),
             index: i,
-            label: isCameras ? 'Cameras' : humanize(key),
-            count:
-                isCameras ? cameras.length : (byKey[key]?.devices.length ?? 0),
+            label: cam != null ? cam.name : humanize(key),
+            count: cam != null ? 0 : (byKey[key]?.devices.length ?? 0),
+            detail: cam != null
+                ? (cam.homeLarge ? 'Large camera' : 'Camera')
+                : null,
             hidden: widget.arrangement.hidden.contains(key),
             onToggleHidden: () => widget.onToggleHidden(key),
           );
@@ -312,38 +314,11 @@ class _HouseState extends ConsumerState<_House> {
                 // twelve-device room now sit side by side, so the house reads as
                 // a dense board — not a ragged list dropped down the left edge.
                 final colCount = (c.maxWidth / 360).floor().clamp(1, 4);
-                final columns = List.generate(colCount, (_) => <Widget>[]);
-                final heights = List<double>.filled(colCount, 0);
+                final colW =
+                    (c.maxWidth - (colCount - 1) * t.space.md) / colCount;
 
-                for (final key in keys) {
-                  var shortest = 0;
-                  for (var i = 1; i < colCount; i++) {
-                    if (heights[i] < heights[shortest]) shortest = i;
-                  }
-                  if (key == _kCamerasKey) {
-                    final open = !_collapsed.contains(_kCamerasKey);
-                    // Height tracks the cameras actually shown on Home, not the
-                    // whole wall — the card renders only the chosen subset.
-                    final shownCount =
-                        cameras.where((c) => c.showOnHome).length;
-                    heights[shortest] += 64 +
-                        (open
-                            ? (shownCount == 0
-                                ? 96
-                                : (shownCount / 2).ceil() * 115)
-                            : 0);
-                    columns[shortest].add(HomeCamerasCard(
-                      cameras: cameras,
-                      collapsed: !open,
-                      onToggleCollapse: () => _toggle(_kCamerasKey),
-                    ));
-                    continue;
-                  }
-                  final room = byKey[key]!;
-                  heights[shortest] += _estimateHeight(room);
-                  columns[shortest].add(
-                    _Room(
-                      room: room,
+                Widget room(String key) => _Room(
+                      room: byKey[key]!,
                       collapsed: _collapsed.contains(key),
                       onToggleCollapse: () => _toggle(key),
                       // Scene duality: Lutron wants {"activate": true}; Hue
@@ -354,23 +329,83 @@ class _HouseState extends ConsumerState<_House> {
                             ? {'action': 'activate_scene'}
                             : {'activate': true},
                       ),
-                    ),
+                    );
+
+                Widget smallCamera(String key, Camera cam) => HomeCameraCard(
+                      camera: cam,
+                      large: false,
+                      collapsed: _collapsed.contains(key),
+                      onToggleCollapse: () => _toggle(key),
+                    );
+
+                // Pack a run of single-column cards (rooms + small cameras) into
+                // balanced columns.
+                Widget masonry(List<String> ks) {
+                  final columns = List.generate(colCount, (_) => <Widget>[]);
+                  final heights = List<double>.filled(colCount, 0);
+                  for (final key in ks) {
+                    var shortest = 0;
+                    for (var i = 1; i < colCount; i++) {
+                      if (heights[i] < heights[shortest]) shortest = i;
+                    }
+                    final cam = camById[cameraIdFromKey(key) ?? ''];
+                    if (cam != null) {
+                      heights[shortest] += _collapsed.contains(key)
+                          ? 48
+                          : 46 + colW / (16 / 10) + 14;
+                      columns[shortest].add(smallCamera(key, cam));
+                    } else {
+                      heights[shortest] += _estimateHeight(byKey[key]!);
+                      columns[shortest].add(room(key));
+                    }
+                  }
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      for (var i = 0; i < colCount; i++) ...[
+                        if (i > 0) SizedBox(width: t.space.md),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: columns[i],
+                          ),
+                        ),
+                      ],
+                    ],
                   );
                 }
 
-                return Row(
+                // A large camera is a full-width hero, so it breaks the column
+                // flow: small cards pack into a masonry band, a hero spans the
+                // whole width, then packing resumes below it.
+                final bands = <Widget>[];
+                var band = <String>[];
+                void flush() {
+                  if (band.isNotEmpty) {
+                    bands.add(masonry(band));
+                    band = [];
+                  }
+                }
+
+                for (final key in keys) {
+                  final cam = camById[cameraIdFromKey(key) ?? ''];
+                  if (cam != null && cam.homeLarge) {
+                    flush();
+                    bands.add(HomeCameraCard(
+                      camera: cam,
+                      large: true,
+                      collapsed: _collapsed.contains(key),
+                      onToggleCollapse: () => _toggle(key),
+                    ));
+                  } else {
+                    band.add(key);
+                  }
+                }
+                flush();
+
+                return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    for (var i = 0; i < colCount; i++) ...[
-                      if (i > 0) SizedBox(width: t.space.md),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: columns[i],
-                        ),
-                      ),
-                    ],
-                  ],
+                  children: bands,
                 );
               },
             ),
@@ -952,6 +987,7 @@ class _ArrangeRow extends StatelessWidget {
     required this.count,
     required this.hidden,
     required this.onToggleHidden,
+    this.detail,
   });
 
   final int index;
@@ -959,6 +995,9 @@ class _ArrangeRow extends StatelessWidget {
   final int count;
   final bool hidden;
   final VoidCallback onToggleHidden;
+
+  /// Shown instead of the device count for cards that are not rooms (a camera).
+  final String? detail;
 
   @override
   Widget build(BuildContext context) {
@@ -999,7 +1038,7 @@ class _ArrangeRow extends StatelessWidget {
                 ),
               ),
               Text(
-                count == 1 ? '1 device' : '$count devices',
+                detail ?? (count == 1 ? '1 device' : '$count devices'),
                 style: TextStyle(
                   fontSize: 12,
                   color: t.surface.onBaseMuted,

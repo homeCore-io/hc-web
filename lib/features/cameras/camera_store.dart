@@ -13,6 +13,7 @@ class Camera {
     this.refreshSecs,
     this.span = 1,
     this.showOnHome = true,
+    this.homeLarge = false,
   });
 
   final String id;
@@ -36,7 +37,13 @@ class Camera {
   /// silently empty on Home.
   final bool showOnHome;
 
-  Camera copyWith({int? span, bool? showOnHome}) => Camera(
+  /// On Home, whether this camera's card is a full-width hero (true) or a
+  /// single-column card (false). Each Home camera is its own card now, so this
+  /// is the "resize" the user asked for — a driveway made big, a side gate left
+  /// small. Persisted per camera, defaults to the compact single column.
+  final bool homeLarge;
+
+  Camera copyWith({int? span, bool? showOnHome, bool? homeLarge}) => Camera(
         id: id,
         name: name,
         url: url,
@@ -44,6 +51,7 @@ class Camera {
         refreshSecs: refreshSecs,
         span: span ?? this.span,
         showOnHome: showOnHome ?? this.showOnHome,
+        homeLarge: homeLarge ?? this.homeLarge,
       );
 
   static Camera? fromWidget(DashboardWidgetModel w) {
@@ -59,6 +67,7 @@ class Camera {
       // Absent means show — the flag only ever hides, so old cameras and cameras
       // added by another client both keep appearing on Home until curated here.
       showOnHome: w.config['show_on_home'] as bool? ?? true,
+      homeLarge: w.config['home_large'] as bool? ?? false,
     );
   }
 
@@ -76,6 +85,7 @@ class Camera {
           // Only written when hidden, so the wall document stays clean and the
           // default (show) needs no key.
           if (!showOnHome) 'show_on_home': false,
+          if (homeLarge) 'home_large': true,
         },
       );
 }
@@ -124,10 +134,18 @@ class CamerasNotifier extends AsyncNotifier<List<Camera>> {
     ref.invalidateSelf();
   }
 
-  /// Curate which cameras surface on Home. Rewrites the camera's widget config
-  /// in place, so the choice is user data on the wall — the same camera hidden
-  /// from Home still lives on the Cameras page and in any kiosk link.
-  Future<void> setShowOnHome(String id, bool show) async {
+  /// Curate which cameras surface on Home. The same camera hidden from Home
+  /// still lives on the Cameras page and in any kiosk link.
+  Future<void> setShowOnHome(String id, bool show) =>
+      _edit(id, (c) => c.copyWith(showOnHome: show));
+
+  /// Resize a Home camera card between full-width hero and single column.
+  Future<void> setHomeLarge(String id, bool large) =>
+      _edit(id, (c) => c.copyWith(homeLarge: large));
+
+  /// Rewrites one camera's widget in place through [change], leaving every other
+  /// widget on the wall untouched — the choice is user data on the wall.
+  Future<void> _edit(String id, Camera Function(Camera) change) async {
     final notifier = ref.read(dashboardsProvider.notifier);
     final dashboards = await ref.read(dashboardsProvider.future);
     final wall = _wallIn(dashboards);
@@ -136,10 +154,7 @@ class CamerasNotifier extends AsyncNotifier<List<Camera>> {
     final widgets = [
       for (final w in wall.widgets)
         if (w.id == id && w.type == 'camera_video')
-          if (Camera.fromWidget(w) case final c?)
-            c.copyWith(showOnHome: show).toWidget()
-          else
-            w
+          if (Camera.fromWidget(w) case final c?) change(c).toWidget() else w
         else
           w,
     ];

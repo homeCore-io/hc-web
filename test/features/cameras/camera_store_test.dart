@@ -62,4 +62,52 @@ void main() {
       expect(hidden.name, 'Attic');
     });
   });
+
+  group('Camera homeLarge', () {
+    test('defaults to compact single column', () {
+      const cam = Camera(
+        id: 'a',
+        name: 'Driveway',
+        url: 'http://x/stream',
+        sourceType: 'webrtc',
+      );
+      expect(cam.homeLarge, isFalse);
+    });
+
+    test('round-trips a hero camera and omits the key when compact', () {
+      const large = Camera(
+        id: 'a',
+        name: 'Driveway',
+        url: 'http://x/stream',
+        sourceType: 'webrtc',
+        homeLarge: true,
+      );
+      final w = large.toWidget();
+      expect(w.config['home_large'], isTrue);
+      expect(Camera.fromWidget(w)!.homeLarge, isTrue);
+
+      const small = Camera(
+        id: 'a',
+        name: 'Driveway',
+        url: 'http://x/stream',
+        sourceType: 'webrtc',
+      );
+      expect(small.toWidget().config.containsKey('home_large'), isFalse);
+    });
+
+    test('size and Home visibility are independent', () {
+      const cam = Camera(
+        id: 'a',
+        name: 'Driveway',
+        url: 'http://x/stream',
+        sourceType: 'webrtc',
+        showOnHome: false,
+        homeLarge: true,
+      );
+      final w = cam.toWidget();
+      final back = Camera.fromWidget(w)!;
+      expect(back.showOnHome, isFalse);
+      expect(back.homeLarge, isTrue);
+    });
+  });
 }

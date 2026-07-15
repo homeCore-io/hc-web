@@ -97,6 +97,8 @@ class _CamerasPageState extends ConsumerState<CamerasPage> {
               _CameraStrip(
                 cameras: list,
                 onRemove: (id) => ref.read(camerasProvider.notifier).remove(id),
+                onToggleHome: (id, show) =>
+                    ref.read(camerasProvider.notifier).setShowOnHome(id, show),
               ),
             ],
           );
@@ -192,14 +194,20 @@ class _StripToggle extends StatelessWidget {
   }
 }
 
-/// The thin row of cameras along the bottom, where you remove one. It is a
-/// Flutter strip UNDER the wall, not an overlay on it — controls floated over a
-/// live iframe are unclickable, because the platform view eats the pointer.
+/// The thin row of cameras along the bottom, where you manage each one: toggle
+/// whether it appears on Home, and remove it. It is a Flutter strip UNDER the
+/// wall, not an overlay on it — controls floated over a live iframe are
+/// unclickable, because the platform view eats the pointer.
 class _CameraStrip extends StatelessWidget {
-  const _CameraStrip({required this.cameras, required this.onRemove});
+  const _CameraStrip({
+    required this.cameras,
+    required this.onRemove,
+    required this.onToggleHome,
+  });
 
   final List<Camera> cameras;
   final ValueChanged<String> onRemove;
+  final void Function(String id, bool show) onToggleHome;
 
   @override
   Widget build(BuildContext context) {
@@ -211,17 +219,87 @@ class _CameraStrip extends StatelessWidget {
         color: t.surface.raised,
         border: Border(top: BorderSide(color: t.stroke.hairline)),
       ),
-      child: Wrap(
-        spacing: t.space.sm,
-        runSpacing: t.space.xs,
+      child: Row(
         children: [
-          for (final cam in cameras)
-            Chip(
-              backgroundColor: t.surface.sunken,
-              label: Text(cam.name, style: const TextStyle(fontSize: 12)),
-              deleteIcon: const Icon(HcIcons.x, size: 14),
-              onDeleted: () => onRemove(cam.id),
+          Text('On Home',
+              style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.6,
+                  color: t.surface.onBaseMuted)),
+          SizedBox(width: t.space.sm),
+          Expanded(
+            child: Wrap(
+              spacing: t.space.sm,
+              runSpacing: t.space.xs,
+              children: [
+                for (final cam in cameras)
+                  _CameraChip(
+                    camera: cam,
+                    onToggleHome: () => onToggleHome(cam.id, !cam.showOnHome),
+                    onRemove: () => onRemove(cam.id),
+                  ),
+              ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One camera in the strip: a Home eye that lights when the camera shows on the
+/// house, its name, and a delete. The eye is the curation the combined Home card
+/// used to hold — cameras page is where the wall is managed.
+class _CameraChip extends StatelessWidget {
+  const _CameraChip({
+    required this.camera,
+    required this.onToggleHome,
+    required this.onRemove,
+  });
+
+  final Camera camera;
+  final VoidCallback onToggleHome;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    final on = camera.showOnHome;
+    return Container(
+      padding: EdgeInsets.only(left: t.space.xs, right: t.space.xs),
+      decoration: BoxDecoration(
+        color: t.surface.sunken,
+        borderRadius: t.radius.smR,
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+            iconSize: 15,
+            color: on ? t.accent.active : t.surface.onBaseMuted,
+            tooltip: on ? 'Showing on Home' : 'Hidden from Home',
+            icon: Icon(on ? HcIcons.eye : HcIcons.eyeSlash),
+            onPressed: onToggleHome,
+          ),
+          Text(camera.name,
+              style: TextStyle(
+                  fontSize: 12,
+                  color: on ? t.surface.onBase : t.surface.onBaseMuted)),
+          SizedBox(width: t.space.xs),
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints.tightFor(width: 24, height: 28),
+            iconSize: 13,
+            color: t.surface.onBaseMuted,
+            tooltip: 'Remove',
+            icon: const Icon(HcIcons.x),
+            onPressed: onRemove,
+          ),
         ],
       ),
     );
