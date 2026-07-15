@@ -13,7 +13,9 @@ import '../devices/device_sheet.dart';
 import '../../core/providers/dashboards_provider.dart';
 import '../../design/components/hc_controls.dart';
 import '../../shell/hc_sheet.dart';
+import '../cameras/camera_store.dart';
 import 'home_arrangement.dart';
+import 'home_cameras.dart';
 import 'home_color_light.dart';
 import 'home_entity_row.dart';
 import 'home_rich_cards.dart';
@@ -216,6 +218,10 @@ class _House extends ConsumerStatefulWidget {
 }
 
 class _HouseState extends ConsumerState<_House> {
+  /// The collapse key for the cameras area — not a real room, so it needs its
+  /// own reserved key that no `area` can collide with.
+  static const _kCameras = '__cameras__';
+
   /// Rooms the user has folded shut. Local and ephemeral on purpose: collapsing
   /// a room to see past it is a glance-time act, not a saved layout, and it must
   /// never fire a dashboard write on every tap. A room absent from this set is
@@ -247,6 +253,7 @@ class _HouseState extends ConsumerState<_House> {
         : widget.arrangement.apply(byKey.keys);
     final rooms = [for (final k in keys) byKey[k]!];
     final problems = problemsIn(devices);
+    final cameras = ref.watch(camerasProvider).valueOrNull ?? const <Camera>[];
 
     if (widget.arranging) {
       return ReorderableListView.builder(
@@ -289,6 +296,18 @@ class _HouseState extends ConsumerState<_House> {
                 final colCount = (c.maxWidth / 360).floor().clamp(1, 4);
                 final columns = List.generate(colCount, (_) => <Widget>[]);
                 final heights = List<double>.filled(colCount, 0);
+
+                // Cameras are their own area, led at the top-left of the board.
+                if (cameras.isNotEmpty) {
+                  final open = !_collapsed.contains(_kCameras);
+                  heights[0] +=
+                      64 + (open ? (cameras.length / 2).ceil() * 115 : 0);
+                  columns[0].add(HomeCamerasCard(
+                    cameras: cameras,
+                    collapsed: !open,
+                    onToggleCollapse: () => _toggle(_kCameras),
+                  ));
+                }
 
                 for (final room in rooms) {
                   var shortest = 0;
