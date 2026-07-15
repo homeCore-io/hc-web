@@ -275,33 +275,96 @@ class _HouseState extends ConsumerState<_House> {
             child: _HouseHeader(devices: devices, problems: problems.length),
           ),
         ),
-        for (final room in rooms)
-          SliverToBoxAdapter(
-            child: _Room(
-              room: room,
-              collapsed: _collapsed.contains(room.key),
-              onToggleCollapse: () => _toggle(room.key),
-              // A sheet OVER the house, not a route away from it. You look, you
-              // act, you dismiss — and the house is still lit where it was.
-              onTap: (d) => showDeviceSheet(context, d.id),
-              onToggle: (d) => notifier.command(d.id, {'on': !isOn(d)}),
-              // Scene duality: a plugin scene-device is activated by a
-              // plugin-specific payload. Lutron wants {"activate": true};
-              // Hue wants {"action": "activate_scene"}. There is no single
-              // command, so pick by who owns the device.
-              onActivate: (d) => notifier.command(
-                d.id,
-                d.pluginId.contains('hue')
-                    ? {'action': 'activate_scene'}
-                    : {'activate': true},
-              ),
-              onLevel: (d, v) =>
-                  notifier.command(d.id, {'on': true, 'brightness': v.round()}),
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: t.space.lg),
+            child: LayoutBuilder(
+              builder: (context, c) {
+                // Rooms pack into balanced columns instead of each taking a
+                // full-width band it only half fills. A one-lamp room and a
+                // twelve-device room now sit side by side, so the house reads as
+                // a dense board — not a ragged list dropped down the left edge.
+                final colCount = (c.maxWidth / 360).floor().clamp(1, 4);
+                final columns = List.generate(colCount, (_) => <Widget>[]);
+                final heights = List<double>.filled(colCount, 0);
+
+                for (final room in rooms) {
+                  var shortest = 0;
+                  for (var i = 1; i < colCount; i++) {
+                    if (heights[i] < heights[shortest]) shortest = i;
+                  }
+                  heights[shortest] += _estimateHeight(room);
+                  columns[shortest].add(
+                    _Room(
+                      room: room,
+                      collapsed: _collapsed.contains(room.key),
+                      onToggleCollapse: () => _toggle(room.key),
+                      // A sheet OVER the house, not a route away. You look, you
+                      // act, you dismiss — the house is still lit where it was.
+                      onTap: (d) => showDeviceSheet(context, d.id),
+                      onToggle: (d) => notifier.command(d.id, {'on': !isOn(d)}),
+                      // Scene duality: Lutron wants {"activate": true}; Hue
+                      // wants {"action": "activate_scene"}. Pick by owner.
+                      onActivate: (d) => notifier.command(
+                        d.id,
+                        d.pluginId.contains('hue')
+                            ? {'action': 'activate_scene'}
+                            : {'activate': true},
+                      ),
+                      onLevel: (d, v) => notifier
+                          .command(d.id, {'on': true, 'brightness': v.round()}),
+                    ),
+                  );
+                }
+
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    for (var i = 0; i < colCount; i++) ...[
+                      if (i > 0) SizedBox(width: t.space.md),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: columns[i],
+                        ),
+                      ),
+                    ],
+                  ],
+                );
+              },
             ),
           ),
+        ),
         SliverToBoxAdapter(child: SizedBox(height: t.space.xl)),
       ],
     );
+  }
+
+  /// A rough height for a room, only to balance the masonry columns — exactness
+  /// does not matter, only which column is currently shortest.
+  double _estimateHeight(DeviceGroupResult room) {
+    if (_collapsed.contains(room.key)) return 54;
+    var rich = 0, ctrl = 0, read = 0, scene = 0;
+    for (final d in room.devices) {
+      switch (facetOf(d, d.schema).presentation) {
+        case TilePresentation.rich:
+          rich++;
+        case TilePresentation.control:
+        case TilePresentation.button:
+          ctrl++;
+        case TilePresentation.readout:
+          read++;
+        case TilePresentation.scene:
+          scene++;
+      }
+    }
+    // A column is ~340px wide: controls sit 2-up (~92px/row), readouts 2-up
+    // (~60px/row), a rich card ~150px.
+    return 54 +
+        rich * 150 +
+        (ctrl / 2).ceil() * 92 +
+        (read / 2).ceil() * 60 +
+        (scene > 0 ? 44 : 0);
   }
 }
 
@@ -568,7 +631,9 @@ class _Room extends StatelessWidget {
     final on = actuators.where(isOn).length;
 
     return Padding(
-      padding: EdgeInsets.fromLTRB(t.space.lg, 0, t.space.lg, t.space.lg),
+      // Horizontal spacing is owned by the masonry column now; a room only pads
+      // itself below.
+      padding: EdgeInsets.only(bottom: t.space.lg),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -655,7 +720,7 @@ class _Room extends StatelessWidget {
                 // Tiles size themselves to the space, so the same surface is a
                 // phone, a laptop and a wall panel without a breakpoint document
                 // describing all three.
-                const target = 210.0;
+                const target = 200.0;
                 final columns = (c.maxWidth / target).floor().clamp(1, 8);
                 final width =
                     (c.maxWidth - (columns - 1) * t.space.sm) / columns;
@@ -667,7 +732,7 @@ class _Room extends StatelessWidget {
                     for (final d in cards)
                       SizedBox(
                         width: width,
-                        height: 84,
+                        height: 76,
                         child: HcTile(
                           device: d,
                           onTap: () => onTap(d),
@@ -688,7 +753,7 @@ class _Room extends StatelessWidget {
               builder: (context, c) {
                 // Sensors pack tighter than controls — a reading needs less room
                 // than a slider — so a smaller target fits more per row.
-                const target = 176.0;
+                const target = 162.0;
                 final columns = (c.maxWidth / target).floor().clamp(2, 8);
                 final width =
                     (c.maxWidth - (columns - 1) * t.space.sm) / columns;
@@ -712,14 +777,7 @@ class _Room extends StatelessWidget {
           ],
           if (!collapsed && scenes.isNotEmpty) ...[
             SizedBox(height: t.space.sm),
-            Wrap(
-              spacing: t.space.xs,
-              runSpacing: t.space.xs,
-              children: [
-                for (final s in scenes)
-                  _SceneChip(scene: s, onTap: () => onActivate(s)),
-              ],
-            ),
+            _SceneChips(scenes: scenes, onActivate: onActivate),
           ],
         ],
       ),
@@ -733,6 +791,86 @@ class _Room extends StatelessWidget {
       return HomeMediaCard(device: d);
     }
     return HomeClimateCard(device: d, onTap: () => onTap(d));
+  }
+}
+
+/// A room's scenes, capped so a Hue room's twenty presets don't become a wall.
+///
+/// Shows the first few and rolls the rest up behind a "+N more" — a family room
+/// with a dozen scenes was three rows of chips that buried the two lamps above
+/// them.
+class _SceneChips extends StatefulWidget {
+  const _SceneChips({required this.scenes, required this.onActivate});
+
+  final List<DeviceState> scenes;
+  final ValueChanged<DeviceState> onActivate;
+
+  @override
+  State<_SceneChips> createState() => _SceneChipsState();
+}
+
+class _SceneChipsState extends State<_SceneChips> {
+  static const _cap = 4;
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    final all = widget.scenes;
+    final shown = _expanded ? all : all.take(_cap).toList();
+    final hidden = all.length - shown.length;
+
+    return Wrap(
+      spacing: t.space.xs,
+      runSpacing: t.space.xs,
+      children: [
+        for (final s in shown)
+          _SceneChip(scene: s, onTap: () => widget.onActivate(s)),
+        if (hidden > 0)
+          _MoreChip(
+            label: '+$hidden more',
+            onTap: () => setState(() => _expanded = true),
+          )
+        else if (_expanded && all.length > _cap)
+          _MoreChip(
+            label: 'Less',
+            onTap: () => setState(() => _expanded = false),
+          ),
+      ],
+    );
+  }
+}
+
+/// The "+N more" / "Less" chip that rolls the scene overflow up.
+class _MoreChip extends StatelessWidget {
+  const _MoreChip({required this.label, required this.onTap});
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: EdgeInsets.symmetric(
+            horizontal: t.space.sm + 2, vertical: t.space.xs + 1),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: t.stroke.hairline),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: t.surface.onBaseMuted,
+          ),
+        ),
+      ),
+    );
   }
 }
 
