@@ -71,25 +71,35 @@ class HomeArrangement {
   static const _kRoomPrefix = 'room_';
   static const _kAreaKey = 'area';
   static const _kHiddenKey = 'hidden';
+  static const _kOrderKey = 'order';
+
+  /// A private marker type, NOT `device_grid`. Two reasons the old type was a
+  /// bug: core validates `device_grid` and rejects one without a
+  /// `selection_mode` (so every arrange-save 400'd), and a real widget type gets
+  /// a grid placement — which would draw these order-markers as cards on top of
+  /// the very dashboard they are stored on. Core accepts unknown types
+  /// untouched, and a widget with no placement is never drawn.
+  static const _kMarkerType = 'home_arrangement';
+
+  static int _orderOf(DashboardWidgetModel w) =>
+      (w.config[_kOrderKey] as num?)?.toInt() ?? (1 << 20);
+
+  static String _title(String area) {
+    final h = humanize(area);
+    return h.isNotEmpty ? h : (area.isNotEmpty ? area : 'Area');
+  }
 
   /// Reads the arrangement out of a dashboard, ignoring anything else on it.
   static HomeArrangement fromDashboard(DashboardDefinition? d) {
     if (d == null) return const HomeArrangement();
 
-    // Placement order is the source of truth for sequence; a widget with no
-    // placement still counts, it just sorts last.
-    final desktop = d.layouts
-        .where((l) => l.breakpoint == DashboardBreakpoint.desktop)
-        .firstOrNull;
-    final yOf = <String, int>{
-      for (final p in desktop?.placements ?? const []) p.widgetId: p.y,
-    };
-
+    // Sequence is carried in each marker's `order`, not a placement — the
+    // markers are deliberately unplaced so they never render.
     final rooms = d.widgets
         .where((w) => w.id.startsWith(_kRoomPrefix))
         .where((w) => w.config[_kAreaKey] is String)
         .toList()
-      ..sort((a, b) => (yOf[a.id] ?? 1 << 20).compareTo(yOf[b.id] ?? 1 << 20));
+      ..sort((a, b) => _orderOf(a).compareTo(_orderOf(b)));
 
     return HomeArrangement(
       order: [for (final w in rooms) w.config[_kAreaKey] as String],
@@ -110,33 +120,27 @@ class HomeArrangement {
 
     final ordered = all(rooms);
     final roomWidgets = [
-      for (final area in ordered)
+      for (var i = 0; i < ordered.length; i++)
         DashboardWidgetModel(
-          id: '$_kRoomPrefix$area',
-          type: 'device_grid',
-          title: humanize(area),
+          id: '$_kRoomPrefix${ordered[i]}',
+          type: _kMarkerType,
+          title: _title(ordered[i]),
           subtitle: null,
           refreshPolicy: DashboardRefreshPolicy.live,
           config: {
-            _kAreaKey: area,
-            if (hidden.contains(area)) _kHiddenKey: true,
+            _kAreaKey: ordered[i],
+            _kOrderKey: i,
+            if (hidden.contains(ordered[i])) _kHiddenKey: true,
           },
         ),
     ];
 
+    // Markers carry NO placement — they are order/hidden state, not cards to
+    // draw. Only the dashboard's real widgets keep their placements.
     final placements = <DashboardWidgetPlacement>[
-      // Anything that is not a room keeps whatever placement it had.
       for (final l in d.layouts)
         if (l.breakpoint == DashboardBreakpoint.desktop)
           ...l.placements.where((p) => keepIds.contains(p.widgetId)),
-      for (var i = 0; i < roomWidgets.length; i++)
-        DashboardWidgetPlacement(
-          widgetId: roomWidgets[i].id,
-          x: 0,
-          y: i,
-          w: 12,
-          h: 1,
-        ),
     ];
 
     final layouts = [

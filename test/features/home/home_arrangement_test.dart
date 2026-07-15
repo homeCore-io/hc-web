@@ -108,5 +108,57 @@ void main() {
       expect(HomeArrangement.fromDashboard(_blank()).isEmpty, isTrue);
       expect(HomeArrangement.fromDashboard(null).isEmpty, isTrue);
     });
+
+    test('markers are not device_grid and carry no placement', () {
+      // The bug: markers were `device_grid`, which core validates and rejects
+      // without a `selection_mode` — so every save 400'd. And a placed marker
+      // would render as a card on the dashboard it lives on. Markers must be an
+      // inert, unplaced type.
+      const a = HomeArrangement(order: ['kitchen', 'bathroom']);
+      final saved = a.toDashboard(_blank(), ['kitchen', 'bathroom']);
+
+      final markers = saved.widgets.where((w) => w.id.startsWith('room_'));
+      expect(markers, isNotEmpty);
+      for (final w in markers) {
+        expect(w.type, isNot('device_grid'));
+        expect(w.title, isNotEmpty); // core rejects an empty title
+      }
+      final placedIds =
+          saved.layouts.expand((l) => l.placements).map((p) => p.widgetId);
+      expect(placedIds.any((id) => id.startsWith('room_')), isFalse);
+    });
+
+    test('a real widget keeps its placement when the arrangement is saved', () {
+      final withCard = _blank().copyWith(
+        widgets: [
+          const DashboardWidgetModel(
+            id: 'card_1',
+            type: 'device_grid',
+            title: 'Lights',
+            subtitle: null,
+            refreshPolicy: DashboardRefreshPolicy.live,
+            config: {'selection_mode': 'area', 'area_name': 'Kitchen'},
+          ),
+        ],
+        layouts: const [
+          DashboardLayout(
+            breakpoint: DashboardBreakpoint.desktop,
+            columns: 12,
+            rowHeight: 120,
+            gap: 12,
+            placements: [
+              DashboardWidgetPlacement(
+                  widgetId: 'card_1', x: 0, y: 0, w: 6, h: 2),
+            ],
+          ),
+        ],
+      );
+
+      const a = HomeArrangement(order: ['kitchen']);
+      final saved = a.toDashboard(withCard, ['kitchen']);
+      final placed =
+          saved.layouts.expand((l) => l.placements).map((p) => p.widgetId);
+      expect(placed, contains('card_1'));
+    });
   });
 }
