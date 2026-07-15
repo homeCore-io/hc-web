@@ -29,6 +29,7 @@ import 'shell/shell_scope.dart';
 import 'features/home/home_page.dart';
 import 'features/manage/manage_page.dart';
 import 'features/cameras/cameras_page.dart';
+import 'features/cameras/kiosk_wall_page.dart';
 
 class _RouterNotifier extends ChangeNotifier {
   _RouterNotifier(Ref ref) {
@@ -45,11 +46,18 @@ GoRouter _buildRouter(Ref ref) {
       final isLoggedIn = await ref.read(authProvider.future);
       final isLoginPage = state.matchedLocation == '/login';
       if (!isLoggedIn && !isLoginPage) return '/login';
-      if (isLoggedIn && isLoginPage) return '/dashboard';
+      if (isLoggedIn && isLoginPage) return '/';
       return null;
     },
     routes: [
       GoRoute(path: '/login', builder: (_, __) => const LoginPage()),
+      // The kiosk camera wall — OUTSIDE the shell, so it has no nav rail or bars.
+      // This is the URL a device (Fully Kiosk on a tablet) loads; the query
+      // string chooses the presentation. See KioskWallPage.
+      GoRoute(
+        path: '/wall',
+        builder: (_, state) => KioskWallPage(params: state.uri.queryParameters),
+      ),
       ShellRoute(
         // One scope for every route: it resolves which shell the location
         // belongs to, applies that shell's skin, and wraps the page in the right

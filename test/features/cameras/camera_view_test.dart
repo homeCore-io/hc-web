@@ -58,6 +58,41 @@ void main() {
     });
   });
 
+  group('the still URL (spotlight thumbnails)', () {
+    test('a go2rtc camera gets a snapshot frame', () {
+      expect(
+        stillUrlFor(
+            'http://10.0.10.150:1984/stream.html?src=driveway', 'webrtc'),
+        'http://10.0.10.150:1984/api/frame.jpeg?src=driveway',
+      );
+    });
+
+    test('a plain mjpeg camera uses its own url as the thumbnail', () {
+      expect(stillUrlFor('http://cam/live.mjpeg', 'mjpeg'),
+          'http://cam/live.mjpeg');
+    });
+  });
+
+  group('kiosk link naming', () {
+    test('a camera is named by its go2rtc stream, for readable links', () {
+      expect(go2rtcStreamName('http://h:1984/stream.html?src=driveway'),
+          'driveway');
+      expect(go2rtcStreamName('http://h:1984/api/ws?mode=webrtc&src=garage'),
+          'garage');
+      expect(go2rtcStreamName('http://cam/live.mjpeg'), isNull);
+    });
+  });
+
+  group('layout is chosen by URL, per device', () {
+    test('parses the query value', () {
+      expect(wallLayoutFrom('spotlight'), WallLayout.spotlight);
+      expect(wallLayoutFrom('grid'), WallLayout.grid);
+      expect(wallLayoutFrom('solo'), WallLayout.solo);
+      expect(wallLayoutFrom(null), WallLayout.auto);
+      expect(wallLayoutFrom('nonsense'), WallLayout.auto);
+    });
+  });
+
   group('cameraSrc cache-busting', () {
     test('a still is busted so a live camera never looks frozen', () {
       const url = 'http://go2rtc/api/frame.jpeg?src=gate';

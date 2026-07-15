@@ -54,12 +54,63 @@ String go2rtcEmbedUrl(String url) {
 /// The MJPEG still/stream URL for a go2rtc source, for the non-iframe path.
 ///
 /// Returns null when the URL is not a recognisable go2rtc endpoint.
-String? go2rtcMjpegUrl(String url) {
+String? go2rtcMjpegUrl(String url) => _go2rtcEndpoint(url, 'stream.mjpeg');
+
+/// A single-frame snapshot URL for a go2rtc source.
+///
+/// This is what a camera shows when it is NOT the live one. A wall of live
+/// WebRTC streams would melt an 8-inch tablet — decoding several H.264 streams
+/// at once is exactly what a small kiosk device cannot do — so only the active
+/// camera streams, and the rest are cheap stills refreshed on a timer. This is
+/// the whole reason the spotlight layout exists.
+///
+/// Returns null when the URL is not a recognisable go2rtc endpoint.
+String? go2rtcStillUrl(String url) => _go2rtcEndpoint(url, 'frame.jpeg');
+
+/// The go2rtc stream name (`src`) in a camera URL, e.g. `driveway`. Null when
+/// there is none. Used so a kiosk link can name a camera readably.
+String? go2rtcStreamName(String url) =>
+    RegExp(r'[?&]src=([^&]+)').firstMatch(url)?.group(1);
+
+String? _go2rtcEndpoint(String url, String leaf) {
   final m =
       RegExp(r'^(https?)://([^/]+)/[^?]*\?(?:.*&)?src=([^&]+)').firstMatch(url);
   if (m == null) return null;
-  return '${m.group(1)}://${m.group(2)}/api/stream.mjpeg?src=${m.group(3)}';
+  return '${m.group(1)}://${m.group(2)}/api/$leaf?src=${m.group(3)}';
 }
+
+/// The still URL for any camera: a go2rtc snapshot for a go2rtc source, or the
+/// image URL itself for a plain still/MJPEG camera (its own frame is the
+/// thumbnail).
+String stillUrlFor(String url, String sourceType) =>
+    transportFor(sourceType) == CameraTransport.go2rtc
+        ? (go2rtcStillUrl(url) ?? url)
+        : url;
+
+/// How the wall is presented on a given device. Chosen by URL so each device —
+/// an 8-inch kiosk tablet, a wall-mounted display, a phone — loads the link that
+/// suits it, with no per-device config baked into the app.
+enum WallLayout {
+  /// One live feed, the rest as tappable stills. The right shape for a small or
+  /// low-power screen: only one stream decodes at a time.
+  spotlight,
+
+  /// Every camera live at once. For a big display with the bandwidth for it.
+  grid,
+
+  /// A single camera, full screen.
+  solo,
+
+  /// Pick [spotlight] or [grid] from the viewport width at load.
+  auto,
+}
+
+WallLayout wallLayoutFrom(String? raw) => switch (raw) {
+      'spotlight' => WallLayout.spotlight,
+      'grid' => WallLayout.grid,
+      'solo' => WallLayout.solo,
+      _ => WallLayout.auto,
+    };
 
 /// The URL to fetch for a given frame of an image source.
 ///

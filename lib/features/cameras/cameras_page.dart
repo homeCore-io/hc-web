@@ -1,25 +1,35 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:web/web.dart' as web;
 
 import '../../design/hc_icons.dart';
 import '../../design/tokens.dart';
+import 'camera_source.dart';
 import 'camera_store.dart';
-import 'camera_tile.dart';
+import 'wall_presentations.dart';
 
-/// The security wall.
+/// The camera wall you manage — add cameras, remove them, preview the wall, and
+/// copy the kiosk link a device should load.
 ///
-/// A grid of live cameras you assemble yourself. The cameras are user data
-/// (persisted server-side as `camera_video` cards), never shipped config, which
-/// is the whole point of a wall you arrange rather than one that ships fixed.
+/// The wall itself is presented by [WallView]; this page is the desk you build
+/// it from. The cameras are user data (persisted server-side as `camera_video`
+/// cards), never shipped config — the whole point of a wall you assemble.
 ///
-/// Display only, by design: the NVR already does motion, detection and recording
-/// — this is a wall of live streams to watch, not a surveillance system to
-/// operate. It points at any go2rtc, and gracefully at any plain MJPEG camera.
-class CamerasPage extends ConsumerWidget {
+/// Display only, by design: the NVR already does motion, detection and
+/// recording. This is a wall of live streams to watch, not a system to operate.
+class CamerasPage extends ConsumerStatefulWidget {
   const CamerasPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<CamerasPage> createState() => _CamerasPageState();
+}
+
+class _CamerasPageState extends ConsumerState<CamerasPage> {
+  WallLayout _preview = WallLayout.spotlight;
+
+  @override
+  Widget build(BuildContext context) {
     final t = HcTokens.of(context);
     final cameras = ref.watch(camerasProvider);
 
@@ -29,68 +39,52 @@ class CamerasPage extends ConsumerWidget {
         label: const Text('Add camera'),
         backgroundColor: t.accent.active,
         foregroundColor: t.surface.base,
-        onPressed: () => _addCamera(context, ref),
+        onPressed: () => _addCamera(context),
       ),
       body: cameras.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(
-          child: Text('$e', style: TextStyle(color: t.surface.onBaseMuted)),
-        ),
+            child: Text('$e', style: TextStyle(color: t.surface.onBaseMuted))),
         data: (list) {
           if (list.isEmpty) return const _Empty();
-          return CustomScrollView(
-            slivers: [
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: EdgeInsets.fromLTRB(
-                      t.space.lg, t.space.lg, t.space.lg, t.space.md),
-                  child: Text(
-                    'Cameras',
-                    style: TextStyle(
-                      fontSize: 30,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -0.8,
-                      color: t.surface.onBase,
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: EdgeInsets.fromLTRB(
+                    t.space.lg, t.space.lg, t.space.lg, t.space.sm),
+                child: Row(
+                  children: [
+                    Text('Cameras',
+                        style: TextStyle(
+                          fontSize: 30,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -0.8,
+                          color: t.surface.onBase,
+                        )),
+                    const Spacer(),
+                    _LayoutToggle(
+                      value: _preview,
+                      onChanged: (v) => setState(() => _preview = v),
                     ),
-                  ),
+                    SizedBox(width: t.space.sm),
+                    TextButton.icon(
+                      icon: const Icon(HcIcons.copy, size: 14),
+                      label: const Text('Kiosk link'),
+                      onPressed: () => _copyKioskLink(context, list),
+                    ),
+                  ],
                 ),
               ),
-              SliverPadding(
-                padding:
-                    EdgeInsets.fromLTRB(t.space.lg, 0, t.space.lg, t.space.xl),
-                sliver: SliverLayoutBuilder(
-                  builder: (context, constraints) {
-                    // A security wall wants big tiles: ~360px each, so three
-                    // across on a laptop, more on a wall panel.
-                    final w = constraints.crossAxisExtent;
-                    final columns = (w / 360).floor().clamp(1, 6);
-                    return SliverGrid(
-                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: columns,
-                        crossAxisSpacing: t.space.sm,
-                        mainAxisSpacing: t.space.sm,
-                        childAspectRatio: 16 / 9,
-                      ),
-                      delegate: SliverChildBuilderDelegate(
-                        (context, i) {
-                          final cam = list[i];
-                          return _Removable(
-                            onRemove: () => ref
-                                .read(camerasProvider.notifier)
-                                .remove(cam.id),
-                            child: CameraTile(
-                              name: cam.name,
-                              url: cam.url,
-                              sourceType: cam.sourceType,
-                              refreshSecs: cam.refreshSecs,
-                            ),
-                          );
-                        },
-                        childCount: list.length,
-                      ),
-                    );
-                  },
-                ),
+              // The wall as a device would see it, live, so what you build is
+              // what you get. Cameras below for management.
+              Expanded(
+                child: WallView(cameras: list, layout: _preview),
+              ),
+              _CameraStrip(
+                cameras: list,
+                onRemove: (id) => ref.read(camerasProvider.notifier).remove(id),
               ),
             ],
           );
@@ -99,7 +93,7 @@ class CamerasPage extends ConsumerWidget {
     );
   }
 
-  Future<void> _addCamera(BuildContext context, WidgetRef ref) async {
+  Future<void> _addCamera(BuildContext context) async {
     final camera = await showDialog<Camera>(
       context: context,
       builder: (_) => const _AddCameraDialog(),
@@ -108,46 +102,83 @@ class CamerasPage extends ConsumerWidget {
       await ref.read(camerasProvider.notifier).add(camera);
     }
   }
+
+  Future<void> _copyKioskLink(
+      BuildContext context, List<Camera> cameras) async {
+    final link = await showDialog<String>(
+      context: context,
+      builder: (_) => _KioskLinkDialog(cameras: cameras),
+    );
+    if (link != null) {
+      await Clipboard.setData(ClipboardData(text: link));
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Kiosk link copied')),
+        );
+      }
+    }
+  }
 }
 
-/// Reveals a delete affordance on hover — a wall is watched, not fiddled with,
-/// so the controls stay out of the way until wanted.
-class _Removable extends StatefulWidget {
-  const _Removable({required this.child, required this.onRemove});
+/// Which presentation the preview (and the copied link) uses.
+class _LayoutToggle extends StatelessWidget {
+  const _LayoutToggle({required this.value, required this.onChanged});
 
-  final Widget child;
-  final VoidCallback onRemove;
-
-  @override
-  State<_Removable> createState() => _RemovableState();
-}
-
-class _RemovableState extends State<_Removable> {
-  bool _hover = false;
+  final WallLayout value;
+  final ValueChanged<WallLayout> onChanged;
 
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hover = true),
-      onExit: (_) => setState(() => _hover = false),
-      child: Stack(
+    return SegmentedButton<WallLayout>(
+      style: SegmentedButton.styleFrom(
+        textStyle: const TextStyle(fontSize: 12),
+        visualDensity: VisualDensity.compact,
+        foregroundColor: t.surface.onBaseMuted,
+        selectedForegroundColor: t.accent.onPrimary,
+        selectedBackgroundColor: t.accent.active,
+      ),
+      segments: const [
+        ButtonSegment(value: WallLayout.spotlight, label: Text('Spotlight')),
+        ButtonSegment(value: WallLayout.grid, label: Text('Grid')),
+      ],
+      selected: {
+        value == WallLayout.grid ? WallLayout.grid : WallLayout.spotlight
+      },
+      onSelectionChanged: (s) => onChanged(s.first),
+    );
+  }
+}
+
+/// The thin row of cameras along the bottom, where you remove one. It is a
+/// Flutter strip UNDER the wall, not an overlay on it — controls floated over a
+/// live iframe are unclickable, because the platform view eats the pointer.
+class _CameraStrip extends StatelessWidget {
+  const _CameraStrip({required this.cameras, required this.onRemove});
+
+  final List<Camera> cameras;
+  final ValueChanged<String> onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Container(
+      padding:
+          EdgeInsets.symmetric(horizontal: t.space.md, vertical: t.space.sm),
+      decoration: BoxDecoration(
+        color: t.surface.raised,
+        border: Border(top: BorderSide(color: t.stroke.hairline)),
+      ),
+      child: Wrap(
+        spacing: t.space.sm,
+        runSpacing: t.space.xs,
         children: [
-          Positioned.fill(child: widget.child),
-          if (_hover)
-            Positioned(
-              top: 6,
-              right: 6,
-              child: Material(
-                color: Colors.black54,
-                shape: const CircleBorder(),
-                child: IconButton(
-                  icon: const Icon(HcIcons.trash, size: 15),
-                  color: t.accent.danger,
-                  tooltip: 'Remove',
-                  onPressed: widget.onRemove,
-                ),
-              ),
+          for (final cam in cameras)
+            Chip(
+              backgroundColor: t.surface.sunken,
+              label: Text(cam.name, style: const TextStyle(fontSize: 12)),
+              deleteIcon: const Icon(HcIcons.x, size: 14),
+              onDeleted: () => onRemove(cam.id),
             ),
         ],
       ),
@@ -181,6 +212,130 @@ class _Empty extends StatelessWidget {
   }
 }
 
+/// Builds the URL a device loads in Fully Kiosk, tuned per device.
+class _KioskLinkDialog extends StatefulWidget {
+  const _KioskLinkDialog({required this.cameras});
+  final List<Camera> cameras;
+
+  @override
+  State<_KioskLinkDialog> createState() => _KioskLinkDialogState();
+}
+
+class _KioskLinkDialogState extends State<_KioskLinkDialog> {
+  WallLayout _layout = WallLayout.spotlight;
+  final _included = <String>{};
+
+  @override
+  void initState() {
+    super.initState();
+    // All cameras, in order, by default.
+    _included.addAll(widget.cameras.map((c) => _nameOf(c)));
+  }
+
+  String _nameOf(Camera c) => go2rtcStreamName(c.url) ?? c.id;
+
+  String _link() {
+    final origin = web.window.location.origin;
+    final layout = switch (_layout) {
+      WallLayout.spotlight => 'spotlight',
+      WallLayout.grid => 'grid',
+      WallLayout.solo => 'solo',
+      WallLayout.auto => 'auto',
+    };
+    final ordered =
+        widget.cameras.map(_nameOf).where(_included.contains).toList();
+    final cams = ordered.join(',');
+    return '$origin/#/wall?layout=$layout&cams=$cams';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    final link = _link();
+
+    return AlertDialog(
+      backgroundColor: t.surface.overlay,
+      title: const Text('Kiosk link'),
+      content: SizedBox(
+        width: 500,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Point Fully Kiosk on the device at this URL. Pick the layout the '
+              'device can handle — Spotlight for a small tablet, Grid for a big '
+              'display.',
+              style: TextStyle(fontSize: 12.5, color: t.surface.onBaseMuted),
+            ),
+            SizedBox(height: t.space.md),
+            SegmentedButton<WallLayout>(
+              style: SegmentedButton.styleFrom(
+                textStyle: const TextStyle(fontSize: 12),
+                selectedBackgroundColor: t.accent.active,
+                selectedForegroundColor: t.accent.onPrimary,
+              ),
+              segments: const [
+                ButtonSegment(
+                    value: WallLayout.spotlight, label: Text('Spotlight')),
+                ButtonSegment(value: WallLayout.grid, label: Text('Grid')),
+                ButtonSegment(value: WallLayout.auto, label: Text('Auto')),
+              ],
+              selected: {_layout},
+              onSelectionChanged: (s) => setState(() => _layout = s.first),
+            ),
+            SizedBox(height: t.space.md),
+            Text('Include',
+                style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.6,
+                    color: t.surface.onBaseMuted)),
+            Wrap(
+              spacing: t.space.xs,
+              children: [
+                for (final c in widget.cameras)
+                  FilterChip(
+                    label: Text(c.name, style: const TextStyle(fontSize: 12)),
+                    selected: _included.contains(_nameOf(c)),
+                    onSelected: (on) => setState(() {
+                      on
+                          ? _included.add(_nameOf(c))
+                          : _included.remove(_nameOf(c));
+                    }),
+                  ),
+              ],
+            ),
+            SizedBox(height: t.space.md),
+            Container(
+              width: double.infinity,
+              padding: EdgeInsets.all(t.space.sm),
+              decoration: BoxDecoration(
+                color: t.surface.sunken,
+                borderRadius: t.radius.smR,
+              ),
+              child: SelectableText(
+                link,
+                style: const TextStyle(fontFamily: 'monospace', fontSize: 11.5),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, link),
+          child: const Text('Copy'),
+        ),
+      ],
+    );
+  }
+}
+
 class _AddCameraDialog extends StatefulWidget {
   const _AddCameraDialog();
 
@@ -198,18 +353,6 @@ class _AddCameraDialogState extends State<_AddCameraDialog> {
     _name.dispose();
     _url.dispose();
     super.dispose();
-  }
-
-  /// A go2rtc stream is entered by name or by its full ws URL; the field accepts
-  /// either, because typing `driveway` is what a person wants and pasting the
-  /// full URL is what a person has.
-  String _resolvedUrl() {
-    final raw = _url.text.trim();
-    if (_type != 'webrtc') return raw;
-    if (raw.startsWith('http')) return raw;
-    // A bare stream name — but we do not know the NVR host, so a name alone is
-    // not enough. Left as-is; the hint tells the user to paste the full URL.
-    return raw;
   }
 
   bool get _valid =>
@@ -265,8 +408,8 @@ class _AddCameraDialogState extends State<_AddCameraDialog> {
             if (_type == 'webrtc') ...[
               const SizedBox(height: 8),
               Text(
-                'For live WebRTC, go2rtc needs api.origin: "*" in its config. '
-                'Without it the wall still works over MJPEG.',
+                'Embeds go2rtc\'s own player, so WebRTC works with no extra '
+                'go2rtc config — it is the same page you open in a browser tab.',
                 style: TextStyle(fontSize: 11.5, color: t.surface.onBaseMuted),
               ),
             ],
@@ -282,16 +425,15 @@ class _AddCameraDialogState extends State<_AddCameraDialog> {
           onPressed: _valid
               ? () {
                   // Unique per add, NOT derived from the name — two cameras can
-                  // share a name (front and back "Door") and a name-derived id
-                  // made the second silently overwrite the first, which is why
-                  // "add the same camera again" appeared to do nothing.
+                  // share a name and a name-derived id made the second silently
+                  // overwrite the first.
                   final id = 'cam_${DateTime.now().microsecondsSinceEpoch}';
                   Navigator.pop(
                     context,
                     Camera(
                       id: id,
                       name: _name.text.trim(),
-                      url: _resolvedUrl(),
+                      url: _url.text.trim(),
                       sourceType: _type,
                       refreshSecs: _type == 'image_refresh' ? 2 : null,
                     ),

@@ -11,6 +11,7 @@ class Camera {
     required this.url,
     required this.sourceType,
     this.refreshSecs,
+    this.span = 1,
   });
 
   final String id;
@@ -22,6 +23,21 @@ class Camera {
   final String sourceType;
   final int? refreshSecs;
 
+  /// How many grid columns this camera occupies — 1 (normal), 2 (wide), 3
+  /// (full). This is the "resize": a driveway you watch closely gets made big,
+  /// a side gate stays small. Persisted, so the wall you built is the wall you
+  /// come back to.
+  final int span;
+
+  Camera copyWith({int? span}) => Camera(
+        id: id,
+        name: name,
+        url: url,
+        sourceType: sourceType,
+        refreshSecs: refreshSecs,
+        span: span ?? this.span,
+      );
+
   static Camera? fromWidget(DashboardWidgetModel w) {
     final url = w.config['url'];
     if (url is! String || url.isEmpty) return null;
@@ -31,6 +47,7 @@ class Camera {
       url: url,
       sourceType: w.config['source_type'] as String? ?? 'mjpeg',
       refreshSecs: (w.config['refresh_secs'] as num?)?.toInt(),
+      span: (w.config['span'] as num?)?.toInt().clamp(1, 3) ?? 1,
     );
   }
 
@@ -44,6 +61,7 @@ class Camera {
           'url': url,
           'source_type': sourceType,
           if (refreshSecs != null) 'refresh_secs': refreshSecs,
+          'span': span,
         },
       );
 }
