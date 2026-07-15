@@ -21,6 +21,11 @@ import 'home_entity_row.dart';
 import 'home_rich_cards.dart';
 import 'home_thermostat.dart';
 
+/// The arrangement key for the Cameras area — not a real room, so it needs a
+/// reserved key no `area` can collide with. It orders, hides, and drags exactly
+/// like a room.
+const _kCamerasKey = '__cameras__';
+
 /// The house.
 ///
 /// This is the app's one primary surface, and the change it represents is the
@@ -54,6 +59,8 @@ class _HomePageState extends ConsumerState<HomePage> {
     final devicesAsync = ref.watch(devicesProvider);
     final saved =
         HomeArrangement.fromDashboard(ref.watch(defaultDashboardProvider));
+    final hasCameras =
+        (ref.watch(camerasProvider).valueOrNull ?? const []).isNotEmpty;
 
     return Scaffold(
       floatingActionButton: _arranging
@@ -94,7 +101,7 @@ class _HomePageState extends ConsumerState<HomePage> {
           arrangement: _draft ?? saved,
           arranging: _arranging,
           onReorder: (from, to) => setState(() {
-            final rooms = _roomKeys(devices);
+            final rooms = _orderKeys(devices, hasCameras);
             final order = _draft!.all(rooms);
             if (to > from) to--;
             final moved = order.removeAt(from);
@@ -111,16 +118,27 @@ class _HomePageState extends ConsumerState<HomePage> {
     );
   }
 
-  static List<String> _roomKeys(List<DeviceState> devices) => runQuery(
-        devices,
-        const DeviceQuery(
-            group: DeviceGroup.room, sort: DeviceSort.activeFirst),
-      ).map((g) => g.key).toList();
+  /// Every draggable card's key, in default order: the rooms, then the Cameras
+  /// area if there is one. What Arrange reorders and the masonry lays out.
+  static List<String> _orderKeys(
+    List<DeviceState> devices,
+    bool hasCameras,
+  ) =>
+      [
+        ...runQuery(
+          devices,
+          const DeviceQuery(
+              group: DeviceGroup.room, sort: DeviceSort.activeFirst),
+        ).map((g) => g.key),
+        if (hasCameras) _kCamerasKey,
+      ];
 
   Future<void> _save() async {
     final draft = _draft;
     final dashboard = ref.read(defaultDashboardProvider);
     final devices = ref.read(devicesProvider).valueOrNull ?? const [];
+    final hasCameras =
+        (ref.read(camerasProvider).valueOrNull ?? const []).isNotEmpty;
     if (draft == null || dashboard == null) {
       setState(() => _draft = null);
       return;
@@ -129,7 +147,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     setState(() => _saving = true);
     try {
       await ref.read(dashboardsProvider.notifier).updateDashboard(
-            draft.toDashboard(dashboard, _roomKeys(devices)),
+            draft.toDashboard(dashboard, _orderKeys(devices, hasCameras)),
           );
       if (mounted) setState(() => _draft = null);
     } catch (e) {
@@ -218,10 +236,6 @@ class _House extends ConsumerStatefulWidget {
 }
 
 class _HouseState extends ConsumerState<_House> {
-  /// The collapse key for the cameras area — not a real room, so it needs its
-  /// own reserved key that no `area` can collide with.
-  static const _kCameras = '__cameras__';
-
   /// Rooms the user has folded shut. Local and ephemeral on purpose: collapsing
   /// a room to see past it is a glance-time act, not a saved layout, and it must
   /// never fire a dashboard write on every tap. A room absent from this set is
@@ -245,30 +259,34 @@ class _HouseState extends ConsumerState<_House> {
       const DeviceQuery(group: DeviceGroup.room, sort: DeviceSort.activeFirst),
     );
     final byKey = {for (final g in groups) g.key: g};
-
-    // While arranging you see every room INCLUDING the hidden ones, or you could
-    // never bring one back.
-    final keys = widget.arranging
-        ? widget.arrangement.all(byKey.keys)
-        : widget.arrangement.apply(byKey.keys);
-    final rooms = [for (final k in keys) byKey[k]!];
     final problems = problemsIn(devices);
     final cameras = ref.watch(camerasProvider).valueOrNull ?? const <Camera>[];
+
+    // Every arrangeable card: the rooms, plus the Cameras area when there is
+    // one. Cameras order, hide, and drag exactly like a room.
+    final areaKeys = [...byKey.keys, if (cameras.isNotEmpty) _kCamerasKey];
+
+    // While arranging you see every area INCLUDING the hidden ones, or you could
+    // never bring one back.
+    final keys = widget.arranging
+        ? widget.arrangement.all(areaKeys)
+        : widget.arrangement.apply(areaKeys);
 
     if (widget.arranging) {
       return ReorderableListView.builder(
         padding: EdgeInsets.fromLTRB(t.space.lg, t.space.lg, t.space.lg, 0),
-        itemCount: rooms.length,
+        itemCount: keys.length,
         onReorderItem: widget.onReorder,
         itemBuilder: (context, i) {
-          final key = rooms[i].key;
-          final hidden = widget.arrangement.hidden.contains(key);
+          final key = keys[i];
+          final isCameras = key == _kCamerasKey;
           return _ArrangeRow(
             key: ValueKey(key),
             index: i,
-            room: key,
-            count: rooms[i].devices.length,
-            hidden: hidden,
+            label: isCameras ? 'Cameras' : humanize(key),
+            count:
+                isCameras ? cameras.length : (byKey[key]?.devices.length ?? 0),
+            hidden: widget.arrangement.hidden.contains(key),
             onToggleHidden: () => widget.onToggleHidden(key),
           );
         },
@@ -297,29 +315,29 @@ class _HouseState extends ConsumerState<_House> {
                 final columns = List.generate(colCount, (_) => <Widget>[]);
                 final heights = List<double>.filled(colCount, 0);
 
-                // Cameras are their own area, led at the top-left of the board.
-                if (cameras.isNotEmpty) {
-                  final open = !_collapsed.contains(_kCameras);
-                  heights[0] +=
-                      64 + (open ? (cameras.length / 2).ceil() * 115 : 0);
-                  columns[0].add(HomeCamerasCard(
-                    cameras: cameras,
-                    collapsed: !open,
-                    onToggleCollapse: () => _toggle(_kCameras),
-                  ));
-                }
-
-                for (final room in rooms) {
+                for (final key in keys) {
                   var shortest = 0;
                   for (var i = 1; i < colCount; i++) {
                     if (heights[i] < heights[shortest]) shortest = i;
                   }
+                  if (key == _kCamerasKey) {
+                    final open = !_collapsed.contains(_kCamerasKey);
+                    heights[shortest] +=
+                        64 + (open ? (cameras.length / 2).ceil() * 115 : 0);
+                    columns[shortest].add(HomeCamerasCard(
+                      cameras: cameras,
+                      collapsed: !open,
+                      onToggleCollapse: () => _toggle(_kCamerasKey),
+                    ));
+                    continue;
+                  }
+                  final room = byKey[key]!;
                   heights[shortest] += _estimateHeight(room);
                   columns[shortest].add(
                     _Room(
                       room: room,
-                      collapsed: _collapsed.contains(room.key),
-                      onToggleCollapse: () => _toggle(room.key),
+                      collapsed: _collapsed.contains(key),
+                      onToggleCollapse: () => _toggle(key),
                       // Scene duality: Lutron wants {"activate": true}; Hue
                       // wants {"action": "activate_scene"}. Pick by owner.
                       onActivate: (d) => notifier.command(
@@ -360,22 +378,21 @@ class _HouseState extends ConsumerState<_House> {
   /// device is a ~44px row; scenes add a small block.
   double _estimateHeight(DeviceGroupResult room) {
     if (_collapsed.contains(room.key)) return 48;
-    var rows = 0, scenes = 0, climate = 0, actuators = 0, playing = 0;
+    var rows = 0, scenes = 0, climate = 0, playing = 0;
     for (final d in room.devices) {
       final f = facetOf(d, d.schema);
       if (f == DeviceFacet.scene) {
         scenes++;
       } else {
         rows++;
-        if (f.isActuator) actuators++;
         if (f == DeviceFacet.climate) climate++;
         if (f == DeviceFacet.mediaPlayer && d.playbackState == 'playing') {
           playing++;
         }
       }
     }
-    // A room that is nothing but its thermostat gets the tall dial.
-    if (climate == 1 && actuators == 1 && rows == 1) return 46 + 330;
+    // Thermostats are compact by default (a large one the user pinned throws the
+    // estimate off a little, which only nudges column balance — harmless).
     return 46 +
         rows * 44 +
         climate * 16 +
@@ -657,8 +674,6 @@ class _Room extends StatelessWidget {
             facetOf(d, d.schema) != DeviceFacet.climate &&
             !playingMedia.contains(d))
         .toList();
-    final soleThermostat =
-        climate.length == 1 && controls.isEmpty && sensors.isEmpty;
     final entities = [...controls, ...sensors];
     final on = controls.where(isOn).length;
 
@@ -748,28 +763,23 @@ class _Room extends StatelessWidget {
               ),
             ),
             if (!collapsed) ...[
-              if (soleThermostat) ...[
+              for (final c in climate) ...[
                 divider(),
-                HomeThermostat(device: climate.first),
-              ] else ...[
-                for (final c in climate) ...[
-                  divider(),
-                  HomeThermostat(device: c, compact: true),
-                ],
-                for (final m in playingMedia) ...[
-                  divider(),
-                  Padding(
-                    padding: EdgeInsets.all(t.space.sm),
-                    child: HomeMediaCard(device: m),
-                  ),
-                ],
-                for (final d in entities) ...[
-                  divider(),
-                  if (facetOf(d, d.schema) == DeviceFacet.colorLight)
-                    HomeColorLight(device: d)
-                  else
-                    HomeEntityRow(device: d),
-                ],
+                HomeThermostat(device: c),
+              ],
+              for (final m in playingMedia) ...[
+                divider(),
+                Padding(
+                  padding: EdgeInsets.all(t.space.sm),
+                  child: HomeMediaCard(device: m),
+                ),
+              ],
+              for (final d in entities) ...[
+                divider(),
+                if (facetOf(d, d.schema) == DeviceFacet.colorLight)
+                  HomeColorLight(device: d)
+                else
+                  HomeEntityRow(device: d),
               ],
               if (scenes.isNotEmpty) ...[
                 divider(),
@@ -930,14 +940,14 @@ class _ArrangeRow extends StatelessWidget {
   const _ArrangeRow({
     super.key,
     required this.index,
-    required this.room,
+    required this.label,
     required this.count,
     required this.hidden,
     required this.onToggleHidden,
   });
 
   final int index;
-  final String room;
+  final String label;
   final int count;
   final bool hidden;
   final VoidCallback onToggleHidden;
@@ -972,7 +982,7 @@ class _ArrangeRow extends StatelessWidget {
               SizedBox(width: t.space.md),
               Expanded(
                 child: Text(
-                  room.replaceAll('_', ' '),
+                  label,
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,

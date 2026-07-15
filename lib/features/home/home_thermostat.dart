@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/models/device_state.dart';
 import '../../core/providers/devices_provider.dart';
+import '../../core/providers/thermostat_prefs_provider.dart';
 import '../../design/tokens.dart';
 
 /// A thermostat, as a Nest-style dial (when it is the room's whole story) or a
@@ -14,10 +15,9 @@ import '../../design/tokens.dart';
 /// colours itself by what it is doing — blue cooling, warm heating — so the room
 /// says its climate at a glance.
 class HomeThermostat extends ConsumerStatefulWidget {
-  const HomeThermostat({super.key, required this.device, this.compact = false});
+  const HomeThermostat({super.key, required this.device});
 
   final DeviceState device;
-  final bool compact;
 
   @override
   ConsumerState<HomeThermostat> createState() => _HomeThermostatState();
@@ -83,11 +83,16 @@ class _HomeThermostatState extends ConsumerState<HomeThermostat> {
     final callFor = (s['call_for'] as String?) ?? 'idle';
     final style = _style(mode, callFor);
     final active = callFor == 'cool' || callFor == 'heat';
+    final large = ref.watch(thermostatLargeProvider).contains(widget.device.id);
 
-    return widget.compact
-        ? _compact(context, cur, mode, style, active)
-        : _full(context, cur, mode, style, active);
+    return large
+        ? _full(context, cur, mode, style, active)
+        : _compact(context, cur, mode, style, active);
   }
+
+  void _setLarge(bool large) => ref
+      .read(thermostatLargeProvider.notifier)
+      .setLarge(widget.device.id, large);
 
   String _fmt(double v) =>
       (v * 2).round() % 2 == 0 ? '${v.round()}°' : '${(v * 2).round() / 2}°';
@@ -99,9 +104,19 @@ class _HomeThermostatState extends ConsumerState<HomeThermostat> {
     final t = HcTokens.of(context);
     return Padding(
       padding:
-          EdgeInsets.fromLTRB(t.space.md, t.space.lg, t.space.md, t.space.lg),
+          EdgeInsets.fromLTRB(t.space.md, t.space.xs, t.space.md, t.space.lg),
       child: Column(
         children: [
+          Align(
+            alignment: Alignment.centerRight,
+            child: IconButton(
+              icon: const Icon(Icons.unfold_less, size: 18),
+              tooltip: 'Show compact',
+              color: t.surface.onBaseMuted,
+              visualDensity: VisualDensity.compact,
+              onPressed: () => _setLarge(false),
+            ),
+          ),
           SizedBox(
             width: 208,
             height: 208,
@@ -229,52 +244,67 @@ class _HomeThermostatState extends ConsumerState<HomeThermostat> {
               horizontal: t.space.md, vertical: t.space.sm),
           child: Row(
             children: [
-              SizedBox(
-                width: 44,
-                height: 44,
-                child: CustomPaint(
-                  painter: _DialPainter(
-                    frac: (_sp - _min) / (_max - _min),
-                    colour: style.colour,
-                    track: t.stroke.hairline,
-                    stroke: 4,
-                  ),
-                  child: Center(
-                    child: Text(_fmt(_sp),
-                        style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: style.colour,
-                            fontFeatures: t.numericFontFeatures)),
-                  ),
-                ),
-              ),
-              SizedBox(width: t.space.md),
+              // Tapping the gauge/name expands to the full dial and remembers
+              // it; the steppers keep working without expanding.
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(widget.device.displayName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                            fontSize: 13.5,
-                            fontWeight: FontWeight.w600,
-                            color: t.surface.onBase)),
-                    Text(
-                      active
-                          ? '${style.verb}${cur != null ? ' · now ${cur.toStringAsFixed(1)}°' : ''}'
-                          : mode[0].toUpperCase() + mode.substring(1),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w600,
-                          color: style.colour,
-                          fontFeatures: t.numericFontFeatures),
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => _setLarge(true),
+                    child: Row(
+                      children: [
+                        SizedBox(
+                          width: 44,
+                          height: 44,
+                          child: CustomPaint(
+                            painter: _DialPainter(
+                              frac: (_sp - _min) / (_max - _min),
+                              colour: style.colour,
+                              track: t.stroke.hairline,
+                              stroke: 4,
+                            ),
+                            child: Center(
+                              child: Text(_fmt(_sp),
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      color: style.colour,
+                                      fontFeatures: t.numericFontFeatures)),
+                            ),
+                          ),
+                        ),
+                        SizedBox(width: t.space.md),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(widget.device.displayName,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                      fontSize: 13.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: t.surface.onBase)),
+                              Text(
+                                active
+                                    ? '${style.verb}${cur != null ? ' · now ${cur.toStringAsFixed(1)}°' : ''}'
+                                    : mode[0].toUpperCase() + mode.substring(1),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: style.colour,
+                                    fontFeatures: t.numericFontFeatures),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
               ),
               _Step(glyph: '−', small: true, onTap: () => _setSp(_sp - 0.5)),
