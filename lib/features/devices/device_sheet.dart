@@ -55,33 +55,12 @@ class _DeviceSheet extends ConsumerWidget {
       );
     }
 
-    final notifier = ref.read(devicesProvider.notifier);
-    final facet = facetOf(device, device.schema);
-    final on = device.available && isOn(device);
-
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          HcSheetHeader(
-            title: device.displayName,
-            subtitle: [
-              if (device.area != null) humanize(device.area!),
-              if (device.deviceType != null) humanize(device.deviceType!),
-              if (!device.available) 'offline',
-            ].join(' · '),
-            trailing: facet.isActuator && device.available
-                ? Padding(
-                    padding: EdgeInsets.only(top: t.space.xs),
-                    child: HcToggle(
-                      value: on,
-                      semanticLabel: device.displayName,
-                      onChanged: (v) => notifier.command(device.id, {'on': v}),
-                    ),
-                  )
-                : null,
-          ),
+          _Identity(device: device),
 
           if (!device.available)
             const _Banner(
@@ -122,6 +101,238 @@ class _DeviceSheet extends ConsumerWidget {
                 ),
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The sheet's head: the device's name and where it lives, its power toggle, and
+/// — the part that was a whole separate page before — a pencil that turns the
+/// name and room into fields you edit right here. A device that arrives named
+/// `hue-001788ff` is the reason: you rename it once, in the place you found it,
+/// and it is that name everywhere after.
+class _Identity extends ConsumerStatefulWidget {
+  const _Identity({required this.device});
+
+  final DeviceState device;
+
+  @override
+  ConsumerState<_Identity> createState() => _IdentityState();
+}
+
+class _IdentityState extends ConsumerState<_Identity> {
+  bool _editing = false;
+  bool _busy = false;
+  String? _error;
+  final _name = TextEditingController();
+  final _area = TextEditingController();
+
+  DeviceState get _d => widget.device;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _area.dispose();
+    super.dispose();
+  }
+
+  String get _currentArea => _d.area != null ? humanize(_d.area!) : '';
+
+  void _start() => setState(() {
+        _editing = true;
+        _error = null;
+        _name.text = _d.displayName;
+        _area.text = _currentArea;
+      });
+
+  Future<void> _save() async {
+    final name = _name.text.trim();
+    if (name.isEmpty) {
+      setState(() => _error = 'Name cannot be empty');
+      return;
+    }
+    final areaText = _area.text.trim();
+    final body = <String, dynamic>{};
+    if (name != _d.displayName) body['name'] = name;
+    // Areas are stored as snake_case keys and shown humanized, so compare the
+    // typed text against the humanized current value; core re-normalizes what we
+    // send, so a human "Family Room" lands on the existing `family_room`.
+    if (areaText != _currentArea) {
+      body['area'] = areaText.isEmpty ? null : areaText;
+    }
+    if (body.isEmpty) {
+      setState(() => _editing = false);
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      await ref.read(devicesProvider.notifier).updateDevice(_d.id, body);
+      if (mounted) setState(() => _editing = _busy = false);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = '$e';
+          _busy = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return _editing ? _editor(t) : _display(t);
+  }
+
+  Widget _display(HcTokens t) {
+    final facet = facetOf(_d, _d.schema);
+    final on = _d.available && isOn(_d);
+    return Padding(
+      padding:
+          EdgeInsets.fromLTRB(t.space.lg, t.space.md, t.space.sm, t.space.sm),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        _d.displayName,
+                        style: TextStyle(
+                          fontSize: 19,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -0.3,
+                          color: t.surface.onBase,
+                        ),
+                      ),
+                    ),
+                    SizedBox(width: t.space.xs),
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      constraints:
+                          const BoxConstraints.tightFor(width: 26, height: 26),
+                      iconSize: 13,
+                      color: t.surface.onBaseMuted,
+                      tooltip: 'Rename',
+                      icon: const Icon(HcIcons.pencil),
+                      onPressed: _start,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  [
+                    if (_d.area != null) humanize(_d.area!),
+                    if (_d.deviceType != null) humanize(_d.deviceType!),
+                    if (!_d.available) 'offline',
+                  ].join(' · '),
+                  style:
+                      TextStyle(fontSize: 12.5, color: t.surface.onBaseMuted),
+                ),
+              ],
+            ),
+          ),
+          if (facet.isActuator && _d.available)
+            Padding(
+              padding: EdgeInsets.only(top: t.space.xs),
+              child: HcToggle(
+                value: on,
+                semanticLabel: _d.displayName,
+                onChanged: (v) => ref
+                    .read(devicesProvider.notifier)
+                    .command(_d.id, {'on': v}),
+              ),
+            ),
+          IconButton(
+            icon: const Icon(HcIcons.x, size: 16),
+            tooltip: 'Close',
+            color: t.surface.onBaseMuted,
+            onPressed: () => Navigator.of(context).maybePop(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _editor(HcTokens t) {
+    // Rooms already in use, humanized, so a rename lands things in the same room
+    // rather than a snake_case twin.
+    final areas = (ref.watch(devicesProvider).valueOrNull ?? const [])
+        .map((d) => d.area)
+        .whereType<String>()
+        .map(humanize)
+        .toSet()
+        .toList()
+      ..sort();
+
+    return Padding(
+      padding:
+          EdgeInsets.fromLTRB(t.space.lg, t.space.md, t.space.lg, t.space.sm),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextField(
+            controller: _name,
+            autofocus: true,
+            enabled: !_busy,
+            decoration: const InputDecoration(labelText: 'Name', isDense: true),
+            onSubmitted: (_) => _save(),
+          ),
+          SizedBox(height: t.space.sm),
+          TextField(
+            controller: _area,
+            enabled: !_busy,
+            decoration: const InputDecoration(
+                labelText: 'Room', isDense: true, hintText: 'No room'),
+            onSubmitted: (_) => _save(),
+          ),
+          if (areas.isNotEmpty) ...[
+            SizedBox(height: t.space.sm),
+            Wrap(
+              spacing: t.space.xs,
+              runSpacing: t.space.xs,
+              children: [
+                for (final a in areas)
+                  ActionChip(
+                    label: Text(a, style: const TextStyle(fontSize: 12)),
+                    visualDensity: VisualDensity.compact,
+                    onPressed: _busy ? null : () => _area.text = a,
+                  ),
+              ],
+            ),
+          ],
+          if (_error != null) ...[
+            SizedBox(height: t.space.sm),
+            Text(_error!,
+                style: TextStyle(fontSize: 12, color: t.accent.danger)),
+          ],
+          SizedBox(height: t.space.sm),
+          Row(
+            children: [
+              const Spacer(),
+              TextButton(
+                onPressed:
+                    _busy ? null : () => setState(() => _editing = false),
+                child: const Text('Cancel'),
+              ),
+              SizedBox(width: t.space.xs),
+              FilledButton(
+                onPressed: _busy ? null : _save,
+                child: _busy
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Text('Save'),
+              ),
+            ],
           ),
         ],
       ),

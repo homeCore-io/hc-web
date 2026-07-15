@@ -8,6 +8,7 @@ import '../../design/components/hc_now_playing.dart';
 import '../../design/components/hc_surface.dart';
 import '../../design/hc_icons.dart';
 import '../../design/tokens.dart';
+import 'home_edit_button.dart';
 
 /// The domain-rich cards the house shows for the two device kinds an on/off tile
 /// cannot do justice: a speaker and a thermostat. Both are wired straight to the
@@ -27,30 +28,49 @@ class HomeMediaCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final t = HcTokens.of(context);
     final notifier = ref.read(devicesProvider.notifier);
     bool can(String a) => device.supportsAction(a);
 
-    return HcNowPlaying(
-      device: device,
-      onPlayPause: can('play')
-          ? () => notifier.command(device.id, {
-                'action': device.playbackState == 'playing' ? 'pause' : 'play',
-              })
-          : null,
-      onNext: can('next')
-          ? () => notifier.command(device.id, {'action': 'next'})
-          : null,
-      onPrevious: can('previous')
-          ? () => notifier.command(device.id, {'action': 'previous'})
-          : null,
-      onVolume: can('set_volume')
-          ? (id, v) => notifier
-              .command(id, {'action': 'set_volume', 'volume': v.round()})
-          : null,
-      onSeek: can('seek')
-          ? (secs) => notifier.command(
-              device.id, {'action': 'seek', 'position_secs': secs.round()})
-          : null,
+    return Stack(
+      children: [
+        HcNowPlaying(
+          device: device,
+          onPlayPause: can('play')
+              ? () => notifier.command(device.id, {
+                    'action':
+                        device.playbackState == 'playing' ? 'pause' : 'play',
+                  })
+              : null,
+          onNext: can('next')
+              ? () => notifier.command(device.id, {'action': 'next'})
+              : null,
+          onPrevious: can('previous')
+              ? () => notifier.command(device.id, {'action': 'previous'})
+              : null,
+          onVolume: can('set_volume')
+              ? (id, v) => notifier
+                  .command(id, {'action': 'set_volume', 'volume': v.round()})
+              : null,
+          onSeek: can('seek')
+              ? (secs) => notifier.command(
+                  device.id, {'action': 'seek', 'position_secs': secs.round()})
+              : null,
+        ),
+        // A backed pencil, so it reads over both the bright bloom of a playing
+        // card and the flat surface of an idle one.
+        Positioned(
+          top: t.space.xs,
+          right: t.space.xs,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: t.surface.base.withValues(alpha: 0.35),
+              shape: BoxShape.circle,
+            ),
+            child: HomeEditButton(deviceId: device.id),
+          ),
+        ),
+      ],
     );
   }
 }

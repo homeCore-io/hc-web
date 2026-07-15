@@ -8,6 +8,7 @@ import '../../design/components/hc_tile.dart' show summarise;
 import '../../design/hc_icons.dart';
 import '../../design/tokens.dart';
 import '../devices/device_sheet.dart';
+import 'home_edit_button.dart';
 
 /// One device, as a row in a room card.
 ///
@@ -15,13 +16,24 @@ import '../devices/device_sheet.dart';
 /// black field. A room is instead a bordered container of these rows: an icon
 /// and a name on the left, its control or reading on the right, hairlines
 /// between. It scans like a list because it is one, which is the whole point.
-class HomeEntityRow extends ConsumerWidget {
+class HomeEntityRow extends ConsumerStatefulWidget {
   const HomeEntityRow({super.key, required this.device});
 
   final DeviceState device;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HomeEntityRow> createState() => _HomeEntityRowState();
+}
+
+class _HomeEntityRowState extends ConsumerState<HomeEntityRow> {
+  // Tapping the row opens the sheet already; the pencil is a visible hint that
+  // it does, revealed on hover so a hundred rows are not each wearing one.
+  bool _hover = false;
+
+  DeviceState get device => widget.device;
+
+  @override
+  Widget build(BuildContext context) {
     final t = HcTokens.of(context);
     final notifier = ref.read(devicesProvider.notifier);
     final facet = facetOf(device, device.schema);
@@ -37,30 +49,36 @@ class HomeEntityRow extends ConsumerWidget {
                 ? (lightColorOf(device) ?? t.accent.active)
                 : t.surface.onBaseMuted;
 
-    return InkWell(
-      onTap: () => showDeviceSheet(context, device.id),
-      child: Padding(
-        padding: EdgeInsets.symmetric(
-            horizontal: t.space.md, vertical: t.space.sm + 1),
-        child: Row(
-          children: [
-            Icon(HcIcons.forFacet(facet, on: on), size: 19, color: iconColour),
-            SizedBox(width: t.space.md),
-            Expanded(
-              child: Text(
-                device.displayName,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 13.5,
-                  fontWeight: FontWeight.w500,
-                  color: offline ? t.surface.onBaseMuted : t.surface.onBase,
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: InkWell(
+        onTap: () => showDeviceSheet(context, device.id),
+        child: Padding(
+          padding: EdgeInsets.symmetric(
+              horizontal: t.space.md, vertical: t.space.sm + 1),
+          child: Row(
+            children: [
+              Icon(HcIcons.forFacet(facet, on: on),
+                  size: 19, color: iconColour),
+              SizedBox(width: t.space.md),
+              Expanded(
+                child: Text(
+                  device.displayName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w500,
+                    color: offline ? t.surface.onBaseMuted : t.surface.onBase,
+                  ),
                 ),
               ),
-            ),
-            SizedBox(width: t.space.sm),
-            _trailing(context, t, notifier, facet, offline, on, alert),
-          ],
+              if (_hover) HomeEditButton(deviceId: device.id),
+              SizedBox(width: t.space.sm),
+              _trailing(context, t, notifier, facet, offline, on, alert),
+            ],
+          ),
         ),
       ),
     );

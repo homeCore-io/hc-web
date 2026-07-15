@@ -9,6 +9,7 @@ import '../../core/providers/devices_provider.dart';
 import '../../design/components/hc_attribute_control.dart' show rgbToXy;
 import '../../design/hc_icons.dart';
 import '../../design/tokens.dart';
+import 'home_edit_button.dart';
 
 /// A colour / tunable-white light, as an expressive row that opens a real
 /// control — a colour wheel, brightness, a warm↔cool temperature bar, presets.
@@ -131,6 +132,8 @@ class _HomeColorLightState extends ConsumerState<HomeColorLight> {
                           fontFeatures: t.numericFontFeatures)),
                   SizedBox(width: t.space.sm),
                 ],
+                HomeEditButton(deviceId: widget.device.id),
+                SizedBox(width: t.space.xs),
                 _Toggle(
                   on: on,
                   onChanged: () =>

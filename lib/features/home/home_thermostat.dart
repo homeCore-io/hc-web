@@ -7,6 +7,7 @@ import '../../core/models/device_state.dart';
 import '../../core/providers/devices_provider.dart';
 import '../../core/providers/thermostat_prefs_provider.dart';
 import '../../design/tokens.dart';
+import 'home_edit_button.dart';
 
 /// A thermostat, as a Nest-style dial (when it is the room's whole story) or a
 /// compact decorative gauge (when it shares the room with other devices).
@@ -107,15 +108,18 @@ class _HomeThermostatState extends ConsumerState<HomeThermostat> {
           EdgeInsets.fromLTRB(t.space.md, t.space.xs, t.space.md, t.space.lg),
       child: Column(
         children: [
-          Align(
-            alignment: Alignment.centerRight,
-            child: IconButton(
-              icon: const Icon(Icons.unfold_less, size: 18),
-              tooltip: 'Show compact',
-              color: t.surface.onBaseMuted,
-              visualDensity: VisualDensity.compact,
-              onPressed: () => _setLarge(false),
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              HomeEditButton(deviceId: widget.device.id),
+              IconButton(
+                icon: const Icon(Icons.unfold_less, size: 18),
+                tooltip: 'Show compact',
+                color: t.surface.onBaseMuted,
+                visualDensity: VisualDensity.compact,
+                onPressed: () => _setLarge(false),
+              ),
+            ],
           ),
           SizedBox(
             width: 208,
@@ -307,6 +311,8 @@ class _HomeThermostatState extends ConsumerState<HomeThermostat> {
                   ),
                 ),
               ),
+              HomeEditButton(deviceId: widget.device.id),
+              SizedBox(width: t.space.xs),
               _Step(glyph: '−', small: true, onTap: () => _setSp(_sp - 0.5)),
               SizedBox(width: t.space.sm),
               SizedBox(

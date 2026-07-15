@@ -10,6 +10,7 @@ import '../../design/hc_icons.dart';
 import '../../design/tokens.dart';
 import '../devices/device_query.dart';
 import '../devices/device_sheet.dart';
+import '../../core/providers/areas_provider.dart';
 import '../../core/providers/dashboards_provider.dart';
 import '../../design/components/hc_controls.dart';
 import '../../shell/hc_sheet.dart';
@@ -321,6 +322,11 @@ class _HouseState extends ConsumerState<_House> {
                       room: byKey[key]!,
                       collapsed: _collapsed.contains(key),
                       onToggleCollapse: () => _toggle(key),
+                      // "No room" is a dumping bucket, not an area, so it cannot
+                      // be renamed.
+                      onRename: byKey[key]!.key == HomeArrangement.kNoRoom
+                          ? null
+                          : () => _renameRoom(byKey[key]!.key),
                       // Scene duality: Lutron wants {"activate": true}; Hue
                       // wants {"action": "activate_scene"}. Pick by owner.
                       onActivate: (d) => notifier.command(
@@ -414,6 +420,61 @@ class _HouseState extends ConsumerState<_House> {
         SliverToBoxAdapter(child: SizedBox(height: t.space.xl)),
       ],
     );
+  }
+
+  /// Rename a room in plain English. Core renames the shared area and cascades
+  /// the new name to every device in it (`PATCH /areas/:id`), so one rename fixes
+  /// the whole room. The area's id comes from the areas list, keyed by its
+  /// normalized name — which is exactly the room key the house groups on.
+  Future<void> _renameRoom(String areaKey) async {
+    final controller = TextEditingController(text: humanize(areaKey));
+    final newName = await showDialog<String>(
+      context: context,
+      builder: (ctx) {
+        final t = HcTokens.of(ctx);
+        return AlertDialog(
+          backgroundColor: t.surface.overlay,
+          title: const Text('Rename room'),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            decoration: const InputDecoration(labelText: 'Room name'),
+            onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel')),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+    if (newName == null || newName.isEmpty || newName == humanize(areaKey)) {
+      return;
+    }
+    try {
+      final areas = await ref.read(areasProvider.future);
+      final match = areas.firstWhere(
+        (a) =>
+            a['name'] == areaKey ||
+            humanize('${a['name']}') == humanize(areaKey),
+        orElse: () => const <String, dynamic>{},
+      );
+      final id = match['id'];
+      if (id is! String) throw 'Room not found';
+      await ref.read(areasApiProvider).renameArea(id, newName);
+      ref.invalidate(areasProvider);
+      ref.invalidate(devicesProvider);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Could not rename: $e')));
+      }
+    }
   }
 
   /// A rough height for a room card, only to balance the masonry columns —
@@ -666,12 +727,17 @@ class _Room extends StatelessWidget {
     required this.collapsed,
     required this.onToggleCollapse,
     required this.onActivate,
+    this.onRename,
   });
 
   final DeviceGroupResult room;
   final bool collapsed;
   final VoidCallback onToggleCollapse;
   final ValueChanged<DeviceState> onActivate;
+
+  /// Rename this room in English. Null for the "No room" bucket, which is not an
+  /// area and cannot be renamed.
+  final VoidCallback? onRename;
 
   @override
   Widget build(BuildContext context) {
@@ -768,6 +834,18 @@ class _Room extends StatelessWidget {
                           ),
                         ),
                       ),
+                      if (onRename != null)
+                        IconButton(
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints.tightFor(
+                              width: 28, height: 28),
+                          iconSize: 13,
+                          color: t.surface.onBaseMuted,
+                          tooltip: 'Rename room',
+                          icon: const Icon(HcIcons.pencil),
+                          onPressed: onRename,
+                        ),
                       SizedBox(width: t.space.sm),
                       if (controls.isNotEmpty)
                         Text.rich(
