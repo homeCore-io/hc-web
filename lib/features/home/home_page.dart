@@ -272,72 +272,104 @@ class _HouseState extends ConsumerState<_House> {
         _collapsed.contains(key) ? _collapsed.remove(key) : _collapsed.add(key);
       });
 
-  // Direct drag: long-press a card to pick it up, drag over another to drop it
-  // there, and the board reflows live. No Arrange mode, no list. `_liveOrder` is
-  // the working sequence while a drag is in flight; committed on drop.
+  // Direct drag: long-press a card to lift it; a ghost chip follows the cursor
+  // and a bright bar shows where it will land. Reordering the greedy masonry
+  // live re-packs every card and reads as chaos, so the board stays still during
+  // the drag and only settles on drop. `_baseOrder` is the sequence captured at
+  // pickup; `_dropBefore` is the key the lifted card will land in front of.
   String? _dragKey;
-  List<String>? _liveOrder;
+  List<String>? _baseOrder;
+  String? _dropBefore;
 
   void _beginDrag(String key, List<String> from) => setState(() {
         _dragKey = key;
-        _liveOrder = [...from];
+        _baseOrder = [...from];
+        _dropBefore = null;
       });
 
-  /// Move the dragged key to just before [target] as the pointer passes over it.
+  /// The lifted card will land just before [target].
   void _dragOver(String target) {
-    final o = _liveOrder;
-    final dragged = _dragKey;
-    if (o == null || dragged == null || dragged == target) return;
-    final di = o.indexOf(dragged);
-    final ti = o.indexOf(target);
-    if (di < 0 || ti < 0 || di + 1 == ti) {
-      return; // gone, or already sitting just before the target
-    }
-    setState(() {
-      o.removeAt(di);
-      o.insert(o.indexOf(target), dragged);
-    });
+    if (_dragKey == null || target == _dragKey || _dropBefore == target) return;
+    setState(() => _dropBefore = target);
   }
 
   void _endDrag() {
-    final order = _liveOrder;
     final dragged = _dragKey;
+    final base = _baseOrder;
+    final before = _dropBefore;
     setState(() {
       _dragKey = null;
-      _liveOrder = null;
+      _baseOrder = null;
+      _dropBefore = null;
     });
-    if (dragged != null && order != null) widget.onCommitOrder(order);
+    if (dragged == null || base == null) return;
+
+    final order = [...base]..remove(dragged);
+    final at = before == null ? -1 : order.indexOf(before);
+    order.insert(at < 0 ? order.length : at, dragged);
+    if (!_sameOrder(order, base)) widget.onCommitOrder(order);
   }
 
-  /// Wraps a card so it can be picked up and so a drag can be dropped onto it.
-  /// [keys] is the sequence the drag starts from; [width] sizes the lifted copy.
+  static bool _sameOrder(List<String> a, List<String> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
+
+  /// Wraps a card so it can be picked up and dropped onto. [label] names the
+  /// ghost chip; [keys] is the sequence at pickup.
   Widget _arrangeable(
     String key,
-    double width,
+    String label,
     List<String> keys,
     Widget card,
   ) {
+    final t = HcTokens.of(context);
+    final showBar = _dragKey != null && _dragKey != key && _dropBefore == key;
+
     return DragTarget<String>(
       onWillAcceptWithDetails: (d) {
         _dragOver(key);
         return d.data != key;
       },
+      onMove: (d) => _dragOver(key),
       builder: (context, _, __) => LongPressDraggable<String>(
         data: key,
         onDragStarted: () => _beginDrag(key, keys),
         onDragEnd: (_) => _endDrag(),
         onDraggableCanceled: (_, __) => _endDrag(),
         hapticFeedbackOnStart: true,
-        feedback: SizedBox(
-          width: width,
-          child: Material(
-            color: Colors.transparent,
-            child: Opacity(opacity: 0.92, child: card),
-          ),
-        ),
+        feedback: _DragChip(label: label),
         childWhenDragging:
-            Opacity(opacity: 0.3, child: IgnorePointer(child: card)),
-        child: card,
+            Opacity(opacity: 0.35, child: IgnorePointer(child: card)),
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            card,
+            // The landing bar sits at the top edge of the card the lift will
+            // drop in front of — a clear "it goes here", no guessing.
+            if (showBar)
+              Positioned(
+                left: t.space.xs,
+                right: t.space.xs,
+                top: -3,
+                child: Container(
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: t.accent.active,
+                    borderRadius: BorderRadius.circular(2),
+                    boxShadow: [
+                      BoxShadow(
+                          color: t.accent.active.withValues(alpha: 0.5),
+                          blurRadius: 6),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -465,12 +497,12 @@ class _HouseState extends ConsumerState<_House> {
                       heights[shortest] += _collapsed.contains(key)
                           ? 48
                           : 46 + colW / (16 / 10) + 14;
-                      columns[shortest].add(
-                          _arrangeable(key, colW, full, smallCamera(key, cam)));
+                      columns[shortest].add(_arrangeable(
+                          key, cam.name, full, smallCamera(key, cam)));
                     } else {
                       heights[shortest] += _estimateHeight(byKey[key]!);
-                      columns[shortest]
-                          .add(_arrangeable(key, colW, full, room(key)));
+                      columns[shortest].add(
+                          _arrangeable(key, humanize(key), full, room(key)));
                     }
                   }
                   return Row(
@@ -489,10 +521,6 @@ class _HouseState extends ConsumerState<_House> {
                   );
                 }
 
-                // While a card is being dragged the board lays out from the live
-                // order, so the others reflow around the drop point in real time.
-                final order = _liveOrder ?? keys;
-
                 // A large camera is a full-width hero, so it breaks the column
                 // flow: small cards pack into a masonry band, a hero spans the
                 // whole width, then packing resumes below it.
@@ -500,19 +528,19 @@ class _HouseState extends ConsumerState<_House> {
                 var band = <String>[];
                 void flush() {
                   if (band.isNotEmpty) {
-                    bands.add(masonry(band, order));
+                    bands.add(masonry(band, keys));
                     band = [];
                   }
                 }
 
-                for (final key in order) {
+                for (final key in keys) {
                   final cam = camById[cameraIdFromKey(key) ?? ''];
                   if (cam != null && cam.homeLarge) {
                     flush();
                     bands.add(_arrangeable(
                       key,
-                      c.maxWidth,
-                      order,
+                      cam.name,
+                      keys,
                       HomeCameraCard(
                         camera: cam,
                         large: true,
@@ -1174,6 +1202,55 @@ class _SceneChip extends StatelessWidget {
 /// Deliberately NOT the room itself with its tiles: dragging a 200px-tall grid
 /// of live devices around is fiddly and slow, and you cannot see the shape of
 /// the house while you do it. Arranging is about ORDER, so it shows order.
+/// The ghost that follows the cursor while a card is being dragged — a compact,
+/// elevated pill naming what you picked up. The whole card can't be the feedback:
+/// in the drag overlay it has no bounded height, so its column fails to lay out
+/// and nothing paints — which is why the drag had no visible mirror at all.
+class _DragChip extends StatelessWidget {
+  const _DragChip({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Material(
+      color: Colors.transparent,
+      child: Container(
+        padding:
+            EdgeInsets.symmetric(horizontal: t.space.md, vertical: t.space.sm),
+        decoration: BoxDecoration(
+          color: t.surface.raised,
+          borderRadius: t.radius.mdR,
+          border: Border.all(color: t.accent.active, width: 1.5),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.35),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(HcIcons.grip, size: 14, color: t.accent.active),
+            SizedBox(width: t.space.sm),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: t.surface.onBase,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _ArrangeRow extends StatelessWidget {
   const _ArrangeRow({
     super.key,
