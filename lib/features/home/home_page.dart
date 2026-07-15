@@ -14,7 +14,10 @@ import '../../core/providers/dashboards_provider.dart';
 import '../../design/components/hc_controls.dart';
 import '../../shell/hc_sheet.dart';
 import 'home_arrangement.dart';
+import 'home_color_light.dart';
 import 'home_entity_row.dart';
+import 'home_rich_cards.dart';
+import 'home_thermostat.dart';
 
 /// The house.
 ///
@@ -338,15 +341,28 @@ class _HouseState extends ConsumerState<_House> {
   /// device is a ~44px row; scenes add a small block.
   double _estimateHeight(DeviceGroupResult room) {
     if (_collapsed.contains(room.key)) return 48;
-    var rows = 0, scenes = 0;
+    var rows = 0, scenes = 0, climate = 0, actuators = 0, playing = 0;
     for (final d in room.devices) {
-      if (facetOf(d, d.schema) == DeviceFacet.scene) {
+      final f = facetOf(d, d.schema);
+      if (f == DeviceFacet.scene) {
         scenes++;
       } else {
         rows++;
+        if (f.isActuator) actuators++;
+        if (f == DeviceFacet.climate) climate++;
+        if (f == DeviceFacet.mediaPlayer && d.playbackState == 'playing') {
+          playing++;
+        }
       }
     }
-    return 46 + rows * 44 + (scenes > 0 ? 74 : 0) + 12;
+    // A room that is nothing but its thermostat gets the tall dial.
+    if (climate == 1 && actuators == 1 && rows == 1) return 46 + 330;
+    return 46 +
+        rows * 44 +
+        climate * 16 +
+        playing * 150 +
+        (scenes > 0 ? 74 : 0) +
+        12;
   }
 }
 
@@ -604,8 +620,28 @@ class _Room extends StatelessWidget {
         .where((d) => !facetOf(d, d.schema).isActuator)
         .toList()
       ..sort((a, b) => a.displayName.compareTo(b.displayName));
-    final entities = [...actuators, ...sensors];
-    final on = actuators.where(isOn).length;
+
+    // A thermostat is its own thing: a full dial when the room is just it, a
+    // compact gauge when it shares the room. It never renders as a plain row.
+    final climate = actuators
+        .where((d) => facetOf(d, d.schema) == DeviceFacet.climate)
+        .toList();
+    // A speaker earns its space only when it is playing — then it blooms into a
+    // now-playing card. Idle, it stays a row (with a play button).
+    final playingMedia = actuators
+        .where((d) =>
+            facetOf(d, d.schema) == DeviceFacet.mediaPlayer &&
+            d.playbackState == 'playing')
+        .toList();
+    final controls = actuators
+        .where((d) =>
+            facetOf(d, d.schema) != DeviceFacet.climate &&
+            !playingMedia.contains(d))
+        .toList();
+    final soleThermostat =
+        climate.length == 1 && controls.isEmpty && sensors.isEmpty;
+    final entities = [...controls, ...sensors];
+    final on = controls.where(isOn).length;
 
     Widget divider() =>
         Divider(height: 1, thickness: 1, color: t.stroke.hairline);
@@ -656,7 +692,7 @@ class _Room extends StatelessWidget {
                         ),
                       ),
                       SizedBox(width: t.space.sm),
-                      if (actuators.isNotEmpty)
+                      if (controls.isNotEmpty)
                         Text.rich(
                           TextSpan(children: [
                             TextSpan(
@@ -668,7 +704,7 @@ class _Room extends StatelessWidget {
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
-                            TextSpan(text: ' of ${actuators.length} on'),
+                            TextSpan(text: ' of ${controls.length} on'),
                           ]),
                           style: TextStyle(
                             fontSize: 11.5,
@@ -678,7 +714,9 @@ class _Room extends StatelessWidget {
                         )
                       else
                         Text(
-                          '${room.devices.length} devices',
+                          room.devices.length == 1
+                              ? '1 device'
+                              : '${room.devices.length} devices',
                           style: TextStyle(
                             fontSize: 11.5,
                             color: t.surface.onBaseMuted,
@@ -691,9 +729,28 @@ class _Room extends StatelessWidget {
               ),
             ),
             if (!collapsed) ...[
-              for (final d in entities) ...[
+              if (soleThermostat) ...[
                 divider(),
-                HomeEntityRow(device: d),
+                HomeThermostat(device: climate.first),
+              ] else ...[
+                for (final c in climate) ...[
+                  divider(),
+                  HomeThermostat(device: c, compact: true),
+                ],
+                for (final m in playingMedia) ...[
+                  divider(),
+                  Padding(
+                    padding: EdgeInsets.all(t.space.sm),
+                    child: HomeMediaCard(device: m),
+                  ),
+                ],
+                for (final d in entities) ...[
+                  divider(),
+                  if (facetOf(d, d.schema) == DeviceFacet.colorLight)
+                    HomeColorLight(device: d)
+                  else
+                    HomeEntityRow(device: d),
+                ],
               ],
               if (scenes.isNotEmpty) ...[
                 divider(),
