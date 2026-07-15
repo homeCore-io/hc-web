@@ -22,11 +22,15 @@ class WallView extends StatefulWidget {
     super.key,
     required this.cameras,
     required this.layout,
+    this.stripPosition = StripPosition.bottom,
     this.initialActiveId,
   });
 
   final List<Camera> cameras;
   final WallLayout layout;
+
+  /// Where the still filmstrip sits in spotlight.
+  final StripPosition stripPosition;
 
   /// Which camera starts live, in spotlight/solo. Defaults to the first.
   final String? initialActiveId;
@@ -65,6 +69,7 @@ class _WallViewState extends State<WallView> {
       _ => _Spotlight(
           active: _active,
           others: widget.cameras.where((c) => c.id != _active.id).toList(),
+          position: widget.stripPosition,
           onSelect: (c) => setState(() => _activeId = c.id),
         ),
     };
@@ -72,55 +77,100 @@ class _WallViewState extends State<WallView> {
 }
 
 /// One live, the rest as stills. Tap a still to make it the live one.
+///
+/// The strip of stills sits on whichever edge the device asked for: along the
+/// bottom or top (a horizontal row) or down the left or right (a vertical
+/// column). A tall tablet wants it along the bottom; a wide display often wants
+/// it down a side so the live feed stays close to square.
 class _Spotlight extends StatelessWidget {
   const _Spotlight({
     required this.active,
     required this.others,
+    required this.position,
     required this.onSelect,
   });
 
   final Camera active;
   final List<Camera> others;
+  final StripPosition position;
   final ValueChanged<Camera> onSelect;
 
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
 
-    return Column(
-      children: [
-        // The live feed takes the space; the filmstrip is a fixed strip beneath.
-        Expanded(
-          child: Padding(
-            padding: EdgeInsets.all(t.space.sm),
-            child: CameraTile(
-              key: ValueKey(active.id),
-              name: active.name,
-              url: active.url,
-              sourceType: active.sourceType,
-              refreshSecs: active.refreshSecs,
-            ),
-          ),
+    final live = Expanded(
+      child: Padding(
+        padding: EdgeInsets.all(t.space.sm),
+        child: CameraTile(
+          key: ValueKey(active.id),
+          name: active.name,
+          url: active.url,
+          sourceType: active.sourceType,
+          refreshSecs: active.refreshSecs,
         ),
-        if (others.isNotEmpty)
-          SizedBox(
-            height: 96,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              padding: EdgeInsets.symmetric(horizontal: t.space.sm),
-              itemCount: others.length,
-              separatorBuilder: (_, __) => SizedBox(width: t.space.sm),
-              itemBuilder: (context, i) {
-                final cam = others[i];
-                return AspectRatio(
-                  aspectRatio: 16 / 9,
-                  child: _StillCell(camera: cam, onTap: () => onSelect(cam)),
-                );
-              },
-            ),
-          ),
-      ],
+      ),
     );
+
+    if (others.isEmpty) return Column(children: [live]);
+
+    final strip = _Strip(
+      cameras: others,
+      vertical: stripIsVertical(position),
+      onSelect: onSelect,
+    );
+
+    // The strip goes first for top/left, last for bottom/right.
+    final children = switch (position) {
+      StripPosition.top || StripPosition.left => [strip, live],
+      StripPosition.bottom || StripPosition.right => [live, strip],
+    };
+
+    return stripIsVertical(position)
+        ? Row(children: children)
+        : Column(children: children);
+  }
+}
+
+/// The scrollable strip of still cameras — a row when horizontal, a column when
+/// vertical.
+class _Strip extends StatelessWidget {
+  const _Strip({
+    required this.cameras,
+    required this.vertical,
+    required this.onSelect,
+  });
+
+  final List<Camera> cameras;
+  final bool vertical;
+  final ValueChanged<Camera> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+
+    final list = ListView.separated(
+      scrollDirection: vertical ? Axis.vertical : Axis.horizontal,
+      padding: EdgeInsets.all(t.space.sm),
+      itemCount: cameras.length,
+      separatorBuilder: (_, __) => SizedBox(
+        width: vertical ? 0 : t.space.sm,
+        height: vertical ? t.space.sm : 0,
+      ),
+      itemBuilder: (context, i) {
+        final cam = cameras[i];
+        return AspectRatio(
+          aspectRatio: 16 / 9,
+          child: _StillCell(camera: cam, onTap: () => onSelect(cam)),
+        );
+      },
+    );
+
+    // A fixed cross-axis size: a strip along the bottom is ~96 tall; a strip
+    // down the side is ~180 wide (a 16:9 still that height reads clearly).
+    return vertical
+        ? SizedBox(width: 180, child: list)
+        : SizedBox(height: 96, child: list);
   }
 }
 

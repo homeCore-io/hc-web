@@ -27,6 +27,7 @@ class CamerasPage extends ConsumerStatefulWidget {
 
 class _CamerasPageState extends ConsumerState<CamerasPage> {
   WallLayout _preview = WallLayout.spotlight;
+  StripPosition _strip = StripPosition.bottom;
 
   @override
   Widget build(BuildContext context) {
@@ -68,6 +69,13 @@ class _CamerasPageState extends ConsumerState<CamerasPage> {
                       value: _preview,
                       onChanged: (v) => setState(() => _preview = v),
                     ),
+                    if (_preview == WallLayout.spotlight) ...[
+                      SizedBox(width: t.space.sm),
+                      _StripToggle(
+                        value: _strip,
+                        onChanged: (v) => setState(() => _strip = v),
+                      ),
+                    ],
                     SizedBox(width: t.space.sm),
                     TextButton.icon(
                       icon: const Icon(HcIcons.copy, size: 14),
@@ -80,7 +88,11 @@ class _CamerasPageState extends ConsumerState<CamerasPage> {
               // The wall as a device would see it, live, so what you build is
               // what you get. Cameras below for management.
               Expanded(
-                child: WallView(cameras: list, layout: _preview),
+                child: WallView(
+                  cameras: list,
+                  layout: _preview,
+                  stripPosition: _strip,
+                ),
               ),
               _CameraStrip(
                 cameras: list,
@@ -107,7 +119,7 @@ class _CamerasPageState extends ConsumerState<CamerasPage> {
       BuildContext context, List<Camera> cameras) async {
     final link = await showDialog<String>(
       context: context,
-      builder: (_) => _KioskLinkDialog(cameras: cameras),
+      builder: (_) => _KioskLinkDialog(cameras: cameras, strip: _strip),
     );
     if (link != null) {
       await Clipboard.setData(ClipboardData(text: link));
@@ -145,6 +157,36 @@ class _LayoutToggle extends StatelessWidget {
       selected: {
         value == WallLayout.grid ? WallLayout.grid : WallLayout.spotlight
       },
+      onSelectionChanged: (s) => onChanged(s.first),
+    );
+  }
+}
+
+/// Where the still filmstrip sits, in spotlight — a small compass of positions.
+class _StripToggle extends StatelessWidget {
+  const _StripToggle({required this.value, required this.onChanged});
+
+  final StripPosition value;
+  final ValueChanged<StripPosition> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return SegmentedButton<StripPosition>(
+      style: SegmentedButton.styleFrom(
+        textStyle: const TextStyle(fontSize: 11),
+        visualDensity: VisualDensity.compact,
+        foregroundColor: t.surface.onBaseMuted,
+        selectedForegroundColor: t.accent.onPrimary,
+        selectedBackgroundColor: t.accent.active,
+      ),
+      segments: const [
+        ButtonSegment(value: StripPosition.bottom, label: Text('Btm')),
+        ButtonSegment(value: StripPosition.top, label: Text('Top')),
+        ButtonSegment(value: StripPosition.left, label: Text('Left')),
+        ButtonSegment(value: StripPosition.right, label: Text('Right')),
+      ],
+      selected: {value},
       onSelectionChanged: (s) => onChanged(s.first),
     );
   }
@@ -214,8 +256,9 @@ class _Empty extends StatelessWidget {
 
 /// Builds the URL a device loads in Fully Kiosk, tuned per device.
 class _KioskLinkDialog extends StatefulWidget {
-  const _KioskLinkDialog({required this.cameras});
+  const _KioskLinkDialog({required this.cameras, required this.strip});
   final List<Camera> cameras;
+  final StripPosition strip;
 
   @override
   State<_KioskLinkDialog> createState() => _KioskLinkDialogState();
@@ -223,6 +266,7 @@ class _KioskLinkDialog extends StatefulWidget {
 
 class _KioskLinkDialogState extends State<_KioskLinkDialog> {
   WallLayout _layout = WallLayout.spotlight;
+  late StripPosition _strip = widget.strip;
   final _included = <String>{};
 
   @override
@@ -245,7 +289,9 @@ class _KioskLinkDialogState extends State<_KioskLinkDialog> {
     final ordered =
         widget.cameras.map(_nameOf).where(_included.contains).toList();
     final cams = ordered.join(',');
-    return '$origin/#/wall?layout=$layout&cams=$cams';
+    final strip = _strip.name; // bottom|top|left|right
+    final stripParam = _layout == WallLayout.spotlight ? '&strip=$strip' : '';
+    return '$origin/#/wall?layout=$layout&cams=$cams$stripParam';
   }
 
   @override
@@ -284,6 +330,21 @@ class _KioskLinkDialogState extends State<_KioskLinkDialog> {
               selected: {_layout},
               onSelectionChanged: (s) => setState(() => _layout = s.first),
             ),
+            if (_layout == WallLayout.spotlight) ...[
+              SizedBox(height: t.space.sm),
+              Row(
+                children: [
+                  Text('Strip',
+                      style: TextStyle(
+                          fontSize: 12, color: t.surface.onBaseMuted)),
+                  SizedBox(width: t.space.sm),
+                  _StripToggle(
+                    value: _strip,
+                    onChanged: (v) => setState(() => _strip = v),
+                  ),
+                ],
+              ),
+            ],
             SizedBox(height: t.space.md),
             Text('Include',
                 style: TextStyle(

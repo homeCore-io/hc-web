@@ -112,6 +112,23 @@ WallLayout wallLayoutFrom(String? raw) => switch (raw) {
       _ => WallLayout.auto,
     };
 
+/// Where the strip of other cameras sits, relative to the live feed, in
+/// spotlight. Also a per-device choice: a wide display may want the strip down
+/// one side, a tall tablet along the bottom.
+enum StripPosition { bottom, top, left, right }
+
+StripPosition stripPositionFrom(String? raw) => switch (raw) {
+      'top' => StripPosition.top,
+      'left' => StripPosition.left,
+      'right' => StripPosition.right,
+      _ => StripPosition.bottom,
+    };
+
+/// Whether the strip runs along an edge horizontally (a row of stills) or down
+/// one vertically (a column).
+bool stripIsVertical(StripPosition p) =>
+    p == StripPosition.left || p == StripPosition.right;
+
 /// The URL to fetch for a given frame of an image source.
 ///
 /// A still must be re-fetched, and browsers cache stills hard; without the

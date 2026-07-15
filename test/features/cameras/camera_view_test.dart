@@ -83,6 +83,24 @@ void main() {
     });
   });
 
+  group('the filmstrip position is chosen by URL', () {
+    test('parses the query value', () {
+      expect(stripPositionFrom('bottom'), StripPosition.bottom);
+      expect(stripPositionFrom('top'), StripPosition.top);
+      expect(stripPositionFrom('left'), StripPosition.left);
+      expect(stripPositionFrom('right'), StripPosition.right);
+      expect(stripPositionFrom(null), StripPosition.bottom);
+      expect(stripPositionFrom('sideways'), StripPosition.bottom);
+    });
+
+    test('left and right are vertical, top and bottom horizontal', () {
+      expect(stripIsVertical(StripPosition.left), isTrue);
+      expect(stripIsVertical(StripPosition.right), isTrue);
+      expect(stripIsVertical(StripPosition.top), isFalse);
+      expect(stripIsVertical(StripPosition.bottom), isFalse);
+    });
+  });
+
   group('layout is chosen by URL, per device', () {
     test('parses the query value', () {
       expect(wallLayoutFrom('spotlight'), WallLayout.spotlight);

@@ -59,6 +59,7 @@ class KioskWallPage extends ConsumerWidget {
           return WallView(
             cameras: chosen,
             layout: layout,
+            stripPosition: stripPositionFrom(params['strip']),
             initialActiveId: _byName(chosen, params['active'])?.id,
           );
         },
