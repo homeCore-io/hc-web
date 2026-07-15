@@ -129,3 +129,7 @@ app.*.symbols
 # Cached Flutter SDK tarball (see tool/fetch-flutter-sdk.sh) — big, and reproducible.
 .flutter-sdk/*
 !.flutter-sdk/.keep
+
+# Camera stack: real config (has camera credentials) and env — never commit.
+go2rtc.yaml
+.env

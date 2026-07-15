@@ -1,0 +1,87 @@
+# hc-web + go2rtc, in one stack.
+#
+#   cp .env.example .env               # point HOMECORE_URL at your appliance
+#   cp go2rtc.example.yaml go2rtc.yaml # add your cameras
+#   docker compose up -d
+#
+# WHAT TALKS TO WHAT — the layout is not obvious, so it is worth stating:
+#
+#   browser ──/──────────────▶ hc-web (nginx :3000)  ──/api/v1──▶ homeCore
+#           └──stream pages──▶ go2rtc (:1984)
+#
+# hc-web serves the UI and reverse-proxies /api/v1 to your homeCore APPLIANCE.
+# homeCore is NOT in this stack — it is the box already running hc-core; point
+# HOMECORE_URL at it.
+#
+# go2rtc serves the cameras. The browser loads go2rtc's OWN stream pages in an
+# iframe (that is what makes WebRTC work with no CORS/origin config), so go2rtc
+# must be reachable from the browser on the LAN — it is not proxied through
+# hc-web. hc-web and go2rtc never talk to each other.
+
+name: homecore-web
+
+services:
+  hc-web:
+    build: .
+    # Or skip the build and pull the published image:
+    # image: ghcr.io/homecore-io/hc-web:dev
+    container_name: hc-web
+    restart: unless-stopped
+    ports:
+      - "${HC_WEB_PORT:-3000}:80"
+    environment:
+      # homeCore's API base. The app calls /api/v1 RELATIVELY; nginx proxies it
+      # here. Must be reachable FROM this container (a LAN IP, or a compose
+      # service name if you add homeCore to this file).
+      HOMECORE_URL: "${HOMECORE_URL:-http://10.0.10.150:8080}"
+    depends_on:
+      - go2rtc
+
+  go2rtc:
+    # Pinned, not :latest — a camera server that silently changes behaviour on a
+    # pull is the last thing a security wall wants. Bump deliberately.
+    image: alexxit/go2rtc:1.9.14
+    container_name: go2rtc
+    restart: unless-stopped
+
+    # host networking, on purpose. WebRTC has to hand the browser an address it
+    # can actually reach for the media stream (ICE candidates), and the default
+    # bridge network hides the container behind NAT — so candidates come out
+    # wrong and WebRTC silently falls back or fails. On a Linux host, host mode
+    # gives go2rtc the host's real IP and WebRTC "just works". This is the
+    # go2rtc-recommended setup.
+    #
+    # It also puts go2rtc's ports (1984 API + stream pages, 8555 WebRTC, 8554
+    # RTSP) straight on the host — so do NOT add a `ports:` block under host mode.
+    network_mode: host
+
+    volumes:
+      # Your real config, with camera credentials — gitignored, never committed.
+      - ./go2rtc.yaml:/config/go2rtc.yaml
+
+    # --- Bridge alternative -------------------------------------------------
+    # host networking is Linux-only and not available on Docker Desktop
+    # (Mac/Windows). There, remove `network_mode: host` above and use:
+    #
+    # ports:
+    #   - "1984:1984/tcp"   # API + stream pages (what the browser loads)
+    #   - "8555:8555/tcp"   # WebRTC
+    #   - "8555:8555/udp"   # WebRTC media
+    #   - "8554:8554/tcp"   # RTSP
+    #
+    # ...and in go2rtc.yaml, tell WebRTC the host's LAN address explicitly, or it
+    # will advertise the unreachable container IP:
+    #   webrtc:
+    #     candidates:
+    #       - "192.168.1.50:8555"   # this host's LAN IP
+
+# To add homeCore itself to this stack (instead of pointing at an appliance),
+# add a service like:
+#
+#   homecore:
+#     image: ghcr.io/homecore-io/hc-core:dev
+#     restart: unless-stopped
+#     ports: [ "8080:8080", "1883:1883" ]
+#     volumes: [ "./homecore-data:/var/lib/homecore" ]
+#
+# then set HOMECORE_URL=http://homecore:8080 in .env (the compose service name).
