@@ -5,6 +5,7 @@ import '../../core/devices/presentation.dart';
 import '../../core/models/device_state.dart';
 import '../../core/providers/devices_provider.dart';
 import '../../core/providers/modes_provider.dart';
+import '../../design/components/hc_sensor_chip.dart';
 import '../../design/components/hc_tile.dart';
 import '../../design/hc_icons.dart';
 import '../../design/tokens.dart';
@@ -12,7 +13,9 @@ import '../devices/device_query.dart';
 import '../devices/device_sheet.dart';
 import '../../core/providers/dashboards_provider.dart';
 import '../../design/components/hc_controls.dart';
+import '../../shell/hc_sheet.dart';
 import 'home_arrangement.dart';
+import 'home_rich_cards.dart';
 
 /// The house.
 ///
@@ -191,7 +194,7 @@ class _ArrangeBar extends StatelessWidget {
   }
 }
 
-class _House extends ConsumerWidget {
+class _House extends ConsumerStatefulWidget {
   const _House({
     required this.devices,
     required this.arrangement,
@@ -207,9 +210,25 @@ class _House extends ConsumerWidget {
   final ValueChanged<String> onToggleHidden;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_House> createState() => _HouseState();
+}
+
+class _HouseState extends ConsumerState<_House> {
+  /// Rooms the user has folded shut. Local and ephemeral on purpose: collapsing
+  /// a room to see past it is a glance-time act, not a saved layout, and it must
+  /// never fire a dashboard write on every tap. A room absent from this set is
+  /// open — so a newly installed room is always visible, never folded by default.
+  final Set<String> _collapsed = {};
+
+  void _toggle(String key) => setState(() {
+        _collapsed.contains(key) ? _collapsed.remove(key) : _collapsed.add(key);
+      });
+
+  @override
+  Widget build(BuildContext context) {
     final t = HcTokens.of(context);
     final notifier = ref.read(devicesProvider.notifier);
+    final devices = widget.devices;
 
     // Rooms, not "sections". The house already has a structure; inventing a
     // second one in a dashboard document was the original mistake.
@@ -221,26 +240,27 @@ class _House extends ConsumerWidget {
 
     // While arranging you see every room INCLUDING the hidden ones, or you could
     // never bring one back.
-    final keys =
-        arranging ? arrangement.all(byKey.keys) : arrangement.apply(byKey.keys);
+    final keys = widget.arranging
+        ? widget.arrangement.all(byKey.keys)
+        : widget.arrangement.apply(byKey.keys);
     final rooms = [for (final k in keys) byKey[k]!];
     final problems = problemsIn(devices);
 
-    if (arranging) {
+    if (widget.arranging) {
       return ReorderableListView.builder(
         padding: EdgeInsets.fromLTRB(t.space.lg, t.space.lg, t.space.lg, 0),
         itemCount: rooms.length,
-        onReorderItem: onReorder,
+        onReorderItem: widget.onReorder,
         itemBuilder: (context, i) {
           final key = rooms[i].key;
-          final hidden = arrangement.hidden.contains(key);
+          final hidden = widget.arrangement.hidden.contains(key);
           return _ArrangeRow(
             key: ValueKey(key),
             index: i,
             room: key,
             count: rooms[i].devices.length,
             hidden: hidden,
-            onToggleHidden: () => onToggleHidden(key),
+            onToggleHidden: () => widget.onToggleHidden(key),
           );
         },
       );
@@ -259,6 +279,8 @@ class _House extends ConsumerWidget {
           SliverToBoxAdapter(
             child: _Room(
               room: room,
+              collapsed: _collapsed.contains(room.key),
+              onToggleCollapse: () => _toggle(room.key),
               // A sheet OVER the house, not a route away from it. You look, you
               // act, you dismiss — and the house is still lit where it was.
               onTap: (d) => showDeviceSheet(context, d.id),
@@ -327,7 +349,19 @@ class _HouseHeader extends ConsumerWidget {
             ],
             if (problems > 0) ...[
               _dot(t),
-              _Stat(label: '$problems need attention', warn: true),
+              // A count is only useful if it takes you to the things it counts.
+              // This is the one stat that is a door, not a fact.
+              MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: GestureDetector(
+                  onTap: () => _showNeedsAttention(context, devices),
+                  child: _Stat(
+                    label: '$problems need attention',
+                    warn: true,
+                    link: true,
+                  ),
+                ),
+              ),
             ],
             for (final m in active) ...[
               _dot(t),
@@ -344,27 +378,144 @@ class _HouseHeader extends ConsumerWidget {
 }
 
 class _Stat extends StatelessWidget {
-  const _Stat({required this.label, this.lit = false, this.warn = false});
+  const _Stat({
+    required this.label,
+    this.lit = false,
+    this.warn = false,
+    this.link = false,
+  });
 
   final String label;
   final bool lit;
   final bool warn;
 
+  /// A stat you can tap. A dotted underline says so without a button's weight.
+  final bool link;
+
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
+    final colour = warn
+        ? t.accent.warn
+        : lit
+            ? t.accent.active
+            : t.surface.onBaseMuted;
     return Text(
       label,
       style: TextStyle(
         fontSize: 13,
         fontWeight: lit || warn ? FontWeight.w600 : FontWeight.w400,
-        color: warn
-            ? t.accent.warn
-            : lit
-                ? t.accent.active
-                : t.surface.onBaseMuted,
+        color: colour,
         fontFeatures: t.numericFontFeatures,
+        decoration: link ? TextDecoration.underline : null,
+        decorationColor: link ? colour.withValues(alpha: 0.5) : null,
+        decorationStyle: TextDecorationStyle.dotted,
       ),
+    );
+  }
+}
+
+/// Opens the list behind the "N need attention" count — the offline and
+/// low-battery devices, each a tap away from its own detail.
+void _showNeedsAttention(BuildContext context, List<DeviceState> devices) {
+  showHcSheet(
+    context,
+    title: 'Needs attention',
+    child: _NeedsAttentionSheet(problems: problemsIn(devices)),
+  );
+}
+
+class _NeedsAttentionSheet extends StatelessWidget {
+  const _NeedsAttentionSheet({required this.problems});
+
+  final List<DeviceProblem> problems;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        HcSheetHeader(
+          title: 'Needs attention',
+          subtitle: problems.isEmpty
+              ? 'Everything looks healthy'
+              : '${problems.length} ${problems.length == 1 ? 'device' : 'devices'}',
+        ),
+        Flexible(
+          child: ListView.separated(
+            shrinkWrap: true,
+            padding: EdgeInsets.fromLTRB(t.space.md, 0, t.space.md, t.space.lg),
+            itemCount: problems.length,
+            separatorBuilder: (_, __) => SizedBox(height: t.space.xs),
+            itemBuilder: (context, i) {
+              final p = problems[i];
+              final offline = p.reason == 'offline';
+              final colour = offline ? t.accent.offline : t.accent.warn;
+              final area = (p.device.area ?? '').replaceAll('_', ' ');
+
+              return InkWell(
+                borderRadius: t.radius.mdR,
+                onTap: () {
+                  // Close this sheet first, then open the device's own — two
+                  // stacked sheets read as clutter.
+                  Navigator.of(context).maybePop();
+                  showDeviceSheet(context, p.device.id);
+                },
+                child: Container(
+                  padding: EdgeInsets.all(t.space.md),
+                  decoration: BoxDecoration(
+                    color: t.surface.raised,
+                    borderRadius: t.radius.mdR,
+                    border: Border.all(color: t.stroke.hairline),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        offline
+                            ? HcIcons.warning
+                            : facetOf(p.device, p.device.schema).icon,
+                        size: 18,
+                        color: colour,
+                      ),
+                      SizedBox(width: t.space.md),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              p.device.displayName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: t.surface.onBase,
+                              ),
+                            ),
+                            Text(
+                              area.isEmpty ? p.reason : '$area · ${p.reason}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: colour,
+                                fontFeatures: t.numericFontFeatures,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 }
@@ -372,6 +523,8 @@ class _Stat extends StatelessWidget {
 class _Room extends StatelessWidget {
   const _Room({
     required this.room,
+    required this.collapsed,
+    required this.onToggleCollapse,
     required this.onTap,
     required this.onToggle,
     required this.onActivate,
@@ -379,6 +532,8 @@ class _Room extends StatelessWidget {
   });
 
   final DeviceGroupResult room;
+  final bool collapsed;
+  final VoidCallback onToggleCollapse;
   final ValueChanged<DeviceState> onTap;
   final ValueChanged<DeviceState> onToggle;
   final ValueChanged<DeviceState> onActivate;
@@ -388,20 +543,28 @@ class _Room extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
 
-    // Scenes are not devices, even though a plugin registers them as one (Hue
-    // publishes each scene as `device_type: "scene"`). Rendering them as tiles
-    // put twenty of them — Arctic aurora, Bright, Concentrate, Dimmed… — in the
-    // family room and buried the two lamps that actually live there. A scene is
-    // a button you press, so it gets a chip, not a tile.
-    final scenes = room.devices
-        .where((d) => facetOf(d, d.schema) == DeviceFacet.scene)
-        .toList();
-    final things = room.devices
-        .where((d) => facetOf(d, d.schema) != DeviceFacet.scene)
-        .toList();
+    // A device earns its space by what it *is*. A leak sensor is a reading, not
+    // a control, so it gets a dense chip; a scene is a button, so it gets a
+    // chip; a light gets a card. Bucketing by presentation tier is what stops a
+    // room's two lamps being buried under twenty scenes and a shelf of sensors.
+    final byTier = <TilePresentation, List<DeviceState>>{};
+    for (final d in room.devices) {
+      byTier.putIfAbsent(facetOf(d, d.schema).presentation, () => []).add(d);
+    }
 
-    final actuators =
-        things.where((d) => facetOf(d, d.schema).isActuator).toList();
+    // Rich: a speaker or a thermostat, each its own wider card.
+    final rich = byTier[TilePresentation.rich] ?? const [];
+    // Cards: things you switch, dim, open, lock; press-buttons ride along.
+    final cards = [
+      ...?byTier[TilePresentation.control],
+      ...?byTier[TilePresentation.button],
+    ];
+    final readouts = byTier[TilePresentation.readout] ?? const [];
+    final scenes = byTier[TilePresentation.scene] ?? const [];
+
+    final actuators = [...rich, ...cards]
+        .where((d) => facetOf(d, d.schema).isActuator)
+        .toList();
     final on = actuators.where(isOn).length;
 
     return Padding(
@@ -409,61 +572,145 @@ class _Room extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Text(
-                room.key.replaceAll('_', ' '),
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 1.1,
-                  color: t.accent.primary,
-                ),
-              ),
-              SizedBox(width: t.space.sm),
-              if (actuators.isNotEmpty)
-                Text(
-                  '$on of ${actuators.length} on',
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    color: t.surface.onBaseMuted,
-                    fontFeatures: t.numericFontFeatures,
-                  ),
-                ),
-            ],
-          ),
-          SizedBox(height: t.space.sm),
-          LayoutBuilder(
-            builder: (context, c) {
-              // Tiles size themselves to the space, so the same surface is a
-              // phone, a laptop and a wall panel without a breakpoint document
-              // describing all three.
-              const target = 210.0;
-              final columns = (c.maxWidth / target).floor().clamp(1, 8);
-              final width = (c.maxWidth - (columns - 1) * t.space.sm) / columns;
-
-              return Wrap(
-                spacing: t.space.sm,
-                runSpacing: t.space.sm,
-                children: [
-                  for (final d in things)
-                    SizedBox(
-                      width: width,
-                      height: 84,
-                      child: HcTile(
-                        device: d,
-                        onTap: () => onTap(d),
-                        onToggle: facetOf(d, d.schema).isActuator
-                            ? () => onToggle(d)
-                            : null,
-                        onLevel: (v) => onLevel(d, v),
+          // The room name is also the fold. Tapping it collapses the room to
+          // this one line — the way you see past a room you are not using right
+          // now without hiding it for good.
+          MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: onToggleCollapse,
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: t.space.xs),
+                child: Row(
+                  children: [
+                    AnimatedRotation(
+                      turns: collapsed ? -0.25 : 0,
+                      duration: t.motion.d(t.motion.fast),
+                      child: Icon(HcIcons.caretDown,
+                          size: 12, color: t.surface.onBaseMuted),
+                    ),
+                    SizedBox(width: t.space.xs + 1),
+                    Text(
+                      room.key.replaceAll('_', ' '),
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.1,
+                        color: t.accent.primary,
                       ),
                     ),
-                ],
-              );
-            },
+                    SizedBox(width: t.space.sm),
+                    if (actuators.isNotEmpty)
+                      Text(
+                        '$on of ${actuators.length} on',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          color: t.surface.onBaseMuted,
+                          fontFeatures: t.numericFontFeatures,
+                        ),
+                      ),
+                    // Folded, the room still says how much it holds, so you know
+                    // there is something behind the line.
+                    if (collapsed) ...[
+                      SizedBox(width: t.space.sm),
+                      Text(
+                        '· ${room.devices.length} devices',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          color: t.surface.onBaseMuted.withValues(alpha: 0.6),
+                          fontFeatures: t.numericFontFeatures,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
           ),
-          if (scenes.isNotEmpty) ...[
+          if (!collapsed && rich.isNotEmpty) ...[
+            SizedBox(height: t.space.sm),
+            LayoutBuilder(
+              builder: (context, c) {
+                // Rich cards want breathing room but not the whole wall — two up
+                // on a desktop, one on a phone.
+                final columns = (c.maxWidth / 360).floor().clamp(1, 2);
+                final width =
+                    (c.maxWidth - (columns - 1) * t.space.sm) / columns;
+                return Wrap(
+                  spacing: t.space.sm,
+                  runSpacing: t.space.sm,
+                  children: [
+                    for (final d in rich)
+                      SizedBox(width: width, child: _richCard(d)),
+                  ],
+                );
+              },
+            ),
+          ],
+          if (!collapsed && cards.isNotEmpty) ...[
+            SizedBox(height: t.space.sm),
+            LayoutBuilder(
+              builder: (context, c) {
+                // Tiles size themselves to the space, so the same surface is a
+                // phone, a laptop and a wall panel without a breakpoint document
+                // describing all three.
+                const target = 210.0;
+                final columns = (c.maxWidth / target).floor().clamp(1, 8);
+                final width =
+                    (c.maxWidth - (columns - 1) * t.space.sm) / columns;
+
+                return Wrap(
+                  spacing: t.space.sm,
+                  runSpacing: t.space.sm,
+                  children: [
+                    for (final d in cards)
+                      SizedBox(
+                        width: width,
+                        height: 84,
+                        child: HcTile(
+                          device: d,
+                          onTap: () => onTap(d),
+                          onToggle: facetOf(d, d.schema).isActuator
+                              ? () => onToggle(d)
+                              : null,
+                          onLevel: (v) => onLevel(d, v),
+                        ),
+                      ),
+                  ],
+                );
+              },
+            ),
+          ],
+          if (!collapsed && readouts.isNotEmpty) ...[
+            SizedBox(height: t.space.sm),
+            LayoutBuilder(
+              builder: (context, c) {
+                // Sensors pack tighter than controls — a reading needs less room
+                // than a slider — so a smaller target fits more per row.
+                const target = 176.0;
+                final columns = (c.maxWidth / target).floor().clamp(2, 8);
+                final width =
+                    (c.maxWidth - (columns - 1) * t.space.sm) / columns;
+
+                return Wrap(
+                  spacing: t.space.sm,
+                  runSpacing: t.space.sm,
+                  children: [
+                    for (final d in readouts)
+                      SizedBox(
+                        width: width,
+                        child: HcSensorChip(
+                          device: d,
+                          onTap: () => onTap(d),
+                        ),
+                      ),
+                  ],
+                );
+              },
+            ),
+          ],
+          if (!collapsed && scenes.isNotEmpty) ...[
             SizedBox(height: t.space.sm),
             Wrap(
               spacing: t.space.xs,
@@ -477,6 +724,15 @@ class _Room extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  /// The right rich card for a device — a now-playing card for a speaker, a
+  /// climate card for a thermostat.
+  Widget _richCard(DeviceState d) {
+    if (facetOf(d, d.schema) == DeviceFacet.mediaPlayer) {
+      return HomeMediaCard(device: d);
+    }
+    return HomeClimateCard(device: d, onTap: () => onTap(d));
   }
 }
 

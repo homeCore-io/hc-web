@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'core/providers/auth_provider.dart';
 import 'design/skins.dart';
 import 'features/admin/admin_shell.dart';
@@ -23,6 +24,7 @@ import 'features/devices/device_list_page.dart';
 import 'features/events/events_page.dart';
 import 'features/media/media_page.dart';
 import 'features/modes/modes_page.dart';
+import 'features/pages/page_screen.dart';
 import 'features/scenes/scene_editor_page.dart';
 import 'features/scenes/scenes_page.dart';
 import 'shell/shell_scope.dart';
@@ -39,6 +41,9 @@ class _RouterNotifier extends ChangeNotifier {
 
 GoRouter _buildRouter(Ref ref) {
   final notifier = _RouterNotifier(ref);
+  // Honour the user's chosen Home page once, on the first landing — after that
+  // '/' is the house again, always reachable from the rail.
+  var honouredLanding = false;
   return GoRouter(
     initialLocation: '/',
     refreshListenable: notifier,
@@ -47,6 +52,12 @@ GoRouter _buildRouter(Ref ref) {
       final isLoginPage = state.matchedLocation == '/login';
       if (!isLoggedIn && !isLoginPage) return '/login';
       if (isLoggedIn && isLoginPage) return '/';
+      if (isLoggedIn && !honouredLanding && state.matchedLocation == '/') {
+        honouredLanding = true;
+        final prefs = await SharedPreferences.getInstance();
+        final landing = prefs.getString('landing_route') ?? '/';
+        if (landing != '/') return landing;
+      }
       return null;
     },
     routes: [
@@ -78,6 +89,13 @@ GoRouter _buildRouter(Ref ref) {
           // The house is the app's one primary surface, and it is where you
           // land. `/dashboard` used to bounce you here through a redirector.
           GoRoute(path: '/', builder: (_, __) => const HomePage()),
+          // App-native dashboard pages — view + in-place editor, the replacement
+          // for the old /dashboards CMS. Same document, same grid engine.
+          GoRoute(
+            path: '/pages/:id',
+            builder: (_, state) =>
+                PageScreen(dashboardId: state.pathParameters['id']!),
+          ),
           GoRoute(path: '/manage', builder: (_, __) => const ManagePage()),
           GoRoute(path: '/cameras', builder: (_, __) => const CamerasPage()),
           GoRoute(

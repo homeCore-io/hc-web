@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../models/device_state.dart';
@@ -95,6 +97,53 @@ enum DeviceFacet {
           true,
         _ => false,
       };
+
+  /// How much room a device earns on the house. The single biggest cause of the
+  /// "box of things dumped on a canvas" was giving a leak sensor the same 84px
+  /// card as a dimmable light: a sensor is a *reading*, so it gets a chip.
+  TilePresentation get presentation => switch (this) {
+        // Domain-rich: a speaker and a thermostat each have more to say and
+        // control than an on/off tile can hold. A colour bulb stays a control
+        // tile — but a colour-aware one, whose halo is the light's real colour.
+        DeviceFacet.mediaPlayer || DeviceFacet.climate => TilePresentation.rich,
+        // A scene is a button you press; a keypad/pico is too.
+        DeviceFacet.scene => TilePresentation.scene,
+        DeviceFacet.button => TilePresentation.button,
+        // Things you switch, dim, open, lock, or run.
+        DeviceFacet.light ||
+        DeviceFacet.dimmableLight ||
+        DeviceFacet.colorLight ||
+        DeviceFacet.outlet ||
+        DeviceFacet.switch_ ||
+        DeviceFacet.cover ||
+        DeviceFacet.lock ||
+        DeviceFacet.garage ||
+        DeviceFacet.siren ||
+        DeviceFacet.timer =>
+          TilePresentation.control,
+        // Everything else is a sensor: a value to read, not a control. Doors,
+        // windows, motion, occupancy, contact, temperature, humidity, leak…
+        _ => TilePresentation.readout,
+      };
+}
+
+/// The visual weight a device is given on the house, derived from its facet.
+enum TilePresentation {
+  /// A dense readout chip — sensors. No control affordance.
+  readout,
+
+  /// A control tile — switch/dim/open/lock. Today's [DeviceFacet.isActuator]
+  /// look, minus the rich domains.
+  control,
+
+  /// A larger card with domain content — media transport, colour, climate.
+  rich,
+
+  /// A press-to-run chip — scenes.
+  scene,
+
+  /// A press chip — keypads, picos, buttons.
+  button,
 }
 
 /// Collapses the aliases core itself collapses (`canonical_device_type_name`
@@ -121,6 +170,14 @@ DeviceFacet facetOf(DeviceState d, [DeviceSchema? schema]) {
     if (byHint != null) return byHint;
   }
 
+  // 1b. A plugin scene registered as a *device* is a button, never a toggle.
+  //     Hue publishes `device_type: "scene"` (caught by _fromToken below), but
+  //     Lutron identifies its scenes only by the `kind == "scene"` attribute —
+  //     which _fromToken never sees, so the device falls through to _infer, hits
+  //     its `on` key, and renders as a switch with a toggle it cannot honour.
+  //     Detect both, matching leptos `is_scene_like`, before that can happen.
+  if (_isSceneLike(d)) return DeviceFacet.scene;
+
   // 2. The canonical type.
   final type = canonicalDeviceType(d.deviceType);
   final byType = _fromToken(type);
@@ -132,6 +189,16 @@ DeviceFacet facetOf(DeviceState d, [DeviceSchema? schema]) {
 
   // 3. Nothing usable — infer from what the device actually exposes.
   return _infer(d, schema);
+}
+
+/// A device that *is* a scene, however it was registered — matching leptos
+/// `is_scene_like` (`clients/hc-web-leptos/src/models.rs`). Native Hue scenes
+/// come through as `device_type: "scene"`; Lutron scenes only carry the
+/// `kind == "scene"` attribute.
+bool _isSceneLike(DeviceState d) {
+  if (canonicalDeviceType(d.deviceType) == 'scene') return true;
+  final kind = d.state['kind'];
+  return kind is String && kind.toLowerCase() == 'scene';
 }
 
 DeviceFacet? _fromToken(String t) => switch (t) {
@@ -222,6 +289,67 @@ double? levelOf(DeviceState d) {
   final vol = d.state['volume'];
   if (vol is num) return (vol.toDouble() / 100).clamp(0.0, 1.0);
   return null;
+}
+
+/// The colour a light is actually showing, or null if it has none to show.
+///
+/// A Hue bulb that can render "Concentrate" cool-white or a deep amber sunset
+/// should say so on the wall — a fleet of identically amber tiles throws away
+/// the one thing a colour light is *for*. Derived from `color_xy` (a rendered
+/// colour) when present, else `color_temp_mirek` (a white temperature). Returns
+/// null for a plain dimmer, so the caller keeps the house accent.
+Color? lightColorOf(DeviceState d) {
+  final xy = d.state['color_xy'];
+  if (xy is Map && xy['x'] is num && xy['y'] is num) {
+    return _xyToColor((xy['x'] as num).toDouble(), (xy['y'] as num).toDouble());
+  }
+  final mirek = d.state['color_temp_mirek'];
+  if (mirek is num && mirek > 0) return _kelvinToColor(1000000 / mirek);
+  final kelvin = d.state['color_temp'];
+  if (kelvin is num && kelvin > 0) return _kelvinToColor(kelvin.toDouble());
+  return null;
+}
+
+/// CIE 1931 xy → sRGB at full luminance (the hue, not the brightness — the tile
+/// carries brightness in its halo already).
+Color _xyToColor(double x, double y) {
+  if (y <= 0) return const Color(0xFFFFFFFF);
+  final z = 1.0 - x - y;
+  final xx = x / y, zz = z / y; // Y normalised to 1
+  var r = xx * 1.656492 - 0.354851 - zz * 0.255038;
+  var g = -xx * 0.707196 + 1.655397 + zz * 0.036152;
+  var b = xx * 0.051713 - 0.121364 + zz * 1.011530;
+  final maxc = [r, g, b, 1.0].reduce(math.max);
+  r /= maxc;
+  g /= maxc;
+  b /= maxc;
+  int ch(double v) {
+    v = v <= 0.0031308 ? 12.92 * v : 1.055 * math.pow(v, 1 / 2.4) - 0.055;
+    return (v.clamp(0.0, 1.0) * 255).round();
+  }
+
+  return Color.fromARGB(255, ch(r), ch(g), ch(b));
+}
+
+/// Colour-temperature → an approximate white point (Tanner Helland's fit).
+Color _kelvinToColor(double kelvin) {
+  final t = kelvin.clamp(1000, 40000) / 100;
+  double r, g, b;
+  if (t <= 66) {
+    r = 255;
+    g = (99.4708025861 * math.log(t) - 161.1195681661).clamp(0, 255);
+  } else {
+    r = (329.698727446 * math.pow(t - 60, -0.1332047592)).clamp(0, 255);
+    g = (288.1221695283 * math.pow(t - 60, -0.0755148492)).clamp(0, 255);
+  }
+  if (t >= 66) {
+    b = 255;
+  } else if (t <= 19) {
+    b = 0;
+  } else {
+    b = (138.5177312231 * math.log(t - 10) - 305.0447927307).clamp(0, 255);
+  }
+  return Color.fromARGB(255, r.round(), g.round(), b.round());
 }
 
 /// Whether the device reads as "doing something" right now.

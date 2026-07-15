@@ -2,12 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/api/history_api.dart';
 import '../../core/devices/presentation.dart';
 import '../../core/models/device_state.dart';
+import '../../core/models/history_entry.dart';
+import '../../core/providers/auth_provider.dart';
 import '../../core/providers/automations_provider.dart';
 import '../../core/providers/devices_provider.dart';
 import '../../design/components/hc_attribute_control.dart';
 import '../../design/components/hc_controls.dart';
+import '../../design/components/hc_history_chart.dart';
 import '../../design/hc_icons.dart';
 import '../../design/tokens.dart';
 import '../../shell/hc_sheet.dart';
@@ -87,6 +91,10 @@ class _DeviceSheet extends ConsumerWidget {
           // Controls come from the device's own schema, so a plugin that adds an
           // attribute gets a correct control for free — no per-device UI code.
           _Controls(device: device),
+
+          // A number is a fact; a number over the last day is a story. Sensors
+          // get their trend inline, not one route away.
+          _SheetHistory(device: device),
 
           _UsedBy(device: device),
 
@@ -373,5 +381,116 @@ class _Banner extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+/// The metrics worth trending, in the order we'd rather show them. A device may
+/// report several numbers; this picks the one a person came to see.
+const _metricPriority = <String>[
+  'temperature',
+  'current_temperature',
+  'humidity',
+  'illuminance_lux',
+  'illuminance',
+  'co2',
+  'pm25',
+  'pressure',
+  'power',
+  'setpoint',
+  'battery',
+];
+
+bool _isMetric(String attr, Object? value) =>
+    value is num && (_metricPriority.contains(attr) || attr.endsWith('_pct'));
+
+/// True when the device exposes at least one number worth a chart — so we never
+/// fire a history request for a plain on/off switch.
+bool _hasMetric(DeviceState d) =>
+    d.state.entries.any((e) => _isMetric(e.key, e.value));
+
+final _sheetHistoryProvider =
+    FutureProvider.family.autoDispose<List<HistoryEntry>, String>((ref, id) {
+  final client = ref.watch(homecoreClientProvider);
+  return HistoryApi(client).getHistory(id, limit: 500);
+});
+
+/// The recent trend for a device's primary metric, drawn inline in the sheet.
+class _SheetHistory extends ConsumerWidget {
+  const _SheetHistory({required this.device});
+
+  final DeviceState device;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = HcTokens.of(context);
+    if (!_hasMetric(device)) return const SizedBox.shrink();
+
+    final async = ref.watch(_sheetHistoryProvider(device.id));
+    return async.when(
+      loading: () => const SizedBox(height: 44),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (entries) {
+        final attr = _pickAttribute(entries);
+        if (attr == null) return const SizedBox.shrink();
+        final series = entries
+            .where((e) => e.attribute == attr && e.value is num)
+            .toList();
+        if (series.length < 2) return const SizedBox.shrink();
+
+        return Padding(
+          padding: EdgeInsets.fromLTRB(
+              t.space.lg, t.space.sm, t.space.lg, t.space.sm),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Text(
+                    attr.replaceAll('_', ' ').toUpperCase(),
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.1,
+                      color: t.surface.onBaseMuted,
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    'RECENT',
+                    style: TextStyle(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1,
+                      color: t.surface.onBaseMuted.withValues(alpha: 0.6),
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: t.space.sm),
+              HcHistoryChart(entries: series),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// The numeric attribute to chart: the highest-priority metric that actually
+  /// has history, falling back to whichever numeric attribute has the most
+  /// points.
+  static String? _pickAttribute(List<HistoryEntry> entries) {
+    final numericAttrs = <String, int>{};
+    for (final e in entries) {
+      if (e.value is num) {
+        numericAttrs[e.attribute] = (numericAttrs[e.attribute] ?? 0) + 1;
+      }
+    }
+    if (numericAttrs.isEmpty) return null;
+    for (final metric in _metricPriority) {
+      if (numericAttrs.containsKey(metric)) return metric;
+    }
+    return numericAttrs.entries
+        .reduce((a, b) => a.value >= b.value ? a : b)
+        .key;
   }
 }

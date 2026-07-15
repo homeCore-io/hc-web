@@ -50,6 +50,12 @@ class HcTile extends StatelessWidget {
     final on = !offline && isOn(device);
     final level = levelOf(device);
 
+    // A colour light lit its real colour, so a Hue bulb showing deep amber
+    // glows amber and a cool-white one glows white — the point of a colour
+    // light, thrown away when every tile is the same house accent.
+    final tint = on ? lightColorOf(device) : null;
+    final active = tint ?? t.accent.active;
+
     // A sensor has no switch and no dimmer, however many writable attributes
     // happen to drift in. Offering one would invite the user to "turn off" a
     // motion sensor.
@@ -59,14 +65,14 @@ class HcTile extends StatelessWidget {
     final fg = offline
         ? t.accent.offline
         : on
-            ? t.accent.active
+            ? active
             : t.surface.onBaseMuted;
 
     return _Pulse(
       pulse: pulse,
       child: HcSurface(
         onTap: onTap,
-        glowColor: t.accent.active,
+        glowColor: active,
         // The halo is the level. Not a fixed "on" glow — a dim lamp must look
         // dim, or the wall panel lies about the room.
         glowIntensity: on ? (level ?? 1.0) : 0,
@@ -76,7 +82,12 @@ class HcTile extends StatelessWidget {
           children: [
             Row(
               children: [
-                _Bulb(facet: facet, on: on, offline: offline, colour: fg),
+                _Bulb(
+                    facet: facet,
+                    on: on,
+                    offline: offline,
+                    colour: fg,
+                    accent: active),
                 SizedBox(width: t.space.md),
                 Expanded(child: _title(context, t, offline)),
                 if (actuator && !offline && onToggle != null)
@@ -137,12 +148,16 @@ class _Bulb extends StatelessWidget {
     required this.on,
     required this.offline,
     required this.colour,
+    required this.accent,
   });
 
   final DeviceFacet facet;
   final bool on;
   final bool offline;
   final Color colour;
+
+  /// The active colour — the light's own when it has one, else the house accent.
+  final Color accent;
 
   @override
   Widget build(BuildContext context) {
@@ -156,7 +171,7 @@ class _Bulb extends StatelessWidget {
       height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: on ? t.accent.active.withValues(alpha: 0.22) : t.surface.sunken,
+        color: on ? accent.withValues(alpha: 0.22) : t.surface.sunken,
         border: offline
             ? Border.all(color: t.accent.offline.withValues(alpha: 0.5))
             : null,

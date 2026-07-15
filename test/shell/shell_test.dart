@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hc_web/design/skins.dart';
 import 'package:hc_web/design/tokens.dart';
+import 'package:hc_web/shell/nav_rail.dart';
 import 'package:hc_web/shell/shell_scope.dart';
 import 'package:hc_web/shell/wall_chrome.dart';
 
@@ -227,13 +228,13 @@ void main() {
 
       await tester.pumpWidget(_app(at: '/devices'));
       await tester.pumpAndSettle();
-      expect(find.byType(NavigationRail), findsOneWidget);
+      expect(find.byType(HcNavRail), findsOneWidget);
       expect(find.byType(NavigationBar), findsNothing);
 
       tester.view.physicalSize = const Size(420, 900);
       await tester.pumpWidget(_app(at: '/devices'));
       await tester.pumpAndSettle();
-      expect(find.byType(NavigationRail), findsNothing);
+      expect(find.byType(HcNavRail), findsNothing);
       expect(find.byType(NavigationBar), findsOneWidget);
     });
   });

@@ -3,12 +3,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/providers/auth_provider.dart';
+import '../core/providers/nav_prefs_provider.dart';
+import '../design/hc_icons.dart';
 import '../design/tokens.dart';
+import 'hub_launcher.dart';
+import 'nav_rail.dart';
 import 'session_status.dart';
-import 'shell_scope.dart';
 
-/// Phone and tablet, in the hand. A rail when there's room, a bottom bar when
-/// there isn't — the one place where the *viewport* genuinely decides.
+/// Phone and tablet, in the hand.
+///
+/// Wide, it wears the app's collapsible [HcNavRail] — unless the user has chosen
+/// launcher-only, in which case there is no persistent chrome at all, just a hub
+/// button that opens the full-screen page grid. Narrow, a bottom bar carries the
+/// three things a thumb needs: Home, the launcher, and Manage.
 class TouchChrome extends ConsumerWidget {
   const TouchChrome({super.key, required this.child});
 
@@ -18,88 +25,105 @@ class TouchChrome extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final t = HcTokens.of(context);
     final wide = MediaQuery.sizeOf(context).width >= 600;
-    final isAdmin =
-        ref.watch(currentUserProvider).valueOrNull?['role'] == 'admin';
-
-    final items = [
-      for (final i in kNavItems)
-        if (!i.adminOnly || isAdmin) i,
-    ];
-
+    final railVisible = ref.watch(navRailVisibleProvider);
+    // Captured here (inside GoRouter's subtree) so the launcher — which opens in
+    // the root overlay, outside that subtree — can be told where we are.
     final location = GoRouterState.of(context).matchedLocation;
-    var selected = items.indexWhere((i) => location.startsWith(i.route));
-    if (selected < 0) selected = 0;
 
-    void go(int i) => context.go(items[i].route);
-
-    final body = Column(
-      children: [
-        const ExpiryBanner(),
-        Expanded(
-          child: Row(
-            children: [
-              if (wide)
-                NavigationRail(
-                  selectedIndex: selected,
-                  onDestinationSelected: go,
-                  labelType: NavigationRailLabelType.all,
-                  backgroundColor: t.surface.raised,
-                  destinations: [
-                    for (final i in items)
-                      NavigationRailDestination(
-                        icon: Icon(i.icon),
-                        label: Text(i.label),
-                      ),
-                  ],
-                  trailing: Expanded(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.end,
+    if (wide) {
+      return Scaffold(
+        body: Column(
+          children: [
+            const ExpiryBanner(),
+            Expanded(
+              child: Row(
+                children: [
+                  if (railVisible) const HcNavRail(),
+                  Expanded(
+                    child: Stack(
                       children: [
-                        const LiveDot(),
-                        SizedBox(height: t.space.sm),
-                        IconButton(
-                          icon: const Icon(Icons.logout),
-                          tooltip: 'Sign out',
-                          onPressed: () =>
-                              ref.read(authProvider.notifier).logout(),
-                        ),
-                        SizedBox(height: t.space.md),
+                        Positioned.fill(child: child),
+                        // Launcher-only: no rail, so a single hub button is the
+                        // way in and out of everything.
+                        if (!railVisible)
+                          Positioned(
+                            left: t.space.md,
+                            top: t.space.md,
+                            child: _HubButton(location: location),
+                          ),
                       ],
                     ),
                   ),
-                ),
-              Expanded(child: child),
-            ],
-          ),
+                ],
+              ),
+            ),
+          ],
         ),
-      ],
-    );
+      );
+    }
+
+    final selected = location == '/'
+        ? 0
+        : location.startsWith('/manage')
+            ? 2
+            : 1;
 
     return Scaffold(
-      appBar: wide
-          ? null
-          : AppBar(
-              title: const Text('HomeCore'),
-              actions: [
-                const LiveDot(),
-                SizedBox(width: t.space.sm),
-                IconButton(
-                  icon: const Icon(Icons.logout),
-                  onPressed: () => ref.read(authProvider.notifier).logout(),
-                ),
-              ],
-            ),
-      body: body,
-      bottomNavigationBar: wide
-          ? null
-          : NavigationBar(
-              selectedIndex: selected,
-              onDestinationSelected: go,
-              destinations: [
-                for (final i in items)
-                  NavigationDestination(icon: Icon(i.icon), label: i.label),
-              ],
-            ),
+      appBar: AppBar(
+        title: const Text('HomeCore'),
+        actions: [
+          const LiveDot(),
+          SizedBox(width: t.space.sm),
+          IconButton(
+            icon: const Icon(Icons.logout),
+            onPressed: () => ref.read(authProvider.notifier).logout(),
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          const ExpiryBanner(),
+          Expanded(child: child),
+        ],
+      ),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: selected,
+        onDestinationSelected: (i) => switch (i) {
+          0 => context.go('/'),
+          1 => showHubLauncher(context, location: location),
+          _ => context.go('/manage'),
+        },
+        destinations: const [
+          NavigationDestination(icon: Icon(HcIcons.home), label: 'Home'),
+          NavigationDestination(icon: Icon(HcIcons.dashboards), label: 'Pages'),
+          NavigationDestination(icon: Icon(HcIcons.sliders), label: 'Manage'),
+        ],
+      ),
+    );
+  }
+}
+
+/// The floating way into the launcher, for launcher-only mode.
+class _HubButton extends StatelessWidget {
+  const _HubButton({required this.location});
+
+  final String location;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Material(
+      color: t.surface.raised,
+      shape: const CircleBorder(),
+      elevation: 2,
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: () => showHubLauncher(context, location: location),
+        child: Padding(
+          padding: EdgeInsets.all(t.space.sm + 2),
+          child: Icon(HcIcons.dashboards, size: 20, color: t.surface.onBase),
+        ),
+      ),
     );
   }
 }
