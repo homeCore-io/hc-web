@@ -377,6 +377,11 @@ class _HouseState extends ConsumerState<_House> {
       return ReorderableListView.builder(
         padding: EdgeInsets.fromLTRB(t.space.lg, t.space.lg, t.space.lg, 0),
         itemCount: keys.length,
+        // Off: on desktop/web this list injects a trailing drag handle on every
+        // row, which lands on top of the eye and makes it hard to hit. We supply
+        // our own grip on the LEFT (ReorderableDragStartListener), so the built-in
+        // one is redundant as well as in the way.
+        buildDefaultDragHandles: false,
         onReorderItem: widget.onReorder,
         itemBuilder: (context, i) {
           final key = keys[i];
