@@ -12,6 +12,7 @@ class Camera {
     required this.sourceType,
     this.refreshSecs,
     this.span = 1,
+    this.showOnHome = true,
   });
 
   final String id;
@@ -29,13 +30,20 @@ class Camera {
   /// come back to.
   final int span;
 
-  Camera copyWith({int? span}) => Camera(
+  /// Whether this camera surfaces in the Home cameras area. The full wall lives
+  /// on the Cameras page; Home shows the subset you glance at. Defaults true so
+  /// every existing camera keeps showing until you curate — a fresh wall is not
+  /// silently empty on Home.
+  final bool showOnHome;
+
+  Camera copyWith({int? span, bool? showOnHome}) => Camera(
         id: id,
         name: name,
         url: url,
         sourceType: sourceType,
         refreshSecs: refreshSecs,
         span: span ?? this.span,
+        showOnHome: showOnHome ?? this.showOnHome,
       );
 
   static Camera? fromWidget(DashboardWidgetModel w) {
@@ -48,6 +56,9 @@ class Camera {
       sourceType: w.config['source_type'] as String? ?? 'mjpeg',
       refreshSecs: (w.config['refresh_secs'] as num?)?.toInt(),
       span: (w.config['span'] as num?)?.toInt().clamp(1, 3) ?? 1,
+      // Absent means show — the flag only ever hides, so old cameras and cameras
+      // added by another client both keep appearing on Home until curated here.
+      showOnHome: w.config['show_on_home'] as bool? ?? true,
     );
   }
 
@@ -62,6 +73,9 @@ class Camera {
           'source_type': sourceType,
           if (refreshSecs != null) 'refresh_secs': refreshSecs,
           'span': span,
+          // Only written when hidden, so the wall document stays clean and the
+          // default (show) needs no key.
+          if (!showOnHome) 'show_on_home': false,
         },
       );
 }
@@ -107,6 +121,29 @@ class CamerasNotifier extends AsyncNotifier<List<Camera>> {
     } else {
       await notifier.updateDashboard(_wallWith(wall, widgets));
     }
+    ref.invalidateSelf();
+  }
+
+  /// Curate which cameras surface on Home. Rewrites the camera's widget config
+  /// in place, so the choice is user data on the wall — the same camera hidden
+  /// from Home still lives on the Cameras page and in any kiosk link.
+  Future<void> setShowOnHome(String id, bool show) async {
+    final notifier = ref.read(dashboardsProvider.notifier);
+    final dashboards = await ref.read(dashboardsProvider.future);
+    final wall = _wallIn(dashboards);
+    if (wall == null) return;
+
+    final widgets = [
+      for (final w in wall.widgets)
+        if (w.id == id && w.type == 'camera_video')
+          if (Camera.fromWidget(w) case final c?)
+            c.copyWith(showOnHome: show).toWidget()
+          else
+            w
+        else
+          w,
+    ];
+    await notifier.updateDashboard(_wallWith(wall, widgets));
     ref.invalidateSelf();
   }
 
@@ -175,3 +212,10 @@ class CamerasNotifier extends AsyncNotifier<List<Camera>> {
 
 final camerasProvider =
     AsyncNotifierProvider<CamerasNotifier, List<Camera>>(CamerasNotifier.new);
+
+/// The subset of the wall the user has chosen to surface on Home. The Home
+/// cameras area watches this; the Cameras page and kiosk watch the full wall.
+final homeCamerasProvider = Provider<List<Camera>>((ref) {
+  final all = ref.watch(camerasProvider).valueOrNull ?? const <Camera>[];
+  return all.where((c) => c.showOnHome).toList();
+});

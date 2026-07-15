@@ -322,8 +322,16 @@ class _HouseState extends ConsumerState<_House> {
                   }
                   if (key == _kCamerasKey) {
                     final open = !_collapsed.contains(_kCamerasKey);
-                    heights[shortest] +=
-                        64 + (open ? (cameras.length / 2).ceil() * 115 : 0);
+                    // Height tracks the cameras actually shown on Home, not the
+                    // whole wall — the card renders only the chosen subset.
+                    final shownCount =
+                        cameras.where((c) => c.showOnHome).length;
+                    heights[shortest] += 64 +
+                        (open
+                            ? (shownCount == 0
+                                ? 96
+                                : (shownCount / 2).ceil() * 115)
+                            : 0);
                     columns[shortest].add(HomeCamerasCard(
                       cameras: cameras,
                       collapsed: !open,
