@@ -287,7 +287,8 @@ class _ConfigPreview extends StatelessWidget {
     // Show a handful of top-level scalar settings, secrets masked.
     final flat = flattenConfig(config);
     final rows = flat.entries
-        .where((e) => e.value is! List && e.value is! Map)
+        .where((e) =>
+            e.value is! List && e.value is! Map && !isBootstrapConfigKey(e.key))
         .take(6)
         .toList();
 

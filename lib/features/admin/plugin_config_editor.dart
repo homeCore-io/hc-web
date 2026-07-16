@@ -262,6 +262,8 @@ class _ConfigFormState extends ConsumerState<_ConfigForm> {
     final order = <String>[];
     final bySection = <String, List<WidgetConfigField>>{};
     for (final field in f.fields) {
+      // Hide the [homecore] connection/bootstrap block.
+      if (isBootstrapConfigKey(field.name)) continue;
       final sec = f.sectionOf[field.name] ?? 'General';
       if (!bySection.containsKey(sec)) order.add(sec);
       bySection.putIfAbsent(sec, () => []).add(field);

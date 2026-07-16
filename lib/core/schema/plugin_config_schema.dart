@@ -48,6 +48,12 @@ const _secretPattern =
 bool isSecretFieldName(String leaf) =>
     RegExp(_secretPattern, caseSensitive: false).hasMatch(leaf);
 
+/// The SDK `[homecore]` block (broker host/port, plugin_id, password) is
+/// connection *identity/bootstrap*, not operator config — hidden from the
+/// editor and preview so operators tune behaviour, not plumbing.
+bool isBootstrapConfigKey(String dotted) =>
+    dotted == 'homecore' || dotted.startsWith('homecore.');
+
 /// Core redacts secrets to this exact literal on read; leaving it unchanged on
 /// write tells core to keep the stored value.
 const redactedSentinel = '__redacted__';

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../core/schema/plugin_capabilities.dart';
+import '../../core/text/humanize.dart';
 
 /// Live view of a streaming plugin action.
 ///
@@ -110,6 +111,53 @@ class _ActionDrawerState extends State<ActionDrawer> {
     super.dispose();
   }
 
+  /// Render a streamed item as a readable row instead of a raw map dump.
+  /// Uses the action's own fields (`name`/`bridge_id`/`id`, `host`, `status`,
+  /// `error`) generically, so it reads well for any plugin.
+  Widget _itemTile(BuildContext context, ActionEvent e) {
+    final scheme = Theme.of(context).colorScheme;
+    final data = e.data is Map
+        ? Map<String, dynamic>.from(e.data as Map)
+        : const <String, dynamic>{};
+    final title = e.label ??
+        data['name']?.toString() ??
+        data['bridge_id']?.toString() ??
+        data['id']?.toString() ??
+        widget.action.label;
+    final subtitle = data['error']?.toString() ?? data['host']?.toString();
+    final status = data['status']?.toString();
+
+    final (statusColor, statusIcon) = switch (status) {
+      'paired' || 'ok' || 'done' || 'added' => (
+          scheme.primary,
+          Icons.check_circle_outline
+        ),
+      'error' || 'failed' => (scheme.error, Icons.error_outline),
+      'already_paired' || 'skipped' => (
+          scheme.onSurfaceVariant,
+          Icons.info_outline
+        ),
+      _ => (scheme.onSurfaceVariant, Icons.radio_button_unchecked),
+    };
+
+    return ListTile(
+      dense: true,
+      contentPadding: EdgeInsets.zero,
+      leading: Icon(statusIcon, size: 16, color: statusColor),
+      title: Text(title),
+      subtitle: subtitle == null
+          ? null
+          : Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
+      trailing: status == null
+          ? null
+          : Text(humanize(status),
+              style: TextStyle(
+                  color: statusColor,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600)),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -172,12 +220,7 @@ class _ActionDrawerState extends State<ActionDrawer> {
                 child: ListView(
                   shrinkWrap: true,
                   children: [
-                    for (final e in _items.values)
-                      ListTile(
-                        dense: true,
-                        leading: const Icon(Icons.add_circle_outline, size: 16),
-                        title: Text(e.label ?? '${e.data}'),
-                      ),
+                    for (final e in _items.values) _itemTile(context, e),
                   ],
                 ),
               ),
