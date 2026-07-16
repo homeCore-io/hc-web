@@ -47,6 +47,20 @@ class DevicesNotifier extends AsyncNotifier<List<DeviceState>> {
                   d.id == event.deviceId ? d.copyWith(available: avail) : d)
               .toList();
           state = AsyncData(updated);
+        } else if (event.type == 'custom' &&
+            event.data['event_type'] == 'device_deleted') {
+          // Core signals a device removal (plugin unregister, incl. unpairing a
+          // hub) as a Custom event: type "custom", event_type "device_deleted",
+          // with the id nested under `payload` — NOT a top-level device_id like
+          // state/availability events. Without this the tile lingered until a
+          // manual refresh. Drop it so the list updates live.
+          final payload = event.data['payload'];
+          final removedId =
+              payload is Map ? payload['device_id'] as String? : null;
+          if (removedId != null) {
+            state =
+                AsyncData(current.where((d) => d.id != removedId).toList());
+          }
         }
       });
     });
