@@ -20,13 +20,10 @@ class PluginsNotifier extends AsyncNotifier<List<PluginEntry>> {
         if (event.type == 'plugin_registered') {
           final id = event.data['plugin_id'] as String?;
           if (id == null) return;
-          final updated = current.map((p) {
-            if (p.pluginId != id) return p;
-            return PluginEntry(
-                pluginId: p.pluginId,
-                status: 'active',
-                registeredAt: p.registeredAt);
-          }).toList();
+          final updated = [
+            for (final p in current)
+              p.pluginId == id ? p.copyWith(status: 'active') : p
+          ];
           // If plugin not in list yet, add it.
           if (!updated.any((p) => p.pluginId == id)) {
             updated.add(PluginEntry(
@@ -38,13 +35,10 @@ class PluginsNotifier extends AsyncNotifier<List<PluginEntry>> {
         } else if (event.type == 'plugin_offline') {
           final id = event.data['plugin_id'] as String?;
           if (id == null) return;
-          final updated = current.map((p) {
-            if (p.pluginId != id) return p;
-            return PluginEntry(
-                pluginId: p.pluginId,
-                status: 'offline',
-                registeredAt: p.registeredAt);
-          }).toList();
+          final updated = [
+            for (final p in current)
+              p.pluginId == id ? p.copyWith(status: 'offline') : p
+          ];
           state = AsyncData(updated);
         }
       });
