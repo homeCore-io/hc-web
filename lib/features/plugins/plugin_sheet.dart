@@ -259,12 +259,9 @@ class _ConfigSection extends ConsumerWidget {
           child: _AmberButton(
             icon: HcIcons.pencil,
             label: 'Edit configuration',
-            onTap: () async {
-              await Navigator.of(context).maybePop();
-              if (context.mounted) {
-                await showPluginConfigEditor(context, ref, plugin);
-              }
-            },
+            // Stack the editor OVER this sheet (don't pop it) so its back arrow
+            // returns here — to the plugin's detail panel — not out to the list.
+            onTap: () => showPluginConfigEditor(context, ref, plugin),
           ),
         ),
       ]),

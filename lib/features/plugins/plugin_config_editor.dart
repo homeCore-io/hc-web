@@ -1,16 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/api/action_stream.dart';
+import '../../core/api/plugins_api.dart';
 import '../../core/dashboard/widget_registry.dart';
 import '../../core/models/plugin_config.dart';
 import '../../core/models/plugin_entry.dart';
 import '../../core/providers/plugin_config_provider.dart';
 import '../../core/providers/plugins_provider.dart';
+import '../../core/schema/plugin_capabilities.dart';
 import '../../core/schema/plugin_config_schema.dart';
 import '../../design/hc_icons.dart';
 import '../../design/skins.dart';
 import '../../design/tokens.dart';
 import '../../shell/hc_sheet.dart';
+import 'plugin_actions.dart';
 
 /// Open the plugin's config editor as a sheet: a schema-driven typed form when
 /// the plugin published a schema, with a raw-TOML tab as the fallback / escape.
@@ -142,16 +147,152 @@ class _ConfigFormState extends ConsumerState<_ConfigForm> {
     }
   }
 
+  /// Remove a paired hub: confirm, invoke the plugin's `unpair_bridge` action
+  /// (which unregisters the hub's devices + clears its stored key), then drop
+  /// its entry from operator config so a restart can't resurrect it.
+  Future<void> _removeBridge(Map<String, dynamic> bridge) async {
+    final bridgeId = (bridge['bridge_id'] ?? '').toString().trim();
+    final name = (bridge['name'] ?? '').toString().trim();
+    final label =
+        name.isNotEmpty ? name : (bridgeId.isNotEmpty ? bridgeId : 'this hub');
+    if (bridgeId.isEmpty) {
+      setState(() => _error = 'Cannot remove: this hub has no bridge_id');
+      return;
+    }
+
+    final t = HcTokens.of(context);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Remove hub?'),
+        content: Text(
+            'Removes $label and all of its devices from homeCore, and clears '
+            'its stored key. You can re-pair it later by pressing its link '
+            'button.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(c, false),
+              child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(c, true),
+            child: Text('Remove', style: TextStyle(color: t.accent.danger)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      // 1. Find + invoke unpair_bridge, awaiting its terminal event so the
+      //    device-removal + key-clear finish BEFORE the config-PUT restart.
+      final caps = await ref
+          .read(pluginCapabilitiesProvider(widget.plugin.pluginId).future);
+      final actions = caps?.actions ?? const <PluginAction>[];
+      PluginAction? action;
+      for (final a in actions) {
+        if (a.id == 'unpair_bridge') {
+          action = a;
+          break;
+        }
+      }
+      if (action == null) {
+        throw 'this plugin has no "unpair_bridge" action — rebuild/restart it';
+      }
+      final api = ref.read(pluginsApiProvider);
+      final outcome =
+          await api.invoke(widget.plugin.pluginId, action, {'bridge_id': bridgeId});
+      int removed = 0;
+      switch (outcome) {
+        case CommandDone(:final data):
+          removed = _devicesRemoved(data);
+        case CommandStreaming(:final requestId):
+          removed = await _awaitUnpair(requestId);
+        case CommandBusy(:final activeRequestId):
+          removed = await _awaitUnpair(activeRequestId);
+      }
+
+      // 2. Drop the hub from operator config (no-op for learned-only hubs).
+      //    The config watcher then restarts the plugin onto the clean state.
+      await _dropBridgeFromConfig(bridgeId);
+
+      ref.invalidate(pluginConfigProvider(widget.plugin.pluginId));
+      ref.invalidate(pluginsProvider);
+      messenger.showSnackBar(SnackBar(
+          content: Text(
+              'Removed $label · $removed device${removed == 1 ? '' : 's'} unregistered')));
+    } catch (e) {
+      setState(() => _error = 'Remove failed: $e');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  /// Follow the streaming `unpair_bridge` action to its terminal event and
+  /// return the reported device count. Throws on a failure terminal.
+  Future<int> _awaitUnpair(String requestId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('jwt_token');
+    if (token == null) return 0;
+    final events = openActionStream(
+      pluginId: widget.plugin.pluginId,
+      requestId: requestId,
+      token: token,
+    );
+    await for (final e in events) {
+      if (e.stage.isTerminal) {
+        if (e.stage.isFailure) {
+          throw e.message ?? 'the plugin reported a failure';
+        }
+        return _devicesRemoved(e.data);
+      }
+    }
+    return 0;
+  }
+
+  int _devicesRemoved(Object? data) =>
+      (data is Map && data['devices_removed'] is num)
+          ? (data['devices_removed'] as num).toInt()
+          : 0;
+
+  Future<void> _dropBridgeFromConfig(String bridgeId) async {
+    final config = widget.doc.config;
+    if (config == null) return;
+    final bridges = config['bridges'];
+    if (bridges is! List) return;
+    final kept = bridges
+        .where((b) => !(b is Map &&
+            (b['bridge_id'] ?? '').toString().toLowerCase() ==
+                bridgeId.toLowerCase()))
+        .toList();
+    if (kept.length == bridges.length) return; // learned-only; nothing in config
+    final patched = _deepCopy(config);
+    patched['bridges'] = kept;
+    await ref
+        .read(pluginsApiProvider)
+        .putConfig(widget.plugin.pluginId, config: patched);
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Header + tabs
+        // Header: back to the plugin panel, title, tabs, close
         Padding(
-          padding: EdgeInsets.fromLTRB(t.space.md, t.space.md, t.space.sm, 0),
+          padding: EdgeInsets.fromLTRB(t.space.xs, t.space.md, t.space.sm, 0),
           child: Row(children: [
+            IconButton(
+              icon: Icon(Icons.arrow_back_rounded,
+                  size: 20, color: t.surface.onBaseMuted),
+              tooltip: 'Back',
+              onPressed: () => Navigator.of(context).maybePop(),
+            ),
             Expanded(
               child: Text('${widget.plugin.displayName} configuration',
                   style: TextStyle(
@@ -162,6 +303,7 @@ class _ConfigFormState extends ConsumerState<_ConfigForm> {
             if (_hasForm && widget.doc.hasRaw) _tabs(t),
             IconButton(
               icon: Icon(HcIcons.x, size: 18, color: t.surface.onBaseMuted),
+              tooltip: 'Close',
               onPressed: () => Navigator.of(context).maybePop(),
             ),
           ]),
@@ -301,7 +443,8 @@ class _ConfigFormState extends ConsumerState<_ConfigForm> {
               }),
             ),
         ],
-        for (final path in f.objectArrays) _ArrayNote(t, path, widget.doc),
+        for (final path in f.objectArrays)
+          _ObjectArraySection(path, widget.doc, onRemove: _removeBridge),
       ],
     );
   }
@@ -488,45 +631,182 @@ class _TextInputState extends State<_TextInput> {
   }
 }
 
-/// A read-only note for an `array<object>` (e.g. Hue bridges) the flat form
-/// can't edit — pointing at the Raw TOML tab.
-class _ArrayNote extends StatelessWidget {
-  const _ArrayNote(this.t, this.path, this.doc);
-  final HcTokens t;
+/// Lists each object in an `array<object>` (e.g. Hue bridges / paired hubs).
+/// The flat form can't show these, and with more than one hub you need to see
+/// which are which and which are paired — a bare "N configured" count doesn't.
+class _ObjectArraySection extends StatelessWidget {
+  const _ObjectArraySection(this.path, this.doc, {this.onRemove});
   final String path;
   final PluginConfigDoc doc;
 
+  /// Per-item destructive action (Remove hub). Null hides the row menu.
+  final void Function(Map<String, dynamic> item)? onRemove;
+
+  static const _primaryKeys = [
+    'name', 'label', 'title', 'bridge_id', 'id', 'host', 'ip'
+  ];
+  static const _subtitleKeys = [
+    'host', 'ip', 'address', 'bridge_id', 'serial', 'model'
+  ];
+
   @override
   Widget build(BuildContext context) {
-    final items = doc.config?[path];
-    final count = items is List ? items.length : 0;
+    final t = HcTokens.of(context);
+    final raw = doc.config?[path];
+    final items = raw is List
+        ? raw.whereType<Map>().map((m) => m.cast<String, dynamic>()).toList()
+        : const <Map<String, dynamic>>[];
+
     return Padding(
       padding: EdgeInsets.only(top: t.space.md),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(path.toUpperCase(),
-            style: TextStyle(
-                color: t.surface.onBaseMuted,
-                fontSize: 10.5,
-                letterSpacing: 1.4,
-                fontWeight: FontWeight.w700)),
-        const SizedBox(height: 6),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 12),
-          decoration: BoxDecoration(
-            color: t.surface.sunken,
-            borderRadius: t.radius.smR,
-            border: Border.all(color: t.stroke.hairline),
-          ),
-          child: Row(children: [
-            Text('$count configured',
-                style: TextStyle(color: t.surface.onBase, fontSize: 13.5)),
-            const Spacer(),
-            Text('Edit in Raw TOML',
-                style: TextStyle(color: t.surface.onBaseMuted, fontSize: 12.5)),
-          ]),
-        ),
+        Row(children: [
+          Text(path.toUpperCase(),
+              style: TextStyle(
+                  color: t.surface.onBaseMuted,
+                  fontSize: 10.5,
+                  letterSpacing: 1.4,
+                  fontWeight: FontWeight.w700)),
+          const SizedBox(width: 6),
+          Text('${items.length}',
+              style: TextStyle(
+                  color: t.surface.onBaseMuted.withValues(alpha: 0.65),
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w700)),
+        ]),
+        const SizedBox(height: 8),
+        if (items.isEmpty)
+          _card(t,
+              child: Text('None paired yet',
+                  style:
+                      TextStyle(color: t.surface.onBaseMuted, fontSize: 13)))
+        else
+          for (var i = 0; i < items.length; i++) ...[
+            if (i > 0) const SizedBox(height: 8),
+            _row(t, items[i], i),
+          ],
       ]),
     );
+  }
+
+  Widget _card(HcTokens t, {required Widget child}) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+        decoration: BoxDecoration(
+          color: t.surface.sunken,
+          borderRadius: t.radius.smR,
+          border: Border.all(color: t.stroke.hairline),
+        ),
+        child: child,
+      );
+
+  Widget _row(HcTokens t, Map<String, dynamic> item, int i) {
+    final title = _primary(item, i);
+    final sub = _subtitle(item, title);
+    return _card(
+      t,
+      child: Row(children: [
+        Icon(Icons.router_rounded, size: 20, color: t.surface.onBaseMuted),
+        const SizedBox(width: 11),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(title,
+                  style: TextStyle(
+                      color: t.surface.onBase,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600)),
+              if (sub != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Text(sub,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          color: t.surface.onBaseMuted,
+                          fontSize: 12,
+                          fontFeatures: t.numericFontFeatures)),
+                ),
+            ],
+          ),
+        ),
+        if (_paired(item)) _pairedChip(t),
+        if (onRemove != null) ...[
+          const SizedBox(width: 2),
+          _menu(t, item),
+        ],
+      ]),
+    );
+  }
+
+  Widget _menu(HcTokens t, Map<String, dynamic> item) =>
+      PopupMenuButton<String>(
+        icon: Icon(Icons.more_vert, size: 18, color: t.surface.onBaseMuted),
+        tooltip: 'Hub actions',
+        color: t.surface.overlay,
+        onSelected: (v) {
+          if (v == 'remove') onRemove!(item);
+        },
+        itemBuilder: (_) => [
+          PopupMenuItem(
+            value: 'remove',
+            child: Row(children: [
+              Icon(HcIcons.trash, size: 15, color: t.accent.danger),
+              const SizedBox(width: 10),
+              Text('Remove hub', style: TextStyle(color: t.accent.danger)),
+            ]),
+          ),
+        ],
+      );
+
+  Widget _pairedChip(HcTokens t) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: t.accent.active.withValues(alpha: 0.14),
+          borderRadius: BorderRadius.circular(t.radius.pill),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(HcIcons.check, size: 11, color: t.accent.active),
+          const SizedBox(width: 4),
+          Text('Paired',
+              style: TextStyle(
+                  color: t.accent.active,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600)),
+        ]),
+      );
+
+  String _primary(Map<String, dynamic> item, int i) {
+    for (final k in _primaryKeys) {
+      final v = item[k];
+      if (v is String && v.isNotEmpty) return v;
+    }
+    return '${path.replaceAll(RegExp(r's$'), '')} ${i + 1}';
+  }
+
+  String? _subtitle(Map<String, dynamic> item, String title) {
+    final parts = <String>[];
+    for (final k in _subtitleKeys) {
+      final v = item[k];
+      if (v is String && v.isNotEmpty && v != title && !parts.contains(v)) {
+        parts.add(v);
+      }
+      if (parts.length == 2) break;
+    }
+    return parts.isEmpty ? null : parts.join('  ·  ');
+  }
+
+  // Paired = a secret (app_key/token) is stored; on the wire it's the redacted
+  // sentinel, so either that or any non-empty value counts.
+  bool _paired(Map<String, dynamic> item) {
+    for (final e in item.entries) {
+      if (isSecretFieldName(e.key)) {
+        final v = e.value;
+        if (v == redactedSentinel || (v is String && v.isNotEmpty)) return true;
+      }
+    }
+    return false;
   }
 }
 
