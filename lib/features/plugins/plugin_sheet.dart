@@ -398,32 +398,42 @@ class _DangerRow extends ConsumerWidget {
         onPressed: () => _confirm(context, ref),
         icon: Icon(HcIcons.trash, size: 15, color: t.accent.danger),
         label:
-            Text('Deregister plugin', style: TextStyle(color: t.accent.danger)),
+            Text('Uninstall plugin', style: TextStyle(color: t.accent.danger)),
       ),
     );
   }
 
   Future<void> _confirm(BuildContext context, WidgetRef ref) async {
+    final deviceCount = plugin.deviceCount;
+    final devicesLine = deviceCount > 0
+        ? ' and remove its $deviceCount device${deviceCount == 1 ? '' : 's'} from homeCore'
+        : '';
+    final messenger = ScaffoldMessenger.of(context);
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
-        title: const Text('Deregister plugin?'),
+        title: const Text('Uninstall plugin?'),
         content: Text(
-            'Removes ${plugin.displayName} from the registry. The plugin process '
-            'is not stopped; its learned state and retained config topic are cleared.'),
+            'Stops ${plugin.displayName}$devicesLine, and clears its learned '
+            'state. Its saved configuration is kept.'
+            '${plugin.managed ? '\n\nNote: while it is still declared in config it will '
+                'return on the next core restart (full removal of the declaration '
+                'is coming with the plugin registry).' : ''}'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(c, false),
               child: const Text('Cancel')),
           TextButton(
               onPressed: () => Navigator.pop(c, true),
-              child: const Text('Deregister')),
+              child: const Text('Uninstall')),
         ],
       ),
     );
     if (ok == true) {
       await ref.read(pluginsApiProvider).deregister(plugin.pluginId);
       ref.invalidate(pluginsProvider);
+      messenger.showSnackBar(
+          SnackBar(content: Text('Uninstalled ${plugin.displayName}')));
       if (context.mounted) Navigator.of(context).maybePop();
     }
   }
