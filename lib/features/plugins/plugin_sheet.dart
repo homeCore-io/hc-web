@@ -10,7 +10,7 @@ import '../../design/hc_icons.dart';
 import '../../design/skins.dart';
 import '../../design/tokens.dart';
 import '../../shell/hc_sheet.dart';
-import '../plugins/plugin_actions.dart';
+import 'plugin_actions.dart';
 import 'plugin_config_editor.dart';
 
 /// Slide the plugin detail over the list — status, config, actions, devices —

@@ -7,7 +7,7 @@ import 'design/skins.dart';
 import 'features/admin/admin_shell.dart';
 import 'features/admin/areas_page.dart';
 import 'features/admin/logs_page.dart';
-import 'features/admin/plugins_page.dart';
+import 'features/plugins/plugins_page.dart';
 import 'features/admin/system_page.dart';
 import 'features/admin/users_page.dart';
 import 'features/auth/login_page.dart';
