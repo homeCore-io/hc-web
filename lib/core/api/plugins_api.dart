@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 
+import '../models/plugin_config.dart';
 import '../schema/plugin_capabilities.dart';
 import 'homecore_client.dart';
 
@@ -94,5 +95,50 @@ class PluginsApi {
   Future<void> lifecycle(String id, String action) async {
     // action ∈ start | stop | restart
     await client.dio.post('/plugins/$id/$action');
+  }
+
+  /// The plugin's operator config (secrets redacted). 404 when the plugin has
+  /// no config path and no management RPC — the UI then shows nothing to edit.
+  Future<PluginConfigDoc?> getConfig(String id) async {
+    try {
+      final response = await client.dio.get('/plugins/$id/config');
+      return PluginConfigDoc.fromJson(response.data as Map);
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) return null;
+      rethrow;
+    }
+  }
+
+  /// Replace the config. Pass exactly one of [raw] (TOML text, written verbatim)
+  /// or [config] (JSON, serialised to TOML by core). Redacted secrets left as
+  /// `__redacted__` are restored to their stored value by core, so an untouched
+  /// secret survives the round-trip. Does not restart the plugin.
+  Future<void> putConfig(
+    String id, {
+    String? raw,
+    Map<String, dynamic>? config,
+  }) async {
+    assert(
+      (raw != null) ^ (config != null),
+      'putConfig needs exactly one of raw or config',
+    );
+    await client.dio.put(
+      '/plugins/$id/config',
+      data: raw != null ? {'raw': raw} : {'config': config},
+    );
+  }
+
+  /// The plugin's operator-config JSON Schema, or null when it published none
+  /// (404) — in which case the editor falls back to the raw-TOML view.
+  Future<Map<String, dynamic>?> configSchema(String id) async {
+    try {
+      final response = await client.dio.get('/plugins/$id/config/schema');
+      final data = response.data as Map;
+      final schema = data['schema'];
+      return schema == null ? null : Map<String, dynamic>.from(schema as Map);
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) return null;
+      rethrow;
+    }
   }
 }
