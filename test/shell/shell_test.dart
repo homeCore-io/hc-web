@@ -61,7 +61,8 @@ void main() {
       expect(shellFor('/wall'), HcShell.wall);
       expect(shellFor('/wall/kitchen'), HcShell.wall);
       expect(shellFor('/admin/users'), HcShell.admin);
-      expect(shellFor('/admin/plugins'), HcShell.admin);
+      // Plugins moved out of the admin portal into the app-native Manage surface.
+      expect(shellFor('/plugins'), HcShell.touch);
       expect(shellFor('/devices'), HcShell.touch);
       expect(shellFor('/automations/abc'), HcShell.touch);
     });

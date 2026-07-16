@@ -7,7 +7,6 @@ class AdminShell extends StatelessWidget {
 
   static const _tabs = [
     (label: 'Users', icon: Icons.people_outline, path: '/admin/users'),
-    (label: 'Plugins', icon: Icons.extension_outlined, path: '/admin/plugins'),
     (label: 'Areas', icon: Icons.room_outlined, path: '/admin/areas'),
     (
       label: 'System',

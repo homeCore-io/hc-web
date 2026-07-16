@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/providers/automations_provider.dart';
 import '../../core/providers/devices_provider.dart';
+import '../../core/providers/plugins_provider.dart';
 import '../../design/hc_icons.dart';
 import '../../design/tokens.dart';
 
@@ -27,6 +28,10 @@ class ManagePage extends ConsumerWidget {
     final rules = ref.watch(automationsProvider).valueOrNull;
     final broken = rules?.where((r) => r.hasError).length ?? 0;
     final disabled = rules?.where((r) => !r.enabled).length ?? 0;
+
+    final plugins = ref.watch(pluginsProvider).valueOrNull;
+    final pluginsRunning = plugins?.where((p) => p.isActive).length ?? 0;
+    final pluginsOffline = plugins?.where((p) => p.isOffline).length ?? 0;
 
     final entries = <_Entry>[
       _Entry(
@@ -55,6 +60,18 @@ class ManagePage extends ConsumerWidget {
       const _Entry(route: '/media', icon: HcIcons.media, title: 'Media'),
       const _Entry(route: '/cameras', icon: HcIcons.camera, title: 'Cameras'),
       const _Entry(route: '/events', icon: HcIcons.events, title: 'Events'),
+      _Entry(
+        route: '/plugins',
+        icon: HcIcons.plugins,
+        title: 'Plugins',
+        detail: plugins == null
+            ? null
+            : [
+                '$pluginsRunning running',
+                if (pluginsOffline > 0) '$pluginsOffline offline',
+              ].join(' · '),
+        alert: pluginsOffline > 0,
+      ),
       const _Entry(route: '/admin/users', icon: HcIcons.admin, title: 'Admin'),
     ];
 

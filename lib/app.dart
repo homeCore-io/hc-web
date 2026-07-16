@@ -145,6 +145,7 @@ GoRouter _buildRouter(Ref ref) {
           GoRoute(path: '/modes', builder: (_, __) => const ModesPage()),
           GoRoute(path: '/events', builder: (_, __) => const EventsPage()),
           GoRoute(path: '/media', builder: (_, __) => const MediaPage()),
+          GoRoute(path: '/plugins', builder: (_, __) => const PluginsPage()),
           GoRoute(
               path: '/devices/:id',
               builder: (_, state) =>
@@ -159,9 +160,6 @@ GoRouter _buildRouter(Ref ref) {
             routes: [
               GoRoute(
                   path: '/admin/users', builder: (_, __) => const UsersPage()),
-              GoRoute(
-                  path: '/admin/plugins',
-                  builder: (_, __) => const PluginsPage()),
               GoRoute(
                   path: '/admin/areas', builder: (_, __) => const AreasPage()),
               GoRoute(
