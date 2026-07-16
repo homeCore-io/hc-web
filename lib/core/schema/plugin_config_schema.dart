@@ -73,6 +73,60 @@ SchemaFields translateSchema(Map<String, dynamic> schema) {
   );
 }
 
+/// When a plugin publishes no schema, infer a structured form from the *values*
+/// of its parsed config, so the editor is never a raw text box. Kinds come from
+/// the JSON value types (bool→toggle, num→number, string→text, primitive
+/// list→stringList, list-of-maps→bespoke). There's no enum/range/description
+/// info, so those niceties are absent — but it beats a TOML blob, and Raw TOML
+/// stays available as a tab.
+SchemaFields inferFieldsFromConfig(Map<String, dynamic> config) {
+  final fields = <WidgetConfigField>[];
+  final secrets = <String>{};
+  final objectArrays = <String>[];
+  final sectionOf = <String, String>{};
+
+  void walk(String prefix, String? section, Map<String, dynamic> m) {
+    for (final e in m.entries) {
+      final leaf = e.key;
+      final path = prefix.isEmpty ? leaf : '$prefix.$leaf';
+      final v = e.value;
+      final sect = section ?? _humanize(leaf);
+      if (v is Map) {
+        walk(path, sect, v.cast<String, dynamic>());
+        continue;
+      }
+      if (v is List) {
+        if (v.isNotEmpty && v.first is Map) {
+          objectArrays.add(path);
+        } else {
+          fields.add(WidgetConfigField(path, WidgetConfigKind.stringList,
+              label: _humanize(leaf)));
+          sectionOf[path] = sect;
+        }
+        continue;
+      }
+      final kind = v is bool
+          ? WidgetConfigKind.boolean
+          : v is num
+              ? WidgetConfigKind.integer
+              : WidgetConfigKind.text;
+      fields.add(WidgetConfigField(path, kind, label: _humanize(leaf)));
+      sectionOf[path] = sect;
+      if (isSecretFieldName(leaf)) secrets.add(path);
+    }
+  }
+
+  walk('', null, config);
+  return SchemaFields(
+    fields: fields,
+    secretFields: secrets,
+    minimums: const {},
+    maximums: const {},
+    objectArrays: objectArrays,
+    sectionOf: sectionOf,
+  );
+}
+
 class _Builder {
   _Builder(this.defs);
   final Map<String, dynamic> defs;

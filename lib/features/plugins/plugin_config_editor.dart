@@ -77,15 +77,27 @@ class _ConfigFormState extends ConsumerState<_ConfigForm> {
   bool _saving = false;
   String? _error;
 
-  bool get _hasSchema => widget.fields != null && !widget.fields!.isEmpty;
+  /// The form fields: the plugin's published schema when it has one, otherwise
+  /// inferred from the config values so the default view is never a text box.
+  late final SchemaFields? _fields;
+  bool get _hasForm {
+    final f = _fields;
+    return f != null && !f.isEmpty;
+  }
 
   @override
   void initState() {
     super.initState();
     _flat = widget.doc.config == null ? {} : flattenConfig(widget.doc.config!);
     _toml = TextEditingController(text: widget.doc.raw ?? '');
-    // Without a schema there are no form fields, so the raw view is the editor.
-    _rawMode = !_hasSchema;
+    final schema = widget.fields;
+    _fields = (schema != null && !schema.isEmpty)
+        ? schema
+        : (widget.doc.config != null
+            ? inferFieldsFromConfig(widget.doc.config!)
+            : null);
+    // Only fall back to the raw view when there is genuinely no form to show.
+    _rawMode = !_hasForm;
   }
 
   @override
@@ -104,7 +116,7 @@ class _ConfigFormState extends ConsumerState<_ConfigForm> {
       if (_rawMode) {
         await api.putConfig(widget.plugin.pluginId, raw: _toml.text);
       } else {
-        final validate = buildValidator(widget.fields!);
+        final validate = buildValidator(_fields!);
         final err = validate(_flat);
         if (err != null) {
           setState(() {
@@ -147,7 +159,7 @@ class _ConfigFormState extends ConsumerState<_ConfigForm> {
                       fontSize: 16,
                       fontWeight: FontWeight.w600)),
             ),
-            if (_hasSchema && widget.doc.hasRaw) _tabs(t),
+            if (_hasForm && widget.doc.hasRaw) _tabs(t),
             IconButton(
               icon: Icon(HcIcons.x, size: 18, color: t.surface.onBaseMuted),
               onPressed: () => Navigator.of(context).maybePop(),
@@ -257,7 +269,7 @@ class _ConfigFormState extends ConsumerState<_ConfigForm> {
       );
 
   Widget _formView(HcTokens t) {
-    final f = widget.fields!;
+    final f = _fields!;
     // Group by section, preserving first-seen order.
     final order = <String>[];
     final bySection = <String, List<WidgetConfigField>>{};
@@ -380,7 +392,8 @@ class _FieldRow extends StatelessWidget {
           initial: value?.toString() ?? '',
           width: 96,
           numeric: true,
-          onChanged: (s) => onChanged(int.tryParse(s)),
+          // num, not int: inferred configs contain doubles (thresholds, lat/lon).
+          onChanged: (s) => onChanged(num.tryParse(s)),
         );
       case WidgetConfigKind.stringList:
         final list = value is List ? (value as List).join(', ') : '';

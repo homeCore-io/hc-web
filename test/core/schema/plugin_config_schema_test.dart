@@ -124,6 +124,38 @@ void main() {
     });
   });
 
+  group('inferFieldsFromConfig (no-schema fallback)', () {
+    final s = inferFieldsFromConfig({
+      'logging': {'compress': true, 'level': 'debug', 'max_size_mb': 100},
+      'yolink': {
+        'poll_interval_secs': 3600,
+        'local': {'client_secret': 'xyz', 'api_port': 1080},
+      },
+      'bridges': [
+        {'host': '10.0.0.1'}
+      ],
+      'tags': ['a', 'b'],
+    });
+
+    WidgetConfigField f(String n) => s.fields.firstWhere((x) => x.name == n);
+
+    test('infers kinds from JSON value types', () {
+      expect(f('logging.compress').kind, WidgetConfigKind.boolean);
+      expect(f('logging.level').kind, WidgetConfigKind.text);
+      expect(f('logging.max_size_mb').kind, WidgetConfigKind.integer);
+      expect(f('yolink.local.api_port').kind, WidgetConfigKind.integer);
+      expect(f('tags').kind, WidgetConfigKind.stringList);
+    });
+
+    test('flattens + groups + masks secrets, and defers object arrays', () {
+      expect(f('yolink.poll_interval_secs').name, 'yolink.poll_interval_secs');
+      expect(s.sectionOf['yolink.local.api_port'], 'Yolink');
+      expect(s.secretFields, contains('yolink.local.client_secret'));
+      expect(s.objectArrays, contains('bridges'));
+      expect(s.fields.map((x) => x.name), isNot(contains('bridges')));
+    });
+  });
+
   group('flatten/unflatten config', () {
     test('round-trips a nested document', () {
       final nested = {
