@@ -78,16 +78,31 @@ class _Builder {
   final objectArrays = <String>[];
   final sectionOf = <String, String>{};
 
-  /// Follow a `$ref` (`#/definitions/Foo`) to its definition; return the node
-  /// unchanged if it isn't a ref.
+  /// Follow a `$ref` (`#/definitions/Foo`) to its definition, merging in the
+  /// referencing site's own keywords (`default`, `description`). schemars wraps
+  /// a `$ref` in a single-element `allOf` whenever it also emits a sibling like
+  /// `default` — `{allOf:[{$ref}], default:…}` — so unwrap that first. Returns
+  /// the node unchanged when it isn't a ref.
   Map<String, dynamic> resolve(Map<String, dynamic> node) {
-    final ref = node[r'$ref'];
-    if (ref is String && ref.startsWith('#/definitions/')) {
-      final name = ref.substring('#/definitions/'.length);
-      final def = defs[name];
-      if (def is Map) return def.cast<String, dynamic>();
+    var n = node;
+    final allOf = n['allOf'];
+    if (allOf is List && allOf.length == 1 && allOf.first is Map) {
+      n = {...n}..remove('allOf');
+      (allOf.first as Map).forEach((k, v) => n[k.toString()] = v);
     }
-    return node;
+    final ref = n[r'$ref'];
+    if (ref is String && ref.startsWith('#/definitions/')) {
+      final def = defs[ref.substring('#/definitions/'.length)];
+      if (def is Map) {
+        final merged =
+            def.cast<String, dynamic>().map((k, v) => MapEntry(k, v));
+        n.forEach((k, v) {
+          if (k != r'$ref' && k != 'allOf') merged.putIfAbsent(k, () => v);
+        });
+        return merged;
+      }
+    }
+    return n;
   }
 
   void walkObject(

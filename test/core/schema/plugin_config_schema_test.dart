@@ -8,7 +8,13 @@ import 'package:hc_web/core/schema/plugin_config_schema.dart';
 Map<String, dynamic> _hueSchema() => {
       'type': 'object',
       'properties': {
-        'hue': {r'$ref': '#/definitions/HueConfig'},
+        // schemars wraps a $ref in allOf whenever it also emits `default`.
+        'hue': {
+          'allOf': [
+            {r'$ref': '#/definitions/HueConfig'}
+          ],
+          'default': <String, dynamic>{},
+        },
         'homecore': {r'$ref': '#/definitions/HomecoreConfig'},
         'bridges': {
           'type': 'array',
@@ -27,17 +33,28 @@ Map<String, dynamic> _hueSchema() => {
               'default': 300,
               'description': 'How often to re-walk the bridge',
             },
-            'display': {r'$ref': '#/definitions/HueDisplayConfig'},
+            'display': {
+              'allOf': [
+                {r'$ref': '#/definitions/HueDisplayConfig'}
+              ],
+              'default': <String, dynamic>{},
+            },
           },
         },
         'HueDisplayConfig': {
           'type': 'object',
           'properties': {
+            // enum via an allOf-wrapped ref, as schemars emits it.
             'temperature_unit': {
-              'enum': ['c', 'f'],
+              'allOf': [
+                {r'$ref': '#/definitions/TemperatureUnit'}
+              ],
               'default': 'c',
             },
           },
+        },
+        'TemperatureUnit': {
+          'enum': ['c', 'f'],
         },
         'HomecoreConfig': {
           'type': 'object',
