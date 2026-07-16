@@ -10,7 +10,11 @@ import '../../core/text/humanize.dart';
 /// is hiding it. Every layout system that persists an explicit order has this
 /// bug waiting in it.
 class HomeArrangement {
-  const HomeArrangement({this.order = const [], this.hidden = const {}});
+  const HomeArrangement({
+    this.order = const [],
+    this.hidden = const {},
+    this.columns = const {},
+  });
 
   /// Room keys, in the order the user put them. Rooms absent from this list are
   /// NOT unknown-and-therefore-hidden — they are simply new. See [apply].
@@ -19,7 +23,15 @@ class HomeArrangement {
   /// Rooms the user explicitly hid. Only an explicit act hides a room.
   final Set<String> hidden;
 
-  bool get isEmpty => order.isEmpty && hidden.isEmpty;
+  /// The column a card is PINNED to (0-based), set by dragging it there. A card
+  /// absent from this map is auto-placed into the shortest column — so an
+  /// untouched board balances itself, and only the cards you move stay put.
+  final Map<String, int> columns;
+
+  /// The column [key] is pinned to, or null if it should auto-place.
+  int? columnOf(String key) => columns[key];
+
+  bool get isEmpty => order.isEmpty && hidden.isEmpty && columns.isEmpty;
 
   /// The bucket for devices with no area. It is not a room, so it never leads.
   static const kNoRoom = 'No room';
@@ -53,10 +65,15 @@ class HomeArrangement {
     return a.toLowerCase().compareTo(b.toLowerCase());
   }
 
-  HomeArrangement copyWith({List<String>? order, Set<String>? hidden}) =>
+  HomeArrangement copyWith({
+    List<String>? order,
+    Set<String>? hidden,
+    Map<String, int>? columns,
+  }) =>
       HomeArrangement(
         order: order ?? this.order,
         hidden: hidden ?? this.hidden,
+        columns: columns ?? this.columns,
       );
 
   // -- persistence ----------------------------------------------------------
@@ -72,6 +89,7 @@ class HomeArrangement {
   static const _kAreaKey = 'area';
   static const _kHiddenKey = 'hidden';
   static const _kOrderKey = 'order';
+  static const _kColKey = 'col';
 
   /// A private marker type, NOT `device_grid`. Two reasons the old type was a
   /// bug: core validates `device_grid` and rejects one without a
@@ -107,6 +125,11 @@ class HomeArrangement {
         for (final w in rooms)
           if (w.config[_kHiddenKey] == true) w.config[_kAreaKey] as String,
       },
+      columns: {
+        for (final w in rooms)
+          if (w.config[_kColKey] is num)
+            w.config[_kAreaKey] as String: (w.config[_kColKey] as num).toInt(),
+      },
     );
   }
 
@@ -131,6 +154,7 @@ class HomeArrangement {
             _kAreaKey: ordered[i],
             _kOrderKey: i,
             if (hidden.contains(ordered[i])) _kHiddenKey: true,
+            if (columns.containsKey(ordered[i])) _kColKey: columns[ordered[i]],
           },
         ),
     ];

@@ -128,6 +128,20 @@ void main() {
       expect(placedIds.any((id) => id.startsWith('room_')), isFalse);
     });
 
+    test('a pinned column survives the round trip', () {
+      const a = HomeArrangement(
+        order: ['kitchen', 'bathroom', 'garage'],
+        columns: {'bathroom': 2, 'garage': 0},
+      );
+      final saved = a.toDashboard(_blank(), ['kitchen', 'bathroom', 'garage']);
+      final read = HomeArrangement.fromDashboard(saved);
+
+      expect(read.columnOf('bathroom'), 2);
+      expect(read.columnOf('garage'), 0);
+      // A card the user never dragged has no pinned column — it auto-places.
+      expect(read.columnOf('kitchen'), isNull);
+    });
+
     test('a real widget keeps its placement when the arrangement is saved', () {
       final withCard = _blank().copyWith(
         widgets: [

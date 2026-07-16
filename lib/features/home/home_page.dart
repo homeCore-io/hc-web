@@ -110,24 +110,26 @@ class _HomePageState extends ConsumerState<HomePage> {
             hidden.contains(room) ? hidden.remove(room) : hidden.add(room);
             _draft = _draft!.copyWith(hidden: hidden);
           }),
-          onCommitOrder: (order) => _persistOrder(devices, homeCams, order),
+          onCommit: (order, columns) =>
+              _persistLayout(devices, homeCams, order, columns),
         ),
       ),
     );
   }
 
-  /// Save the order from a direct card drag straight away — no Arrange mode.
+  /// Save the layout from a direct card drag straight away — no Arrange mode.
   /// Hidden rooms are not in the dragged list (they are not on screen), so their
   /// hidden state is preserved and they append in the arrangement.
-  Future<void> _persistOrder(
+  Future<void> _persistLayout(
     List<DeviceState> devices,
     List<Camera> homeCams,
     List<String> order,
+    Map<String, int> columns,
   ) async {
     final dashboard = ref.read(defaultDashboardProvider);
     if (dashboard == null) return;
     final current = HomeArrangement.fromDashboard(dashboard);
-    final next = current.copyWith(order: order);
+    final next = current.copyWith(order: order, columns: columns);
     try {
       await ref.read(dashboardsProvider.notifier).updateDashboard(
             next.toDashboard(dashboard, _orderKeys(devices, homeCams)),
@@ -244,7 +246,7 @@ class _House extends ConsumerStatefulWidget {
     required this.arranging,
     required this.onReorder,
     required this.onToggleHidden,
-    required this.onCommitOrder,
+    required this.onCommit,
   });
 
   final List<DeviceState> devices;
@@ -253,9 +255,10 @@ class _House extends ConsumerStatefulWidget {
   final void Function(int from, int to) onReorder;
   final ValueChanged<String> onToggleHidden;
 
-  /// Persist a new order after a direct card drag. The list is the visible keys
-  /// in their new sequence; hidden rooms keep their state and append.
-  final ValueChanged<List<String>> onCommitOrder;
+  /// Persist a new layout after a direct card drag: the visible keys in their new
+  /// sequence, and each dragged card's pinned column. Hidden rooms keep their
+  /// state and append.
+  final void Function(List<String> order, Map<String, int> columns) onCommit;
 
   @override
   ConsumerState<_House> createState() => _HouseState();
@@ -273,46 +276,65 @@ class _HouseState extends ConsumerState<_House> {
       });
 
   // Direct drag: long-press a card to lift it; a ghost chip follows the cursor
-  // and a bright bar shows where it will land. Reordering the greedy masonry
-  // live re-packs every card and reads as chaos, so the board holds still and
-  // only settles on drop.
+  // and a bright bar shows where it will land. The board holds still and settles
+  // on drop. Crucially the card lands WHERE you drop it — the column and the slot
+  // you chose — not wherever a balancer decides. Each card remembers its column
+  // (HomeArrangement.columns); untouched cards auto-place into the shortest
+  // column, so a fresh board is balanced and only what you move stays pinned.
   //
-  // The drop is handled by DragTarget.onAccept — the target Flutter reports under
-  // the pointer at release — and the landing bar by its `candidateData`, which it
-  // rebuilds on its own. An earlier version tracked the target in state and
-  // setState'd on every hover, which rebuilt every DragTarget mid-drag and made
-  // the drag machinery lose the target when crossing between columns. No hover
-  // state now: nothing to lose.
+  // The drop is handled by DragTarget.onAccept (the target Flutter reports under
+  // the pointer at release, robust across columns) and the landing bar by its
+  // `candidateData` (rebuilt on its own — no hover state to lose mid-drag).
 
-  /// Reorder so [dragged] lands just before [before], within [keys], and save.
-  void _commitDrop(String dragged, String before, List<String> keys) {
+  /// Drop [dragged] into [col], just before [before], and save. A null [col]
+  /// un-pins it (a full-width hero has no column).
+  void _dropBefore(String dragged, String before, int? col, List<String> keys) {
     if (dragged == before) return;
     final order = [...keys]..remove(dragged);
     final at = order.indexOf(before);
     order.insert(at < 0 ? order.length : at, dragged);
-    if (!_sameOrder(order, keys)) widget.onCommitOrder(order);
+    _commit(dragged, col, order);
   }
 
-  /// Reorder so [dragged] lands at the very end (dropped past every card).
-  void _commitToEnd(String dragged, List<String> keys) {
+  /// Drop [dragged] at the BOTTOM of [col] — after [lastInCol], the column's
+  /// current last card (null if the column is empty).
+  void _dropIntoColumn(
+    String dragged,
+    int col,
+    String? lastInCol,
+    List<String> keys,
+  ) {
     final order = [...keys]..remove(dragged);
-    order.add(dragged);
-    if (!_sameOrder(order, keys)) widget.onCommitOrder(order);
+    final anchor = (lastInCol != null && lastInCol != dragged)
+        ? order.indexOf(lastInCol)
+        : -1;
+    order.insert(anchor < 0 ? order.length : anchor + 1, dragged);
+    _commit(dragged, col, order);
   }
 
-  static bool _sameOrder(List<String> a, List<String> b) {
-    if (a.length != b.length) return false;
-    for (var i = 0; i < a.length; i++) {
-      if (a[i] != b[i]) return false;
+  /// The column every card currently renders in — recorded each build. A drop
+  /// pins the WHOLE board to this, then moves only the dragged card, so nothing
+  /// else shifts. Without it, an untouched card re-balances the moment any other
+  /// card is pinned, and the board reshuffles under you.
+  final Map<String, int> _renderedColumns = {};
+
+  void _commit(String dragged, int? col, List<String> order) {
+    final columns = {..._renderedColumns};
+    if (col == null) {
+      columns.remove(dragged);
+    } else {
+      columns[dragged] = col;
     }
-    return true;
+    widget.onCommit(order, columns);
   }
 
   /// Wraps a card so it can be picked up and dropped onto. [label] names the
-  /// ghost chip; [keys] is the current sequence (stable during a drag).
+  /// ghost chip; [col] is the column this card sits in (null for a full-width
+  /// hero); [keys] is the current sequence (stable during a drag).
   Widget _arrangeable(
     String key,
     String label,
+    int? col,
     List<String> keys,
     Widget card,
   ) {
@@ -320,13 +342,17 @@ class _HouseState extends ConsumerState<_House> {
 
     return DragTarget<String>(
       onWillAcceptWithDetails: (d) => d.data != key,
-      onAcceptWithDetails: (d) => _commitDrop(d.data, key, keys),
+      onAcceptWithDetails: (d) => _dropBefore(d.data, key, col, keys),
       builder: (context, candidate, rejected) {
         final active = candidate.any((c) => c != null && c != key);
         return LongPressDraggable<String>(
           data: key,
+          dragAnchorStrategy: pointerDragAnchorStrategy,
           hapticFeedbackOnStart: true,
-          feedback: _DragChip(label: label),
+          feedback: FractionalTranslation(
+            translation: const Offset(0.08, 0.4),
+            child: _DragChip(label: label),
+          ),
           childWhenDragging:
               Opacity(opacity: 0.35, child: IgnorePointer(child: card)),
           child: Stack(
@@ -355,6 +381,41 @@ class _HouseState extends ConsumerState<_House> {
                 ),
             ],
           ),
+        );
+      },
+    );
+  }
+
+  /// The drop zone at the bottom of a column: dropping here pins a card to this
+  /// column, after its current last card. It stays a slim strip until a card is
+  /// held over it, then opens into a labelled slot.
+  Widget _columnTail(int col, String? lastInCol, List<String> keys) {
+    final t = HcTokens.of(context);
+    return DragTarget<String>(
+      onWillAcceptWithDetails: (d) => true,
+      onAcceptWithDetails: (d) => _dropIntoColumn(d.data, col, lastInCol, keys),
+      builder: (context, candidate, rejected) {
+        final active = candidate.isNotEmpty;
+        return AnimatedContainer(
+          duration: t.motion.d(t.motion.fast),
+          height: active ? 60 : 24,
+          margin: EdgeInsets.only(bottom: t.space.md),
+          decoration: active
+              ? BoxDecoration(
+                  color: t.accent.active.withValues(alpha: 0.08),
+                  border: Border.all(color: t.accent.active, width: 1.5),
+                  borderRadius: t.radius.lgR,
+                )
+              : null,
+          alignment: Alignment.center,
+          child: active
+              ? Text('Drop in this column',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: t.accent.active,
+                  ))
+              : null,
         );
       },
     );
@@ -467,29 +528,39 @@ class _HouseState extends ConsumerState<_House> {
                       onToggleCollapse: () => _toggle(key),
                     );
 
-                // Pack a run of single-column cards (rooms + small cameras) into
-                // balanced columns. [full] is the whole drag order so a card can
-                // be dropped anywhere, not just within this band.
-                Widget masonry(List<String> ks, List<String> full) {
-                  final columns = List.generate(colCount, (_) => <Widget>[]);
+                Widget cardFor(String key, int col, List<String> full) {
+                  final cam = camById[cameraIdFromKey(key) ?? ''];
+                  return cam != null
+                      ? _arrangeable(
+                          key, cam.name, col, full, smallCamera(key, cam))
+                      : _arrangeable(key, humanize(key), col, full, room(key));
+                }
+
+                // Lay a run of single-column cards out into columns. A card the
+                // user PINNED (dragged) goes to its column; an untouched card
+                // fills the shortest column, so a fresh board self-balances. Each
+                // column ends in a drop zone that pins a card to that column.
+                Widget board(List<String> ks, List<String> full) {
+                  final colKeys = List.generate(colCount, (_) => <String>[]);
                   final heights = List<double>.filled(colCount, 0);
                   for (final key in ks) {
-                    var shortest = 0;
-                    for (var i = 1; i < colCount; i++) {
-                      if (heights[i] < heights[shortest]) shortest = i;
+                    final pinned = widget.arrangement.columnOf(key);
+                    var col = 0;
+                    if (pinned != null) {
+                      col = pinned.clamp(0, colCount - 1);
+                    } else {
+                      for (var i = 1; i < colCount; i++) {
+                        if (heights[i] < heights[col]) col = i;
+                      }
                     }
                     final cam = camById[cameraIdFromKey(key) ?? ''];
-                    if (cam != null) {
-                      heights[shortest] += _collapsed.contains(key)
-                          ? 48
-                          : 46 + colW / (16 / 10) + 14;
-                      columns[shortest].add(_arrangeable(
-                          key, cam.name, full, smallCamera(key, cam)));
-                    } else {
-                      heights[shortest] += _estimateHeight(byKey[key]!);
-                      columns[shortest].add(
-                          _arrangeable(key, humanize(key), full, room(key)));
-                    }
+                    heights[col] += cam != null
+                        ? (_collapsed.contains(key)
+                            ? 48
+                            : 46 + colW / (16 / 10) + 14)
+                        : _estimateHeight(byKey[key]!);
+                    colKeys[col].add(key);
+                    _renderedColumns[key] = col;
                   }
                   return Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -498,8 +569,15 @@ class _HouseState extends ConsumerState<_House> {
                         if (i > 0) SizedBox(width: t.space.md),
                         Expanded(
                           child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: columns[i],
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              for (final key in colKeys[i])
+                                cardFor(key, i, full),
+                              _columnTail(
+                                  i,
+                                  colKeys[i].isEmpty ? null : colKeys[i].last,
+                                  full),
+                            ],
                           ),
                         ),
                       ],
@@ -507,14 +585,18 @@ class _HouseState extends ConsumerState<_House> {
                   );
                 }
 
+                // Recompute where every card renders this frame; a drop reads it
+                // to pin the whole board and move only the lifted card.
+                _renderedColumns.clear();
+
                 // A large camera is a full-width hero, so it breaks the column
-                // flow: small cards pack into a masonry band, a hero spans the
-                // whole width, then packing resumes below it.
+                // flow: cards lay out into a band, a hero spans the whole width,
+                // then the columns resume below it.
                 final bands = <Widget>[];
                 var band = <String>[];
                 void flush() {
                   if (band.isNotEmpty) {
-                    bands.add(masonry(band, keys));
+                    bands.add(board(band, keys));
                     band = [];
                   }
                 }
@@ -526,6 +608,7 @@ class _HouseState extends ConsumerState<_House> {
                     bands.add(_arrangeable(
                       key,
                       cam.name,
+                      null,
                       keys,
                       HomeCameraCard(
                         camera: cam,
@@ -542,32 +625,7 @@ class _HouseState extends ConsumerState<_House> {
 
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    ...bands,
-                    // A tail zone so a card can be dropped at the very end —
-                    // there is no card below the last one to drop "before".
-                    DragTarget<String>(
-                      onWillAcceptWithDetails: (d) => true,
-                      onAcceptWithDetails: (d) => _commitToEnd(d.data, keys),
-                      builder: (context, candidate, rejected) =>
-                          AnimatedContainer(
-                        duration: t.motion.d(t.motion.fast),
-                        height: candidate.isNotEmpty ? 40 : 12,
-                        alignment: Alignment.topCenter,
-                        child: candidate.isNotEmpty
-                            ? Container(
-                                height: 4,
-                                margin: EdgeInsets.symmetric(
-                                    horizontal: t.space.xs),
-                                decoration: BoxDecoration(
-                                  color: t.accent.active,
-                                  borderRadius: BorderRadius.circular(2),
-                                ),
-                              )
-                            : null,
-                      ),
-                    ),
-                  ],
+                  children: bands,
                 );
               },
             ),
