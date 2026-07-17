@@ -93,6 +93,12 @@ class DeviceState {
 
   String get displayName => name ?? id;
 
+  /// Built-in / virtual devices — modes (`core.mode`), timers & switches
+  /// (`core.glue`), etc. Real device plugins are `plugin.*`. These are not
+  /// physical, so they never "belong" to a room and shouldn't be nagged about
+  /// one.
+  bool get isSystem => pluginId.startsWith('core.');
+
   String get ruleReference => canonicalName ?? id;
 
   bool get isMediaPlayer =>

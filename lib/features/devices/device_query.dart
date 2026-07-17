@@ -90,10 +90,12 @@ List<DeviceProblem> problemsIn(List<DeviceState> devices) {
   return out;
 }
 
-/// Devices with no room. Not a fault, but grouping and rules both get worse
-/// without one, and today they are simply invisible.
+/// Real devices with no room. Not a fault, but grouping and rules both get
+/// worse without one. Built-in/virtual devices (modes, timers, switches —
+/// `core.*`) are excluded: they aren't physical, so "assign a room" is
+/// meaningless for them and nagging about it is noise.
 List<DeviceState> unassigned(List<DeviceState> devices) =>
-    devices.where((d) => (d.area ?? '').isEmpty).toList();
+    devices.where((d) => (d.area ?? '').isEmpty && !d.isSystem).toList();
 
 /// Matches a device against a query string.
 ///
@@ -130,7 +132,7 @@ bool _passesFilter(DeviceState d, DeviceFilter f) {
         final num b when b <= kLowBatteryPct => true,
         _ => false,
       },
-    DeviceFilter.unassigned => (d.area ?? '').isEmpty,
+    DeviceFilter.unassigned => (d.area ?? '').isEmpty && !d.isSystem,
   };
 }
 
