@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../core/providers/auth_provider.dart';
 import '../core/providers/events_provider.dart';
 import '../design/tokens.dart';
 
@@ -106,48 +105,15 @@ class LiveDot extends ConsumerWidget {
   }
 }
 
-/// Warns before the session dies, rather than after.
+/// Formerly warned before the access token expired and forced a re-login.
+/// Sessions now renew silently via the refresh token (see [HomecoreClient]), so
+/// access-token expiry no longer interrupts anyone — there is nothing to warn
+/// about. Kept as a no-op so the chromes that embed it don't need to change; a
+/// truly-ended session (refresh token expired or revoked) drops the user to the
+/// login screen on the next failed refresh.
 class ExpiryBanner extends ConsumerWidget {
   const ExpiryBanner({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final t = HcTokens.of(context);
-    final remaining = ref.watch(tokenExpiryProvider).valueOrNull;
-
-    if (remaining == null || remaining.inMinutes >= 60) {
-      return const SizedBox.shrink();
-    }
-
-    final expired = remaining.isNegative;
-
-    return Material(
-      color: t.accent.danger.withValues(alpha: 0.16),
-      child: Padding(
-        padding: EdgeInsets.symmetric(
-          horizontal: t.space.md,
-          vertical: t.space.sm,
-        ),
-        child: Row(
-          children: [
-            Icon(Icons.warning_amber_outlined,
-                size: 16, color: t.accent.danger),
-            SizedBox(width: t.space.sm),
-            Expanded(
-              child: Text(
-                expired
-                    ? 'Session expired.'
-                    : 'Session expires in ${remaining.inMinutes} min.',
-                style: TextStyle(fontSize: 13, color: t.accent.danger),
-              ),
-            ),
-            TextButton(
-              onPressed: () => ref.read(authProvider.notifier).logout(),
-              child: const Text('Sign in again'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context, WidgetRef ref) => const SizedBox.shrink();
 }

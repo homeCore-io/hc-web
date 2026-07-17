@@ -10,7 +10,10 @@ class AuthApi {
       'password': password,
     });
     final token = response.data['token'] as String;
-    await client.saveToken(token);
+    final refresh = response.data['refresh_token'] as String?;
+    // Store the refresh token too, so the session survives access-token expiry
+    // without a re-login (silent renewal in HomecoreClient).
+    await client.saveTokens(token, refresh);
     return token;
   }
 
