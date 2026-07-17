@@ -1,3 +1,5 @@
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -29,18 +31,37 @@ Future<void> showHubLauncher(BuildContext context,
       context: context,
       barrierDismissible: true,
       barrierLabel: 'Pages',
-      barrierColor: Colors.black.withValues(alpha: 0.62),
+      // The launcher floats over the live page, so push that page firmly back:
+      // a strong dim plus a backdrop blur, so the grid in front is unambiguously
+      // the focus rather than competing with a still-legible dashboard behind.
+      barrierColor: Colors.black.withValues(alpha: 0.74),
       transitionDuration: const Duration(milliseconds: 220),
       pageBuilder: (context, _, __) => _HubLauncher(location: location),
       transitionBuilder: (context, anim, _, child) {
         final curved =
             CurvedAnimation(parent: anim, curve: Curves.easeOutCubic);
-        return FadeTransition(
-          opacity: curved,
-          child: Transform.scale(
-            scale: 0.98 + 0.02 * curved.value,
-            child: child,
-          ),
+        return Stack(
+          children: [
+            // Blur the page behind the dimmed barrier; ramps in with the panel.
+            // IgnorePointer so a tap on the backdrop still reaches the barrier
+            // and dismisses.
+            FadeTransition(
+              opacity: curved,
+              child: IgnorePointer(
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                  child: const SizedBox.expand(),
+                ),
+              ),
+            ),
+            FadeTransition(
+              opacity: curved,
+              child: Transform.scale(
+                scale: 0.98 + 0.02 * curved.value,
+                child: child,
+              ),
+            ),
+          ],
         );
       },
     );

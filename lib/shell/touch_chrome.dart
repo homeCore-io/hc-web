@@ -38,22 +38,24 @@ class TouchChrome extends ConsumerWidget {
             Expanded(
               child: Row(
                 children: [
-                  if (railVisible) const HcNavRail(),
-                  Expanded(
-                    child: Stack(
-                      children: [
-                        Positioned.fill(child: child),
-                        // Launcher-only: no rail, so a single hub button is the
-                        // way in and out of everything.
-                        if (!railVisible)
-                          Positioned(
-                            left: t.space.md,
-                            top: t.space.md,
-                            child: _HubButton(location: location),
-                          ),
-                      ],
+                  if (railVisible)
+                    const HcNavRail()
+                  else
+                    // Launcher-only: a slim transparent gutter holds the single
+                    // hub button so it never overlaps a page's own header (it
+                    // used to float on top of the content at the top-left). No
+                    // background or border, so the chrome still reads as absent.
+                    SizedBox(
+                      width: 56,
+                      child: Align(
+                        alignment: Alignment.topCenter,
+                        child: Padding(
+                          padding: EdgeInsets.only(top: t.space.md),
+                          child: _HubButton(location: location),
+                        ),
+                      ),
                     ),
-                  ),
+                  Expanded(child: child),
                 ],
               ),
             ),

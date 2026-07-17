@@ -34,6 +34,37 @@ final navRailVisibleProvider =
   (ref) => NavRailVisibleNotifier(),
 );
 
+const _kRailExpandedKey = 'nav_rail_expanded';
+
+/// Whether the nav rail is pinned open (labels) or collapsed to icons.
+///
+/// Manual and persisted: the rail changes width only when the user toggles it —
+/// never on hover — so the page content never reflows out from under the
+/// pointer. Defaults to collapsed (icons), the quieter resting state.
+class NavRailExpandedNotifier extends StateNotifier<bool> {
+  NavRailExpandedNotifier() : super(false) {
+    _load();
+  }
+
+  Future<void> _load() async {
+    final p = await SharedPreferences.getInstance();
+    if (mounted) state = p.getBool(_kRailExpandedKey) ?? false;
+  }
+
+  Future<void> set(bool expanded) async {
+    state = expanded;
+    final p = await SharedPreferences.getInstance();
+    await p.setBool(_kRailExpandedKey, expanded);
+  }
+
+  Future<void> toggle() => set(!state);
+}
+
+final navRailExpandedProvider =
+    StateNotifierProvider<NavRailExpandedNotifier, bool>(
+  (ref) => NavRailExpandedNotifier(),
+);
+
 const _kLandingRouteKey = 'landing_route';
 
 /// The route the app opens to on a fresh load — the house by default, or a page
