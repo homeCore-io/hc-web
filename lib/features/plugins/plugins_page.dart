@@ -9,6 +9,7 @@ import '../../design/skins.dart';
 import '../../design/tokens.dart';
 import '../../shared/widgets/skeleton.dart';
 import 'plugin_sheet.dart';
+import 'registry_sheet.dart';
 
 /// The plugins section — an app-native surface, not the dense admin table its
 /// siblings are, so it's rendered in the Midnight skin regardless of the shell.
@@ -64,8 +65,12 @@ class _PluginsView extends ConsumerWidget {
           child: Padding(
             padding: EdgeInsets.fromLTRB(
                 t.space.lg, t.space.lg, t.space.lg, t.space.md),
-            child:
-                _Header(running: running, offline: offline, devices: devices),
+            child: _Header(
+              running: running,
+              offline: offline,
+              devices: devices,
+              onAdd: () => showRegistrySheet(context, ref),
+            ),
           ),
         ),
         SliverPadding(
@@ -93,8 +98,12 @@ class _PluginsView extends ConsumerWidget {
 
 class _Header extends StatelessWidget {
   const _Header(
-      {required this.running, required this.offline, required this.devices});
+      {required this.running,
+      required this.offline,
+      required this.devices,
+      required this.onAdd});
   final int running, offline, devices;
+  final VoidCallback onAdd;
 
   @override
   Widget build(BuildContext context) {
@@ -133,6 +142,21 @@ class _Header extends StatelessWidget {
             if (offline > 0) stat(t.accent.danger, '$offline', 'offline'),
             stat(null, '$devices', 'devices'),
           ]),
+        ),
+        const Spacer(),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 3),
+          child: FilledButton.icon(
+            onPressed: onAdd,
+            icon: const Icon(Icons.add_rounded, size: 18),
+            label: const Text('Add plugin'),
+            style: FilledButton.styleFrom(
+              backgroundColor: t.accent.active.withValues(alpha: 0.16),
+              foregroundColor: t.accent.active,
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            ),
+          ),
         ),
       ],
     );

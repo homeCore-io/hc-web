@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 
 import '../models/plugin_config.dart';
+import '../models/registry_plugin.dart';
 import '../schema/plugin_capabilities.dart';
 import 'homecore_client.dart';
 
@@ -42,6 +43,25 @@ class PluginsApi {
 
   Future<void> deregister(String id) async {
     await client.dio.delete('/plugins/$id');
+  }
+
+  /// Browse the remote registry. 503 (no registry configured) surfaces as an
+  /// empty list so the catalog can say "no registry" rather than error.
+  Future<List<RegistryPlugin>> registryPlugins() async {
+    final response = await client.dio.get('/registry/plugins');
+    final list = (response.data['plugins'] as List?) ?? const [];
+    return list.map((e) => RegistryPlugin.fromJson(e as Map)).toList();
+  }
+
+  /// Install a plugin from the registry; core resolves + downloads + verifies +
+  /// installs + activates. Returns the install summary.
+  Future<Map<String, dynamic>> installFromRegistry(String id,
+      {String? version}) async {
+    final response = await client.dio.post('/plugins/install', data: {
+      'id': id,
+      if (version != null) 'version': version,
+    });
+    return Map<String, dynamic>.from(response.data as Map);
   }
 
   /// 404 when the plugin has never published a manifest — which is normal, and

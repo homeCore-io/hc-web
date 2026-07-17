@@ -1,11 +1,19 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../api/plugins_api.dart';
 import '../models/plugin_entry.dart';
+import '../models/registry_plugin.dart';
 import 'auth_provider.dart';
 import 'events_provider.dart';
 
 final pluginsApiProvider = Provider<PluginsApi>((ref) {
   return PluginsApi(ref.watch(homecoreClientProvider));
+});
+
+/// The remote registry's plugin catalog. Auto-disposes so it re-fetches when the
+/// Add-plugin sheet reopens (and after an install invalidates it).
+final registryPluginsProvider =
+    FutureProvider.autoDispose<List<RegistryPlugin>>((ref) async {
+  return ref.watch(pluginsApiProvider).registryPlugins();
 });
 
 class PluginsNotifier extends AsyncNotifier<List<PluginEntry>> {
