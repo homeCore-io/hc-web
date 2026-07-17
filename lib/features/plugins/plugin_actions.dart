@@ -10,6 +10,7 @@ import '../../core/schema/plugin_capabilities.dart';
 import '../../design/tokens.dart';
 import 'action_drawer.dart';
 import 'action_form.dart';
+import 'discovery_dialog.dart';
 
 /// A plugin's declared actions, or null if it never published a manifest.
 final pluginCapabilitiesProvider =
@@ -233,8 +234,9 @@ IconData _actionIcon(PluginAction a) {
     return Icons.cleaning_services_rounded;
   }
   if (s.contains('include') || s.contains('add')) return Icons.add_rounded;
-  if (s.contains('identify') || s.contains('locate'))
+  if (s.contains('identify') || s.contains('locate')) {
     return Icons.my_location_rounded;
+  }
   return Icons.play_arrow_rounded;
 }
 
@@ -275,7 +277,18 @@ Future<void> runPluginAction(
 
   switch (outcome) {
     case CommandDone(:final data):
-      _toast(context, _summarise(data));
+      // A `discover_devices`-style result (a `discovered` array) opens the
+      // review-and-add dialog instead of a toast; anything else just toasts.
+      final discovered = _discoveryList(data);
+      if (discovered != null && discovered.isNotEmpty) {
+        await showDialog<void>(
+          context: context,
+          builder: (_) => DiscoveryResultsDialog(
+              pluginId: pluginId, discovered: discovered),
+        );
+      } else {
+        _toast(context, _summarise(data));
+      }
 
     case CommandStreaming(:final requestId):
       await _follow(context, ref, pluginId, action, requestId);
@@ -333,9 +346,28 @@ void _toast(BuildContext context, String message) =>
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(message)));
 
+/// Extracts a `discovered` array from an action result, normalised to a list of
+/// string-keyed maps. Null when the result isn't a discovery payload.
+List<Map<String, dynamic>>? _discoveryList(Object? data) {
+  if (data is! Map) return null;
+  final d = data['discovered'];
+  if (d is! List) return null;
+  return d
+      .whereType<Map>()
+      .map((m) => m.map((k, v) => MapEntry('$k', v)))
+      .toList();
+}
+
 String _summarise(Object? data) {
   if (data == null) return 'Done.';
-  if (data is Map && data['message'] != null) return '${data['message']}';
+  if (data is Map) {
+    // A plugin that ran but reported a problem answers with status:"error"
+    // (HTTP 200, not a 504) — surface its message rather than a raw JSON dump.
+    if (data['status'] == 'error') {
+      return 'Failed: ${data['error'] ?? data['message'] ?? 'unknown error'}';
+    }
+    if (data['message'] != null) return '${data['message']}';
+  }
   final s = '$data';
   return s.length > 160 ? '${s.substring(0, 157)}…' : s;
 }
