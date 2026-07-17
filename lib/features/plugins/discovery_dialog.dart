@@ -35,6 +35,8 @@ class _DiscoveryResultsDialogState
   Map<String, dynamic> _config = {};
   final Set<String> _added = {}; // host keys already-in-config or just added
   final Set<String> _adding = {}; // in-flight host keys
+  final Set<String> _newHcIds = {}; // hc_ids written this session, to await
+
   bool _dirty = false; // wrote config → needs a restart on close
   bool _loading = true;
   bool _restarting = false;
@@ -106,10 +108,11 @@ class _DiscoveryResultsDialogState
           : <dynamic>[];
       if (!devs.any((e) => e is Map && '${e['host']}' == host)) {
         final taken = devs.whereType<Map>().map((e) => '${e['hc_id']}').toSet();
-        devs.add(
-            {'host': host, 'hc_id': _deriveHcId(d, taken), 'name': _nameOf(d)});
+        final hcId = _deriveHcId(d, taken);
+        devs.add({'host': host, 'hc_id': hcId, 'name': _nameOf(d)});
         _config['devices'] = devs;
         await api.putConfig(widget.pluginId, config: _config);
+        _newHcIds.add(hcId);
       }
       setState(() {
         _adding.remove(host);
@@ -134,6 +137,10 @@ class _DiscoveryResultsDialogState
       // The plugin registers devices only at startup, so a restart is what
       // makes the entries we just wrote become live devices.
       await ref.read(pluginsApiProvider).lifecycle(widget.pluginId, 'restart');
+      // Registration lags the restart ack by a few seconds — wait for the new
+      // devices to actually appear before refreshing, or the overview count
+      // (from the plugin record) reads the pre-restart state.
+      await _awaitRegistered();
     } catch (_) {
       // Config is written regardless; a failed restart just delays registration
       // until the next start. Don't trap the user in the dialog.
@@ -142,6 +149,26 @@ class _DiscoveryResultsDialogState
     ref.invalidate(pluginsProvider);
     ref.invalidate(devicesProvider);
     if (mounted) Navigator.of(context).pop();
+  }
+
+  /// Poll the device list until every device we just wrote has registered, or
+  /// ~13s elapses. Bounded so an unreachable device can't trap the dialog — the
+  /// config is saved regardless and the device appears once it registers.
+  Future<void> _awaitRegistered() async {
+    if (_newHcIds.isEmpty) return;
+    final api = ref.read(devicesApiProvider);
+    for (var i = 0; i < 18; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 700));
+      try {
+        final raw = await api.listDevices();
+        final present = raw
+            .map((m) => '${(m as Map)['device_id'] ?? m['id'] ?? ''}')
+            .toSet();
+        if (_newHcIds.every(present.contains)) return;
+      } catch (_) {
+        // transient — keep polling
+      }
+    }
   }
 
   @override
