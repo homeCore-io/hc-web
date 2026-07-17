@@ -88,4 +88,22 @@ class PluginEntry {
     if (d.inDays < 1) return '${d.inHours}h ${d.inMinutes % 60}m';
     return '${d.inDays}d ${d.inHours % 24}h';
   }
+
+  /// Compact "time since last heartbeat", e.g. "12s", "4m". Null if never seen.
+  String? get heartbeatAgo {
+    final h = lastHeartbeat;
+    if (h == null) return null;
+    final d = DateTime.now().toUtc().difference(h);
+    if (d.inSeconds < 60) return '${d.inSeconds < 0 ? 0 : d.inSeconds}s';
+    if (d.inMinutes < 60) return '${d.inMinutes}m';
+    if (d.inHours < 24) return '${d.inHours}h';
+    return '${d.inDays}d';
+  }
+
+  /// A heartbeat within ~90s means the supervisor still hears from the child.
+  bool get heartbeatHealthy {
+    final h = lastHeartbeat;
+    if (h == null) return false;
+    return DateTime.now().toUtc().difference(h).inSeconds < 90;
+  }
 }

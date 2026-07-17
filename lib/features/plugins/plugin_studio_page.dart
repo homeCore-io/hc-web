@@ -3,8 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/dashboard/widget_registry.dart';
+import '../../core/models/device_state.dart';
 import '../../core/models/plugin_config.dart';
 import '../../core/models/plugin_entry.dart';
+import '../../core/providers/devices_provider.dart';
 import '../../core/providers/plugin_config_provider.dart';
 import '../../core/providers/plugins_provider.dart';
 import '../../core/schema/plugin_config_schema.dart';
@@ -91,7 +93,9 @@ class _PluginStudioPageState extends ConsumerState<PluginStudioPage> {
         final plugin = ref.watch(pluginsProvider).valueOrNull?.firstWhere(
               (p) => p.pluginId == widget.pluginId,
               orElse: () => PluginEntry(
-                  pluginId: widget.pluginId, status: 'unknown', registeredAt: ''),
+                  pluginId: widget.pluginId,
+                  status: 'unknown',
+                  registeredAt: ''),
             );
         if (plugin == null) {
           return const ColoredBox(
@@ -140,12 +144,15 @@ class _PluginStudioPageState extends ConsumerState<PluginStudioPage> {
   }
 
   List<_NavItem> _railItems(PluginEntry p, String? update) {
-    final fields = ref.watch(pluginConfigFieldsProvider(p.pluginId)).valueOrNull;
+    final fields =
+        ref.watch(pluginConfigFieldsProvider(p.pluginId)).valueOrNull;
     final sections = <String>[];
     if (fields != null) {
       for (final f in fields.fields) {
         final s = fields.sectionOf[f.name];
-        if (s != null && !isBootstrapConfigKey(f.name) && !sections.contains(s)) {
+        if (s != null &&
+            !isBootstrapConfigKey(f.name) &&
+            !sections.contains(s)) {
           sections.add(s);
         }
       }
@@ -175,13 +182,18 @@ class _PluginStudioPageState extends ConsumerState<PluginStudioPage> {
 
   Widget _pane(PluginEntry p, String? update) {
     if (_selected == 'overview') {
-      return _OverviewPane(plugin: p, update: update);
+      return _OverviewPane(
+        plugin: p,
+        update: update,
+        onNavigate: (k) => setState(() => _selected = k),
+      );
     }
     if (_selected == 'actions') {
       return _PaneScaffold(
         title: 'Actions',
         subtitle: 'Everything this plugin can do on demand.',
-        child: PluginActions(pluginId: p.pluginId),
+        child: PluginActions(
+            pluginId: p.pluginId, layout: PluginActionsLayout.cards),
       );
     }
     if (_selected.startsWith('config')) {
@@ -226,19 +238,10 @@ class _Header extends ConsumerWidget {
         : plugin.isOffline
             ? t.accent.danger
             : t.surface.onBaseMuted;
-    final label = plugin.isActive
-        ? 'Active'
-        : plugin.isOffline
-            ? 'Offline'
-            : (plugin.enabled ? 'Starting' : 'Disabled');
-    final facts = <String>[
-      '${plugin.deviceCount} devices',
-      if (plugin.uptime != null) 'up ${plugin.uptime}',
-      if (plugin.managed) 'local' else 'remote',
-    ];
 
     return Padding(
-      padding: EdgeInsets.fromLTRB(t.space.lg, t.space.md, t.space.lg, t.space.md),
+      padding:
+          EdgeInsets.fromLTRB(t.space.lg, t.space.md, t.space.lg, t.space.md),
       child: Row(children: [
         IconButton(
           icon: Icon(Icons.arrow_back_rounded, color: t.surface.onBaseMuted),
@@ -255,7 +258,12 @@ class _Header extends ConsumerWidget {
             borderRadius: BorderRadius.circular(14),
             border: Border.all(color: t.stroke.hairline),
             boxShadow: plugin.isActive
-                ? [BoxShadow(color: color.withValues(alpha: 0.35), blurRadius: 18, spreadRadius: -6)]
+                ? [
+                    BoxShadow(
+                        color: color.withValues(alpha: 0.35),
+                        blurRadius: 18,
+                        spreadRadius: -6)
+                  ]
                 : null,
           ),
           child: Icon(HcIcons.plugins, size: 23, color: color),
@@ -280,47 +288,49 @@ class _Header extends ConsumerWidget {
             ),
           ],
         ),
-        const SizedBox(width: 20),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(mainAxisSize: MainAxisSize.min, children: [
-              Container(
-                  width: 9,
-                  height: 9,
-                  decoration: BoxDecoration(
-                      color: color,
-                      shape: BoxShape.circle,
-                      boxShadow: plugin.isActive
-                          ? [BoxShadow(color: color.withValues(alpha: 0.7), blurRadius: 9)]
-                          : null)),
-              const SizedBox(width: 7),
-              Text(label,
-                  style: TextStyle(color: color, fontWeight: FontWeight.w600, fontSize: 13)),
-            ]),
-            const SizedBox(height: 3),
-            Text(facts.join('  ·  '),
-                style: TextStyle(
-                    color: t.surface.onBaseMuted,
-                    fontSize: 12,
-                    fontFeatures: t.numericFontFeatures)),
-          ],
-        ),
         const Spacer(),
         if (updateAvailable != null) ...[
-          _pill(t, 'Update v$updateAvailable'),
+          _pill(t, 'Update available'),
           const SizedBox(width: 10),
         ],
-        _ghostBtn(t, Icons.refresh_rounded, 'Restart', () => _lifecycle(ref, 'restart')),
+        _ghostBtn(t, Icons.refresh_rounded, 'Restart',
+            () => _lifecycle(ref, 'restart')),
         const SizedBox(width: 8),
         if (plugin.isActive)
-          _ghostBtn(t, Icons.stop_rounded, 'Stop', () => _lifecycle(ref, 'stop'))
+          _ghostBtn(
+              t, Icons.stop_rounded, 'Stop', () => _lifecycle(ref, 'stop'))
         else
-          _ghostBtn(t, Icons.play_arrow_rounded, 'Start', () => _lifecycle(ref, 'start')),
+          _ghostBtn(t, Icons.play_arrow_rounded, 'Start',
+              () => _lifecycle(ref, 'start')),
+        const SizedBox(width: 8),
+        _overflow(context, ref, t),
       ]),
     );
   }
+
+  Widget _overflow(BuildContext context, WidgetRef ref, HcTokens t) =>
+      PopupMenuButton<String>(
+        tooltip: 'More',
+        color: t.surface.overlay,
+        icon: Icon(Icons.more_horiz_rounded, color: t.surface.onBaseMuted),
+        onSelected: (v) async {
+          switch (v) {
+            case 'restart':
+              await _lifecycle(ref, 'restart');
+            case 'toggle':
+              await ref
+                  .read(pluginsApiProvider)
+                  .setEnabled(plugin.pluginId, !plugin.enabled);
+              ref.invalidate(pluginsProvider);
+          }
+        },
+        itemBuilder: (_) => [
+          const PopupMenuItem(value: 'restart', child: Text('Restart plugin')),
+          PopupMenuItem(
+              value: 'toggle',
+              child: Text(plugin.enabled ? 'Disable plugin' : 'Enable plugin')),
+        ],
+      );
 
   Widget _pill(HcTokens t, String s) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
@@ -331,7 +341,9 @@ class _Header extends ConsumerWidget {
         ),
         child: Text(s,
             style: TextStyle(
-                color: t.accent.active, fontSize: 11.5, fontWeight: FontWeight.w700)),
+                color: t.accent.active,
+                fontSize: 11.5,
+                fontWeight: FontWeight.w700)),
       );
 
   Widget _ghostBtn(HcTokens t, IconData ic, String label, VoidCallback onTap) =>
@@ -349,7 +361,8 @@ class _Header extends ConsumerWidget {
 
 // ── Rail ────────────────────────────────────────────────────────────────────
 class _Rail extends StatelessWidget {
-  const _Rail({required this.items, required this.selected, required this.onSelect});
+  const _Rail(
+      {required this.items, required this.selected, required this.onSelect});
   final List<_NavItem> items;
   final String selected;
   final ValueChanged<String> onSelect;
@@ -363,7 +376,8 @@ class _Rail extends StatelessWidget {
       if (it.group != lastGroup) {
         lastGroup = it.group;
         children.add(Padding(
-          padding: EdgeInsets.fromLTRB(t.space.sm, t.space.md, t.space.sm, t.space.xs),
+          padding: EdgeInsets.fromLTRB(
+              t.space.sm, t.space.md, t.space.sm, t.space.xs),
           child: Text(it.group.toUpperCase(),
               style: TextStyle(
                   color: t.surface.onBaseMuted.withValues(alpha: 0.6),
@@ -381,7 +395,8 @@ class _Rail extends StatelessWidget {
       children.add(Padding(
         padding: const EdgeInsets.symmetric(vertical: 1),
         child: Material(
-          color: on ? t.accent.active.withValues(alpha: 0.14) : Colors.transparent,
+          color:
+              on ? t.accent.active.withValues(alpha: 0.14) : Colors.transparent,
           borderRadius: t.radius.smR,
           child: InkWell(
             borderRadius: t.radius.smR,
@@ -394,7 +409,9 @@ class _Rail extends StatelessWidget {
                 Expanded(
                     child: Text(it.label,
                         style: TextStyle(
-                            color: fg, fontSize: 14, fontWeight: FontWeight.w500))),
+                            color: fg,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500))),
                 if (it.badge != null) _badge(t, it.badge!),
               ]),
             ),
@@ -406,8 +423,10 @@ class _Rail extends StatelessWidget {
       width: 232,
       color: t.surface.raised.withValues(alpha: 0.35),
       child: SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(t.space.sm, t.space.sm, t.space.sm, t.space.lg),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: children),
+        padding:
+            EdgeInsets.fromLTRB(t.space.sm, t.space.sm, t.space.sm, t.space.lg),
+        child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch, children: children),
       ),
     );
   }
@@ -421,13 +440,16 @@ class _Rail extends StatelessWidget {
         ),
         child: Text(s,
             style: TextStyle(
-                color: t.accent.active, fontSize: 10, fontWeight: FontWeight.w700)),
+                color: t.accent.active,
+                fontSize: 10,
+                fontWeight: FontWeight.w700)),
       );
 }
 
 // ── Pane scaffold ───────────────────────────────────────────────────────────
 class _PaneScaffold extends StatelessWidget {
-  const _PaneScaffold({required this.title, required this.subtitle, required this.child});
+  const _PaneScaffold(
+      {required this.title, required this.subtitle, required this.child});
   final String title;
   final String subtitle;
   final Widget child;
@@ -435,13 +457,17 @@ class _PaneScaffold extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
     return SingleChildScrollView(
-      padding: EdgeInsets.fromLTRB(t.space.lg, t.space.lg, t.space.lg, t.space.xl),
+      padding:
+          EdgeInsets.fromLTRB(t.space.lg, t.space.lg, t.space.lg, t.space.xl),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(title,
             style: TextStyle(
-                color: t.surface.onBase, fontSize: 17, fontWeight: FontWeight.w700)),
+                color: t.surface.onBase,
+                fontSize: 17,
+                fontWeight: FontWeight.w700)),
         const SizedBox(height: 3),
-        Text(subtitle, style: TextStyle(color: t.surface.onBaseMuted, fontSize: 13)),
+        Text(subtitle,
+            style: TextStyle(color: t.surface.onBaseMuted, fontSize: 13)),
         const SizedBox(height: 20),
         child,
       ]),
@@ -451,63 +477,128 @@ class _PaneScaffold extends StatelessWidget {
 
 // ── Overview pane ───────────────────────────────────────────────────────────
 class _OverviewPane extends ConsumerWidget {
-  const _OverviewPane({required this.plugin, required this.update});
+  const _OverviewPane(
+      {required this.plugin, required this.update, this.onNavigate});
   final PluginEntry plugin;
   final String? update;
+  final void Function(String key)? onNavigate;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = HcTokens.of(context);
     final statusColor = plugin.isActive
-        ? t.accent.active
+        ? t.accent.success
         : plugin.isOffline
             ? t.accent.danger
             : t.surface.onBaseMuted;
+    final statusLabel = plugin.isActive
+        ? 'Active'
+        : plugin.isOffline
+            ? 'Offline'
+            : (plugin.enabled ? 'Starting' : 'Disabled');
+
+    final devices = ref
+            .watch(devicesProvider)
+            .valueOrNull
+            ?.where((d) => d.pluginId == plugin.pluginId)
+            .toList() ??
+        const <DeviceState>[];
+    final breakdown = _breakdown(devices);
+    final devicesSub = breakdown.isEmpty
+        ? (plugin.deviceCount == 0 ? 'none registered' : 'registered')
+        : breakdown.take(3).map((e) => '${e.value} ${e.key}').join(' · ');
+
+    final hb = plugin.heartbeatAgo;
+    final caps =
+        ref.watch(pluginCapabilitiesProvider(plugin.pluginId)).valueOrNull;
+    final hasActions = caps != null && caps.actions.isNotEmpty;
 
     return _PaneScaffold(
       title: 'Overview',
       subtitle: 'Live status and everything you can do with this plugin.',
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        // stat cards
+        // ── stat cards ──
         LayoutBuilder(builder: (context, c) {
           final cols = c.maxWidth > 720 ? 4 : 2;
-          return Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              _stat(t, 'Status', plugin.isActive ? 'Active' : (plugin.isOffline ? 'Offline' : (plugin.enabled ? 'Starting' : 'Disabled')),
-                  plugin.uptime != null ? 'up ${plugin.uptime}' : '', statusColor, c.maxWidth, cols, dot: true),
-              _stat(t, 'Devices', '${plugin.deviceCount}', 'registered', t.surface.onBase, c.maxWidth, cols),
-              _stat(t, 'Kind', plugin.managed ? 'Local' : 'Remote',
-                  plugin.managed ? 'child process' : 'MQTT', t.surface.onBase, c.maxWidth, cols),
-              _stat(t, 'Version', plugin.installedVersion ?? plugin.version ?? '—',
-                  update != null ? '$update available' : (plugin.installedVersion != null ? 'up to date' : ''),
-                  update != null ? t.accent.active : t.surface.onBase, c.maxWidth, cols),
-            ],
-          );
+          return Wrap(spacing: 12, runSpacing: 12, children: [
+            _stat(
+                t,
+                'Status',
+                statusLabel,
+                plugin.uptime != null
+                    ? 'up ${plugin.uptime}'
+                    : (plugin.enabled ? 'enabled' : 'disabled'),
+                statusColor,
+                c.maxWidth,
+                cols,
+                dot: true),
+            _stat(t, 'Devices', '${plugin.deviceCount}', devicesSub,
+                t.surface.onBase, c.maxWidth, cols),
+            _stat(
+                t,
+                'Heartbeat',
+                hb ?? '—',
+                hb != null
+                    ? 'ago · ${plugin.heartbeatHealthy ? 'healthy' : 'stale'}'
+                    : 'no signal',
+                hb != null ? t.surface.onBase : t.surface.onBaseMuted,
+                c.maxWidth,
+                cols),
+            _stat(
+                t,
+                'Version',
+                plugin.installedVersion ?? plugin.version ?? '—',
+                update != null
+                    ? '$update available'
+                    : (plugin.installedVersion != null ? 'up to date' : ''),
+                update != null ? t.accent.active : t.surface.onBase,
+                c.maxWidth,
+                cols),
+          ]);
         }),
         if (update != null) ...[
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
           _updateBanner(context, ref, t),
         ],
-        const SizedBox(height: 22),
-        Text('ACTIONS',
-            style: TextStyle(
-                color: t.surface.onBaseMuted,
-                fontSize: 11,
-                letterSpacing: 1.3,
-                fontWeight: FontWeight.w700)),
-        const SizedBox(height: 4),
-        PluginActions(pluginId: plugin.pluginId),
+        const SizedBox(height: 14),
+        // ── devices breakdown + connection ──
+        LayoutBuilder(builder: (context, c) {
+          final dev = _devicesCard(context, t, devices, breakdown);
+          final conn = _connectionCard(t, statusLabel, statusColor, hb);
+          if (c.maxWidth <= 720) {
+            return Column(children: [dev, const SizedBox(height: 12), conn]);
+          }
+          return IntrinsicHeight(
+            child:
+                Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Expanded(child: dev),
+              const SizedBox(width: 12),
+              Expanded(child: conn),
+            ]),
+          );
+        }),
+        if (hasActions) ...[
+          const SizedBox(height: 24),
+          Text('ACTIONS',
+              style: TextStyle(
+                  color: t.surface.onBaseMuted,
+                  fontSize: 11,
+                  letterSpacing: 1.3,
+                  fontWeight: FontWeight.w700)),
+          const SizedBox(height: 12),
+          PluginActions(
+              pluginId: plugin.pluginId, layout: PluginActionsLayout.cards),
+        ],
       ]),
     );
   }
 
-  Widget _stat(HcTokens t, String label, String value, String sub, Color valueColor,
-      double maxW, int cols, {bool dot = false}) {
+  Widget _stat(HcTokens t, String label, String value, String sub,
+      Color valueColor, double maxW, int cols,
+      {bool dot = false}) {
     final w = (maxW - (cols - 1) * 12) / cols;
     return SizedBox(
-      width: w.clamp(140, 320),
+      width: w.clamp(140, 340),
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
@@ -515,68 +606,291 @@ class _OverviewPane extends ConsumerWidget {
           borderRadius: t.radius.mdR,
           border: Border.all(color: t.stroke.hairline),
         ),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-          Text(label.toUpperCase(),
-              style: TextStyle(
-                  color: t.surface.onBaseMuted,
-                  fontSize: 11,
-                  letterSpacing: 0.4,
-                  fontWeight: FontWeight.w600)),
-          const SizedBox(height: 9),
-          Row(children: [
-            if (dot) ...[
-              Container(width: 9, height: 9, decoration: BoxDecoration(color: valueColor, shape: BoxShape.circle)),
-              const SizedBox(width: 8),
-            ],
-            Flexible(
-              child: Text(value,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+        child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(label.toUpperCase(),
                   style: TextStyle(
-                      color: valueColor,
-                      fontSize: 23,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -0.5)),
-            ),
-          ]),
-          if (sub.isNotEmpty) ...[
-            const SizedBox(height: 3),
-            Text(sub, style: TextStyle(color: t.surface.onBaseMuted, fontSize: 12)),
-          ],
-        ]),
+                      color: t.surface.onBaseMuted,
+                      fontSize: 11,
+                      letterSpacing: 0.4,
+                      fontWeight: FontWeight.w600)),
+              const SizedBox(height: 9),
+              Row(children: [
+                if (dot) ...[
+                  Container(
+                      width: 9,
+                      height: 9,
+                      decoration: BoxDecoration(
+                          color: valueColor,
+                          shape: BoxShape.circle,
+                          boxShadow: dot && valueColor != t.surface.onBaseMuted
+                              ? [
+                                  BoxShadow(
+                                      color: valueColor.withValues(alpha: 0.6),
+                                      blurRadius: 8)
+                                ]
+                              : null)),
+                  const SizedBox(width: 8),
+                ],
+                Flexible(
+                  child: Text(value,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          color: valueColor,
+                          fontSize: 23,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -0.5,
+                          fontFeatures: t.numericFontFeatures)),
+                ),
+              ]),
+              if (sub.isNotEmpty) ...[
+                const SizedBox(height: 3),
+                Text(sub,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style:
+                        TextStyle(color: t.surface.onBaseMuted, fontSize: 12)),
+              ],
+            ]),
       ),
     );
   }
 
-  Widget _updateBanner(BuildContext context, WidgetRef ref, HcTokens t) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+  Widget _updateBanner(BuildContext context, WidgetRef ref, HcTokens t) =>
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
           gradient: LinearGradient(colors: [
-            t.accent.active.withValues(alpha: 0.14),
-            t.accent.active.withValues(alpha: 0.04),
+            t.accent.active.withValues(alpha: 0.16),
+            t.accent.active.withValues(alpha: 0.03),
           ]),
           borderRadius: t.radius.mdR,
           border: Border.all(color: t.accent.active.withValues(alpha: 0.38)),
         ),
         child: Row(children: [
-          Icon(Icons.upgrade_rounded, color: t.accent.active, size: 22),
+          Container(
+            width: 40,
+            height: 40,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: t.accent.active.withValues(alpha: 0.16),
+              borderRadius: BorderRadius.circular(11),
+            ),
+            child:
+                Icon(Icons.upgrade_rounded, color: t.accent.active, size: 22),
+          ),
           const SizedBox(width: 13),
           Expanded(
-            child: Text('Update available — v$update',
-                style: TextStyle(
-                    color: t.surface.onBase, fontSize: 14, fontWeight: FontWeight.w600)),
+            child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Update available — v$update',
+                      style: TextStyle(
+                          color: t.surface.onBase,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 2),
+                  Text('A newer version is published in the registry.',
+                      style: TextStyle(
+                          color: t.surface.onBaseMuted, fontSize: 12.5)),
+                ]),
           ),
+          const SizedBox(width: 12),
+          OutlinedButton(
+            onPressed: () => onNavigate?.call('update'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: t.surface.onBase,
+              side: BorderSide(color: t.stroke.hairline),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            ),
+            child: const Text("What's new"),
+          ),
+          const SizedBox(width: 8),
           FilledButton(
             onPressed: () async {
-              await ref.read(pluginsApiProvider).installFromRegistry(plugin.pluginId, version: update);
+              await ref
+                  .read(pluginsApiProvider)
+                  .installFromRegistry(plugin.pluginId, version: update);
               ref.invalidate(pluginsProvider);
             },
             style: FilledButton.styleFrom(
-                backgroundColor: t.accent.active, foregroundColor: t.accent.onPrimary),
+                backgroundColor: t.accent.active,
+                foregroundColor: t.accent.onPrimary),
             child: const Text('Update'),
           ),
         ]),
       );
+
+  Widget _devicesCard(BuildContext context, HcTokens t,
+      List<DeviceState> devices, List<MapEntry<String, int>> breakdown) {
+    final colors = _segColors(t);
+    return _card(t,
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            _cardLabel(t, 'Devices'),
+            const Spacer(),
+            InkWell(
+              onTap: () => context.go('/devices'),
+              borderRadius: BorderRadius.circular(6),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Text('View all',
+                      style: TextStyle(
+                          color: t.accent.active,
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600)),
+                  const SizedBox(width: 3),
+                  Icon(Icons.arrow_forward_rounded,
+                      size: 13, color: t.accent.active),
+                ]),
+              ),
+            ),
+          ]),
+          const SizedBox(height: 16),
+          if (breakdown.isEmpty)
+            Text(
+                devices.isEmpty && plugin.deviceCount == 0
+                    ? 'No devices registered yet.'
+                    : '${plugin.deviceCount} device${plugin.deviceCount == 1 ? '' : 's'} registered.',
+                style: TextStyle(color: t.surface.onBaseMuted, fontSize: 13))
+          else ...[
+            ClipRRect(
+              borderRadius: BorderRadius.circular(5),
+              child: SizedBox(
+                height: 9,
+                child: Row(children: [
+                  for (var i = 0; i < breakdown.length; i++)
+                    Expanded(
+                      flex: breakdown[i].value,
+                      child: Container(color: colors[i % colors.length]),
+                    ),
+                ]),
+              ),
+            ),
+            const SizedBox(height: 14),
+            Wrap(spacing: 16, runSpacing: 8, children: [
+              for (var i = 0; i < breakdown.length; i++)
+                Row(mainAxisSize: MainAxisSize.min, children: [
+                  Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                          color: colors[i % colors.length],
+                          shape: BoxShape.circle)),
+                  const SizedBox(width: 6),
+                  Text('${breakdown[i].value} ${breakdown[i].key}',
+                      style: TextStyle(
+                          color: t.surface.onBase,
+                          fontSize: 12.5,
+                          fontFeatures: t.numericFontFeatures)),
+                ]),
+            ]),
+          ],
+        ]));
+  }
+
+  Widget _connectionCard(
+      HcTokens t, String statusLabel, Color statusColor, String? hb) {
+    final rows = <Widget>[
+      _connRow(t, 'Transport', plugin.managed ? 'local child' : 'remote',
+          mono: true),
+      _connRow(t, 'Status', statusLabel, valueColor: statusColor),
+      _connRow(t, 'Heartbeat', hb != null ? '$hb ago' : '—',
+          valueColor:
+              hb != null && plugin.heartbeatHealthy ? t.accent.success : null,
+          mono: true),
+      _connRow(t, 'Config',
+          plugin.configPath != null ? plugin.configPath!.split('/').last : '—',
+          mono: true),
+    ];
+    return _card(t,
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          _cardLabel(t, 'Connection'),
+          const SizedBox(height: 14),
+          for (var i = 0; i < rows.length; i++) ...[
+            rows[i],
+            if (i != rows.length - 1)
+              Divider(
+                  height: 17, color: t.stroke.hairline.withValues(alpha: 0.6)),
+          ],
+        ]));
+  }
+
+  Widget _connRow(HcTokens t, String label, String value,
+          {Color? valueColor, bool mono = false}) =>
+      Row(children: [
+        Text(label,
+            style: TextStyle(color: t.surface.onBaseMuted, fontSize: 13)),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.right,
+              style: TextStyle(
+                  color: valueColor ?? t.surface.onBase,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  fontFeatures: mono ? t.numericFontFeatures : null)),
+        ),
+      ]);
+
+  Widget _card(HcTokens t, {required Widget child}) => Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: t.surface.raised,
+          borderRadius: t.radius.mdR,
+          border: Border.all(color: t.stroke.hairline),
+        ),
+        child: child,
+      );
+
+  Widget _cardLabel(HcTokens t, String s) => Text(s.toUpperCase(),
+      style: TextStyle(
+          color: t.surface.onBaseMuted,
+          fontSize: 11,
+          letterSpacing: 1.1,
+          fontWeight: FontWeight.w700));
+
+  List<Color> _segColors(HcTokens t) => [
+        t.accent.active,
+        const Color(0xFF5FB8D0),
+        t.accent.success,
+        const Color(0xFF9B8CFF),
+        t.accent.primary,
+        const Color(0xFFE08AC0),
+      ];
+
+  List<MapEntry<String, int>> _breakdown(List<DeviceState> devices) {
+    final counts = <String, int>{};
+    for (final d in devices) {
+      counts[_plural(d.deviceType)] = (counts[_plural(d.deviceType)] ?? 0) + 1;
+    }
+    final entries = counts.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    return entries;
+  }
+
+  String _plural(String? type) {
+    final w = (type == null || type.isEmpty)
+        ? 'device'
+        : type.toLowerCase().replaceAll('_', ' ');
+    if (w.endsWith('s') ||
+        w.endsWith('x') ||
+        w.endsWith('ch') ||
+        w.endsWith('sh')) {
+      return '${w}es';
+    }
+    if (w.endsWith('y') && w.length > 1 && !'aeiou'.contains(w[w.length - 2])) {
+      return '${w.substring(0, w.length - 1)}ies';
+    }
+    return '${w}s';
+  }
 }
 
 // ── Config section pane (inline, rich controls, shared save bar) ────────────
@@ -592,7 +906,8 @@ class _ConfigSectionPane extends ConsumerWidget {
     required this.error,
   });
   final PluginEntry plugin;
-  final String section; // '' = all (no-schema fallback), else the schema section
+  final String
+      section; // '' = all (no-schema fallback), else the schema section
   final Map<String, Object?> edits;
   final void Function(String key, Object? val) onField;
   final Future<void> Function(PluginConfigDoc doc) onSave;
@@ -610,7 +925,8 @@ class _ConfigSectionPane extends ConsumerWidget {
     }
     final doc = docA.valueOrNull;
     if (doc == null) {
-      return _empty(t, 'Nothing to configure', 'This plugin exposes no editable config.');
+      return _empty(
+          t, 'Nothing to configure', 'This plugin exposes no editable config.');
     }
     final schema = schemaA.valueOrNull;
     final fields = (schema != null && !schema.isEmpty)
@@ -619,9 +935,8 @@ class _ConfigSectionPane extends ConsumerWidget {
     if (fields == null || fields.isEmpty) {
       return _empty(t, 'Nothing to configure', 'Raw config only.');
     }
-    final flat = doc.config == null
-        ? <String, dynamic>{}
-        : flattenConfig(doc.config!);
+    final flat =
+        doc.config == null ? <String, dynamic>{} : flattenConfig(doc.config!);
 
     final arrayKey = fields.objectArrays.firstWhere(
       (a) => a.toLowerCase() == section.toLowerCase(),
@@ -639,8 +954,9 @@ class _ConfigSectionPane extends ConsumerWidget {
       }).toList();
       for (final f in rows) {
         final secret = fields.secretFields.contains(f.name);
-        final value =
-            edits.containsKey(f.name) ? edits[f.name] : (flat[f.name] ?? f.defaultValue);
+        final value = edits.containsKey(f.name)
+            ? edits[f.name]
+            : (flat[f.name] ?? f.defaultValue);
         body.add(_row(t, f, value, secret,
             hasDefault: f.defaultValue != null,
             onChanged: (v) => onField(f.name, v)));
@@ -650,12 +966,18 @@ class _ConfigSectionPane extends ConsumerWidget {
     return Column(children: [
       Expanded(
         child: SingleChildScrollView(
-          padding: EdgeInsets.fromLTRB(t.space.lg, t.space.lg, t.space.lg, t.space.md),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          padding: EdgeInsets.fromLTRB(
+              t.space.lg, t.space.lg, t.space.lg, t.space.md),
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(section.isEmpty ? 'Configuration' : section,
-                style: TextStyle(color: t.surface.onBase, fontSize: 17, fontWeight: FontWeight.w700)),
+                style: TextStyle(
+                    color: t.surface.onBase,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700)),
             const SizedBox(height: 3),
-            Text('Operator settings — changes apply on save${plugin.managed ? ' (restarts the plugin)' : ''}.',
+            Text(
+                'Operator settings — changes apply on save${plugin.managed ? ' (restarts the plugin)' : ''}.',
                 style: TextStyle(color: t.surface.onBaseMuted, fontSize: 13)),
             const SizedBox(height: 14),
             ...body,
@@ -666,36 +988,52 @@ class _ConfigSectionPane extends ConsumerWidget {
         Container(
           width: double.infinity,
           padding: const EdgeInsets.fromLTRB(24, 10, 24, 0),
-          child: Text(error!, style: TextStyle(color: t.accent.danger, fontSize: 12.5)),
+          child: Text(error!,
+              style: TextStyle(color: t.accent.danger, fontSize: 12.5)),
         ),
       if (edits.isNotEmpty) _saveBar(context, t, doc),
     ]);
   }
 
-  Widget _saveBar(BuildContext context, HcTokens t, PluginConfigDoc doc) => Container(
+  Widget _saveBar(BuildContext context, HcTokens t, PluginConfigDoc doc) =>
+      Container(
         padding: EdgeInsets.all(t.space.md),
         decoration: BoxDecoration(
           color: t.surface.raised.withValues(alpha: 0.4),
           border: Border(top: BorderSide(color: t.stroke.hairline)),
         ),
         child: Row(children: [
-          Container(width: 7, height: 7, decoration: BoxDecoration(
-              color: t.accent.active, shape: BoxShape.circle,
-              boxShadow: [BoxShadow(color: t.accent.active, blurRadius: 8)])),
+          Container(
+              width: 7,
+              height: 7,
+              decoration: BoxDecoration(
+                  color: t.accent.active,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(color: t.accent.active, blurRadius: 8)
+                  ])),
           const SizedBox(width: 9),
           Text('${edits.length} unsaved change${edits.length == 1 ? '' : 's'}',
-              style: TextStyle(color: t.accent.active, fontSize: 13, fontWeight: FontWeight.w600)),
+              style: TextStyle(
+                  color: t.accent.active,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600)),
           const Spacer(),
           TextButton(
               onPressed: saving ? null : onDiscard,
-              child: Text('Discard', style: TextStyle(color: t.surface.onBase))),
+              child:
+                  Text('Discard', style: TextStyle(color: t.surface.onBase))),
           const SizedBox(width: 8),
           FilledButton(
             onPressed: saving ? null : () => onSave(doc),
             style: FilledButton.styleFrom(
-                backgroundColor: t.accent.active, foregroundColor: t.accent.onPrimary),
+                backgroundColor: t.accent.active,
+                foregroundColor: t.accent.onPrimary),
             child: saving
-                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2))
                 : const Text('Save changes'),
           ),
         ]),
@@ -707,19 +1045,32 @@ class _ConfigSectionPane extends ConsumerWidget {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 14),
       decoration: BoxDecoration(
-          border: Border(bottom: BorderSide(color: t.stroke.hairline.withValues(alpha: 0.6)))),
+          border: Border(
+              bottom:
+                  BorderSide(color: t.stroke.hairline.withValues(alpha: 0.6)))),
       child: Row(children: [
         Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-            Row(children: [
-              Flexible(child: Text(f.label ?? f.name,
-                  style: TextStyle(color: t.surface.onBase, fontSize: 14.5, fontWeight: FontWeight.w600))),
-              if (f.required) Text(' *', style: TextStyle(color: t.accent.active)),
-            ]),
-            if (f.help != null)
-              Padding(padding: const EdgeInsets.only(top: 3),
-                  child: Text(f.help!, style: TextStyle(color: t.surface.onBaseMuted, fontSize: 12.5))),
-          ]),
+          child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(children: [
+                  Flexible(
+                      child: Text(f.label ?? f.name,
+                          style: TextStyle(
+                              color: t.surface.onBase,
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.w600))),
+                  if (f.required)
+                    Text(' *', style: TextStyle(color: t.accent.active)),
+                ]),
+                if (f.help != null)
+                  Padding(
+                      padding: const EdgeInsets.only(top: 3),
+                      child: Text(f.help!,
+                          style: TextStyle(
+                              color: t.surface.onBaseMuted, fontSize: 12.5))),
+              ]),
         ),
         const SizedBox(width: 18),
         _control(t, f, value, secret, onChanged),
@@ -739,9 +1090,11 @@ class _ConfigSectionPane extends ConsumerWidget {
       case WidgetConfigKind.choice:
         final opts = f.options ?? const <String>[];
         if (opts.length <= 3) {
-          return _Segmented(options: opts, value: value?.toString(), onChanged: onChanged);
+          return _Segmented(
+              options: opts, value: value?.toString(), onChanged: onChanged);
         }
-        return _Dropdown(options: opts, value: value?.toString(), onChanged: onChanged);
+        return _Dropdown(
+            options: opts, value: value?.toString(), onChanged: onChanged);
       case WidgetConfigKind.integer:
         return _NumInput(
             value: value?.toString() ?? '',
@@ -752,12 +1105,16 @@ class _ConfigSectionPane extends ConsumerWidget {
         return _TextInput(
             value: list,
             width: 200,
-            onChanged: (s) => onChanged(
-                s.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList()));
+            onChanged: (s) => onChanged(s
+                .split(',')
+                .map((e) => e.trim())
+                .where((e) => e.isNotEmpty)
+                .toList()));
       default:
         if (secret) {
           return _SecretInput(
-            stored: value == redactedSentinel || (value is String && value.isNotEmpty),
+            stored: value == redactedSentinel ||
+                (value is String && value.isNotEmpty),
             onChanged: (s) => onChanged(s.isEmpty ? redactedSentinel : s),
           );
         }
@@ -767,7 +1124,8 @@ class _ConfigSectionPane extends ConsumerWidget {
 
   String? _unitFor(String name) {
     final n = name.toLowerCase();
-    if (n.endsWith('_secs') || n.contains('interval') || n.contains('timeout')) return 'secs';
+    if (n.endsWith('_secs') || n.contains('interval') || n.contains('timeout'))
+      return 'secs';
     if (n.endsWith('_ms')) return 'ms';
     if (n.contains('size_mb') || n.endsWith('_mb')) return 'MB';
     if (n.contains('days')) return 'days';
@@ -781,7 +1139,8 @@ class _ConfigSectionPane extends ConsumerWidget {
         ? raw.whereType<Map>().map((m) => m.cast<String, dynamic>()).toList()
         : const <Map<String, dynamic>>[];
     String primary(Map<String, dynamic> m) =>
-        (m['name'] ?? m['bridge_id'] ?? m['host'] ?? m['id'] ?? 'item').toString();
+        (m['name'] ?? m['bridge_id'] ?? m['host'] ?? m['id'] ?? 'item')
+            .toString();
     String? sub(Map<String, dynamic> m) {
       final p = [m['host'], m['ip'], m['bridge_id']]
           .whereType<String>()
@@ -790,9 +1149,11 @@ class _ConfigSectionPane extends ConsumerWidget {
           .join('  ·  ');
       return p.isEmpty ? null : p;
     }
+
     bool paired(Map<String, dynamic> m) => m.entries.any((e) =>
         isSecretFieldName(e.key) &&
-        (e.value == redactedSentinel || (e.value is String && (e.value as String).isNotEmpty)));
+        (e.value == redactedSentinel ||
+            (e.value is String && (e.value as String).isNotEmpty)));
 
     if (items.isEmpty) {
       return _empty(t, 'None paired yet', 'Pair one from the Actions section.');
@@ -808,26 +1169,52 @@ class _ConfigSectionPane extends ConsumerWidget {
             border: Border.all(color: t.stroke.hairline),
           ),
           child: Row(children: [
-            Container(width: 40, height: 40, alignment: Alignment.center,
-                decoration: BoxDecoration(color: t.surface.sunken, borderRadius: BorderRadius.circular(11),
+            Container(
+                width: 40,
+                height: 40,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                    color: t.surface.sunken,
+                    borderRadius: BorderRadius.circular(11),
                     border: Border.all(color: t.stroke.hairline)),
-                child: Icon(Icons.router_rounded, size: 19, color: t.surface.onBaseMuted)),
+                child: Icon(Icons.router_rounded,
+                    size: 19, color: t.surface.onBaseMuted)),
             const SizedBox(width: 13),
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-              Text(primary(m), style: TextStyle(color: t.surface.onBase, fontSize: 14.5, fontWeight: FontWeight.w600)),
-              if (sub(m) != null) Padding(padding: const EdgeInsets.only(top: 2),
-                  child: Text(sub(m)!, style: TextStyle(color: t.surface.onBaseMuted, fontSize: 12, fontFeatures: t.numericFontFeatures))),
-            ])),
-            if (paired(m)) Container(
-              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-              decoration: BoxDecoration(color: t.accent.active.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(t.radius.pill)),
-              child: Row(mainAxisSize: MainAxisSize.min, children: [
-                Icon(HcIcons.check, size: 11, color: t.accent.active),
-                const SizedBox(width: 4),
-                Text('Paired', style: TextStyle(color: t.accent.active, fontSize: 11, fontWeight: FontWeight.w600)),
-              ]),
-            ),
+            Expanded(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                  Text(primary(m),
+                      style: TextStyle(
+                          color: t.surface.onBase,
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.w600)),
+                  if (sub(m) != null)
+                    Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(sub(m)!,
+                            style: TextStyle(
+                                color: t.surface.onBaseMuted,
+                                fontSize: 12,
+                                fontFeatures: t.numericFontFeatures))),
+                ])),
+            if (paired(m))
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                decoration: BoxDecoration(
+                    color: t.accent.active.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(t.radius.pill)),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(HcIcons.check, size: 11, color: t.accent.active),
+                  const SizedBox(width: 4),
+                  Text('Paired',
+                      style: TextStyle(
+                          color: t.accent.active,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600)),
+                ]),
+              ),
           ]),
         ),
     ]);
@@ -836,16 +1223,22 @@ class _ConfigSectionPane extends ConsumerWidget {
   Widget _empty(HcTokens t, String title, String sub) => Padding(
         padding: EdgeInsets.all(t.space.xl),
         child: Column(children: [
-          Text(title, style: TextStyle(color: t.surface.onBase, fontSize: 15, fontWeight: FontWeight.w600)),
+          Text(title,
+              style: TextStyle(
+                  color: t.surface.onBase,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600)),
           const SizedBox(height: 6),
-          Text(sub, style: TextStyle(color: t.surface.onBaseMuted, fontSize: 12.5)),
+          Text(sub,
+              style: TextStyle(color: t.surface.onBaseMuted, fontSize: 12.5)),
         ]),
       );
 }
 
 // ── Rich controls ───────────────────────────────────────────────────────────
 class _Segmented extends StatelessWidget {
-  const _Segmented({required this.options, required this.value, required this.onChanged});
+  const _Segmented(
+      {required this.options, required this.value, required this.onChanged});
   final List<String> options;
   final String? value;
   final ValueChanged<Object?> onChanged;
@@ -869,7 +1262,9 @@ class _Segmented extends StatelessWidget {
                   borderRadius: BorderRadius.circular(6)),
               child: Text(o.toUpperCase(),
                   style: TextStyle(
-                      color: value == o ? t.accent.onPrimary : t.surface.onBaseMuted,
+                      color: value == o
+                          ? t.accent.onPrimary
+                          : t.surface.onBaseMuted,
                       fontSize: 12.5,
                       fontWeight: FontWeight.w600)),
             ),
@@ -880,7 +1275,8 @@ class _Segmented extends StatelessWidget {
 }
 
 class _Dropdown extends StatelessWidget {
-  const _Dropdown({required this.options, required this.value, required this.onChanged});
+  const _Dropdown(
+      {required this.options, required this.value, required this.onChanged});
   final List<String> options;
   final String? value;
   final ValueChanged<Object?> onChanged;
@@ -898,9 +1294,11 @@ class _Dropdown extends StatelessWidget {
         underline: const SizedBox.shrink(),
         dropdownColor: t.surface.overlay,
         style: TextStyle(color: t.surface.onBase, fontSize: 14),
-        icon: Icon(Icons.expand_more_rounded, color: t.surface.onBaseMuted, size: 18),
+        icon: Icon(Icons.expand_more_rounded,
+            color: t.surface.onBaseMuted, size: 18),
         items: [
-          for (final o in options) DropdownMenuItem(value: o, child: Text(o.toUpperCase()))
+          for (final o in options)
+            DropdownMenuItem(value: o, child: Text(o.toUpperCase()))
         ],
         onChanged: (v) => onChanged(v),
       ),
@@ -909,7 +1307,8 @@ class _Dropdown extends StatelessWidget {
 }
 
 class _NumInput extends StatefulWidget {
-  const _NumInput({required this.value, required this.unit, required this.onChanged});
+  const _NumInput(
+      {required this.value, required this.unit, required this.onChanged});
   final String value;
   final String? unit;
   final ValueChanged<String> onChanged;
@@ -918,7 +1317,8 @@ class _NumInput extends StatefulWidget {
 }
 
 class _NumInputState extends State<_NumInput> {
-  late final TextEditingController _c = TextEditingController(text: widget.value);
+  late final TextEditingController _c =
+      TextEditingController(text: widget.value);
   @override
   void dispose() {
     _c.dispose();
@@ -941,24 +1341,31 @@ class _NumInputState extends State<_NumInput> {
             textAlign: TextAlign.right,
             keyboardType: TextInputType.number,
             onChanged: widget.onChanged,
-            style: TextStyle(color: t.surface.onBase, fontSize: 14, fontFeatures: t.numericFontFeatures),
+            style: TextStyle(
+                color: t.surface.onBase,
+                fontSize: 14,
+                fontFeatures: t.numericFontFeatures),
             decoration: const InputDecoration(
                 isDense: true,
                 border: InputBorder.none,
-                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10)),
+                contentPadding:
+                    EdgeInsets.symmetric(horizontal: 12, vertical: 10)),
           ),
         ),
         if (widget.unit != null)
           Padding(
               padding: const EdgeInsets.only(right: 12, left: 2),
-              child: Text(widget.unit!, style: TextStyle(color: t.surface.onBaseMuted, fontSize: 12.5))),
+              child: Text(widget.unit!,
+                  style:
+                      TextStyle(color: t.surface.onBaseMuted, fontSize: 12.5))),
       ]),
     );
   }
 }
 
 class _TextInput extends StatefulWidget {
-  const _TextInput({required this.value, required this.onChanged, this.width = 170});
+  const _TextInput(
+      {required this.value, required this.onChanged, this.width = 170});
   final String value;
   final ValueChanged<String> onChanged;
   final double width;
@@ -967,7 +1374,8 @@ class _TextInput extends StatefulWidget {
 }
 
 class _TextInputState extends State<_TextInput> {
-  late final TextEditingController _c = TextEditingController(text: widget.value);
+  late final TextEditingController _c =
+      TextEditingController(text: widget.value);
   @override
   void dispose() {
     _c.dispose();
@@ -987,11 +1395,14 @@ class _TextInputState extends State<_TextInput> {
             isDense: true,
             filled: true,
             fillColor: t.surface.sunken,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
             enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(9), borderSide: BorderSide(color: t.stroke.hairline)),
+                borderRadius: BorderRadius.circular(9),
+                borderSide: BorderSide(color: t.stroke.hairline)),
             focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(9), borderSide: BorderSide(color: t.stroke.focus))),
+                borderRadius: BorderRadius.circular(9),
+                borderSide: BorderSide(color: t.stroke.focus))),
       ),
     );
   }
@@ -1030,15 +1441,22 @@ class _SecretInputState extends State<_SecretInput> {
             fillColor: t.surface.sunken,
             hintText: widget.stored ? '•••• stored' : null,
             hintStyle: TextStyle(color: t.surface.onBaseMuted, fontSize: 13),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
             suffixIcon: IconButton(
-                icon: Icon(_reveal ? Icons.visibility_off_rounded : Icons.visibility_rounded,
-                    size: 17, color: t.surface.onBaseMuted),
+                icon: Icon(
+                    _reveal
+                        ? Icons.visibility_off_rounded
+                        : Icons.visibility_rounded,
+                    size: 17,
+                    color: t.surface.onBaseMuted),
                 onPressed: () => setState(() => _reveal = !_reveal)),
             enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(9), borderSide: BorderSide(color: t.stroke.hairline)),
+                borderRadius: BorderRadius.circular(9),
+                borderSide: BorderSide(color: t.stroke.hairline)),
             focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(9), borderSide: BorderSide(color: t.stroke.focus))),
+                borderRadius: BorderRadius.circular(9),
+                borderSide: BorderSide(color: t.stroke.focus))),
       ),
     );
   }
@@ -1088,7 +1506,10 @@ class _EnablePane extends ConsumerWidget {
         ),
         child: Row(children: [
           Expanded(
-            child: Text(plugin.enabled ? 'Enabled — running under supervision' : 'Disabled — not started',
+            child: Text(
+                plugin.enabled
+                    ? 'Enabled — running under supervision'
+                    : 'Disabled — not started',
                 style: TextStyle(color: t.surface.onBase, fontSize: 14)),
           ),
           Switch(
@@ -1117,14 +1538,22 @@ class _UpdatePane extends ConsumerWidget {
       subtitle: 'A newer version is available in the registry.',
       child: Row(children: [
         Text('v${plugin.installedVersion} → v$version',
-            style: TextStyle(color: t.surface.onBase, fontSize: 15, fontWeight: FontWeight.w600, fontFeatures: t.numericFontFeatures)),
+            style: TextStyle(
+                color: t.surface.onBase,
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                fontFeatures: t.numericFontFeatures)),
         const SizedBox(width: 16),
         FilledButton(
           onPressed: () async {
-            await ref.read(pluginsApiProvider).installFromRegistry(plugin.pluginId, version: version);
+            await ref
+                .read(pluginsApiProvider)
+                .installFromRegistry(plugin.pluginId, version: version);
             ref.invalidate(pluginsProvider);
           },
-          style: FilledButton.styleFrom(backgroundColor: t.accent.active, foregroundColor: t.accent.onPrimary),
+          style: FilledButton.styleFrom(
+              backgroundColor: t.accent.active,
+              foregroundColor: t.accent.onPrimary),
           child: Text('Update to v$version'),
         ),
       ]),
@@ -1150,8 +1579,10 @@ class _UninstallPane extends ConsumerWidget {
         OutlinedButton.icon(
           onPressed: () => _confirm(context, ref),
           icon: Icon(HcIcons.trash, size: 15, color: t.accent.danger),
-          label: Text('Uninstall plugin', style: TextStyle(color: t.accent.danger)),
-          style: OutlinedButton.styleFrom(side: BorderSide(color: t.accent.danger.withValues(alpha: 0.5))),
+          label: Text('Uninstall plugin',
+              style: TextStyle(color: t.accent.danger)),
+          style: OutlinedButton.styleFrom(
+              side: BorderSide(color: t.accent.danger.withValues(alpha: 0.5))),
         ),
       ]),
     );
@@ -1163,12 +1594,16 @@ class _UninstallPane extends ConsumerWidget {
       context: context,
       builder: (c) => AlertDialog(
         title: const Text('Uninstall plugin?'),
-        content: Text('Stops ${plugin.displayName} and removes its devices. Its config is kept.'),
+        content: Text(
+            'Stops ${plugin.displayName} and removes its devices. Its config is kept.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(c, false),
+              child: const Text('Cancel')),
           TextButton(
               onPressed: () => Navigator.pop(c, true),
-              child: Text('Uninstall', style: TextStyle(color: t.accent.danger))),
+              child:
+                  Text('Uninstall', style: TextStyle(color: t.accent.danger))),
         ],
       ),
     );
