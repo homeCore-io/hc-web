@@ -7,6 +7,7 @@ import 'design/skins.dart';
 import 'features/admin/admin_shell.dart';
 import 'features/admin/areas_page.dart';
 import 'features/admin/logs_page.dart';
+import 'features/plugins/plugin_studio_page.dart';
 import 'features/plugins/plugins_page.dart';
 import 'features/admin/system_page.dart';
 import 'features/admin/users_page.dart';
@@ -146,6 +147,11 @@ GoRouter _buildRouter(Ref ref) {
           GoRoute(path: '/events', builder: (_, __) => const EventsPage()),
           GoRoute(path: '/media', builder: (_, __) => const MediaPage()),
           GoRoute(path: '/plugins', builder: (_, __) => const PluginsPage()),
+          GoRoute(
+            path: '/plugins/:id',
+            builder: (_, state) =>
+                PluginStudioPage(pluginId: state.pathParameters['id']!),
+          ),
           GoRoute(
               path: '/devices/:id',
               builder: (_, state) =>

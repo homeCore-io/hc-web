@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/models/plugin_entry.dart';
 import '../../core/providers/plugins_provider.dart';
@@ -8,7 +9,6 @@ import '../../design/hc_icons.dart';
 import '../../design/skins.dart';
 import '../../design/tokens.dart';
 import '../../shared/widgets/skeleton.dart';
-import 'plugin_sheet.dart';
 import 'registry_sheet.dart';
 
 /// The plugins section — an app-native surface, not the dense admin table its
@@ -85,7 +85,7 @@ class _PluginsView extends ConsumerWidget {
             delegate: SliverChildBuilderDelegate(
               (context, i) => _PluginCard(
                 sorted[i],
-                onTap: () => showPluginSheet(context, ref, sorted[i]),
+                onTap: () => context.go('/plugins/${sorted[i].pluginId}'),
               ),
               childCount: sorted.length,
             ),
