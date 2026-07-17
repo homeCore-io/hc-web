@@ -10,6 +10,7 @@ class PluginEntry {
     this.managed = false,
     this.deviceCount = 0,
     this.version,
+    this.installedVersion,
     this.uptimeStarted,
     this.lastHeartbeat,
     this.configPath,
@@ -27,6 +28,9 @@ class PluginEntry {
   final bool managed;
   final int deviceCount;
   final String? version;
+
+  /// Installed artifact version (registry/managed plugins), for "update available".
+  final String? installedVersion;
   final DateTime? uptimeStarted;
   final DateTime? lastHeartbeat;
   final String? configPath;
@@ -40,6 +44,7 @@ class PluginEntry {
         managed: json['managed'] as bool? ?? false,
         deviceCount: (json['device_count'] as num?)?.toInt() ?? 0,
         version: json['version'] as String?,
+        installedVersion: json['installed_version'] as String?,
         uptimeStarted: DateTime.tryParse('${json['uptime_started'] ?? ''}'),
         lastHeartbeat: DateTime.tryParse('${json['last_heartbeat'] ?? ''}'),
         configPath: json['config_path'] as String?,
@@ -54,6 +59,7 @@ class PluginEntry {
         managed: managed,
         deviceCount: deviceCount,
         version: version,
+        installedVersion: installedVersion,
         uptimeStarted: uptimeStarted,
         lastHeartbeat: lastHeartbeat,
         configPath: configPath,

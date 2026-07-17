@@ -33,20 +33,24 @@ class _RegistrySheetState extends ConsumerState<_RegistrySheet> {
   String? _installing;
   String? _error;
 
-  Future<void> _install(RegistryPlugin p) async {
+  Future<void> _install(RegistryPlugin p, {String? version}) async {
     final messenger = ScaffoldMessenger.of(context);
+    final upgrade = version != null;
     setState(() {
       _installing = p.id;
       _error = null;
     });
     try {
-      await ref.read(pluginsApiProvider).installFromRegistry(p.id);
+      await ref
+          .read(pluginsApiProvider)
+          .installFromRegistry(p.id, version: version);
       ref.invalidate(pluginsProvider);
       ref.invalidate(registryPluginsProvider);
-      messenger.showSnackBar(
-          SnackBar(content: Text('Installed ${p.displayName}')));
+      messenger.showSnackBar(SnackBar(
+          content: Text(
+              '${upgrade ? 'Updated' : 'Installed'} ${p.displayName}')));
     } catch (e) {
-      setState(() => _error = 'Install failed: $e');
+      setState(() => _error = '${upgrade ? 'Update' : 'Install'} failed: $e');
     } finally {
       if (mounted) setState(() => _installing = null);
     }
@@ -56,9 +60,10 @@ class _RegistrySheetState extends ConsumerState<_RegistrySheet> {
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
     final catalog = ref.watch(registryPluginsProvider);
-    final installed = (ref.watch(pluginsProvider).valueOrNull ?? const [])
-        .map((p) => p.pluginId)
-        .toSet();
+    final installedVersions = <String, String?>{
+      for (final p in (ref.watch(pluginsProvider).valueOrNull ?? const []))
+        p.pluginId: p.installedVersion,
+    };
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -100,7 +105,7 @@ class _RegistrySheetState extends ConsumerState<_RegistrySheet> {
                     itemCount: plugins.length,
                     separatorBuilder: (_, __) => const SizedBox(height: 10),
                     itemBuilder: (_, i) =>
-                        _row(t, plugins[i], installed.contains(plugins[i].id)),
+                        _row(t, plugins[i], installedVersions),
                   ),
           ),
         ),
@@ -108,7 +113,11 @@ class _RegistrySheetState extends ConsumerState<_RegistrySheet> {
     );
   }
 
-  Widget _row(HcTokens t, RegistryPlugin p, bool installed) {
+  Widget _row(HcTokens t, RegistryPlugin p, Map<String, String?> installedVersions) {
+    final installed = installedVersions.containsKey(p.id);
+    final installedVer = installedVersions[p.id];
+    final updateAvailable =
+        installed && p.latest != null && p.latest != installedVer;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 12),
       decoration: BoxDecoration(
@@ -156,12 +165,34 @@ class _RegistrySheetState extends ConsumerState<_RegistrySheet> {
           ),
         ),
         const SizedBox(width: 12),
-        _action(t, p, installed),
+        _action(t, p, installed, updateAvailable),
       ]),
     );
   }
 
-  Widget _action(HcTokens t, RegistryPlugin p, bool installed) {
+  Widget _filledButton(HcTokens t, String label, VoidCallback? onPressed) =>
+      FilledButton(
+        onPressed: onPressed,
+        style: FilledButton.styleFrom(
+          backgroundColor: t.accent.active,
+          foregroundColor: t.accent.onPrimary,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          minimumSize: Size.zero,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+        child: Text(label),
+      );
+
+  Widget _action(
+      HcTokens t, RegistryPlugin p, bool installed, bool updateAvailable) {
+    if (_installing == p.id) {
+      return const SizedBox(
+          width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2));
+    }
+    if (updateAvailable) {
+      return _filledButton(t, 'Update to v${p.latest}',
+          _installing != null ? null : () => _install(p, version: p.latest));
+    }
     if (installed) {
       return Row(mainAxisSize: MainAxisSize.min, children: [
         Icon(HcIcons.check, size: 13, color: t.accent.active),
@@ -173,21 +204,8 @@ class _RegistrySheetState extends ConsumerState<_RegistrySheet> {
                 fontWeight: FontWeight.w600)),
       ]);
     }
-    if (_installing == p.id) {
-      return const SizedBox(
-          width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2));
-    }
-    return FilledButton(
-      onPressed: _installing != null ? null : () => _install(p),
-      style: FilledButton.styleFrom(
-        backgroundColor: t.accent.active,
-        foregroundColor: t.accent.onPrimary,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        minimumSize: Size.zero,
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      ),
-      child: const Text('Install'),
-    );
+    return _filledButton(
+        t, 'Install', _installing != null ? null : () => _install(p));
   }
 
   Widget _empty(HcTokens t, String title, String sub) => Padding(
