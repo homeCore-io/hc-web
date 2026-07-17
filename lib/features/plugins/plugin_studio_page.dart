@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/dashboard/widget_registry.dart';
+import '../../core/models/plugin_config.dart';
 import '../../core/models/plugin_entry.dart';
 import '../../core/providers/plugin_config_provider.dart';
 import '../../core/providers/plugins_provider.dart';
@@ -10,7 +12,6 @@ import '../../design/hc_icons.dart';
 import '../../design/skins.dart';
 import '../../design/tokens.dart';
 import 'plugin_actions.dart';
-import 'plugin_config_editor.dart';
 
 /// One full-page surface per plugin: status + info + actions + configuration.
 /// Replaces the detail sheet + separate config editor. Slice 1 delivers the
@@ -38,6 +39,48 @@ class _NavItem {
 
 class _PluginStudioPageState extends ConsumerState<PluginStudioPage> {
   String _selected = 'overview';
+
+  /// Edited config values (dotted keys), shared across config sections so
+  /// switching sections keeps edits and one Save applies the whole config.
+  final Map<String, Object?> _edits = {};
+  bool _savingCfg = false;
+  String? _cfgError;
+
+  void _setField(String key, Object? val) => setState(() {
+        _edits[key] = val;
+        _cfgError = null;
+      });
+
+  void _discardConfig() => setState(() {
+        _edits.clear();
+        _cfgError = null;
+      });
+
+  Future<void> _saveConfig(PluginConfigDoc doc) async {
+    if (_edits.isEmpty) return;
+    setState(() {
+      _savingCfg = true;
+      _cfgError = null;
+    });
+    try {
+      final patched = _deepCopy(doc.config ?? const {});
+      _edits.forEach((k, v) => _setNested(patched, k, v));
+      await ref
+          .read(pluginsApiProvider)
+          .putConfig(widget.pluginId, config: patched);
+      ref.invalidate(pluginConfigProvider(widget.pluginId));
+      ref.invalidate(pluginsProvider);
+      setState(() {
+        _edits.clear();
+        _savingCfg = false;
+      });
+    } catch (e) {
+      setState(() {
+        _cfgError = '$e';
+        _savingCfg = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -142,7 +185,18 @@ class _PluginStudioPageState extends ConsumerState<PluginStudioPage> {
       );
     }
     if (_selected.startsWith('config')) {
-      return _ConfigLauncherPane(plugin: p);
+      final section =
+          _selected == 'config' ? '' : _selected.substring('config:'.length);
+      return _ConfigSectionPane(
+        plugin: p,
+        section: section,
+        edits: _edits,
+        onField: _setField,
+        onSave: _saveConfig,
+        onDiscard: _discardConfig,
+        saving: _savingCfg,
+        error: _cfgError,
+      );
     }
     if (_selected == 'update' && update != null) {
       return _UpdatePane(plugin: p, version: update);
@@ -525,43 +579,494 @@ class _OverviewPane extends ConsumerWidget {
       );
 }
 
-// ── Config launcher (slice 1 placeholder → existing editor) ─────────────────
-class _ConfigLauncherPane extends ConsumerWidget {
-  const _ConfigLauncherPane({required this.plugin});
+// ── Config section pane (inline, rich controls, shared save bar) ────────────
+class _ConfigSectionPane extends ConsumerWidget {
+  const _ConfigSectionPane({
+    required this.plugin,
+    required this.section,
+    required this.edits,
+    required this.onField,
+    required this.onSave,
+    required this.onDiscard,
+    required this.saving,
+    required this.error,
+  });
   final PluginEntry plugin;
+  final String section; // '' = all (no-schema fallback), else the schema section
+  final Map<String, Object?> edits;
+  final void Function(String key, Object? val) onField;
+  final Future<void> Function(PluginConfigDoc doc) onSave;
+  final VoidCallback onDiscard;
+  final bool saving;
+  final String? error;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = HcTokens.of(context);
-    return _PaneScaffold(
-      title: 'Configuration',
-      subtitle: 'Operator settings for this plugin.',
-      child: Container(
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: t.surface.raised,
-          borderRadius: t.radius.mdR,
-          border: Border.all(color: t.stroke.hairline),
+    final docA = ref.watch(pluginConfigProvider(plugin.pluginId));
+    final schemaA = ref.watch(pluginConfigFieldsProvider(plugin.pluginId));
+    if (docA.isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    final doc = docA.valueOrNull;
+    if (doc == null) {
+      return _empty(t, 'Nothing to configure', 'This plugin exposes no editable config.');
+    }
+    final schema = schemaA.valueOrNull;
+    final fields = (schema != null && !schema.isEmpty)
+        ? schema
+        : (doc.config != null ? inferFieldsFromConfig(doc.config!) : null);
+    if (fields == null || fields.isEmpty) {
+      return _empty(t, 'Nothing to configure', 'Raw config only.');
+    }
+    final flat = doc.config == null
+        ? <String, dynamic>{}
+        : flattenConfig(doc.config!);
+
+    final arrayKey = fields.objectArrays.firstWhere(
+      (a) => a.toLowerCase() == section.toLowerCase(),
+      orElse: () => '',
+    );
+
+    final body = <Widget>[];
+    if (arrayKey.isNotEmpty) {
+      body.add(_hubList(t, doc, arrayKey));
+    } else {
+      final rows = fields.fields.where((f) {
+        if (isBootstrapConfigKey(f.name)) return false;
+        if (section.isEmpty) return true;
+        return (fields.sectionOf[f.name] ?? 'General') == section;
+      }).toList();
+      for (final f in rows) {
+        final secret = fields.secretFields.contains(f.name);
+        final value =
+            edits.containsKey(f.name) ? edits[f.name] : (flat[f.name] ?? f.defaultValue);
+        body.add(_row(t, f, value, secret,
+            hasDefault: f.defaultValue != null,
+            onChanged: (v) => onField(f.name, v)));
+      }
+    }
+
+    return Column(children: [
+      Expanded(
+        child: SingleChildScrollView(
+          padding: EdgeInsets.fromLTRB(t.space.lg, t.space.lg, t.space.lg, t.space.md),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(section.isEmpty ? 'Configuration' : section,
+                style: TextStyle(color: t.surface.onBase, fontSize: 17, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 3),
+            Text('Operator settings — changes apply on save${plugin.managed ? ' (restarts the plugin)' : ''}.',
+                style: TextStyle(color: t.surface.onBaseMuted, fontSize: 13)),
+            const SizedBox(height: 14),
+            ...body,
+          ]),
         ),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Inline per-section editing lands in the next slice.',
-              style: TextStyle(color: t.surface.onBase, fontSize: 14, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 6),
-          Text('For now the full schema-driven form opens here.',
-              style: TextStyle(color: t.surface.onBaseMuted, fontSize: 13)),
-          const SizedBox(height: 16),
-          FilledButton.icon(
-            onPressed: () => showPluginConfigEditor(context, ref, plugin),
-            icon: const Icon(HcIcons.pencil, size: 16),
-            label: const Text('Edit configuration'),
+      ),
+      if (error != null)
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(24, 10, 24, 0),
+          child: Text(error!, style: TextStyle(color: t.accent.danger, fontSize: 12.5)),
+        ),
+      if (edits.isNotEmpty) _saveBar(context, t, doc),
+    ]);
+  }
+
+  Widget _saveBar(BuildContext context, HcTokens t, PluginConfigDoc doc) => Container(
+        padding: EdgeInsets.all(t.space.md),
+        decoration: BoxDecoration(
+          color: t.surface.raised.withValues(alpha: 0.4),
+          border: Border(top: BorderSide(color: t.stroke.hairline)),
+        ),
+        child: Row(children: [
+          Container(width: 7, height: 7, decoration: BoxDecoration(
+              color: t.accent.active, shape: BoxShape.circle,
+              boxShadow: [BoxShadow(color: t.accent.active, blurRadius: 8)])),
+          const SizedBox(width: 9),
+          Text('${edits.length} unsaved change${edits.length == 1 ? '' : 's'}',
+              style: TextStyle(color: t.accent.active, fontSize: 13, fontWeight: FontWeight.w600)),
+          const Spacer(),
+          TextButton(
+              onPressed: saving ? null : onDiscard,
+              child: Text('Discard', style: TextStyle(color: t.surface.onBase))),
+          const SizedBox(width: 8),
+          FilledButton(
+            onPressed: saving ? null : () => onSave(doc),
             style: FilledButton.styleFrom(
-                backgroundColor: t.accent.active.withValues(alpha: 0.16),
-                foregroundColor: t.accent.active,
-                elevation: 0),
+                backgroundColor: t.accent.active, foregroundColor: t.accent.onPrimary),
+            child: saving
+                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                : const Text('Save changes'),
           ),
         ]),
+      );
+
+  // A field row: label + description on the left, rich control on the right.
+  Widget _row(HcTokens t, WidgetConfigField f, Object? value, bool secret,
+      {required bool hasDefault, required ValueChanged<Object?> onChanged}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 14),
+      decoration: BoxDecoration(
+          border: Border(bottom: BorderSide(color: t.stroke.hairline.withValues(alpha: 0.6)))),
+      child: Row(children: [
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+            Row(children: [
+              Flexible(child: Text(f.label ?? f.name,
+                  style: TextStyle(color: t.surface.onBase, fontSize: 14.5, fontWeight: FontWeight.w600))),
+              if (f.required) Text(' *', style: TextStyle(color: t.accent.active)),
+            ]),
+            if (f.help != null)
+              Padding(padding: const EdgeInsets.only(top: 3),
+                  child: Text(f.help!, style: TextStyle(color: t.surface.onBaseMuted, fontSize: 12.5))),
+          ]),
+        ),
+        const SizedBox(width: 18),
+        _control(t, f, value, secret, onChanged),
+      ]),
+    );
+  }
+
+  Widget _control(HcTokens t, WidgetConfigField f, Object? value, bool secret,
+      ValueChanged<Object?> onChanged) {
+    switch (f.kind) {
+      case WidgetConfigKind.boolean:
+        return Switch(
+          value: value == true,
+          activeThumbColor: t.accent.active,
+          onChanged: onChanged,
+        );
+      case WidgetConfigKind.choice:
+        final opts = f.options ?? const <String>[];
+        if (opts.length <= 3) {
+          return _Segmented(options: opts, value: value?.toString(), onChanged: onChanged);
+        }
+        return _Dropdown(options: opts, value: value?.toString(), onChanged: onChanged);
+      case WidgetConfigKind.integer:
+        return _NumInput(
+            value: value?.toString() ?? '',
+            unit: _unitFor(f.name),
+            onChanged: (s) => onChanged(num.tryParse(s)));
+      case WidgetConfigKind.stringList:
+        final list = value is List ? (value).join(', ') : '';
+        return _TextInput(
+            value: list,
+            width: 200,
+            onChanged: (s) => onChanged(
+                s.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList()));
+      default:
+        if (secret) {
+          return _SecretInput(
+            stored: value == redactedSentinel || (value is String && value.isNotEmpty),
+            onChanged: (s) => onChanged(s.isEmpty ? redactedSentinel : s),
+          );
+        }
+        return _TextInput(value: value?.toString() ?? '', onChanged: onChanged);
+    }
+  }
+
+  String? _unitFor(String name) {
+    final n = name.toLowerCase();
+    if (n.endsWith('_secs') || n.contains('interval') || n.contains('timeout')) return 'secs';
+    if (n.endsWith('_ms')) return 'ms';
+    if (n.contains('size_mb') || n.endsWith('_mb')) return 'MB';
+    if (n.contains('days')) return 'days';
+    if (n.contains('port')) return null;
+    return null;
+  }
+
+  Widget _hubList(HcTokens t, PluginConfigDoc doc, String key) {
+    final raw = doc.config?[key];
+    final items = raw is List
+        ? raw.whereType<Map>().map((m) => m.cast<String, dynamic>()).toList()
+        : const <Map<String, dynamic>>[];
+    String primary(Map<String, dynamic> m) =>
+        (m['name'] ?? m['bridge_id'] ?? m['host'] ?? m['id'] ?? 'item').toString();
+    String? sub(Map<String, dynamic> m) {
+      final p = [m['host'], m['ip'], m['bridge_id']]
+          .whereType<String>()
+          .where((s) => s.isNotEmpty)
+          .take(2)
+          .join('  ·  ');
+      return p.isEmpty ? null : p;
+    }
+    bool paired(Map<String, dynamic> m) => m.entries.any((e) =>
+        isSecretFieldName(e.key) &&
+        (e.value == redactedSentinel || (e.value is String && (e.value as String).isNotEmpty)));
+
+    if (items.isEmpty) {
+      return _empty(t, 'None paired yet', 'Pair one from the Actions section.');
+    }
+    return Column(children: [
+      for (final m in items)
+        Container(
+          margin: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 14),
+          decoration: BoxDecoration(
+            color: t.surface.raised,
+            borderRadius: t.radius.mdR,
+            border: Border.all(color: t.stroke.hairline),
+          ),
+          child: Row(children: [
+            Container(width: 40, height: 40, alignment: Alignment.center,
+                decoration: BoxDecoration(color: t.surface.sunken, borderRadius: BorderRadius.circular(11),
+                    border: Border.all(color: t.stroke.hairline)),
+                child: Icon(Icons.router_rounded, size: 19, color: t.surface.onBaseMuted)),
+            const SizedBox(width: 13),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+              Text(primary(m), style: TextStyle(color: t.surface.onBase, fontSize: 14.5, fontWeight: FontWeight.w600)),
+              if (sub(m) != null) Padding(padding: const EdgeInsets.only(top: 2),
+                  child: Text(sub(m)!, style: TextStyle(color: t.surface.onBaseMuted, fontSize: 12, fontFeatures: t.numericFontFeatures))),
+            ])),
+            if (paired(m)) Container(
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+              decoration: BoxDecoration(color: t.accent.active.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(t.radius.pill)),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(HcIcons.check, size: 11, color: t.accent.active),
+                const SizedBox(width: 4),
+                Text('Paired', style: TextStyle(color: t.accent.active, fontSize: 11, fontWeight: FontWeight.w600)),
+              ]),
+            ),
+          ]),
+        ),
+    ]);
+  }
+
+  Widget _empty(HcTokens t, String title, String sub) => Padding(
+        padding: EdgeInsets.all(t.space.xl),
+        child: Column(children: [
+          Text(title, style: TextStyle(color: t.surface.onBase, fontSize: 15, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 6),
+          Text(sub, style: TextStyle(color: t.surface.onBaseMuted, fontSize: 12.5)),
+        ]),
+      );
+}
+
+// ── Rich controls ───────────────────────────────────────────────────────────
+class _Segmented extends StatelessWidget {
+  const _Segmented({required this.options, required this.value, required this.onChanged});
+  final List<String> options;
+  final String? value;
+  final ValueChanged<Object?> onChanged;
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+          color: t.surface.sunken,
+          borderRadius: BorderRadius.circular(9),
+          border: Border.all(color: t.stroke.hairline)),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        for (final o in options)
+          GestureDetector(
+            onTap: () => onChanged(o),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 6),
+              decoration: BoxDecoration(
+                  color: value == o ? t.accent.active : Colors.transparent,
+                  borderRadius: BorderRadius.circular(6)),
+              child: Text(o.toUpperCase(),
+                  style: TextStyle(
+                      color: value == o ? t.accent.onPrimary : t.surface.onBaseMuted,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600)),
+            ),
+          ),
+      ]),
+    );
+  }
+}
+
+class _Dropdown extends StatelessWidget {
+  const _Dropdown({required this.options, required this.value, required this.onChanged});
+  final List<String> options;
+  final String? value;
+  final ValueChanged<Object?> onChanged;
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+      decoration: BoxDecoration(
+          color: t.surface.sunken,
+          borderRadius: BorderRadius.circular(9),
+          border: Border.all(color: t.stroke.hairline)),
+      child: DropdownButton<String>(
+        value: options.contains(value) ? value : null,
+        underline: const SizedBox.shrink(),
+        dropdownColor: t.surface.overlay,
+        style: TextStyle(color: t.surface.onBase, fontSize: 14),
+        icon: Icon(Icons.expand_more_rounded, color: t.surface.onBaseMuted, size: 18),
+        items: [
+          for (final o in options) DropdownMenuItem(value: o, child: Text(o.toUpperCase()))
+        ],
+        onChanged: (v) => onChanged(v),
       ),
     );
   }
+}
+
+class _NumInput extends StatefulWidget {
+  const _NumInput({required this.value, required this.unit, required this.onChanged});
+  final String value;
+  final String? unit;
+  final ValueChanged<String> onChanged;
+  @override
+  State<_NumInput> createState() => _NumInputState();
+}
+
+class _NumInputState extends State<_NumInput> {
+  late final TextEditingController _c = TextEditingController(text: widget.value);
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Container(
+      decoration: BoxDecoration(
+          color: t.surface.sunken,
+          borderRadius: BorderRadius.circular(9),
+          border: Border.all(color: t.stroke.hairline)),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        SizedBox(
+          width: 64,
+          child: TextField(
+            controller: _c,
+            textAlign: TextAlign.right,
+            keyboardType: TextInputType.number,
+            onChanged: widget.onChanged,
+            style: TextStyle(color: t.surface.onBase, fontSize: 14, fontFeatures: t.numericFontFeatures),
+            decoration: const InputDecoration(
+                isDense: true,
+                border: InputBorder.none,
+                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10)),
+          ),
+        ),
+        if (widget.unit != null)
+          Padding(
+              padding: const EdgeInsets.only(right: 12, left: 2),
+              child: Text(widget.unit!, style: TextStyle(color: t.surface.onBaseMuted, fontSize: 12.5))),
+      ]),
+    );
+  }
+}
+
+class _TextInput extends StatefulWidget {
+  const _TextInput({required this.value, required this.onChanged, this.width = 170});
+  final String value;
+  final ValueChanged<String> onChanged;
+  final double width;
+  @override
+  State<_TextInput> createState() => _TextInputState();
+}
+
+class _TextInputState extends State<_TextInput> {
+  late final TextEditingController _c = TextEditingController(text: widget.value);
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return SizedBox(
+      width: widget.width,
+      child: TextField(
+        controller: _c,
+        onChanged: widget.onChanged,
+        style: TextStyle(color: t.surface.onBase, fontSize: 14),
+        decoration: InputDecoration(
+            isDense: true,
+            filled: true,
+            fillColor: t.surface.sunken,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+            enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(9), borderSide: BorderSide(color: t.stroke.hairline)),
+            focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(9), borderSide: BorderSide(color: t.stroke.focus))),
+      ),
+    );
+  }
+}
+
+class _SecretInput extends StatefulWidget {
+  const _SecretInput({required this.stored, required this.onChanged});
+  final bool stored;
+  final ValueChanged<String> onChanged;
+  @override
+  State<_SecretInput> createState() => _SecretInputState();
+}
+
+class _SecretInputState extends State<_SecretInput> {
+  final _c = TextEditingController();
+  bool _reveal = false;
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return SizedBox(
+      width: 200,
+      child: TextField(
+        controller: _c,
+        obscureText: !_reveal,
+        onChanged: widget.onChanged,
+        style: TextStyle(color: t.surface.onBase, fontSize: 14),
+        decoration: InputDecoration(
+            isDense: true,
+            filled: true,
+            fillColor: t.surface.sunken,
+            hintText: widget.stored ? '•••• stored' : null,
+            hintStyle: TextStyle(color: t.surface.onBaseMuted, fontSize: 13),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+            suffixIcon: IconButton(
+                icon: Icon(_reveal ? Icons.visibility_off_rounded : Icons.visibility_rounded,
+                    size: 17, color: t.surface.onBaseMuted),
+                onPressed: () => setState(() => _reveal = !_reveal)),
+            enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(9), borderSide: BorderSide(color: t.stroke.hairline)),
+            focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(9), borderSide: BorderSide(color: t.stroke.focus))),
+      ),
+    );
+  }
+}
+
+// deep copy + set-nested (patch config preserving arrays)
+Map<String, dynamic> _deepCopy(Map<dynamic, dynamic> m) {
+  final out = <String, dynamic>{};
+  m.forEach((k, v) {
+    out[k.toString()] = v is Map
+        ? _deepCopy(v)
+        : v is List
+            ? List<dynamic>.from(v)
+            : v;
+  });
+  return out;
+}
+
+void _setNested(Map<String, dynamic> root, String dotted, Object? value) {
+  final parts = dotted.split('.');
+  var cursor = root;
+  for (var i = 0; i < parts.length - 1; i++) {
+    final next = cursor[parts[i]];
+    cursor = next is Map
+        ? next.cast<String, dynamic>()
+        : (cursor[parts[i]] = <String, dynamic>{});
+  }
+  cursor[parts.last] = value;
 }
 
 // ── Manage panes ────────────────────────────────────────────────────────────
