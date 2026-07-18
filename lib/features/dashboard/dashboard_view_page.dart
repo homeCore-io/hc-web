@@ -243,25 +243,32 @@ class _DashboardWidgetCard extends ConsumerWidget {
 List<DeviceState> _selectDevices(
     List<DeviceState> all, Map<String, dynamic> config) {
   final selectionMode = config['selection_mode'] as String? ?? 'query';
-  var selected = all;
+  // Device grids/lists are for real, physical devices. Never surface the
+  // pseudo-entries — modes/timers/switches (`core.*`, isSystem) and scene
+  // devices (device_type "scene") — or a broad/empty query fills the card with
+  // "Day Mode", "Night Mode", and scene rows that belong in mode_chips /
+  // scene_row instead. Those get their own widgets.
+  final base =
+      all.where((d) => !d.isSystem && d.deviceType != 'scene').toList();
+  var selected = base;
   switch (selectionMode) {
     case 'manual':
       final ids = ((config['device_ids'] as List?) ?? const [])
           .whereType<String>()
           .toSet();
-      selected = all.where((device) => ids.contains(device.id)).toList();
+      selected = base.where((device) => ids.contains(device.id)).toList();
       break;
     case 'area':
       final areaName = config['area_name'] as String?;
       if (areaName != null && areaName.isNotEmpty) {
-        selected = all.where((device) => device.area == areaName).toList();
+        selected = base.where((device) => device.area == areaName).toList();
       }
       break;
     case 'query':
     default:
       final query = (config['query'] as String? ?? '').toLowerCase();
       if (query.isNotEmpty) {
-        selected = all.where((device) {
+        selected = base.where((device) {
           return device.displayName.toLowerCase().contains(query) ||
               device.id.toLowerCase().contains(query) ||
               (device.canonicalName?.toLowerCase().contains(query) ?? false) ||
@@ -450,7 +457,7 @@ class _DeviceGridWidget extends ConsumerWidget {
                     const SizedBox(height: 4),
                     Text(
                       device.isMediaPlayer
-                          ? device.title ?? device.playbackState
+                          ? device.mediaSubtitle
                           : device.area != null
                               ? humanize(device.area!)
                               : device.id,
@@ -488,11 +495,15 @@ class _DeviceListWidget extends ConsumerWidget {
                 visualDensity:
                     compact ? VisualDensity.compact : VisualDensity.standard,
                 title: Text(device.displayName),
-                subtitle: Text(device.isMediaPlayer
-                    ? (device.title ?? device.playbackState)
-                    : (device.area != null
-                        ? humanize(device.area!)
-                        : device.id)),
+                subtitle: Text(
+                  device.isMediaPlayer
+                      ? device.mediaSubtitle
+                      : (device.area != null
+                          ? humanize(device.area!)
+                          : device.id),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
                 trailing: Icon(
                   device.available ? Icons.circle : Icons.circle_outlined,
                   size: 10,
