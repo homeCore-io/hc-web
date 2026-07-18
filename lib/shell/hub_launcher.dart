@@ -81,6 +81,7 @@ const _configPlaces = [
 
 IconData dashboardIcon(String? icon) => switch (icon) {
       'home' => HcIcons.home,
+      'rocket' || 'getting-started' => HcIcons.rocket,
       'security-camera' || 'security' || 'camera' => HcIcons.camera,
       _ => HcIcons.dashboards,
     };

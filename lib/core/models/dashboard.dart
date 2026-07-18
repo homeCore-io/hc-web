@@ -418,7 +418,7 @@ class DashboardTemplateFactory {
       ownerUserId: owner,
       visibility: DashboardVisibility.private,
       tags: const ['starter', 'home', 'overview'],
-      icon: 'home',
+      icon: 'rocket',
       isDefault: true,
       createdAt: now,
       updatedAt: now,

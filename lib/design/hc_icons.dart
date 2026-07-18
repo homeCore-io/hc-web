@@ -176,6 +176,11 @@ class HcIcons {
   static const home = IconData(0xe2c2, fontFamily: _regular);
   static const homeFill = IconData(0xe2c2, fontFamily: _fill);
 
+  /// The upright rocket. Verified by rasterising the vendored TTF: 0xe3fc is
+  /// `rocket`, 0xe3fe is `rocket-launch`. Used for the "Getting Started"
+  /// starter dashboard so it reads as onboarding, not a second Home.
+  static const rocket = IconData(0xe3fc, fontFamily: _regular);
+
   // navigation
   static const dashboards = IconData(0xe464, fontFamily: _regular);
   static const devices = IconData(0xeba4, fontFamily: _regular);

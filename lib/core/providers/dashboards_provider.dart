@@ -192,10 +192,24 @@ class DashboardsNotifier extends AsyncNotifier<List<DashboardDefinition>> {
             dashboard.id == starter.id || dashboard.name == starter.name)
         .firstOrNull;
     if (existingStarter != null) {
+      // One-time icon migration: the starter originally shipped with icon
+      // 'home', which renders the identical house glyph to the Home nav item.
+      // Re-point stale copies at the template's current icon ('rocket') so the
+      // rail reads clearly. Idempotent — only fires while the stored icon is
+      // still the legacy 'home'.
+      final needsIconFix =
+          existingStarter.icon == 'home' && starter.icon != 'home';
+      if (needsIconFix) {
+        await api.updateDashboard(existingStarter.copyWith(
+          icon: starter.icon,
+          updatedAt: DateTime.now(),
+        ));
+      }
       if (!dashboards.any((dashboard) => dashboard.isDefault)) {
         await api.setDefault(existingStarter.id);
         return await api.listDashboards();
       }
+      if (needsIconFix) return await api.listDashboards();
       return dashboards;
     }
 
