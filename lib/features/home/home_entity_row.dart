@@ -101,7 +101,7 @@ class _HomeEntityRowState extends ConsumerState<HomeEntityRow> {
       return Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _value(device.title ?? (playing ? 'Playing' : 'Idle'),
+          _value(device.cleanTitle ?? (playing ? 'Playing' : 'Idle'),
               t.surface.onBaseMuted, t,
               max: 130),
           if (device.supportsAction('play')) ...[

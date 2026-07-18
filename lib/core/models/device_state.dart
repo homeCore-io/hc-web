@@ -109,6 +109,27 @@ class DeviceState {
 
   String? get title => (state['title'] ?? state['media_title']) as String?;
 
+  /// The track title, but only when it's actually presentable. Streaming
+  /// sources (Sonos in particular) frequently report the raw stream URL as the
+  /// track `title` — a wall of `hls.m3u8?rj-tok=…` query junk. Returns null
+  /// when the title is missing or looks like a URL/stream token, so callers can
+  /// fall back to a human label.
+  String? get cleanTitle {
+    final t = title;
+    if (t == null || t.isEmpty || _looksLikeStreamUrl(t)) return null;
+    return t;
+  }
+
+  /// The secondary line for a media player. Never surfaces a raw stream URL;
+  /// falls back to the human playback state when there's no presentable title.
+  String get mediaSubtitle => cleanTitle ?? playbackState;
+
+  static bool _looksLikeStreamUrl(String s) =>
+      s.contains('://') ||
+      s.contains('.m3u8') ||
+      (s.contains('?') && s.contains('&')) ||
+      s.length > 60;
+
   String? get artist => (state['artist'] ?? state['media_artist']) as String?;
 
   String? get album => (state['album'] ?? state['media_album']) as String?;

@@ -55,7 +55,10 @@ class HcNowPlaying extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
-    final title = device.title;
+    // Use the sanitized title so a station reporting a raw `hls.m3u8?…` stream
+    // URL as its "track" collapses to the idle row instead of rendering a card
+    // full of query-string junk.
+    final title = device.cleanTitle;
 
     // An idle speaker collapses to a row.
     //
