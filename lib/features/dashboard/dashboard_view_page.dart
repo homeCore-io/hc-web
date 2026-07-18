@@ -1801,6 +1801,10 @@ String? _validateSelection(Map<String, dynamic> c) {
   if (mode == 'area' && (c['area_name'] as String?)?.isNotEmpty != true) {
     return 'Pick an area.';
   }
+  // NOTE: manual mode with an empty device_ids is intentionally allowed — core
+  // accepts it, and this check must mirror core exactly (see widget_registry
+  // _test "client-side validation mirrors core"). The empty-card case is
+  // avoided instead by defaulting new grids/lists to query mode.
   return null;
 }
 

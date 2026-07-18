@@ -268,27 +268,61 @@ class _ConfigFormState extends ConsumerState<_ConfigForm> {
   }
 
   Widget _area(WidgetConfigField f) {
-    final areas = ref.watch(areasProvider).valueOrNull ?? const [];
-    final names = [
-      for (final a in areas) (a['name'] ?? a['id'] ?? '').toString(),
-    ]..sort();
+    final areasAsync = ref.watch(areasProvider);
+    final devices = ref.watch(devicesProvider).valueOrNull ?? const [];
+    // The area catalog (GET /areas) is empty on a fresh system, so fall back to
+    // the areas devices actually report. Matching on device.area is also what
+    // the widget filters on, so a device-derived name is guaranteed to select
+    // something — a catalog-only name might not.
+    final names = <String>{
+      for (final a in (areasAsync.valueOrNull ?? const []))
+        (a['name'] ?? a['id'] ?? '').toString(),
+      for (final d in devices)
+        if ((d.area ?? '').isNotEmpty) d.area!,
+    }.where((s) => s.isNotEmpty).toList()
+      ..sort();
     final value = _config[f.name] as String?;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _label(f),
-        DropdownButtonFormField<String>(
-          initialValue: names.contains(value) ? value : null,
-          isExpanded: true,
-          decoration: const InputDecoration(
-              isDense: true, border: OutlineInputBorder()),
-          items: [
-            for (final n in names)
-              DropdownMenuItem(value: n, child: Text(humanize(n))),
-          ],
-          onChanged: (v) => _set(f.name, v),
-        ),
+        if (names.isEmpty)
+          _hint(areasAsync.isLoading
+              ? 'Loading areas…'
+              : 'No areas yet. Assign devices to rooms in Manage, or pick '
+                  'Manual/Query instead.')
+        else
+          DropdownButtonFormField<String>(
+            initialValue: names.contains(value) ? value : null,
+            isExpanded: true,
+            decoration: const InputDecoration(
+                isDense: true, border: OutlineInputBorder()),
+            items: [
+              for (final n in names)
+                DropdownMenuItem(value: n, child: Text(humanize(n))),
+            ],
+            onChanged: (v) => _set(f.name, v),
+          ),
+        _help(f),
       ],
+    );
+  }
+
+  // A quiet inline note where a control would be, for the empty/loading states
+  // that an unselectable dropdown used to hide.
+  Widget _hint(String message) {
+    final t = HcTokens.of(context);
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(t.space.md),
+      decoration: BoxDecoration(
+        color: t.surface.sunken,
+        borderRadius: t.radius.smR,
+        border: Border.all(color: t.stroke.hairline, width: t.stroke.width),
+      ),
+      child: Text(message,
+          style: TextStyle(fontSize: 12, color: t.surface.onBaseMuted)),
     );
   }
 

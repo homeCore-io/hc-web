@@ -40,7 +40,16 @@ const _addable = <String>[
 
 /// Starting values, so a form opens on something reasonable rather than blank.
 Map<String, dynamic> _defaultConfig(String type) => switch (type) {
-      'device_grid' || 'device_list' || 'device_tile' || 'media_player' => {
+      // Grids/lists open on "query" with an empty query, which means "all
+      // devices" — so a freshly added card immediately shows something rather
+      // than an empty manual selection you have to discover how to fill.
+      'device_grid' || 'device_list' => {
+          'selection_mode': 'query',
+          'query': '',
+          'show_offline': true,
+        },
+      // A single-device tile / player really does need you to choose one.
+      'device_tile' || 'media_player' => {
           'selection_mode': 'manual',
           'device_ids': <String>[],
         },
