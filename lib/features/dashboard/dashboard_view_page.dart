@@ -4,16 +4,19 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/api/events_history_api.dart';
 import '../../core/api/history_api.dart';
 import '../../core/text/humanize.dart';
 import '../../core/dashboard/widget_registry.dart';
 import 'camera_card.dart';
 import '../../core/devices/presentation.dart';
+import '../../design/hc_icons.dart';
 import '../../design/components/hc_surface.dart';
 import '../../design/components/hc_tile.dart';
 import '../../design/tokens.dart';
 import '../devices/device_sheet.dart';
 import '../home/home_entity_row.dart';
+import '../home/home_rich_cards.dart';
 import '../../core/models/dashboard.dart';
 import '../../core/models/device_state.dart';
 import '../../core/models/hc_event.dart';
@@ -424,7 +427,7 @@ class _DeviceGridWidget extends ConsumerWidget {
             crossAxisCount: columns,
             mainAxisSpacing: 12,
             crossAxisSpacing: 12,
-            childAspectRatio: veryCompact ? 1.25 : 1.1,
+            childAspectRatio: veryCompact ? 1.9 : 1.7,
           ),
           itemBuilder: (context, index) {
             final device = devices[index];
@@ -508,16 +511,17 @@ class _ModeChipsWidget extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final modes = ref.watch(modesProvider).valueOrNull ?? const <ModeState>[];
+    final t = HcTokens.of(context);
     return Wrap(
-      spacing: 8,
-      runSpacing: 8,
+      spacing: t.space.sm,
+      runSpacing: t.space.sm,
       children: modes
-          .map((mode) => FilterChip(
-                label: Text(mode.displayName),
+          .map((mode) => _TokenChip(
+                label: mode.displayName,
                 selected: mode.on,
-                onSelected: mode.kind == 'manual'
-                    ? (value) =>
-                        ref.read(modesApiProvider).setModeOn(mode.id, value)
+                onTap: mode.kind == 'manual'
+                    ? () =>
+                        ref.read(modesApiProvider).setModeOn(mode.id, !mode.on)
                     : null,
               ))
           .toList(),
@@ -532,16 +536,76 @@ class _SceneRowWidget extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final scenes =
         ref.watch(scenesProvider).valueOrNull ?? const <SceneModel>[];
+    final t = HcTokens.of(context);
     return Wrap(
-      spacing: 8,
-      runSpacing: 8,
+      spacing: t.space.sm,
+      runSpacing: t.space.sm,
       children: scenes
-          .map((scene) => FilledButton.tonal(
-                onPressed: () =>
+          .map((scene) => _TokenChip(
+                label: scene.name,
+                icon: HcIcons.play,
+                onTap: () =>
                     ref.read(scenesApiProvider).activateScene(scene.id),
-                child: Text(scene.name),
               ))
           .toList(),
+    );
+  }
+}
+
+/// A tokenised pill — the shared shape for modes and scenes. Amber when active,
+/// a quiet sunken pill otherwise; presses ripple within the pill.
+class _TokenChip extends StatelessWidget {
+  const _TokenChip({
+    required this.label,
+    this.selected = false,
+    this.icon,
+    this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final IconData? icon;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    final fg = selected ? t.accent.active : t.surface.onBase;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(t.radius.pill),
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: t.motion.d(t.motion.fast),
+          padding: EdgeInsets.symmetric(
+              horizontal: t.space.md, vertical: t.space.sm - 1),
+          decoration: BoxDecoration(
+            color: selected
+                ? t.accent.active.withValues(alpha: 0.14)
+                : t.surface.sunken,
+            borderRadius: BorderRadius.circular(t.radius.pill),
+            border: Border.all(
+              color: selected
+                  ? t.accent.active.withValues(alpha: 0.6)
+                  : t.stroke.hairline,
+              width: t.stroke.width,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (icon != null) ...[
+                Icon(icon, size: 13, color: fg),
+                SizedBox(width: t.space.xs),
+              ],
+              Text(label,
+                  style: TextStyle(
+                      fontSize: 12.5, fontWeight: FontWeight.w600, color: fg)),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -562,21 +626,44 @@ class _EventFeedWidgetState extends ConsumerState<_EventFeedWidget> {
   final List<HcEvent> _events = [];
   ProviderSubscription<AsyncValue<HcEvent>>? _sub;
 
+  int get _limit => widget.widgetModel.config['limit'] as int? ?? 12;
+
   @override
   void initState() {
     super.initState();
+    // Seed with recent history so the log isn't empty until something happens —
+    // the stream only carries events that arrive AFTER we subscribe.
+    _loadHistory();
     _sub =
         ref.listenManual<AsyncValue<HcEvent>>(eventsStreamProvider, (_, next) {
       next.whenData((event) {
-        final limit = widget.widgetModel.config['limit'] as int? ?? 10;
         setState(() {
           _events.insert(0, event);
-          if (_events.length > limit) {
-            _events.removeRange(limit, _events.length);
+          if (_events.length > _limit) {
+            _events.removeRange(_limit, _events.length);
           }
         });
       });
     });
+  }
+
+  Future<void> _loadHistory() async {
+    try {
+      final api = EventsHistoryApi(ref.read(homecoreClientProvider));
+      final entries = await api.listEvents(limit: _limit);
+      if (!mounted) return;
+      setState(() {
+        _events
+          ..clear()
+          ..addAll(entries.map((e) => HcEvent.fromJson({
+                ...e.event,
+                'type': e.eventType,
+                if (e.deviceId != null) 'device_id': e.deviceId,
+              })));
+      });
+    } catch (_) {
+      // Best-effort; the live stream will still fill in.
+    }
   }
 
   @override
@@ -599,7 +686,6 @@ class _EventFeedWidgetState extends ConsumerState<_EventFeedWidget> {
             .whereType<String>()
             .toSet();
     final areaFilter = widget.widgetModel.config['area_name'] as String? ?? '';
-    final groupBy = widget.widgetModel.config['group_by'] as String? ?? 'none';
     final filtered = _events.where((event) {
       if (allowedTypes.isNotEmpty && !allowedTypes.contains(event.type)) {
         return false;
@@ -620,77 +706,144 @@ class _EventFeedWidgetState extends ConsumerState<_EventFeedWidget> {
 
     final t = HcTokens.of(context);
     if (filtered.isEmpty) {
-      return Text('No recent events yet.',
-          style: TextStyle(color: t.surface.onBaseMuted));
+      return Row(
+        children: [
+          Icon(Icons.history_toggle_off,
+              size: 15, color: t.surface.onBaseMuted),
+          SizedBox(width: t.space.sm),
+          Text('No events yet — activity will stream in here.',
+              style: TextStyle(color: t.surface.onBaseMuted, fontSize: 12.5)),
+        ],
+      );
     }
-    final maxItems =
-        widget.compact && filtered.length > 5 ? 5 : filtered.length;
-    final shown = filtered.take(maxItems).toList();
-    String groupLabel(HcEvent event) {
-      switch (groupBy) {
-        case 'type':
-          return event.type;
-        case 'device':
-          return event.deviceId == null
-              ? 'Other'
-              : (deviceById[event.deviceId!]?.displayName ?? event.deviceId!);
-        case 'area':
-          return event.deviceId == null
-              ? 'Other'
-              : (deviceById[event.deviceId!]?.area ?? 'Unassigned');
-        default:
-          return '';
-      }
-    }
+    final shown =
+        (widget.compact && filtered.length > 6 ? filtered.take(6) : filtered)
+            .toList();
 
-    final children = <Widget>[];
-    String? currentGroup;
-    for (final event in shown) {
-      final label = groupLabel(event);
-      if (groupBy != 'none' && label != currentGroup) {
-        currentGroup = label;
-        children.add(Padding(
-          padding: EdgeInsets.only(top: t.space.sm, bottom: t.space.xs),
-          child: Text(
-            humanize(label),
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.4,
-              color: t.surface.onBaseMuted,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var i = 0; i < shown.length; i++) ...[
+          if (i > 0) Divider(height: 1, thickness: 1, color: t.stroke.hairline),
+          _logRow(t, shown[i], deviceById),
+        ],
+      ],
+    );
+  }
+
+  // One line of the log: a monospaced clock, a category dot, the event and its
+  // subject, and how long ago it happened — the shape of a real event viewer.
+  Widget _logRow(HcTokens t, HcEvent e, Map<String, DeviceState> deviceById) {
+    final color = _eventColor(e.type, t);
+    final ts = e.timestamp.toLocal();
+    final clock = '${_pad(ts.hour)}:${_pad(ts.minute)}:${_pad(ts.second)}';
+    final detail = _eventDetail(e, deviceById);
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: t.space.xs + 1),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 56,
+            child: Text(clock,
+                style: TextStyle(
+                    fontSize: 11.5,
+                    color: t.surface.onBaseMuted,
+                    fontFeatures: t.numericFontFeatures)),
+          ),
+          Padding(
+            padding: EdgeInsets.only(top: 5, right: t.space.sm),
+            child: Container(
+                width: 7,
+                height: 7,
+                decoration:
+                    BoxDecoration(color: color, shape: BoxShape.circle)),
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(humanize(e.type),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: t.surface.onBase)),
+                if (detail.isNotEmpty)
+                  Text(detail,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontSize: 11, color: t.surface.onBaseMuted)),
+              ],
             ),
           ),
-        ));
-      }
-      final subtitle = event.deviceId == null
-          ? event.data['rule_id']?.toString() ??
-              event.data['scene_id']?.toString() ??
-              ''
-          : [
-              deviceById[event.deviceId!]?.displayName ?? event.deviceId!,
-              if ((deviceById[event.deviceId!]?.area ?? '').isNotEmpty)
-                humanize(deviceById[event.deviceId!]?.area ?? ''),
-            ].whereType<String>().join(' • ');
-      children.add(Padding(
-        padding: EdgeInsets.symmetric(vertical: t.space.xs + 1),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(humanize(event.type),
-                style: TextStyle(fontSize: 13, color: t.surface.onBase)),
-            if (subtitle.isNotEmpty)
-              Text(subtitle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 11, color: t.surface.onBaseMuted)),
-          ],
-        ),
-      ));
-    }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: children,
+          SizedBox(width: t.space.sm),
+          Text(_relTime(e.timestamp),
+              style: TextStyle(
+                  fontSize: 10.5,
+                  color: t.surface.onBaseMuted,
+                  fontFeatures: t.numericFontFeatures)),
+        ],
+      ),
     );
+  }
+
+  static String _pad(int n) => n.toString().padLeft(2, '0');
+
+  Color _eventColor(String type, HcTokens t) {
+    if (type.contains('alert') ||
+        type.contains('error') ||
+        type.contains('offline')) {
+      return t.accent.danger;
+    }
+    if (type.contains('rule')) return t.accent.active;
+    if (type.contains('scene') || type.contains('mode')) {
+      return const Color(0xFF9B8CFF);
+    }
+    if (type.contains('availab') || type.contains('plugin')) {
+      return t.accent.warn;
+    }
+    if (type.contains('state')) return const Color(0xFF5AA9E6);
+    return t.surface.onBaseMuted;
+  }
+
+  String _eventDetail(HcEvent e, Map<String, DeviceState> deviceById) {
+    final d = e.data;
+    final devName = e.deviceId == null
+        ? null
+        : (deviceById[e.deviceId!]?.displayName ?? e.deviceId);
+    if (e.available != null && devName != null) {
+      return '$devName → ${e.available! ? 'online' : 'offline'}';
+    }
+    final cur = e.current;
+    if (cur != null && devName != null) {
+      final bits = <String>[];
+      if (cur.containsKey('on')) bits.add(cur['on'] == true ? 'on' : 'off');
+      if (cur['state'] is String) bits.add(cur['state'] as String);
+      if (cur['brightness_pct'] != null) bits.add('${cur['brightness_pct']}%');
+      return bits.isEmpty ? devName : '$devName → ${bits.join(', ')}';
+    }
+    if (d['plugin_id'] != null) {
+      final st = d['status'];
+      return '${d['plugin_id']}${st != null ? ' → $st' : ''}';
+    }
+    if (d['rule_name'] != null || d['rule_id'] != null) {
+      return (d['rule_name'] ?? d['rule_id']).toString();
+    }
+    if (d['scene_name'] != null || d['scene_id'] != null) {
+      return (d['scene_name'] ?? d['scene_id']).toString();
+    }
+    return devName ?? '';
+  }
+
+  String _relTime(DateTime ts) {
+    final diff = DateTime.now().difference(ts);
+    if (diff.inSeconds < 45) return 'now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m';
+    if (diff.inHours < 24) return '${diff.inHours}h';
+    return '${diff.inDays}d';
   }
 }
 
@@ -714,290 +867,20 @@ class _MediaPlayerDashboardWidget extends ConsumerWidget {
           message: 'No media players match this widget.');
     }
 
+    final t = HcTokens.of(context);
     final maxItems = compact && devices.length > 2 ? 2 : devices.length;
+    final shown = devices.take(maxItems).toList();
+    // Reuse HcNowPlaying (via HomeMediaCard) — the same rich card the Home and
+    // Media views use: album-art bloom, transport, volume. The old bespoke
+    // Material card is gone.
     return Column(
-      children: devices
-          .take(maxItems)
-          .map((device) => _MediaPlayerDashboardCard(
-                device: device,
-                compact: compact,
-              ))
-          .toList(),
-    );
-  }
-}
-
-class _MediaPlayerDashboardCard extends ConsumerStatefulWidget {
-  final DeviceState device;
-  final bool compact;
-
-  const _MediaPlayerDashboardCard({
-    required this.device,
-    required this.compact,
-  });
-
-  @override
-  ConsumerState<_MediaPlayerDashboardCard> createState() =>
-      _MediaPlayerDashboardCardState();
-}
-
-class _MediaPlayerDashboardCardState
-    extends ConsumerState<_MediaPlayerDashboardCard> {
-  bool _busy = false;
-  double? _volumeDraft;
-
-  Future<void> _send(Map<String, dynamic> body) async {
-    setState(() => _busy = true);
-    try {
-      await ref.read(devicesApiProvider).setDeviceState(widget.device.id, body);
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final device = widget.device;
-    final sonos = device.sonos;
-    final isPlaying = device.playbackState == 'playing' ||
-        device.playbackState == 'buffering';
-    final progress = (device.durationSecs != null && device.durationSecs! > 0)
-        ? ((device.positionSecs ?? 0) / device.durationSecs!).clamp(0.0, 1.0)
-        : null;
-    final volume =
-        (_volumeDraft ?? device.volumePercent?.toDouble())?.clamp(0, 100);
-    final favorites =
-        ((sonos['favorites'] ?? device.state['available_favorites']) as List? ??
-                const [])
-            .whereType<String>()
-            .toList();
-    final playlists =
-        ((sonos['playlists'] ?? device.state['available_playlists']) as List? ??
-                const [])
-            .whereType<String>()
-            .toList();
-    final groupMembers =
-        ((sonos['group_members'] ?? device.state['group_members']) as List? ??
-                const [])
-            .whereType<String>()
-            .toList();
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: InkWell(
-                    onTap: () => context.go('/devices/${device.id}'),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(device.displayName,
-                            style: Theme.of(context).textTheme.titleSmall),
-                        Text(
-                          [
-                            if (device.title != null &&
-                                device.title!.isNotEmpty)
-                              device.title,
-                            if (device.artist != null &&
-                                device.artist!.isNotEmpty)
-                              device.artist,
-                            if ((device.title == null ||
-                                    device.title!.isEmpty) &&
-                                device.playbackState.isNotEmpty)
-                              device.playbackState,
-                          ].whereType<String>().join(' • '),
-                          maxLines: widget.compact ? 1 : 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                if (_busy)
-                  const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                else
-                  Chip(
-                    visualDensity: VisualDensity.compact,
-                    label: Text(device.playbackState),
-                  ),
-              ],
-            ),
-            if (progress != null) ...[
-              const SizedBox(height: 8),
-              LinearProgressIndicator(value: progress),
-              const SizedBox(height: 4),
-              Text(
-                '${_formatDuration(device.positionSecs)} / ${_formatDuration(device.durationSecs)}',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ],
-            if (!widget.compact &&
-                (device.source != null ||
-                    device.album != null ||
-                    groupMembers.isNotEmpty ||
-                    device.uiEnrichments.isNotEmpty)) ...[
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  if (device.source != null && device.source!.isNotEmpty)
-                    Chip(label: Text(device.source!)),
-                  if (device.album != null && device.album!.isNotEmpty)
-                    Chip(label: Text(device.album!)),
-                  ...device.uiEnrichments.take(3).map((item) => Chip(
-                        visualDensity: VisualDensity.compact,
-                        label: Text(item),
-                      )),
-                ],
-              ),
-              if (groupMembers.isNotEmpty) ...[
-                const SizedBox(height: 6),
-                Text(
-                  'Group: ${groupMembers.join(', ')}',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
-            ],
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                if (device.supportsAction('previous'))
-                  IconButton(
-                    tooltip: 'Previous',
-                    onPressed:
-                        _busy ? null : () => _send({'action': 'previous'}),
-                    icon: const Icon(Icons.skip_previous),
-                  ),
-                if (device.supportsAction('play') && !isPlaying)
-                  FilledButton.tonalIcon(
-                    onPressed: _busy ? null : () => _send({'action': 'play'}),
-                    icon: const Icon(Icons.play_arrow),
-                    label: const Text('Play'),
-                  ),
-                if (device.supportsAction('pause') && isPlaying)
-                  FilledButton.tonalIcon(
-                    onPressed: _busy ? null : () => _send({'action': 'pause'}),
-                    icon: const Icon(Icons.pause),
-                    label: const Text('Pause'),
-                  ),
-                if (device.supportsAction('stop'))
-                  OutlinedButton.icon(
-                    onPressed: _busy ? null : () => _send({'action': 'stop'}),
-                    icon: const Icon(Icons.stop),
-                    label: const Text('Stop'),
-                  ),
-                if (device.supportsAction('next'))
-                  IconButton(
-                    tooltip: 'Next',
-                    onPressed: _busy ? null : () => _send({'action': 'next'}),
-                    icon: const Icon(Icons.skip_next),
-                  ),
-              ],
-            ),
-            if (volume != null &&
-                (device.supportsAction('set_volume') ||
-                    device.supportsAction('set_mute'))) ...[
-              const SizedBox(height: 4),
-              Row(
-                children: [
-                  if (device.supportsAction('set_mute'))
-                    IconButton(
-                      tooltip: device.muted == true ? 'Unmute' : 'Mute',
-                      onPressed: _busy
-                          ? null
-                          : () => _send({
-                                'action': 'set_mute',
-                                'muted': !(device.muted ?? false),
-                              }),
-                      icon: Icon(
-                        device.muted == true
-                            ? Icons.volume_off
-                            : Icons.volume_up,
-                      ),
-                    ),
-                  Expanded(
-                    child: Slider(
-                      value: volume.toDouble(),
-                      min: 0,
-                      max: 100,
-                      divisions: 20,
-                      label: '${volume.round()}%',
-                      onChanged: device.supportsAction('set_volume') && !_busy
-                          ? (value) => setState(() => _volumeDraft = value)
-                          : null,
-                      onChangeEnd: device.supportsAction('set_volume') && !_busy
-                          ? (value) {
-                              setState(() => _volumeDraft = null);
-                              _send({
-                                'action': 'set_volume',
-                                'volume': value.round(),
-                              });
-                            }
-                          : null,
-                    ),
-                  ),
-                  Text('${volume.round()}%'),
-                ],
-              ),
-            ],
-            if (!widget.compact && favorites.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: favorites
-                    .take(3)
-                    .map((favorite) => ActionChip(
-                          label: Text(favorite),
-                          onPressed: _busy
-                              ? null
-                              : () => _send({
-                                    'action': 'play_media',
-                                    'media_type': 'favorite',
-                                    'name': favorite,
-                                  }),
-                        ))
-                    .toList(),
-              ),
-            ],
-            if (!widget.compact && playlists.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: playlists
-                    .take(2)
-                    .map((playlist) => ActionChip(
-                          label: Text(playlist),
-                          onPressed: _busy
-                              ? null
-                              : () => _send({
-                                    'action': 'play_media',
-                                    'media_type': 'playlist',
-                                    'name': playlist,
-                                  }),
-                        ))
-                    .toList(),
-              ),
-            ],
-          ],
-        ),
-      ),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var i = 0; i < shown.length; i++) ...[
+          if (i > 0) SizedBox(height: t.space.md),
+          HomeMediaCard(device: shown[i]),
+        ],
+      ],
     );
   }
 }
@@ -1518,18 +1401,6 @@ class _HistoryChartContent extends ConsumerWidget {
       ],
     );
   }
-}
-
-String _formatDuration(int? secs) {
-  if (secs == null || secs < 0) return '--:--';
-  final duration = Duration(seconds: secs);
-  final hours = duration.inHours;
-  final minutes = duration.inMinutes.remainder(60);
-  final seconds = duration.inSeconds.remainder(60);
-  if (hours > 0) {
-    return '$hours:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
-  }
-  return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
 }
 
 class _PlaceholderWidget extends StatelessWidget {
