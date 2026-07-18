@@ -10,7 +10,10 @@ import '../../core/dashboard/widget_registry.dart';
 import 'camera_card.dart';
 import '../../core/devices/presentation.dart';
 import '../../design/components/hc_surface.dart';
+import '../../design/components/hc_tile.dart';
 import '../../design/tokens.dart';
+import '../devices/device_sheet.dart';
+import '../home/home_entity_row.dart';
 import '../../core/models/dashboard.dart';
 import '../../core/models/device_state.dart';
 import '../../core/models/hc_event.dart';
@@ -124,10 +127,12 @@ class _DashboardGridLayout extends StatelessWidget {
           ...layout.placements
         ]..sort((a, b) => a.y != b.y ? a.y.compareTo(b.y) : a.x.compareTo(b.x));
         if (placements.isEmpty) {
-          return const Card(
-            child: Padding(
-              padding: EdgeInsets.all(24),
-              child: Text('This dashboard has no widgets yet.'),
+          final t = HcTokens.of(context);
+          return HcSurface(
+            padding: EdgeInsets.all(t.space.lg),
+            child: Text(
+              'This dashboard has no widgets yet.',
+              style: TextStyle(color: t.surface.onBaseMuted),
             ),
           );
         }
@@ -211,30 +216,36 @@ class _DashboardWidgetCard extends ConsumerWidget {
             ),
           );
 
-    return Card(
-      margin: EdgeInsets.zero,
-      clipBehavior: Clip.antiAlias,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(widgetModel.title,
-                style: Theme.of(context).textTheme.titleMedium),
-            if (widgetModel.subtitle != null &&
-                widgetModel.subtitle!.isNotEmpty) ...[
-              const SizedBox(height: 4),
-              Text(widgetModel.subtitle!,
-                  style: Theme.of(context).textTheme.bodySmall),
-            ],
-            const SizedBox(height: 12),
-            Expanded(
-              child: SingleChildScrollView(
-                child: body,
+    final t = HcTokens.of(context);
+    return HcSurface(
+      padding: EdgeInsets.all(t.space.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (widgetModel.title.isNotEmpty)
+            Text(
+              widgetModel.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: t.surface.onBase,
               ),
             ),
+          if (widgetModel.subtitle != null &&
+              widgetModel.subtitle!.isNotEmpty) ...[
+            SizedBox(height: t.space.xs),
+            Text(
+              widgetModel.subtitle!,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 11, color: t.surface.onBaseMuted),
+            ),
           ],
-        ),
+          SizedBox(height: t.space.sm),
+          Expanded(child: SingleChildScrollView(child: body)),
+        ],
       ),
     );
   }
@@ -355,29 +366,24 @@ class _StatSummaryWidget extends ConsumerWidget {
       }
     }
 
+    final t = HcTokens.of(context);
     return Wrap(
-      spacing: 12,
-      runSpacing: 12,
+      spacing: t.space.sm,
+      runSpacing: t.space.sm,
       children: cards
           .map((card) => SizedBox(
                 width: compact ? 120 : 150,
-                child: Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color:
-                        Theme.of(context).colorScheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(card.icon),
-                      const SizedBox(height: 8),
-                      Text('${card.value}',
-                          style: Theme.of(context).textTheme.headlineSmall),
-                      Text(card.label),
-                    ],
-                  ),
+                child: _SystemTile(
+                  icon: card.icon,
+                  label: card.label,
+                  value: '${card.value}',
+                  detail: '',
+                  active: card.value > 0 &&
+                      card.label != 'Offline' &&
+                      card.label != 'Doors Open',
+                  alert:
+                      (card.label == 'Offline' || card.label == 'Doors Open') &&
+                          card.value > 0,
                 ),
               ))
           .toList(),
@@ -422,52 +428,19 @@ class _DeviceGridWidget extends ConsumerWidget {
           ),
           itemBuilder: (context, index) {
             final device = devices[index];
-            return InkWell(
-              onTap: () => context.go('/devices/${device.id}'),
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  border: Border.all(
-                    color: Theme.of(context).dividerColor,
-                  ),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(device.isMediaPlayer
-                            ? Icons.speaker
-                            : Icons.devices_other_outlined),
-                        const Spacer(),
-                        Icon(
-                          device.available
-                              ? Icons.circle
-                              : Icons.circle_outlined,
-                          size: 10,
-                          color: device.available ? Colors.green : Colors.red,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Text(device.displayName,
-                        maxLines: veryCompact ? 1 : 2,
-                        overflow: TextOverflow.ellipsis),
-                    const SizedBox(height: 4),
-                    Text(
-                      device.isMediaPlayer
-                          ? device.mediaSubtitle
-                          : device.area != null
-                              ? humanize(device.area!)
-                              : device.id,
-                      style: Theme.of(context).textTheme.bodySmall,
-                      maxLines: veryCompact ? 1 : 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
+            final notifier = ref.read(devicesProvider.notifier);
+            return HcTile(
+              device: device,
+              onTap: () => showDeviceSheet(context, device.id),
+              // Media players open their sheet for transport controls; a bare
+              // on/off would be wrong for a speaker.
+              onToggle: device.isMediaPlayer
+                  ? null
+                  : () => notifier.command(device.id, {'on': !isOn(device)}),
+              onLevel: device.isMediaPlayer
+                  ? null
+                  : (v) => notifier.command(
+                      device.id, {'brightness_pct': (v * 100).round()}),
             );
           },
         );
@@ -487,31 +460,14 @@ class _DeviceListWidget extends ConsumerWidget {
       ref.watch(devicesProvider).valueOrNull ?? const <DeviceState>[],
       widgetModel.config,
     );
+    final t = HcTokens.of(context);
     return Column(
-      children: devices
-          .map((device) => ListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                visualDensity:
-                    compact ? VisualDensity.compact : VisualDensity.standard,
-                title: Text(device.displayName),
-                subtitle: Text(
-                  device.isMediaPlayer
-                      ? device.mediaSubtitle
-                      : (device.area != null
-                          ? humanize(device.area!)
-                          : device.id),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                trailing: Icon(
-                  device.available ? Icons.circle : Icons.circle_outlined,
-                  size: 10,
-                  color: device.available ? Colors.green : Colors.red,
-                ),
-                onTap: () => context.go('/devices/${device.id}'),
-              ))
-          .toList(),
+      children: [
+        for (var i = 0; i < devices.length; i++) ...[
+          if (i > 0) Divider(height: 1, thickness: 1, color: t.stroke.hairline),
+          HomeEntityRow(device: devices[i]),
+        ],
+      ],
     );
   }
 }
@@ -531,17 +487,17 @@ class _DeviceTileWidget extends ConsumerWidget {
       return const _PlaceholderWidget(
           message: 'No device selected for this tile.');
     }
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      title: Text(device.displayName),
-      subtitle: Text(device.title ??
-          (device.area != null ? humanize(device.area!) : device.id)),
-      trailing: Icon(
-        device.available ? Icons.circle : Icons.circle_outlined,
-        size: 10,
-        color: device.available ? Colors.green : Colors.red,
-      ),
-      onTap: () => context.go('/devices/${device.id}'),
+    final notifier = ref.read(devicesProvider.notifier);
+    return HcTile(
+      device: device,
+      onTap: () => showDeviceSheet(context, device.id),
+      onToggle: device.isMediaPlayer
+          ? null
+          : () => notifier.command(device.id, {'on': !isOn(device)}),
+      onLevel: device.isMediaPlayer
+          ? null
+          : (v) => notifier
+              .command(device.id, {'brightness_pct': (v * 100).round()}),
     );
   }
 }
@@ -662,8 +618,10 @@ class _EventFeedWidgetState extends ConsumerState<_EventFeedWidget> {
       return true;
     }).toList();
 
+    final t = HcTokens.of(context);
     if (filtered.isEmpty) {
-      return const Text('No recent events yet.');
+      return Text('No recent events yet.',
+          style: TextStyle(color: t.surface.onBaseMuted));
     }
     final maxItems =
         widget.compact && filtered.length > 5 ? 5 : filtered.length;
@@ -692,29 +650,40 @@ class _EventFeedWidgetState extends ConsumerState<_EventFeedWidget> {
       if (groupBy != 'none' && label != currentGroup) {
         currentGroup = label;
         children.add(Padding(
-          padding: const EdgeInsets.only(top: 8, bottom: 4),
+          padding: EdgeInsets.only(top: t.space.sm, bottom: t.space.xs),
           child: Text(
-            label,
-            style: Theme.of(context).textTheme.labelMedium,
+            humanize(label),
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.4,
+              color: t.surface.onBaseMuted,
+            ),
           ),
         ));
       }
-      children.add(ListTile(
-        dense: true,
-        contentPadding: EdgeInsets.zero,
-        visualDensity:
-            widget.compact ? VisualDensity.compact : VisualDensity.standard,
-        title: Text(humanize(event.type)),
-        subtitle: Text(
-          event.deviceId == null
-              ? event.data['rule_id']?.toString() ??
-                  event.data['scene_id']?.toString() ??
-                  ''
-              : [
-                  deviceById[event.deviceId!]?.displayName ?? event.deviceId!,
-                  if ((deviceById[event.deviceId!]?.area ?? '').isNotEmpty)
-                    humanize(deviceById[event.deviceId!]?.area ?? ''),
-                ].whereType<String>().join(' • '),
+      final subtitle = event.deviceId == null
+          ? event.data['rule_id']?.toString() ??
+              event.data['scene_id']?.toString() ??
+              ''
+          : [
+              deviceById[event.deviceId!]?.displayName ?? event.deviceId!,
+              if ((deviceById[event.deviceId!]?.area ?? '').isNotEmpty)
+                humanize(deviceById[event.deviceId!]?.area ?? ''),
+            ].whereType<String>().join(' • ');
+      children.add(Padding(
+        padding: EdgeInsets.symmetric(vertical: t.space.xs + 1),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(humanize(event.type),
+                style: TextStyle(fontSize: 13, color: t.surface.onBase)),
+            if (subtitle.isNotEmpty)
+              Text(subtitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 11, color: t.surface.onBaseMuted)),
+          ],
         ),
       ));
     }
@@ -1039,9 +1008,88 @@ class _MarkdownWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final markdown = widgetModel.config['markdown'] as String? ?? '';
-    return SelectableText(
-        markdown.isEmpty ? 'No markdown content configured.' : markdown);
+    final t = HcTokens.of(context);
+    final markdown = (widgetModel.config['markdown'] as String? ?? '').trim();
+    if (markdown.isEmpty) {
+      return Text('No markdown content configured.',
+          style: TextStyle(color: t.surface.onBaseMuted));
+    }
+    return DefaultTextStyle.merge(
+      style: TextStyle(color: t.surface.onBase, height: 1.4, fontSize: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: _renderMarkdown(markdown, t),
+      ),
+    );
+  }
+
+  // A deliberately small renderer for dashboard notes: headings, bullets, bold,
+  // and paragraphs. Not a full CommonMark implementation — just the subset a
+  // note actually uses, so a note stops showing literal '##' and '**'.
+  static List<Widget> _renderMarkdown(String source, HcTokens t) {
+    final out = <Widget>[];
+    for (final raw in source.split('\n')) {
+      final line = raw.trimRight();
+      if (line.trim().isEmpty) {
+        out.add(SizedBox(height: t.space.sm));
+        continue;
+      }
+      if (line.startsWith('### ')) {
+        out.add(_line(line.substring(4), t,
+            size: 14, weight: FontWeight.w700, top: t.space.sm));
+      } else if (line.startsWith('## ')) {
+        out.add(_line(line.substring(3), t,
+            size: 16, weight: FontWeight.w700, top: t.space.sm));
+      } else if (line.startsWith('# ')) {
+        out.add(_line(line.substring(2), t,
+            size: 19, weight: FontWeight.w700, top: t.space.sm));
+      } else if (line.startsWith('- ') || line.startsWith('* ')) {
+        out.add(Padding(
+          padding: const EdgeInsets.symmetric(vertical: 1),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('•  ', style: TextStyle(color: t.surface.onBaseMuted)),
+              Expanded(child: _rich(line.substring(2), t)),
+            ],
+          ),
+        ));
+      } else {
+        out.add(Padding(
+          padding: const EdgeInsets.symmetric(vertical: 1),
+          child: _rich(line, t),
+        ));
+      }
+    }
+    return out;
+  }
+
+  static Widget _line(String text, HcTokens t,
+      {required double size, required FontWeight weight, double top = 0}) {
+    return Padding(
+      padding: EdgeInsets.only(top: top, bottom: 2),
+      child: _rich(text, t,
+          base: TextStyle(
+              fontSize: size, fontWeight: weight, color: t.surface.onBase)),
+    );
+  }
+
+  // Inline **bold** parsing; everything else renders as plain text.
+  static Widget _rich(String text, HcTokens t, {TextStyle? base}) {
+    final spans = <TextSpan>[];
+    final re = RegExp(r'\*\*(.+?)\*\*');
+    var index = 0;
+    for (final m in re.allMatches(text)) {
+      if (m.start > index) {
+        spans.add(TextSpan(text: text.substring(index, m.start)));
+      }
+      spans.add(TextSpan(
+          text: m.group(1),
+          style: const TextStyle(fontWeight: FontWeight.w700)));
+      index = m.end;
+    }
+    if (index < text.length) spans.add(TextSpan(text: text.substring(index)));
+    return Text.rich(TextSpan(style: base, children: spans));
   }
 }
 
@@ -1490,14 +1538,16 @@ class _PlaceholderWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(t.space.md),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(12),
+        color: t.surface.sunken,
+        borderRadius: t.radius.mdR,
+        border: Border.all(color: t.stroke.hairline, width: t.stroke.width),
       ),
-      child: Text(message),
+      child: Text(message, style: TextStyle(color: t.surface.onBaseMuted)),
     );
   }
 }
