@@ -401,7 +401,6 @@ class DashboardTemplateFactory {
   static List<DashboardDefinition> templates({required String ownerUserId}) {
     return [
       _gettingStarted(ownerUserId),
-      _homeOverview(ownerUserId),
       _security(ownerUserId),
       _livingRoom(ownerUserId),
       _mediaRoom(ownerUserId),
@@ -507,73 +506,6 @@ class DashboardTemplateFactory {
         'starter_devices': [0, 7, 7, 2],
         'starter_events': [7, 7, 5, 2],
         'starter_links': [0, 9, 12, 1],
-      }),
-    );
-  }
-
-  static DashboardDefinition _homeOverview(String owner) {
-    final now = DateTime.now();
-    return DashboardDefinition(
-      id: 'template_home_overview',
-      name: 'Home Overview',
-      description: 'General whole-home dashboard.',
-      ownerUserId: owner,
-      visibility: DashboardVisibility.private,
-      tags: const ['home', 'overview'],
-      icon: 'dashboard',
-      isDefault: false,
-      createdAt: now,
-      updatedAt: now,
-      widgets: const [
-        DashboardWidgetModel(
-          id: 'summary',
-          type: 'stat_summary',
-          title: 'Home Summary',
-          refreshPolicy: DashboardRefreshPolicy.live,
-          config: {
-            'metrics': ['devices', 'on', 'offline', 'media_playing']
-          },
-        ),
-        DashboardWidgetModel(
-          id: 'scenes',
-          type: 'scene_row',
-          title: 'Scenes',
-          refreshPolicy: DashboardRefreshPolicy.live,
-          config: {},
-        ),
-        DashboardWidgetModel(
-          id: 'modes',
-          type: 'mode_chips',
-          title: 'Modes',
-          refreshPolicy: DashboardRefreshPolicy.live,
-          config: {},
-        ),
-        DashboardWidgetModel(
-          id: 'devices',
-          type: 'device_grid',
-          title: 'Devices',
-          refreshPolicy: DashboardRefreshPolicy.live,
-          config: {
-            'selection_mode': 'query',
-            'query': '',
-            'show_offline': true,
-            'limit': 12,
-          },
-        ),
-        DashboardWidgetModel(
-          id: 'events',
-          type: 'event_feed',
-          title: 'Recent Events',
-          refreshPolicy: DashboardRefreshPolicy.live,
-          config: {'limit': 8},
-        ),
-      ],
-      layouts: _defaultLayouts(const {
-        'summary': [0, 0, 12, 1],
-        'modes': [0, 1, 12, 1],
-        'scenes': [0, 2, 12, 1],
-        'devices': [0, 3, 8, 2],
-        'events': [8, 3, 4, 2],
       }),
     );
   }
