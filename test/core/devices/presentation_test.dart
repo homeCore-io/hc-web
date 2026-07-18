@@ -112,4 +112,28 @@ void main() {
       );
     });
   });
+
+  group('isInfrastructureDevice — keep plumbing out of the house', () {
+    test('a bridge is infrastructure', () {
+      expect(isInfrastructureDevice(_d('br', type: 'bridge')), isTrue);
+    });
+
+    test('a hub / gateway / coordinator is infrastructure', () {
+      for (final t in ['hub', 'gateway', 'coordinator']) {
+        expect(isInfrastructureDevice(_d('x', type: t)), isTrue, reason: t);
+      }
+    });
+
+    test('a Hue bridge is caught by kind even without device_type', () {
+      expect(
+        isInfrastructureDevice(_d('hue', state: {'kind': 'hue_bridge'})),
+        isTrue,
+      );
+    });
+
+    test('a real device is not infrastructure', () {
+      expect(isInfrastructureDevice(_d('l', type: 'light')), isFalse);
+      expect(isInfrastructureDevice(_d('m', type: 'media_player')), isFalse);
+    });
+  });
 }

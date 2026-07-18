@@ -273,6 +273,16 @@ DeviceFacet _infer(DeviceState d, DeviceSchema? schema) {
   return DeviceFacet.unknown;
 }
 
+/// Plumbing, not a thing you live with. Bridges/hubs/gateways are the transport
+/// a plugin talks to its devices over — you pair and manage them from the
+/// plugin Studio (its Bridges section + Pair action), not from the house. They
+/// have no meaningful facet, so on the wall they render as a nameless "?" tile
+/// with a phantom control; the house is better off without them.
+bool isInfrastructureDevice(DeviceState d) {
+  const infra = {'bridge', 'hub', 'gateway', 'coordinator'};
+  return infra.contains(d.deviceType) || d.state['kind'] == 'hue_bridge';
+}
+
 /// The 0–1 "how much" reading a tile glows by. Null when the device has no
 /// meaningful level, in which case `on` alone drives the tile.
 double? levelOf(DeviceState d) {

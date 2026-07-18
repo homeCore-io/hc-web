@@ -93,26 +93,34 @@ class _HomePageState extends ConsumerState<HomePage> {
             ],
           ),
         ),
-        data: (devices) => _House(
-          devices: devices,
-          arrangement: _draft ?? saved,
-          arranging: _arranging,
-          onReorder: (from, to) => setState(() {
-            final rooms = _orderKeys(devices, homeCams);
-            final order = _draft!.all(rooms);
-            if (to > from) to--;
-            final moved = order.removeAt(from);
-            order.insert(to, moved);
-            _draft = _draft!.copyWith(order: order);
-          }),
-          onToggleHidden: (room) => setState(() {
-            final hidden = {..._draft!.hidden};
-            hidden.contains(room) ? hidden.remove(room) : hidden.add(room);
-            _draft = _draft!.copyWith(hidden: hidden);
-          }),
-          onCommit: (order, columns) =>
-              _persistLayout(devices, homeCams, order, columns),
-        ),
+        data: (allDevices) {
+          // The house shows rooms of devices you live with — bridges and hubs
+          // are infrastructure you manage from the plugin Studio, not tiles on
+          // the wall. Filtering here keeps them out of the rooms, the arrange
+          // order, the persisted layout, and the header counts alike.
+          final devices =
+              allDevices.where((d) => !isInfrastructureDevice(d)).toList();
+          return _House(
+            devices: devices,
+            arrangement: _draft ?? saved,
+            arranging: _arranging,
+            onReorder: (from, to) => setState(() {
+              final rooms = _orderKeys(devices, homeCams);
+              final order = _draft!.all(rooms);
+              if (to > from) to--;
+              final moved = order.removeAt(from);
+              order.insert(to, moved);
+              _draft = _draft!.copyWith(order: order);
+            }),
+            onToggleHidden: (room) => setState(() {
+              final hidden = {..._draft!.hidden};
+              hidden.contains(room) ? hidden.remove(room) : hidden.add(room);
+              _draft = _draft!.copyWith(hidden: hidden);
+            }),
+            onCommit: (order, columns) =>
+                _persistLayout(devices, homeCams, order, columns),
+          );
+        },
       ),
     );
   }
