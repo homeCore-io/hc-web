@@ -175,6 +175,13 @@ class _PageGridState extends State<PageGrid> {
         double draggedTop(GridItem i) =>
             (_dragStart.y * stepY + _accum.dy).clamp(0.0, double.infinity);
 
+        // While a gesture is live, render every card as a lightweight chip
+        // instead of its full live body. Reflowing 6 device grids/lists (each
+        // with glowing tiles and CustomPaint) on every pointer frame is what
+        // made dragging choppy; a chip costs almost nothing, so the reflow
+        // animates smoothly. Cards snap back to their live selves on release.
+        final gesturing = _dragId != null || _resizeId != null;
+
         return SizedBox(
           width: double.infinity,
           // Room to drop a card below the last row while editing.
@@ -183,6 +190,7 @@ class _PageGridState extends State<PageGrid> {
             children: [
               for (final item in items)
                 AnimatedPositioned(
+                  key: ValueKey(item.id),
                   duration: _dragId == item.id
                       ? Duration.zero
                       : t.motion.d(t.motion.fast),
@@ -191,19 +199,22 @@ class _PageGridState extends State<PageGrid> {
                   top: _dragId == item.id ? draggedTop(item) : topOf(item),
                   width: widthOf(item),
                   height: heightOf(item),
-                  child: _Cell(
-                    item: item,
-                    model: widget.widgetsById[item.id],
-                    editing: widget.editing,
-                    dragging: _dragId == item.id || _resizeId == item.id,
-                    onRemove: () => widget.onRemove?.call(item.id),
-                    onConfigure: () => widget.onConfigure?.call(item.id),
-                    onDragStart: () => startDrag(item),
-                    onDragUpdate: updateDrag,
-                    onDragEnd: endDrag,
-                    onResizeStart: () => startResize(item),
-                    onResizeUpdate: updateResize,
-                    onResizeEnd: endResize,
+                  child: RepaintBoundary(
+                    child: _Cell(
+                      item: item,
+                      model: widget.widgetsById[item.id],
+                      editing: widget.editing,
+                      simplified: gesturing,
+                      dragging: _dragId == item.id || _resizeId == item.id,
+                      onRemove: () => widget.onRemove?.call(item.id),
+                      onConfigure: () => widget.onConfigure?.call(item.id),
+                      onDragStart: () => startDrag(item),
+                      onDragUpdate: updateDrag,
+                      onDragEnd: endDrag,
+                      onResizeStart: () => startResize(item),
+                      onResizeUpdate: updateResize,
+                      onResizeEnd: endResize,
+                    ),
                   ),
                 ),
             ],
@@ -226,6 +237,7 @@ class _Cell extends StatelessWidget {
     required this.item,
     required this.model,
     required this.editing,
+    required this.simplified,
     required this.dragging,
     required this.onRemove,
     required this.onConfigure,
@@ -240,6 +252,7 @@ class _Cell extends StatelessWidget {
   final GridItem item;
   final DashboardWidgetModel? model;
   final bool editing;
+  final bool simplified;
   final bool dragging;
   final VoidCallback onRemove;
   final VoidCallback onConfigure;
@@ -256,22 +269,32 @@ class _Cell extends StatelessWidget {
     final descriptor =
         model == null ? null : WidgetRegistry.lookup(model!.type);
 
-    final body = model == null
-        ? const SizedBox.shrink()
-        : descriptor == null
-            ? UnknownWidget(type: model!.type)
-            : descriptor.builder(
-                context,
-                WidgetRenderArgs(
-                  id: model!.id,
-                  title: model!.title,
-                  subtitle: model!.subtitle,
-                  config: model!.config,
-                  w: item.w,
-                  h: item.h,
-                  sizeHint: descriptor.sizeHint,
-                ),
-              );
+    final body = simplified
+        // A cheap stand-in during drag/resize: an icon watermark, no providers,
+        // no CustomPaint — so the reflow stays smooth.
+        ? Center(
+            child: Icon(
+              descriptor?.icon ?? HcIcons.dashboards,
+              size: 26,
+              color: t.surface.onBaseMuted.withValues(alpha: 0.4),
+            ),
+          )
+        : model == null
+            ? const SizedBox.shrink()
+            : descriptor == null
+                ? UnknownWidget(type: model!.type)
+                : descriptor.builder(
+                    context,
+                    WidgetRenderArgs(
+                      id: model!.id,
+                      title: model!.title,
+                      subtitle: model!.subtitle,
+                      config: model!.config,
+                      w: item.w,
+                      h: item.h,
+                      sizeHint: descriptor.sizeHint,
+                    ),
+                  );
 
     final card = HcSurface(
       selected: dragging,
