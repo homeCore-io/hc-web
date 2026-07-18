@@ -5,6 +5,7 @@ import '../../core/devices/presentation.dart';
 import '../../core/models/device_state.dart';
 import '../../core/providers/devices_provider.dart';
 import '../../core/providers/modes_provider.dart';
+import '../../core/providers/room_collapse_provider.dart';
 import '../../core/text/humanize.dart';
 import '../../design/hc_icons.dart';
 import '../../design/tokens.dart';
@@ -273,15 +274,16 @@ class _House extends ConsumerStatefulWidget {
 }
 
 class _HouseState extends ConsumerState<_House> {
-  /// Rooms the user has folded shut. Local and ephemeral on purpose: collapsing
-  /// a room to see past it is a glance-time act, not a saved layout, and it must
-  /// never fire a dashboard write on every tap. A room absent from this set is
-  /// open — so a newly installed room is always visible, never folded by default.
-  final Set<String> _collapsed = {};
+  /// Rooms the user has folded shut. A glance-time act, not part of the shared
+  /// house layout — so it is kept as a local UI preference (roomCollapseProvider,
+  /// SharedPreferences) that survives a reload without a dashboard write on every
+  /// tap. Mirrored into this field each build so `_estimateHeight` can read it. A
+  /// room absent from the set is open — a newly installed room is never folded by
+  /// default.
+  Set<String> _collapsed = const {};
 
-  void _toggle(String key) => setState(() {
-        _collapsed.contains(key) ? _collapsed.remove(key) : _collapsed.add(key);
-      });
+  void _toggle(String key) =>
+      ref.read(roomCollapseProvider.notifier).toggle(key);
 
   // Direct drag: long-press a card to lift it; a ghost chip follows the cursor
   // and a bright bar shows where it will land. The board holds still and settles
@@ -434,6 +436,9 @@ class _HouseState extends ConsumerState<_House> {
     final t = HcTokens.of(context);
     final notifier = ref.read(devicesProvider.notifier);
     final devices = widget.devices;
+    // Folded rooms are a persisted local preference; mirror the watched set into
+    // the field so the header taps and the masonry height estimate agree.
+    _collapsed = ref.watch(roomCollapseProvider);
 
     // Rooms, not "sections". The house already has a structure; inventing a
     // second one in a dashboard document was the original mistake.
