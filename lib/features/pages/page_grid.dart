@@ -45,12 +45,31 @@ class PageGrid extends StatefulWidget {
 }
 
 class _PageGridState extends State<PageGrid> {
-  // Local, pixel-space drag state. The dragged card follows the finger freely
-  // (duration zero) while everything else reflows to the grid; on release it
-  // snaps to the cell the engine settled it into.
+  // A gesture (move or resize) works from an immutable snapshot of the layout
+  // taken at its start, so the arrangement depends only on where the pointer is
+  // *now* — not on the path it took to get there. The engine reflows that
+  // snapshot into a stable preview each frame; the committed draft is touched
+  // once, on release. That is what stops neighbours from oscillating under the
+  // cursor and gives an honest WYSIWYG result.
+  List<GridItem>? _baseline;
+  List<GridItem>? _preview;
+
+  // Move gesture.
   String? _dragId;
   Point _dragStart = const Point(0, 0);
   Offset _accum = Offset.zero;
+
+  // Resize gesture — start holds the card's original (w, h).
+  String? _resizeId;
+  Point _resizeStart = const Point(0, 0);
+  Offset _resizeAccum = Offset.zero;
+
+  static GridItem? _itemById(List<GridItem> items, String id) {
+    for (final i in items) {
+      if (i.id == id) return i;
+    }
+    return null;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -64,6 +83,10 @@ class _PageGridState extends State<PageGrid> {
         final stepX = cellW + widget.gap;
         final stepY = widget.rowHeight + widget.gap;
 
+        // While a gesture is live we lay out its preview, so the real draft is
+        // untouched until release.
+        final items = _preview ?? widget.items;
+
         double leftOf(GridItem i) => i.x * stepX;
         double topOf(GridItem i) => i.y * stepY;
         double widthOf(GridItem i) => i.w * cellW + (i.w - 1) * widget.gap;
@@ -71,10 +94,86 @@ class _PageGridState extends State<PageGrid> {
             i.h * widget.rowHeight + (i.h - 1) * widget.gap;
 
         final maxRow =
-            widget.items.fold<int>(0, (m, i) => i.bottom > m ? i.bottom : m);
+            items.fold<int>(0, (m, i) => i.bottom > m ? i.bottom : m);
         final height = maxRow <= 0
             ? widget.rowHeight
             : maxRow * widget.rowHeight + (maxRow - 1) * widget.gap;
+
+        void startDrag(GridItem item) => setState(() {
+              _baseline = List<GridItem>.of(widget.items);
+              _preview = _baseline;
+              _dragId = item.id;
+              _dragStart = Point(item.x, item.y);
+              _accum = Offset.zero;
+            });
+
+        void updateDrag(Offset delta) {
+          _accum += delta;
+          final tx = _dragStart.x + (_accum.dx / stepX).round();
+          final ty = _dragStart.y + (_accum.dy / stepY).round();
+          final engine = GridEngine(columns: columns);
+          setState(() => _preview =
+              engine.move(_baseline!, _dragId!, tx, ty < 0 ? 0 : ty));
+        }
+
+        void endDrag() {
+          final id = _dragId;
+          final settled = id == null ? null : _itemById(_preview!, id);
+          // Commit once: the parent runs the identical move on the real draft,
+          // so the card lands exactly where the preview showed it.
+          if (id != null && settled != null) {
+            widget.onMove?.call(id, settled.x, settled.y);
+          }
+          setState(() {
+            _dragId = null;
+            _baseline = null;
+            _preview = null;
+            _accum = Offset.zero;
+          });
+        }
+
+        void startResize(GridItem item) => setState(() {
+              _baseline = List<GridItem>.of(widget.items);
+              _preview = _baseline;
+              _resizeId = item.id;
+              _resizeStart = Point(item.w, item.h);
+              _resizeAccum = Offset.zero;
+            });
+
+        void updateResize(Offset delta) {
+          // Accumulate, like drag — a per-event delta rounds to zero almost
+          // every frame and the resize feels dead.
+          _resizeAccum += delta;
+          final tw = _resizeStart.x + (_resizeAccum.dx / stepX).round();
+          final th = _resizeStart.y + (_resizeAccum.dy / stepY).round();
+          final engine = GridEngine(columns: columns);
+          setState(
+              () => _preview = engine.resize(_baseline!, _resizeId!, tw, th));
+        }
+
+        void endResize() {
+          final id = _resizeId;
+          final settled = id == null ? null : _itemById(_preview!, id);
+          if (id != null && settled != null) {
+            widget.onResize?.call(id, settled.w, settled.h);
+          }
+          setState(() {
+            _resizeId = null;
+            _baseline = null;
+            _preview = null;
+            _resizeAccum = Offset.zero;
+          });
+        }
+
+        // The lifted card follows the finger, but clamped to the legal range so
+        // it never visually leaves the board and snaps back on release.
+        double draggedLeft(GridItem i) {
+          final maxLeft = (columns - i.w).clamp(0, columns) * stepX;
+          return (_dragStart.x * stepX + _accum.dx).clamp(0.0, maxLeft);
+        }
+
+        double draggedTop(GridItem i) =>
+            (_dragStart.y * stepY + _accum.dy).clamp(0.0, double.infinity);
 
         return SizedBox(
           width: double.infinity,
@@ -82,45 +181,29 @@ class _PageGridState extends State<PageGrid> {
           height: height + (widget.editing ? stepY * 2 : 0),
           child: Stack(
             children: [
-              for (final item in widget.items)
+              for (final item in items)
                 AnimatedPositioned(
                   duration: _dragId == item.id
                       ? Duration.zero
                       : t.motion.d(t.motion.fast),
                   curve: t.motion.curve,
-                  left: _dragId == item.id
-                      ? _dragStart.x * stepX + _accum.dx
-                      : leftOf(item),
-                  top: _dragId == item.id
-                      ? _dragStart.y * stepY + _accum.dy
-                      : topOf(item),
+                  left: _dragId == item.id ? draggedLeft(item) : leftOf(item),
+                  top: _dragId == item.id ? draggedTop(item) : topOf(item),
                   width: widthOf(item),
                   height: heightOf(item),
                   child: _Cell(
                     item: item,
                     model: widget.widgetsById[item.id],
                     editing: widget.editing,
-                    dragging: _dragId == item.id,
+                    dragging: _dragId == item.id || _resizeId == item.id,
                     onRemove: () => widget.onRemove?.call(item.id),
                     onConfigure: () => widget.onConfigure?.call(item.id),
-                    onDragStart: () => setState(() {
-                      _dragId = item.id;
-                      _dragStart = Point(item.x, item.y);
-                      _accum = Offset.zero;
-                    }),
-                    onDragUpdate: (delta) {
-                      _accum += delta;
-                      final tx = _dragStart.x + (_accum.dx / stepX).round();
-                      final ty = _dragStart.y + (_accum.dy / stepY).round();
-                      widget.onMove?.call(item.id, tx, ty < 0 ? 0 : ty);
-                      setState(() {}); // re-read _accum for the followed card
-                    },
-                    onDragEnd: () => setState(() => _dragId = null),
-                    onResize: (delta, current) {
-                      final tw = current.w + (delta.dx / stepX).round();
-                      final th = current.h + (delta.dy / stepY).round();
-                      widget.onResize?.call(item.id, tw, th);
-                    },
+                    onDragStart: () => startDrag(item),
+                    onDragUpdate: updateDrag,
+                    onDragEnd: endDrag,
+                    onResizeStart: () => startResize(item),
+                    onResizeUpdate: updateResize,
+                    onResizeEnd: endResize,
                   ),
                 ),
             ],
@@ -149,7 +232,9 @@ class _Cell extends StatelessWidget {
     required this.onDragStart,
     required this.onDragUpdate,
     required this.onDragEnd,
-    required this.onResize,
+    required this.onResizeStart,
+    required this.onResizeUpdate,
+    required this.onResizeEnd,
   });
 
   final GridItem item;
@@ -161,7 +246,9 @@ class _Cell extends StatelessWidget {
   final VoidCallback onDragStart;
   final ValueChanged<Offset> onDragUpdate;
   final VoidCallback onDragEnd;
-  final void Function(Offset delta, GridItem current) onResize;
+  final VoidCallback onResizeStart;
+  final ValueChanged<Offset> onResizeUpdate;
+  final VoidCallback onResizeEnd;
 
   @override
   Widget build(BuildContext context) {
@@ -256,7 +343,9 @@ class _Cell extends StatelessWidget {
           bottom: 0,
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onPanUpdate: (d) => onResize(d.delta, item),
+            onPanStart: (_) => onResizeStart(),
+            onPanUpdate: (d) => onResizeUpdate(d.delta),
+            onPanEnd: (_) => onResizeEnd(),
             child: MouseRegion(
               cursor: SystemMouseCursors.resizeDownRight,
               child: Container(
