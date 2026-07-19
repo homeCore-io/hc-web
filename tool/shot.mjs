@@ -33,6 +33,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const chrome = spawn('chromium', [
   '--headless', '--disable-gpu', '--no-sandbox', '--hide-scrollbars',
+  // Chrome 150+ dropped the automatic software-WebGL fallback, so CanvasKit
+  // gets no GL context in headless and paints nothing (a blank canvas). This
+  // opts back into SwiftShader's software WebGL so the engine can draw.
+  '--enable-unsafe-swiftshader',
   `--remote-debugging-port=${PORT}`,
   `--user-data-dir=${PROFILE}`,
   `--window-size=${W},${H}`,

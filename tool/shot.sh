@@ -34,6 +34,7 @@ chromium \
   --disable-gpu \
   --no-sandbox \
   --hide-scrollbars \
+  --enable-unsafe-swiftshader \
   --force-device-scale-factor=1 \
   --user-data-dir="$PROFILE" \
   --window-size="$SIZE" \
