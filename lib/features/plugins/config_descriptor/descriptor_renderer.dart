@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:web/web.dart' as web;
 
+import '../../../core/text/humanize.dart';
 import '../../../design/tokens.dart';
 import 'descriptor.dart';
 
@@ -205,7 +206,7 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
         children: [
           Row(children: [
             Flexible(
-                child: Text(f.label ?? f.key ?? '',
+                child: Text(f.label ?? humanize(f.key?.split('.').last),
                     style:
                         TextStyle(fontSize: 14, color: t.surface.onBase))),
             if (_isRequired(f))
@@ -300,7 +301,7 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
         ? (f.placeholder ?? 'Select')
         : opts
             .firstWhere((o) => o.value == value,
-                orElse: () => CfgOption(value: value, label: '$value'))
+                orElse: () => CfgOption(value: value, label: humanize('$value')))
             .label;
     return PopupMenuButton<Object?>(
       tooltip: '',

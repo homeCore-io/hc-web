@@ -5,6 +5,7 @@ import '../../../core/providers/areas_provider.dart';
 import '../../../core/providers/devices_provider.dart';
 import '../../../core/providers/plugin_config_provider.dart';
 import '../../../core/providers/plugins_provider.dart';
+import '../../../core/text/humanize.dart';
 import '../../../design/tokens.dart';
 import 'descriptor.dart';
 import 'descriptor_renderer.dart';
@@ -113,9 +114,16 @@ class _DescriptorConfigPaneState extends ConsumerState<DescriptorConfigPane> {
     return {
       'devices': mine,
       'sonos_devices': mine,
+      // Area keys are backend identifiers (`living_room`): the *value* must stay
+      // raw so it round-trips, but the *label* is humanized so `snake_case`
+      // never reaches a person. Device names, by contrast, already arrive human
+      // and must NOT be title-cased (see core/text/humanize.dart).
       'areas': [
         for (final a in areas)
-          {'value': a['name'] ?? a['id'], 'label': a['name'] ?? a['id']},
+          {
+            'value': a['name'] ?? a['id'],
+            'label': humanize('${a['name'] ?? a['id']}'),
+          },
       ],
     };
   }

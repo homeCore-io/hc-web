@@ -1,5 +1,6 @@
 import '../../../core/dashboard/widget_registry.dart';
 import '../../../core/schema/plugin_config_schema.dart';
+import '../../../core/text/humanize.dart';
 import 'descriptor.dart';
 
 /// Derive a baseline [ConfigDescriptor] from a plugin's JSON Schema.
@@ -39,7 +40,7 @@ ConfigDescriptor autoDeriveDescriptor(
 
   // Arrays of objects become tables; their columns come from the item schema.
   for (final path in sf.objectArrays) {
-    final section = sf.sectionOf[path] ?? _humanize(_leaf(path));
+    final section = sf.sectionOf[path] ?? humanize(_leaf(path));
     if (!bySection.containsKey(section)) {
       bySection[section] = [];
       order.add(section);
@@ -48,7 +49,7 @@ ConfigDescriptor autoDeriveDescriptor(
       key: path,
       kind: 'table',
       render: 'cards',
-      label: _humanize(_leaf(path)),
+      label: humanize(_leaf(path)),
       defaultValue: const [],
       itemFields: _itemFields(rawSchema, defs, path),
     ));
@@ -78,7 +79,7 @@ CfgField _fieldOf(WidgetConfigField f, SchemaFields sf) {
     key: f.name,
     kind: kind,
     unit: unit,
-    label: f.label ?? _humanize(leaf),
+    label: f.label ?? humanize(leaf),
     help: f.help,
     required: f.required,
     secret: secret,
@@ -89,7 +90,7 @@ CfgField _fieldOf(WidgetConfigField f, SchemaFields sf) {
         : null,
     options: f.options == null
         ? null
-        : [for (final o in f.options!) CfgOption(value: o, label: _humanize(o))],
+        : [for (final o in f.options!) CfgOption(value: o, label: humanize(o))],
     itemKind: f.kind == WidgetConfigKind.stringList ? _itemKindOf(leaf) : null,
   );
 }
@@ -158,7 +159,7 @@ List<CfgField>? _itemFields(
       CfgField(
         key: e.key,
         kind: _columnKind((e.value as Map).cast<String, dynamic>(), e.key),
-        label: _humanize(e.key),
+        label: humanize(e.key),
         required: required.contains(e.key),
       ),
   ];
@@ -204,8 +205,3 @@ String _slug(String s) =>
     s.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '_').replaceAll(
         RegExp(r'^_+|_+$'), '');
 
-String _humanize(String s) {
-  final words = s.replaceAll('_', ' ').replaceAll('-', ' ').trim();
-  if (words.isEmpty) return s;
-  return words[0].toUpperCase() + words.substring(1);
-}
