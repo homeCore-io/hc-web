@@ -82,6 +82,7 @@ class _DescriptorConfigPaneState extends ConsumerState<DescriptorConfigPane> {
                 // callback_host defaults to the address homeCore is served on
                 // (the interface the operator reaches it through).
                 dynamicDefaults: {'api.callback_host': Uri.base.host},
+                onCreateInSource: _createInSource,
                 onSave: _save,
               );
             },
@@ -133,6 +134,34 @@ class _DescriptorConfigPaneState extends ConsumerState<DescriptorConfigPane> {
           },
       ],
     };
+  }
+
+  /// Create a new entry in a source-backed list. Only `areas` is creatable
+  /// today — a plugin's own devices come from the plugin, not from a text box.
+  ///
+  /// This is the "create" half of match-or-create: picking an existing room
+  /// matches it, and "New room…" must genuinely add it to the house rather
+  /// than writing a free-text string onto one device. Returns core's
+  /// normalized name so the caller selects the area that actually exists.
+  Future<String?> _createInSource(String sourceRef, String name) async {
+    if (sourceRef != 'areas') return name;
+    try {
+      final created = await ref.read(areasApiProvider).createArea(name);
+      // The dropdown reads from areasProvider, so without this the room the
+      // user just made would be missing from every other device's list until
+      // a reload.
+      ref.invalidate(areasProvider);
+      // Core normalizes on create ("Studio B" → studio_b); return what it
+      // stored, not what was typed.
+      return '${created['name'] ?? name}';
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not create room: $e')),
+        );
+      }
+      return null;
+    }
   }
 
   Future<void> _save(

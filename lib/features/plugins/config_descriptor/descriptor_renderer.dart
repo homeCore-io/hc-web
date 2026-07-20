@@ -21,6 +21,7 @@ class ConfigDescriptorRenderer extends StatefulWidget {
     this.sourceData = const {},
     this.onlySectionId,
     this.dynamicDefaults = const {},
+    this.onCreateInSource,
   });
 
   final ConfigDescriptor descriptor;
@@ -48,6 +49,19 @@ class ConfigDescriptorRenderer extends StatefulWidget {
   /// static default (e.g. `api.callback_host` → the address homeCore is served
   /// on). Applied when the config has no stored value.
   final Map<String, Object?> dynamicDefaults;
+
+  /// Create a new entry in a `source`-backed list and return the canonical
+  /// value to select — e.g. "New room…" on an `areas`-bound select actually
+  /// creates the area in homeCore and returns its normalized name.
+  ///
+  /// Without this, "add new" only stuffed the typed text into the field, so a
+  /// new room was never a real area: it existed as a string on one device,
+  /// showed up in no other device's dropdown, and was invisible to everything
+  /// else in the house. The host owns the create because only it knows what
+  /// `ref` means; the renderer just asks.
+  ///
+  /// Returning null cancels the selection (create failed or was refused).
+  final Future<String?> Function(String ref, String name)? onCreateInSource;
 
   @override
   State<ConfigDescriptorRenderer> createState() =>
@@ -327,12 +341,25 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
         ],
       ],
       onSelected: (v) async {
-        if (identical(v, _createSentinel)) {
-          final name = await _promptNew(f.label ?? 'value');
-          if (name != null && name.isNotEmpty) onChanged(name);
-        } else {
+        if (!identical(v, _createSentinel)) {
           onChanged(v);
+          return;
         }
+        final name = await _promptNew(f.label ?? 'value');
+        if (name == null || name.isEmpty) return;
+
+        // Actually create it in the resource this select is bound to, and
+        // select the canonical value the host hands back — core normalizes
+        // ("Studio B" → studio_b), so selecting the typed text would pin a
+        // value that does not match the area that now exists.
+        final ref = f.source?.ref;
+        final create = widget.onCreateInSource;
+        if (ref == null || create == null) {
+          onChanged(name);
+          return;
+        }
+        final created = await create(ref, name);
+        if (created != null) onChanged(created);
       },
       child: Container(
         width: 240,
