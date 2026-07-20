@@ -1,17 +1,14 @@
 import 'descriptor.dart';
-import 'sonos_fixture.dart';
 
-/// Resolve a plugin's config descriptor.
+/// Local hand-authored descriptors — the stand-in tier of
+/// `pluginDescriptorProvider`, sitting between the plugin's own published
+/// descriptor and the schema-derived fallback.
 ///
-/// Prototype: the hand-authored Sonos fixture. Later this fetches
-/// `GET /plugins/:id/config/descriptor` (with an auto-derived-from-schema
-/// fallback for plugins that ship no descriptor yet). Returning null means
-/// "no descriptor" → the Studio falls back to the legacy schema form.
-ConfigDescriptor? descriptorFor(String pluginId) {
-  switch (pluginId) {
-    case 'plugin.sonos':
-      return ConfigDescriptor.fromJson(sonosDescriptorFixture);
-    default:
-      return null;
-  }
-}
+/// **Empty now.** hc-sonos publishes its own descriptor (SDK
+/// `with_config_descriptor` → capability manifest → `GET /config/descriptor`),
+/// so the Sonos fixture is retired from the resolution chain; it lives on only
+/// as the input to the `/#/dev/config` preview harness (`sonos_fixture.dart`).
+///
+/// Add a case here only to prototype a descriptor for a plugin that cannot yet
+/// publish one — and delete it as soon as the plugin ships its own.
+ConfigDescriptor? descriptorFor(String pluginId) => null;

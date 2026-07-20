@@ -90,22 +90,29 @@ class _DescriptorConfigPaneState extends ConsumerState<DescriptorConfigPane> {
     );
   }
 
-  /// Resolve the live rows for each `source` ref used in this section.
-  /// Prototype: `sonos_devices` → the Sonos devices in the registry. Generalises
-  /// to a resource resolver once the descriptor ships from core.
+  /// Resolve the live rows behind each `source` ref a descriptor can reference.
+  ///
+  /// These are the generic `core_resource` refs any plugin may bind to:
+  /// - `devices` — the devices **this plugin** owns (its rows, its identity).
+  /// - `areas`   — the house's rooms, for `select` options.
+  ///
+  /// (`sonos_devices` is kept as an alias so the local hand-authored fixture
+  /// still resolves if the plugin-served descriptor is unavailable.)
   Map<String, List<Map<String, dynamic>>> _resolveSources() {
     final devices = ref.watch(devicesProvider).valueOrNull ?? const [];
     final areas = ref.watch(areasProvider).valueOrNull ?? const [];
+    final mine = [
+      for (final d in devices)
+        if (d.pluginId == widget.pluginId)
+          {
+            'device_id': d.id,
+            'name': d.name ?? d.displayName,
+            'area': d.area ?? '',
+          },
+    ];
     return {
-      'sonos_devices': [
-        for (final d in devices)
-          if (d.id.startsWith('sonos_'))
-            {
-              'device_id': d.id,
-              'name': d.name ?? d.displayName,
-              'area': d.area ?? '',
-            },
-      ],
+      'devices': mine,
+      'sonos_devices': mine,
       'areas': [
         for (final a in areas)
           {'value': a['name'] ?? a['id'], 'label': a['name'] ?? a['id']},
