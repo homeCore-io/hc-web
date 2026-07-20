@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/dashboard/widget_registry.dart';
 import '../../core/models/device_state.dart';
+import 'config_descriptor/descriptor_config_pane.dart';
+import 'config_descriptor/descriptor_registry.dart';
 import '../../core/models/plugin_config.dart';
 import '../../core/models/plugin_entry.dart';
 import '../../core/providers/devices_provider.dart';
@@ -144,32 +146,49 @@ class _PluginStudioPageState extends ConsumerState<PluginStudioPage> {
   }
 
   List<_NavItem> _railItems(PluginEntry p, String? update) {
-    final fields =
-        ref.watch(pluginConfigFieldsProvider(p.pluginId)).valueOrNull;
-    final sections = <String>[];
-    if (fields != null) {
-      for (final f in fields.fields) {
-        final s = fields.sectionOf[f.name];
-        if (s != null &&
-            !isBootstrapConfigKey(f.name) &&
-            !sections.contains(s)) {
-          sections.add(s);
+    // Descriptor-driven config sections when the plugin has a descriptor;
+    // otherwise the legacy schema-derived sections.
+    final descriptor = descriptorFor(p.pluginId);
+    final configNav = <_NavItem>[];
+    if (descriptor != null) {
+      for (final s in descriptor.sections) {
+        if (!s.hidden) {
+          configNav.add(_NavItem('config:${s.id}', s.title,
+              Icons.tune_rounded, group: 'Configuration'));
         }
       }
-      for (final a in fields.objectArrays) {
-        final label = a[0].toUpperCase() + a.substring(1);
-        if (!sections.contains(label)) sections.add(label);
+    } else {
+      final fields =
+          ref.watch(pluginConfigFieldsProvider(p.pluginId)).valueOrNull;
+      final sections = <String>[];
+      if (fields != null) {
+        for (final f in fields.fields) {
+          final s = fields.sectionOf[f.name];
+          if (s != null &&
+              !isBootstrapConfigKey(f.name) &&
+              !sections.contains(s)) {
+            sections.add(s);
+          }
+        }
+        for (final a in fields.objectArrays) {
+          final label = a[0].toUpperCase() + a.substring(1);
+          if (!sections.contains(label)) sections.add(label);
+        }
+      }
+      if (sections.isEmpty) {
+        configNav.add(const _NavItem('config', 'Configuration',
+            Icons.tune_rounded, group: 'Configuration'));
+      } else {
+        for (final s in sections) {
+          configNav.add(_NavItem('config:$s', s, Icons.tune_rounded,
+              group: 'Configuration'));
+        }
       }
     }
     return [
       const _NavItem('overview', 'Overview', HcIcons.plugins, group: 'Plugin'),
       const _NavItem('actions', 'Actions', Icons.bolt_rounded, group: 'Plugin'),
-      if (sections.isEmpty)
-        const _NavItem('config', 'Configuration', Icons.tune_rounded,
-            group: 'Configuration')
-      else
-        for (final s in sections)
-          _NavItem('config:$s', s, Icons.tune_rounded, group: 'Configuration'),
+      ...configNav,
       const _NavItem('enabled', 'Enabled', Icons.power_settings_new_rounded,
           group: 'Manage'),
       if (update != null)
@@ -199,6 +218,14 @@ class _PluginStudioPageState extends ConsumerState<PluginStudioPage> {
     if (_selected.startsWith('config')) {
       final section =
           _selected == 'config' ? '' : _selected.substring('config:'.length);
+      final descriptor = descriptorFor(p.pluginId);
+      if (descriptor != null) {
+        return DescriptorConfigPane(
+          pluginId: p.pluginId,
+          descriptor: descriptor,
+          sectionId: section,
+        );
+      }
       return _ConfigSectionPane(
         plugin: p,
         section: section,

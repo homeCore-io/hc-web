@@ -7,6 +7,7 @@ import 'design/skins.dart';
 import 'features/admin/admin_shell.dart';
 import 'features/admin/areas_page.dart';
 import 'features/admin/logs_page.dart';
+import 'features/plugins/config_descriptor/config_preview_page.dart';
 import 'features/plugins/plugin_studio_page.dart';
 import 'features/plugins/plugins_page.dart';
 import 'features/admin/system_page.dart';
@@ -98,6 +99,11 @@ GoRouter _buildRouter(Ref ref) {
                 PageScreen(dashboardId: state.pathParameters['id']!),
           ),
           GoRoute(path: '/manage', builder: (_, __) => const ManagePage()),
+          // Dev scaffold: renderer-first preview of the plugin config descriptor
+          // protocol (Sonos). Folds into the Studio config pane once settled.
+          GoRoute(
+              path: '/dev/config',
+              builder: (_, __) => const ConfigPreviewPage()),
           GoRoute(path: '/cameras', builder: (_, __) => const CamerasPage()),
           GoRoute(
             path: '/dashboard',
