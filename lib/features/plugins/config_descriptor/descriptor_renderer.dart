@@ -601,6 +601,11 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
                               key: ValueKey('${f.key}.$k.${c.key}'),
                             ),
                           ),
+                          // When the row carries the upstream value, say so and
+                          // offer a way back to it. Overriding is a deliberate
+                          // act, so it should be visible and reversible.
+                          ..._overrideAffordance(t, c, item, rowEdits,
+                              (v) => setCol(k, c.key!, v)),
                         ]),
                       ),
                   ],
@@ -610,6 +615,48 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
         ],
       ),
     );
+  }
+
+  /// Show whether a sourced column currently differs from the value the owning
+  /// system reports, and offer a one-tap revert.
+  ///
+  /// A row may carry `<col>__source` — the upstream value (what the bridge calls
+  /// the device). When the effective value differs, the user has pinned an
+  /// override; reverting just writes the source value back, which the API reads
+  /// as agreement and clears the pin.
+  List<Widget> _overrideAffordance(
+    HcTokens t,
+    CfgField c,
+    Map<String, dynamic> row,
+    Map<String, dynamic>? rowEdits,
+    ValueChanged<String> setValue,
+  ) {
+    final source = row['${c.key}__source'];
+    if (source == null) return const [];
+    final current = '${rowEdits?[c.key] ?? row[c.key] ?? ''}';
+    if (current == '$source') return const [];
+    final label = c.kind == 'select' ? humanize('$source') : '$source';
+    return [
+      SizedBox(width: t.space.sm),
+      Tooltip(
+        message: source.toString().isEmpty
+            ? 'Revert to the plugin value'
+            : 'Overrides the plugin, which reports "$label" — tap to revert',
+        child: InkWell(
+          onTap: () => setValue('$source'),
+          borderRadius: BorderRadius.circular(t.radius.sm),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(Icons.undo, size: 14, color: t.accent.active),
+              const SizedBox(width: 4),
+              Text('overridden',
+                  style: TextStyle(fontSize: 11, color: t.accent.active)),
+            ]),
+          ),
+        ),
+      ),
+    ];
   }
 
   Widget _pill(HcTokens t, String label) => Container(

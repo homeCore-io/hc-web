@@ -516,7 +516,7 @@ class _NeedsAttention extends ConsumerWidget {
                     ),
                     SizedBox(width: t.space.sm),
                     Text(
-                      p.device.area ?? '',
+                      p.device.effectiveArea ?? '',
                       style:
                           TextStyle(fontSize: 12, color: t.surface.onBaseMuted),
                     ),

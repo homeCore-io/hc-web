@@ -88,7 +88,7 @@ class _DeviceDetailView extends ConsumerWidget {
                   _InfoRow(
                       label: 'Area',
                       value:
-                          device.area != null ? humanize(device.area!) : '—'),
+                          device.effectiveArea != null ? humanize(device.effectiveArea!) : '—'),
                   if (device.deviceType != null)
                     _InfoRow(
                         label: 'Type', value: humanize(device.deviceType!)),
@@ -192,7 +192,7 @@ class _DeviceDetailView extends ConsumerWidget {
           final body = <String, dynamic>{};
           if (name != device.displayName) body['name'] = name;
           // area: send null explicitly to clear, or new string to set
-          if (area != device.area) {
+          if (area != device.effectiveArea) {
             body['area'] = area; // null or string
           }
           if (body.isEmpty) return;
@@ -288,7 +288,7 @@ class _EditDeviceDialogState extends State<_EditDeviceDialog> {
   void initState() {
     super.initState();
     _nameCtrl = TextEditingController(text: widget.device.displayName);
-    _areaCtrl = TextEditingController(text: widget.device.area ?? '');
+    _areaCtrl = TextEditingController(text: widget.device.effectiveArea ?? '');
   }
 
   @override
@@ -343,7 +343,7 @@ class _EditDeviceDialogState extends State<_EditDeviceDialog> {
             const SizedBox(height: 16),
             // Area field with autocomplete from existing areas
             Autocomplete<String>(
-              initialValue: TextEditingValue(text: widget.device.area ?? ''),
+              initialValue: TextEditingValue(text: widget.device.effectiveArea ?? ''),
               optionsBuilder: (value) {
                 if (value.text.isEmpty) return widget.existingAreas;
                 final q = value.text.toLowerCase();

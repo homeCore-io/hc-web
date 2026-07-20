@@ -882,7 +882,7 @@ class _NeedsAttentionSheet extends StatelessWidget {
               final p = problems[i];
               final offline = p.reason == 'offline';
               final colour = offline ? t.accent.offline : t.accent.warn;
-              final area = humanize(p.device.area ?? '');
+              final area = humanize(p.device.effectiveArea ?? '');
 
               return InkWell(
                 borderRadius: t.radius.mdR,

@@ -4,8 +4,20 @@ class DeviceState {
   final String id;
   final String? canonicalName;
   final String pluginId;
+  /// The label **as delivered by the plugin** that owns the device. Keeps
+  /// syncing, so a rename in the vendor's own app reaches homeCore. Show
+  /// [displayName], not this, unless you mean "what does the bridge call it".
   final String? name;
+
+  /// The user's override of [name], when they have deliberately pinned one.
+  /// Null means "follow the bridge".
+  final String? nameOverride;
+
+  /// The room as delivered by the plugin (for bridges that have rooms).
   final String? area;
+
+  /// The user's override of [area]. Null means "follow the bridge".
+  final String? areaOverride;
   final String? deviceType;
 
   /// The user's presentation override. Beats `device_type`, which plugins get
@@ -32,7 +44,9 @@ class DeviceState {
     this.canonicalName,
     required this.pluginId,
     this.name,
+    this.nameOverride,
     this.area,
+    this.areaOverride,
     this.deviceType,
     this.uiHint,
     this.statusIcon,
@@ -47,7 +61,9 @@ class DeviceState {
         canonicalName: json['canonical_name'] as String?,
         pluginId: json['plugin_id'] as String? ?? '',
         name: json['name'] as String?,
+        nameOverride: json['name_override'] as String?,
         area: json['area'] as String?,
+        areaOverride: json['area_override'] as String?,
         deviceType: json['device_type'] as String?,
         uiHint: json['ui_hint'] as String?,
         statusIcon: json['status_icon'] as String?,
@@ -67,7 +83,9 @@ class DeviceState {
   /// heuristics. Anything that mutates a device goes through here.
   DeviceState copyWith({
     String? name,
+    String? nameOverride,
     String? area,
+    String? areaOverride,
     String? deviceType,
     String? uiHint,
     String? statusIcon,
@@ -81,7 +99,9 @@ class DeviceState {
         canonicalName: canonicalName,
         pluginId: pluginId,
         name: name ?? this.name,
+        nameOverride: nameOverride ?? this.nameOverride,
         area: area ?? this.area,
+        areaOverride: areaOverride ?? this.areaOverride,
         deviceType: deviceType ?? this.deviceType,
         uiHint: uiHint ?? this.uiHint,
         statusIcon: statusIcon ?? this.statusIcon,
@@ -91,7 +111,19 @@ class DeviceState {
         lastSeen: lastSeen ?? this.lastSeen,
       );
 
-  String get displayName => name ?? id;
+  /// The label to show a person: their override when set, else whatever the
+  /// owning plugin currently calls it. Mirrors core's `effective_name()`.
+  String get displayName => nameOverride ?? name ?? id;
+
+  /// The room to show/group by: the user's override when set, else the
+  /// plugin-delivered area. Mirrors core's `effective_area()`.
+  String? get effectiveArea => areaOverride ?? area;
+
+  /// True when the user has pinned a label against the bridge's.
+  bool get hasNameOverride => nameOverride != null;
+
+  /// True when the user has pinned a room against the bridge's.
+  bool get hasAreaOverride => areaOverride != null;
 
   /// Built-in / virtual devices — modes (`core.mode`), timers & switches
   /// (`core.glue`), etc. Real device plugins are `plugin.*`. These are not

@@ -102,13 +102,20 @@ class _DescriptorConfigPaneState extends ConsumerState<DescriptorConfigPane> {
   Map<String, List<Map<String, dynamic>>> _resolveSources() {
     final devices = ref.watch(devicesProvider).valueOrNull ?? const [];
     final areas = ref.watch(areasProvider).valueOrNull ?? const [];
+    // Each row carries the *effective* value plus the upstream one under
+    // `<col>__source`. The renderer uses that to say "the bridge calls this X"
+    // and to offer a revert — and because core treats "set it to the plugin's
+    // own value" as agreement rather than a pin, reverting is simply writing
+    // the source value back; no special clear-override call is needed.
     final mine = [
       for (final d in devices)
         if (d.pluginId == widget.pluginId)
           {
             'device_id': d.id,
-            'name': d.name ?? d.displayName,
-            'area': d.area ?? '',
+            'name': d.displayName,
+            'name__source': d.name ?? '',
+            'area': d.effectiveArea ?? '',
+            'area__source': d.area ?? '',
           },
     ];
     return {
