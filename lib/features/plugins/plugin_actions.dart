@@ -255,9 +255,13 @@ Future<void> runPluginAction(
   if (action.params.isNotEmpty || action.stream) {
     params = await showDialog<Map<String, Object?>>(
       context: context,
-      builder: (_) => ActionForm(
+      // Pop the DIALOG's navigator, not the caller's. `context` here belongs to
+      // the page, which lives inside go_router's ShellRoute navigator, while
+      // showDialog pushes onto the root one — so popping `context` unmounted the
+      // page and left a blank white app instead of submitting the form.
+      builder: (dialogContext) => ActionForm(
         action: action,
-        onSubmit: (p) => Navigator.pop(context, p),
+        onSubmit: (p) => Navigator.pop(dialogContext, p),
       ),
     );
     if (params == null) return; // cancelled
