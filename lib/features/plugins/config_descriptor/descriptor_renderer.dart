@@ -22,6 +22,7 @@ class ConfigDescriptorRenderer extends StatefulWidget {
     this.onlySectionId,
     this.dynamicDefaults = const {},
     this.onCreateInSource,
+    this.onSourceEdit,
   });
 
   final ConfigDescriptor descriptor;
@@ -62,6 +63,17 @@ class ConfigDescriptorRenderer extends StatefulWidget {
   ///
   /// Returning null cancels the selection (create failed or was refused).
   final Future<String?> Function(String ref, String name)? onCreateInSource;
+
+  /// Persist one edit to a `source`-bound row immediately (e.g. PATCH
+  /// /devices/:id). Source rows are the **live resource**, not plugin config:
+  /// a speaker's room is true the moment you pick it, and there is nothing to
+  /// "apply" to the plugin afterwards.
+  ///
+  /// Staging these behind Save was actively misleading — creating a room wrote
+  /// through at once while assigning the speaker to it silently waited for a
+  /// button, so the room appeared and the assignment seemed to vanish.
+  final Future<void> Function(Object? rowKey, Map<String, dynamic> patch)?
+      onSourceEdit;
 
   @override
   State<ConfigDescriptorRenderer> createState() =>
@@ -139,6 +151,14 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
       for (final s in widget.descriptor.sections)
         if (!s.hidden && (only == null || s.id == only)) s,
     ];
+    // Only show Save when a visible field actually writes to plugin config on
+    // save. A section that is nothing but a live-resource table (Sonos's
+    // Speakers) has nothing to apply — its edits already wrote through — so a
+    // Save button there is a button that does nothing, which is what prompted
+    // "why is there a save button?".
+    final hasConfigToSave =
+        sections.any((s) => s.fields.where(_visible).any(_savesToConfig));
+
     return Column(
       children: [
         Expanded(
@@ -148,9 +168,18 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
             children: [for (final s in sections) _section(t, s)],
           ),
         ),
-        _saveBar(t),
+        if (hasConfigToSave) _saveBar(t),
       ],
     );
+  }
+
+  /// Does this field persist to the plugin config document on Save? Notes and
+  /// links are display-only; a source-bound table edits the live resource and
+  /// writes through immediately. Everything else is config the save bar owns.
+  bool _savesToConfig(CfgField f) {
+    if (f.kind == 'note' || f.kind == 'link') return false;
+    if (f.kind == 'table' && f.source != null) return false;
+    return true;
   }
 
   Widget _section(HcTokens t, CfgSection s) {
@@ -465,7 +494,7 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
 
   Widget _columnControl(
       HcTokens t, CfgField c, String initial, ValueChanged<String> onChanged,
-      {Key? key}) {
+      {Key? key, ValueChanged<String>? onCommit}) {
     if (c.kind == 'select') {
       return _selectControl(
           t, c, initial.isEmpty ? null : initial, (v) => onChanged('${v ?? ''}'));
@@ -475,6 +504,7 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
       initial: initial,
       placeholder: c.placeholder,
       onChanged: onChanged,
+      onCommit: onCommit,
     );
   }
 
@@ -549,8 +579,14 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
     final cols = f.itemFields ?? const [];
     final edits = _sourceEdits[f.key!] ??= {};
 
-    void setCol(Object? k, String col, String val) =>
-        setState(() => (edits[k] ??= {})[col] = val);
+    // Keep the local echo so the card reflects the edit instantly, then write
+    // through to the live resource. When there is no write-through host the
+    // edit stays staged for the save bar (the preview harness).
+    void setCol(Object? k, String col, String val, {bool commit = true}) {
+      setState(() => (edits[k] ??= {})[col] = val);
+      final write = widget.onSourceEdit;
+      if (commit && write != null) write(k, {col: val});
+    }
 
     return Padding(
       padding: EdgeInsets.symmetric(vertical: t.space.sm),
@@ -624,7 +660,12 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
                               t,
                               c,
                               '${rowEdits?[c.key] ?? item[c.key] ?? ''}',
-                              (s) => setCol(k, c.key!, s),
+                              // A dropdown commits on selection; a text field
+                              // echoes locally per keystroke and commits on
+                              // blur/submit, so we don't PATCH per character.
+                              (s) => setCol(k, c.key!, s,
+                                  commit: c.kind == 'select'),
+                              onCommit: (s) => setCol(k, c.key!, s),
                               key: ValueKey('${f.key}.$k.${c.key}'),
                             ),
                           ),
@@ -972,6 +1013,7 @@ class _Input extends StatefulWidget {
     super.key,
     required this.initial,
     required this.onChanged,
+    this.onCommit,
     this.width,
     this.numeric = false,
     this.obscure = false,
@@ -982,6 +1024,10 @@ class _Input extends StatefulWidget {
   });
   final String initial;
   final ValueChanged<String> onChanged;
+
+  /// Fired on blur and on submit (not per keystroke). Live-resource fields use
+  /// this to persist once the user is done editing, rather than on every char.
+  final ValueChanged<String>? onCommit;
   final double? width;
   final bool numeric;
   final bool obscure;
@@ -997,10 +1043,31 @@ class _Input extends StatefulWidget {
 class _InputState extends State<_Input> {
   late final TextEditingController _c =
       TextEditingController(text: widget.initial);
+  late final FocusNode _focus = FocusNode()..addListener(_onFocusChange);
   String? _error;
+  String _committed = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _committed = widget.initial;
+  }
+
+  void _commit() {
+    if (widget.onCommit == null) return;
+    if (_c.text == _committed) return;
+    _committed = _c.text;
+    widget.onCommit!(_c.text);
+  }
+
+  void _onFocusChange() {
+    if (!_focus.hasFocus) _commit();
+  }
 
   @override
   void dispose() {
+    _focus.removeListener(_onFocusChange);
+    _focus.dispose();
     _c.dispose();
     super.dispose();
   }
@@ -1010,6 +1077,8 @@ class _InputState extends State<_Input> {
     final t = HcTokens.of(context);
     final field = TextField(
       controller: _c,
+      focusNode: _focus,
+      onSubmitted: (_) => _commit(),
       obscureText: widget.obscure,
       keyboardType: widget.numeric ? TextInputType.number : null,
       style: TextStyle(fontSize: 14, color: t.surface.onBase),

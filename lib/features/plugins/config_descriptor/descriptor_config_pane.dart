@@ -40,6 +40,18 @@ class _DescriptorConfigPaneState extends ConsumerState<DescriptorConfigPane> {
         orElse: () => widget.descriptor.sections.first,
       );
 
+  /// A section whose fields all write to the live resource (Sonos's Speakers:
+  /// a source-bound table) applies immediately — there is no save + restart, so
+  /// the header must not promise one.
+  bool get _sectionIsLiveResource {
+    final fields = _section.fields;
+    if (fields.isEmpty) return false;
+    return fields.every((f) =>
+        (f.kind == 'table' && f.source != null) ||
+        f.kind == 'note' ||
+        f.kind == 'link');
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
@@ -59,7 +71,9 @@ class _DescriptorConfigPaneState extends ConsumerState<DescriptorConfigPane> {
                       fontSize: 18,
                       fontWeight: FontWeight.w600,
                       color: t.surface.onBase)),
-              Text('Operator settings — changes apply on save (restarts the plugin).',
+              Text(_sectionIsLiveResource
+                  ? 'Changes take effect immediately.'
+                  : 'Operator settings — changes apply on save (restarts the plugin).',
                   style:
                       TextStyle(fontSize: 12, color: t.surface.onBaseMuted)),
             ],
@@ -83,6 +97,7 @@ class _DescriptorConfigPaneState extends ConsumerState<DescriptorConfigPane> {
                 // (the interface the operator reaches it through).
                 dynamicDefaults: {'api.callback_host': Uri.base.host},
                 onCreateInSource: _createInSource,
+                onSourceEdit: _saveSourceEdit,
                 onSave: _save,
               );
             },
@@ -161,6 +176,23 @@ class _DescriptorConfigPaneState extends ConsumerState<DescriptorConfigPane> {
         );
       }
       return null;
+    }
+  }
+
+  /// Persist a single edit to a live source row — a Sonos speaker's name or
+  /// room — the moment it's made. These are the live device registry, not
+  /// plugin config: `PATCH /devices/:id`, no restart, nothing to "apply".
+  Future<void> _saveSourceEdit(Object? rowKey, Map<String, dynamic> patch) async {
+    if (rowKey == null) return;
+    try {
+      await ref.read(devicesApiProvider).updateDevice('$rowKey', patch);
+      ref.invalidate(devicesProvider);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not save: $e')),
+        );
+      }
     }
   }
 
