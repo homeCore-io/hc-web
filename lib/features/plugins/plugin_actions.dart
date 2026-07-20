@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/api/action_stream.dart';
 import '../../core/api/plugins_api.dart';
 import '../../core/providers/auth_provider.dart';
+import '../../core/providers/devices_provider.dart';
 import '../../core/providers/plugins_provider.dart';
 import '../../core/schema/plugin_capabilities.dart';
 import '../../design/tokens.dart';
@@ -341,9 +342,14 @@ Future<void> _follow(
     ),
   );
 
-  // A completed inclusion or discovery has almost certainly changed the
-  // device list.
+  // A completed inclusion, pairing or discovery has almost certainly changed
+  // both the plugin's own status and the device registry — pairing a Hue
+  // bridge flips it from auth_required to connected AND brings its lights in.
+  // Refreshing only the plugin list left the page showing the pre-pair state,
+  // which read as "pairing did nothing".
   ref.invalidate(pluginsProvider);
+  ref.invalidate(devicesProvider);
+  ref.invalidate(pluginCapabilitiesProvider(pluginId));
 }
 
 void _toast(BuildContext context, String message) =>

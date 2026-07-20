@@ -672,6 +672,26 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
                 color: t.accent.active)),
       );
 
+  /// What this table's rows are *called*, taken from the field itself. This
+  /// renderer is shared by every plugin, so its empty state and add button
+  /// cannot name a specific device — Hue's Bridges section read "No speakers
+  /// pinned … Add speaker" until this was derived rather than hardcoded.
+  String _plural(CfgField f) =>
+      (f.label ?? humanize(f.key ?? 'entries')).toLowerCase();
+
+  /// Naive singularization, which is all a UI noun needs: "Bridges" → "bridge",
+  /// "Entries" → "entry". A plugin wanting better wording gives the field a
+  /// label that reads well either way.
+  String _singular(CfgField f) {
+    final p = _plural(f);
+    if (p.endsWith('ies') && p.length > 3) return '${p.substring(0, p.length - 3)}y';
+    if (p.endsWith('ses') || p.endsWith('xes') || p.endsWith('zes')) {
+      return p.substring(0, p.length - 2);
+    }
+    if (p.endsWith('s') && !p.endsWith('ss')) return p.substring(0, p.length - 1);
+    return p;
+  }
+
   Widget _manualTable(HcTokens t, CfgField f) {
     final raw = _effective(f);
     final rows = raw is List
@@ -694,8 +714,7 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
                 border: Border.all(color: t.stroke.hairline),
                 borderRadius: BorderRadius.circular(t.radius.md),
               ),
-              child: Text(
-                  'No speakers pinned. (Live discovery binding comes next — for now, add one manually.)',
+              child: Text('No ${_plural(f)} yet — add one below.',
                   style:
                       TextStyle(fontSize: 12, color: t.surface.onBaseMuted)),
             ),
@@ -757,7 +776,7 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
               ),
             ),
           _AddButton(
-            label: 'Add speaker',
+            label: 'Add ${_singular(f)}',
             onPressed: () {
               rows.add({for (final c in cols) c.key!: ''});
               write();

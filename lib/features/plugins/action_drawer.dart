@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 
 import '../../core/schema/plugin_capabilities.dart';
 import '../../core/text/humanize.dart';
+import '../../design/components/hc_dialog.dart';
+import '../../design/tokens.dart';
 
 /// Live view of a streaming plugin action.
 ///
@@ -115,7 +117,7 @@ class _ActionDrawerState extends State<ActionDrawer> {
   /// Uses the action's own fields (`name`/`bridge_id`/`id`, `host`, `status`,
   /// `error`) generically, so it reads well for any plugin.
   Widget _itemTile(BuildContext context, ActionEvent e) {
-    final scheme = Theme.of(context).colorScheme;
+    final t = HcTokens.of(context);
     final data = e.data is Map
         ? Map<String, dynamic>.from(e.data as Map)
         : const <String, dynamic>{};
@@ -129,25 +131,27 @@ class _ActionDrawerState extends State<ActionDrawer> {
 
     final (statusColor, statusIcon) = switch (status) {
       'paired' || 'ok' || 'done' || 'added' => (
-          scheme.primary,
+          t.accent.success,
           Icons.check_circle_outline
         ),
-      'error' || 'failed' => (scheme.error, Icons.error_outline),
+      'error' || 'failed' => (t.accent.danger, Icons.error_outline),
       'already_paired' || 'skipped' => (
-          scheme.onSurfaceVariant,
+          t.surface.onBaseMuted,
           Icons.info_outline
         ),
-      _ => (scheme.onSurfaceVariant, Icons.radio_button_unchecked),
+      _ => (t.surface.onBaseMuted, Icons.radio_button_unchecked),
     };
 
     return ListTile(
       dense: true,
       contentPadding: EdgeInsets.zero,
       leading: Icon(statusIcon, size: 16, color: statusColor),
-      title: Text(title),
+      title: Text(title,
+          style: TextStyle(fontSize: 13.5, color: t.surface.onBase)),
       subtitle: subtitle == null
           ? null
-          : Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
+          : Text(subtitle,
+              style: TextStyle(fontSize: 12, color: t.surface.onBaseMuted)),
       trailing: status == null
           ? null
           : Text(humanize(status),
@@ -160,77 +164,27 @@ class _ActionDrawerState extends State<ActionDrawer> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final t = HcTokens.of(context);
     final running = _terminal == null;
 
-    return AlertDialog(
-      title: Row(
-        children: [
-          Expanded(child: Text(widget.action.label)),
-          if (running)
-            const SizedBox(
+    return HcDialog(
+      title: widget.action.label,
+      trailing: running
+          ? SizedBox(
               width: 16,
               height: 16,
-              child: CircularProgressIndicator(strokeWidth: 2),
+              child: CircularProgressIndicator(
+                  strokeWidth: 2, color: t.accent.active),
             )
-          else
-            Icon(
+          : Icon(
               _terminal!.isFailure ? Icons.error_outline : Icons.check_circle,
-              color: _terminal!.isFailure ? scheme.error : scheme.primary,
+              color:
+                  _terminal!.isFailure ? t.accent.danger : t.accent.success,
             ),
-        ],
-      ),
-      content: SizedBox(
-        width: 520,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (_awaiting != null) _awaitingBanner(context, _awaiting!),
-            if (_latest?.percent case final pct?)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: LinearProgressIndicator(
-                  value: (pct / 100).clamp(0.0, 1.0).toDouble(),
-                ),
-              ),
-            if (_latest?.message case final msg?)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Text(msg),
-              ),
-            for (final w in _warnings)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Row(
-                  children: [
-                    Icon(Icons.warning_amber, size: 14, color: scheme.tertiary),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child:
-                          Text(w, style: Theme.of(context).textTheme.bodySmall),
-                    ),
-                  ],
-                ),
-              ),
-            if (_items.isNotEmpty) ...[
-              const Divider(),
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 260),
-                child: ListView(
-                  shrinkWrap: true,
-                  children: [
-                    for (final e in _items.values) _itemTile(context, e),
-                  ],
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
       actions: [
         if (running && widget.onCancel != null)
-          TextButton(
+          HcButton(
+            label: 'Cancel',
             onPressed: () async {
               await widget.onCancel!();
               // Guard the BuildContext, not the State: this closure captures
@@ -238,34 +192,89 @@ class _ActionDrawerState extends State<ActionDrawer> {
               // cancel request is still in flight.
               if (context.mounted) Navigator.pop(context);
             },
-            child: const Text('Cancel'),
           ),
-        FilledButton(
+        HcButton(
+          label: running ? 'Running…' : 'Close',
+          kind: HcButtonKind.primary,
           onPressed: running ? null : () => Navigator.pop(context),
-          child: Text(running ? 'Running…' : 'Close'),
         ),
       ],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (_awaiting != null) _awaitingBanner(context, _awaiting!),
+          if (_latest?.percent case final pct?)
+            Padding(
+              padding: EdgeInsets.only(bottom: t.space.sm),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(t.radius.pill),
+                child: LinearProgressIndicator(
+                  value: (pct / 100).clamp(0.0, 1.0).toDouble(),
+                  minHeight: 4,
+                  backgroundColor: t.surface.sunken,
+                  color: t.accent.active,
+                ),
+              ),
+            ),
+          if (_latest?.message case final msg?)
+            Padding(
+              padding: EdgeInsets.only(bottom: t.space.sm),
+              child: Text(msg,
+                  style: TextStyle(fontSize: 13, color: t.surface.onBase)),
+            ),
+          for (final w in _warnings)
+            Padding(
+              padding: EdgeInsets.only(bottom: t.space.xs),
+              child: Row(
+                children: [
+                  Icon(Icons.warning_amber, size: 14, color: t.accent.warn),
+                  SizedBox(width: t.space.sm),
+                  Expanded(
+                    child: Text(w,
+                        style: TextStyle(
+                            fontSize: 12, color: t.surface.onBaseMuted)),
+                  ),
+                ],
+              ),
+            ),
+          if (_items.isNotEmpty) ...[
+            Divider(color: t.stroke.hairline, height: t.space.lg),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 260),
+              child: ListView(
+                shrinkWrap: true,
+                children: [
+                  for (final e in _items.values) _itemTile(context, e),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 
   Widget _awaitingBanner(BuildContext context, String message) {
-    final scheme = Theme.of(context).colorScheme;
+    final t = HcTokens.of(context);
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(12),
+      margin: EdgeInsets.only(bottom: t.space.md),
+      padding: EdgeInsets.all(t.space.md),
       decoration: BoxDecoration(
-        color: scheme.primary.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(8),
+        color: t.accent.active.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(t.radius.md),
+        border: Border.all(color: t.accent.active.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [
-          Icon(Icons.touch_app_outlined, color: scheme.primary),
-          const SizedBox(width: 10),
+          Icon(Icons.touch_app_outlined, color: t.accent.active),
+          SizedBox(width: t.space.md),
           Expanded(
             child: Text(
               message,
               style: TextStyle(
-                color: scheme.primary,
+                fontSize: 13,
+                color: t.accent.active,
                 fontWeight: FontWeight.w600,
               ),
             ),
