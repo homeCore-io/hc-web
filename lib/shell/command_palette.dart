@@ -46,7 +46,7 @@ List<Command> buildCommands(WidgetRef ref) {
       Command(
         label: d.displayName,
         category: 'Devices',
-        subtitle: d.area ?? d.pluginId,
+        subtitle: d.effectiveArea ?? d.pluginId,
         icon: Icons.devices_outlined,
         onRun: (context) => context.go('/devices/${d.id}'),
       ),

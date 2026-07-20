@@ -138,7 +138,8 @@ class _IdentityState extends ConsumerState<_Identity> {
     super.dispose();
   }
 
-  String get _currentArea => _d.area != null ? humanize(_d.area!) : '';
+  String get _currentArea =>
+      _d.effectiveArea != null ? humanize(_d.effectiveArea!) : '';
 
   void _start() => setState(() {
         _editing = true;
@@ -229,7 +230,7 @@ class _IdentityState extends ConsumerState<_Identity> {
                 const SizedBox(height: 2),
                 Text(
                   [
-                    if (_d.area != null) humanize(_d.area!),
+                    if (_d.effectiveArea != null) humanize(_d.effectiveArea!),
                     if (_d.deviceType != null) humanize(_d.deviceType!),
                     if (!_d.available) 'offline',
                   ].join(' · '),
@@ -265,7 +266,7 @@ class _IdentityState extends ConsumerState<_Identity> {
     // Rooms already in use, humanized, so a rename lands things in the same room
     // rather than a snake_case twin.
     final areas = (ref.watch(devicesProvider).valueOrNull ?? const [])
-        .map((d) => d.area)
+        .map((d) => d.effectiveArea)
         .whereType<String>()
         .map(humanize)
         .toSet()

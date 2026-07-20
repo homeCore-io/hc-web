@@ -281,7 +281,8 @@ List<DeviceState> _selectDevices(
     case 'area':
       final areaName = config['area_name'] as String?;
       if (areaName != null && areaName.isNotEmpty) {
-        selected = base.where((device) => device.area == areaName).toList();
+        selected =
+            base.where((device) => device.effectiveArea == areaName).toList();
       }
       break;
     case 'query':
@@ -703,7 +704,8 @@ class _EventFeedWidgetState extends ConsumerState<_EventFeedWidget> {
       }
       if (areaFilter.isNotEmpty) {
         final deviceId = event.deviceId;
-        if (deviceId == null || deviceById[deviceId]?.area != areaFilter) {
+        if (deviceId == null ||
+            deviceById[deviceId]?.effectiveArea != areaFilter) {
           return false;
         }
       }

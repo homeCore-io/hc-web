@@ -1272,7 +1272,7 @@ class _DashboardWidgetConfigEditorState
   List<DeviceState> _sortedDevices(List<DeviceState> devices) {
     final copy = [...devices];
     copy.sort((a, b) {
-      final areaCmp = (a.area ?? '').compareTo(b.area ?? '');
+      final areaCmp = (a.effectiveArea ?? '').compareTo(b.effectiveArea ?? '');
       if (areaCmp != 0) return areaCmp;
       return a.displayName.compareTo(b.displayName);
     });
@@ -1358,7 +1358,7 @@ class _DashboardWidgetConfigEditorState
                 const <Map<String, dynamic>>[])
             .map((area) => area['name'] as String?)
             .whereType<String>()),
-        ...devices.map((device) => device.area).whereType<String>(),
+        ...devices.map((device) => device.effectiveArea).whereType<String>(),
       }
     ]..sort();
     final dashboards = ref.watch(dashboardsProvider).valueOrNull ??
@@ -1701,9 +1701,10 @@ class _DashboardWidgetConfigEditorState
                   (device) => DropdownMenuItem(
                     value: device.id,
                     child: Text(
-                      device.area == null || device.area!.isEmpty
+                      device.effectiveArea == null ||
+                              device.effectiveArea!.isEmpty
                           ? device.displayName
-                          : '${device.area} • ${device.displayName}',
+                          : '${device.effectiveArea} • ${device.displayName}',
                     ),
                   ),
                 )
@@ -1943,11 +1944,11 @@ class _DeviceSelectionDialogState extends State<_DeviceSelectionDialog> {
       final lower = _query.toLowerCase();
       return device.displayName.toLowerCase().contains(lower) ||
           device.id.toLowerCase().contains(lower) ||
-          (device.area?.toLowerCase().contains(lower) ?? false);
+          (device.effectiveArea?.toLowerCase().contains(lower) ?? false);
     }).toList();
     final byArea = <String, List<DeviceState>>{};
     for (final device in filtered) {
-      final area = device.area ?? 'Unassigned';
+      final area = device.effectiveArea ?? 'Unassigned';
       byArea.putIfAbsent(area, () => []).add(device);
     }
     final areas = byArea.keys.toList()..sort();

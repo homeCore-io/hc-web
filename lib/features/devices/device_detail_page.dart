@@ -177,7 +177,7 @@ class _DeviceDetailView extends ConsumerWidget {
     // Collect existing area names from the devices list for autocomplete
     final allDevices = ref.read(devicesProvider).valueOrNull ?? [];
     final existingAreas = allDevices
-        .map((d) => d.area)
+        .map((d) => d.effectiveArea)
         .whereType<String>()
         .toSet()
         .toList()

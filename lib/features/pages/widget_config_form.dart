@@ -271,14 +271,14 @@ class _ConfigFormState extends ConsumerState<_ConfigForm> {
     final areasAsync = ref.watch(areasProvider);
     final devices = ref.watch(devicesProvider).valueOrNull ?? const [];
     // The area catalog (GET /areas) is empty on a fresh system, so fall back to
-    // the areas devices actually report. Matching on device.area is also what
-    // the widget filters on, so a device-derived name is guaranteed to select
-    // something — a catalog-only name might not.
+    // the areas devices actually report. Matching on the device's effective
+    // area is also what the widget filters on, so a device-derived name is
+    // guaranteed to select something — a catalog-only name might not.
     final names = <String>{
       for (final a in (areasAsync.valueOrNull ?? const []))
         (a['name'] ?? a['id'] ?? '').toString(),
       for (final d in devices)
-        if ((d.area ?? '').isNotEmpty) d.area!,
+        if ((d.effectiveArea ?? '').isNotEmpty) d.effectiveArea!,
     }.where((s) => s.isNotEmpty).toList()
       ..sort();
     final value = _config[f.name] as String?;
@@ -456,7 +456,7 @@ class _DevicePickerState extends State<_DevicePicker> {
         .where((d) =>
             q.isEmpty ||
             d.displayName.toLowerCase().contains(q) ||
-            (d.area ?? '').toLowerCase().contains(q))
+            (d.effectiveArea ?? '').toLowerCase().contains(q))
         .toList()
       ..sort((a, b) => a.displayName.compareTo(b.displayName));
 
@@ -492,9 +492,9 @@ class _DevicePickerState extends State<_DevicePicker> {
                 value: on,
                 title: Text(d.displayName,
                     style: TextStyle(fontSize: 13.5, color: t.surface.onBase)),
-                subtitle: (d.area ?? '').isEmpty
+                subtitle: (d.effectiveArea ?? '').isEmpty
                     ? null
-                    : Text(humanize(d.area!),
+                    : Text(humanize(d.effectiveArea!),
                         style: TextStyle(
                             fontSize: 11, color: t.surface.onBaseMuted)),
                 onChanged: (_) => setState(() {

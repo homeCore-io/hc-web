@@ -396,13 +396,13 @@ class _DevicePickerListState extends State<_DevicePickerList> {
         : widget.devices
             .where((d) =>
                 d.displayName.toLowerCase().contains(_query) ||
-                (d.area ?? '').toLowerCase().contains(_query))
+                (d.effectiveArea ?? '').toLowerCase().contains(_query))
             .toList();
 
     // Group by area
     final Map<String, List<DeviceState>> byArea = {};
     for (final d in filtered) {
-      final area = d.area ?? 'Unassigned';
+      final area = d.effectiveArea ?? 'Unassigned';
       byArea.putIfAbsent(area, () => []).add(d);
     }
     final areas = byArea.keys.toList()..sort();

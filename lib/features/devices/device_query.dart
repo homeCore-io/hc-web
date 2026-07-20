@@ -95,7 +95,7 @@ List<DeviceProblem> problemsIn(List<DeviceState> devices) {
 /// `core.*`) are excluded: they aren't physical, so "assign a room" is
 /// meaningless for them and nagging about it is noise.
 List<DeviceState> unassigned(List<DeviceState> devices) =>
-    devices.where((d) => (d.area ?? '').isEmpty && !d.isSystem).toList();
+    devices.where((d) => (d.effectiveArea ?? '').isEmpty && !d.isSystem).toList();
 
 /// Matches a device against a query string.
 ///
@@ -111,7 +111,7 @@ bool deviceMatches(DeviceState d, String query) {
 
   return has(d.displayName) ||
       has(d.canonicalName) ||
-      has(d.area) ||
+      has(d.effectiveArea) ||
       has(d.deviceType) ||
       has(d.pluginId) ||
       has(facetOf(d, d.schema).name);
@@ -132,13 +132,14 @@ bool _passesFilter(DeviceState d, DeviceFilter f) {
         final num b when b <= kLowBatteryPct => true,
         _ => false,
       },
-    DeviceFilter.unassigned => (d.area ?? '').isEmpty && !d.isSystem,
+    DeviceFilter.unassigned => (d.effectiveArea ?? '').isEmpty && !d.isSystem,
   };
 }
 
 /// The heading a device sits under, for the current grouping.
 String groupKeyOf(DeviceState d, DeviceGroup g) => switch (g) {
-      DeviceGroup.room => (d.area ?? '').isEmpty ? 'No room' : d.area!,
+      DeviceGroup.room =>
+        (d.effectiveArea ?? '').isEmpty ? 'No room' : d.effectiveArea!,
       DeviceGroup.type => facetOf(d, d.schema).label,
       DeviceGroup.plugin => d.pluginId,
       DeviceGroup.status => !d.available

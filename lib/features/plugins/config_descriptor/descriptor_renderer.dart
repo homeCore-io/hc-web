@@ -700,16 +700,19 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
     ValueChanged<String> setValue,
   ) {
     final source = row['${c.key}__source'];
-    if (source == null) return const [];
+    // Only an *override* when the plugin actually reports a value to override.
+    // Sonos reports no room, so `area__source` is empty — assigning a room
+    // there is a plain assignment, not an override, and labelling it
+    // "overridden" (as it did) is just wrong. A speaker's name, which Sonos
+    // does report, still shows the affordance.
+    if (source == null || '$source'.isEmpty) return const [];
     final current = '${rowEdits?[c.key] ?? row[c.key] ?? ''}';
     if (current == '$source') return const [];
     final label = c.kind == 'select' ? humanize('$source') : '$source';
     return [
       SizedBox(width: t.space.sm),
       Tooltip(
-        message: source.toString().isEmpty
-            ? 'Revert to the plugin value'
-            : 'Overrides the plugin, which reports "$label" — tap to revert',
+        message: 'Overrides the plugin, which reports "$label" — tap to revert',
         child: InkWell(
           onTap: () => setValue('$source'),
           borderRadius: BorderRadius.circular(t.radius.sm),
