@@ -247,7 +247,13 @@ class _DashboardWidgetCard extends ConsumerWidget {
             ),
           ],
           SizedBox(height: t.space.sm),
-          Expanded(child: SingleChildScrollView(child: body)),
+          // Fill widgets (e.g. the hero) get the cell's real height so they can
+          // stretch into it; everything else scrolls when it overflows.
+          Expanded(
+            child: (descriptor?.fill ?? false)
+                ? body
+                : SingleChildScrollView(child: body),
+          ),
         ],
       ),
     );
@@ -849,18 +855,25 @@ class _EventFeedWidgetState extends ConsumerState<_EventFeedWidget> {
 
 class _MediaPlayerDashboardWidget extends ConsumerWidget {
   final DashboardWidgetModel widgetModel;
-  final bool compact;
-  const _MediaPlayerDashboardWidget({
-    required this.widgetModel,
-    required this.compact,
-  });
+  const _MediaPlayerDashboardWidget({required this.widgetModel});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final devices = _selectDevices(
+    // Filter to media players BEFORE applying the count limit, so `limit` counts
+    // *players* rather than arbitrary devices that happen to sort first. Passing
+    // the raw config to `_selectDevices` limited the full device list up front —
+    // a non-media device (e.g. a Hue bridge) ate a slot and pushed a real
+    // speaker out, so 4 speakers rendered as 3. The old code also capped at 2 in
+    // "compact" mode, hiding half the house; the card scrolls, so show them all.
+    final limit = widgetModel.config['limit'] as int?;
+    final unlimited = {...widgetModel.config}..remove('limit');
+    var devices = _selectDevices(
       ref.watch(devicesProvider).valueOrNull ?? const <DeviceState>[],
-      widgetModel.config,
+      unlimited,
     ).where((device) => device.isMediaPlayer).toList();
+    if (limit != null && devices.length > limit) {
+      devices = devices.take(limit).toList();
+    }
 
     if (devices.isEmpty) {
       return const _PlaceholderWidget(
@@ -868,8 +881,7 @@ class _MediaPlayerDashboardWidget extends ConsumerWidget {
     }
 
     final t = HcTokens.of(context);
-    final maxItems = compact && devices.length > 2 ? 2 : devices.length;
-    final shown = devices.take(maxItems).toList();
+    final shown = devices;
     // Reuse HcNowPlaying (via HomeMediaCard) — the same rich card the Home and
     // Media views use: album-art bloom, transport, volume. The old bespoke
     // Material card is gone.
@@ -1441,6 +1453,7 @@ void registerBuiltinDashboardWidgets() {
       icon: Icons.home_outlined,
       sizeHint: const WidgetSizeHint(
           minW: 4, minH: 2, recommendedW: 12, recommendedH: 3),
+      fill: true,
       // Core accepts any object (or null) here.
       builder: (context, a) => _HouseStatusHeroWidget(config: a.config),
     ),
@@ -1510,7 +1523,6 @@ void registerBuiltinDashboardWidgets() {
       validate: _validateSelection,
       builder: (context, a) => _MediaPlayerDashboardWidget(
         widgetModel: _modelOf(a, 'media_player'),
-        compact: a.isCompact,
       ),
     ),
     WidgetDescriptor(
@@ -1732,21 +1744,47 @@ class _HouseStatusHeroWidget extends ConsumerWidget {
       return const Center(child: Text('No systems to show.'));
     }
 
+    // Keep the hero to a SINGLE row so it can never grow past its box and clip
+    // the bottom of the tiles. When every tile fits, stretch them across evenly
+    // into the band's full height; when too narrow, scroll horizontally rather
+    // than wrapping into rows the card's height can't show.
     return LayoutBuilder(
-      builder: (context, box) => Wrap(
-        spacing: t.space.md,
-        runSpacing: t.space.md,
-        children: [
-          for (final tile in tiles)
-            SizedBox(
-              width: box.maxWidth >= 640
-                  ? (box.maxWidth - t.space.md * (tiles.length - 1)) /
-                      tiles.length
-                  : (box.maxWidth - t.space.md) / 2,
-              child: tile,
+      builder: (context, box) {
+        const minTileW = 132.0;
+        final gap = t.space.md;
+        final even = (box.maxWidth - gap * (tiles.length - 1)) / tiles.length;
+        final h = box.maxHeight.isFinite ? box.maxHeight : null;
+
+        if (even >= minTileW) {
+          return SizedBox(
+            height: h,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (var i = 0; i < tiles.length; i++) ...[
+                  if (i > 0) SizedBox(width: gap),
+                  Expanded(child: tiles[i]),
+                ],
+              ],
             ),
-        ],
-      ),
+          );
+        }
+        return SizedBox(
+          height: h,
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (var i = 0; i < tiles.length; i++) ...[
+                  if (i > 0) SizedBox(width: gap),
+                  SizedBox(width: minTileW, child: tiles[i]),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -1761,11 +1799,13 @@ class _HouseStatusHeroWidget extends ConsumerWidget {
         }).toList();
         final on = lights.where(isOn).length;
         return _SystemTile(
+          expand: true,
           icon: Icons.lightbulb_outline,
           label: 'Lighting',
           value: '$on',
           detail: on == 0 ? 'all off' : 'of ${lights.length} on',
           active: on > 0,
+          meter: lights.isEmpty ? null : on / lights.length,
         );
 
       case 'climate':
@@ -1776,6 +1816,7 @@ class _HouseStatusHeroWidget extends ConsumerWidget {
         if (temps.isEmpty) return null;
         final avg = temps.reduce((a, b) => a + b) / temps.length;
         return _SystemTile(
+          expand: true,
           icon: Icons.thermostat_outlined,
           label: 'Climate',
           value: avg.toStringAsFixed(1),
@@ -1792,6 +1833,7 @@ class _HouseStatusHeroWidget extends ConsumerWidget {
           return false;
         }).toList();
         return _SystemTile(
+          expand: true,
           icon: open.isEmpty ? Icons.lock_outline : Icons.lock_open_outlined,
           label: 'Security',
           value: open.isEmpty ? 'Secure' : '${open.length}',
@@ -1812,12 +1854,14 @@ class _HouseStatusHeroWidget extends ConsumerWidget {
         final lowest = batteries.first;
         final low = lowest.$2 <= 20;
         return _SystemTile(
+          expand: true,
           icon: low ? Icons.battery_alert_outlined : Icons.battery_full,
           label: 'Battery',
           value: '${lowest.$2.round()}%',
           detail: low ? lowest.$1.displayName : 'lowest of ${batteries.length}',
           active: false,
           alert: low,
+          meter: lowest.$2 / 100,
         );
 
       case 'media':
@@ -1827,6 +1871,7 @@ class _HouseStatusHeroWidget extends ConsumerWidget {
         if (players.isEmpty) return null;
         final playing = players.where((d) => d.playbackState == 'playing');
         return _SystemTile(
+          expand: true,
           icon: Icons.speaker_outlined,
           label: 'Media',
           value: playing.isEmpty ? 'Idle' : '${playing.length}',
@@ -1834,6 +1879,7 @@ class _HouseStatusHeroWidget extends ConsumerWidget {
               ? '${players.length} idle'
               : playing.map((d) => d.displayName).take(2).join(', '),
           active: playing.isNotEmpty,
+          meter: players.isEmpty ? null : playing.length / players.length,
         );
 
       case 'energy':
@@ -1844,6 +1890,7 @@ class _HouseStatusHeroWidget extends ConsumerWidget {
         if (watts.isEmpty) return null;
         final total = watts.reduce((a, b) => a + b);
         return _SystemTile(
+          expand: true,
           icon: Icons.bolt_outlined,
           label: 'Energy',
           value: total.round().toString(),
@@ -1858,6 +1905,7 @@ class _HouseStatusHeroWidget extends ConsumerWidget {
               isOn(d);
         }).toList();
         return _SystemTile(
+          expand: true,
           icon: Icons.sensors,
           label: 'Activity',
           value: motion.isEmpty ? 'Quiet' : '${motion.length}',
@@ -1882,6 +1930,8 @@ class _SystemTile extends StatelessWidget {
     required this.detail,
     required this.active,
     this.alert = false,
+    this.meter,
+    this.expand = false,
   });
 
   final IconData icon;
@@ -1890,6 +1940,15 @@ class _SystemTile extends StatelessWidget {
   final String detail;
   final bool active;
   final bool alert;
+
+  /// Optional 0..1 proportion (lights on / total, battery level, players
+  /// playing / total …). When set, a thin accent bar reads the fraction at a
+  /// glance — the "how much", under the "how many".
+  final double? meter;
+
+  /// Fill the parent's height (hero band) — label pinned to the top, the value
+  /// stack dropped to the bottom — instead of hugging its content (stat grid).
+  final bool expand;
 
   @override
   Widget build(BuildContext context) {
@@ -1905,30 +1964,33 @@ class _SystemTile extends StatelessWidget {
       glowIntensity: (alert || active) ? 0.7 : 0,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
+        mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min,
         children: [
           Row(
             children: [
-              Icon(icon, size: 16, color: accent),
+              Icon(icon, size: expand ? 18 : 16, color: accent),
               SizedBox(width: t.space.sm),
               Text(
-                label,
+                label.toUpperCase(),
                 style: TextStyle(
-                  fontSize: 12,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
                   color: t.surface.onBaseMuted,
-                  letterSpacing: 0.4,
+                  letterSpacing: 0.8,
                 ),
               ),
             ],
           ),
-          SizedBox(height: t.space.sm),
+          // In a tall hero the value stack drops to the bottom of the tile; in
+          // the compact stat grid it just follows the label.
+          if (expand) const Spacer() else SizedBox(height: t.space.sm),
           HcValue(
             value,
             style: TextStyle(
-              fontSize: 30,
-              fontWeight: FontWeight.w300,
+              fontSize: expand ? 42 : 30,
+              fontWeight: expand ? FontWeight.w200 : FontWeight.w300,
               height: 1,
-              color: accent,
+              color: (active || alert) ? accent : t.surface.onBase,
             ),
           ),
           SizedBox(height: t.space.xs),
@@ -1937,6 +1999,46 @@ class _SystemTile extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(fontSize: 11, color: t.surface.onBaseMuted),
+          ),
+          if (meter != null) ...[
+            SizedBox(height: t.space.sm),
+            _MeterBar(value: meter!, color: accent),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// A thin rounded proportion bar — the accent fills [value] (0..1) of the track.
+class _MeterBar extends StatelessWidget {
+  const _MeterBar({required this.value, required this.color});
+
+  final double value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    final frac = value.clamp(0.0, 1.0);
+    return LayoutBuilder(
+      builder: (context, box) => Stack(
+        children: [
+          Container(
+            height: 4,
+            width: box.maxWidth,
+            decoration: BoxDecoration(
+              color: t.surface.onBaseMuted.withValues(alpha: 0.16),
+              borderRadius: BorderRadius.circular(999),
+            ),
+          ),
+          Container(
+            height: 4,
+            width: box.maxWidth * frac,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(999),
+            ),
           ),
         ],
       ),

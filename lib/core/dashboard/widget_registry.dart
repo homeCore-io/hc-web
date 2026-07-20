@@ -22,6 +22,7 @@ class WidgetDescriptor {
     this.configFields = const [],
     this.validate,
     this.description,
+    this.fill = false,
   });
 
   /// The wire value, e.g. `device_grid`. Plugin-contributed cards are namespaced
@@ -43,6 +44,12 @@ class WidgetDescriptor {
   final String? Function(Map<String, dynamic> config)? validate;
 
   final Widget Function(BuildContext context, WidgetRenderArgs args) builder;
+
+  /// When true the card gives the widget its full cell height (no top-aligned
+  /// scroll view), so content can stretch to fill — e.g. the house-status hero
+  /// spreading its tiles across a tall band instead of stranding dead space
+  /// beneath them. Leave false for text/list widgets that should scroll.
+  final bool fill;
 }
 
 /// What the renderer hands a card.
