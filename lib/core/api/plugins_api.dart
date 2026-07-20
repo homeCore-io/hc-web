@@ -161,4 +161,20 @@ class PluginsApi {
       rethrow;
     }
   }
+
+  /// The plugin's own config *descriptor* (the richer, plugin-authored
+  /// description of its configuration), or null when it publishes none — the
+  /// client then falls back to a descriptor auto-derived from the schema.
+  /// 404 today for every plugin until the SDK emits one.
+  Future<Map<String, dynamic>?> configDescriptor(String id) async {
+    try {
+      final response = await client.dio.get('/plugins/$id/config/descriptor');
+      final data = response.data as Map;
+      final d = data['descriptor'] ?? data;
+      return d == null ? null : Map<String, dynamic>.from(d as Map);
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) return null;
+      rethrow;
+    }
+  }
 }

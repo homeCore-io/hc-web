@@ -5,7 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/dashboard/widget_registry.dart';
 import '../../core/models/device_state.dart';
 import 'config_descriptor/descriptor_config_pane.dart';
-import 'config_descriptor/descriptor_registry.dart';
+import 'config_descriptor/descriptor_provider.dart';
 import '../../core/models/plugin_config.dart';
 import '../../core/models/plugin_entry.dart';
 import '../../core/providers/devices_provider.dart';
@@ -146,9 +146,11 @@ class _PluginStudioPageState extends ConsumerState<PluginStudioPage> {
   }
 
   List<_NavItem> _railItems(PluginEntry p, String? update) {
-    // Descriptor-driven config sections when the plugin has a descriptor;
-    // otherwise the legacy schema-derived sections.
-    final descriptor = descriptorFor(p.pluginId);
+    // Descriptor-driven config sections when a descriptor resolves (plugin's
+    // own → local fixture → auto-derived from schema); otherwise the legacy
+    // schema-derived sections.
+    final descriptor =
+        ref.watch(pluginDescriptorProvider(p.pluginId)).valueOrNull;
     final configNav = <_NavItem>[];
     if (descriptor != null) {
       for (final s in descriptor.sections) {
@@ -218,7 +220,8 @@ class _PluginStudioPageState extends ConsumerState<PluginStudioPage> {
     if (_selected.startsWith('config')) {
       final section =
           _selected == 'config' ? '' : _selected.substring('config:'.length);
-      final descriptor = descriptorFor(p.pluginId);
+      final descriptor =
+          ref.watch(pluginDescriptorProvider(p.pluginId)).valueOrNull;
       if (descriptor != null) {
         return DescriptorConfigPane(
           pluginId: p.pluginId,
