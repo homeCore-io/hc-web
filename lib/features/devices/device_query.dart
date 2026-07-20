@@ -1,6 +1,11 @@
 import '../../core/devices/presentation.dart';
 import '../../core/models/device_state.dart';
 
+/// Heading for built-in devices (modes, timers, switches) under room grouping.
+/// They have no room by nature; this keeps them out of the "No room" bucket,
+/// which is for physical devices that *should* have one.
+const kSystemGroup = 'System';
+
 /// How the device list is organised. Pure logic — no widgets — so the rules that
 /// make 167 devices navigable are testable on their own.
 enum DeviceGroup { room, type, plugin, status, none }
@@ -138,6 +143,12 @@ bool _passesFilter(DeviceState d, DeviceFilter f) {
 
 /// The heading a device sits under, for the current grouping.
 String groupKeyOf(DeviceState d, DeviceGroup g) => switch (g) {
+      // Built-in devices (modes, timers, switches) have no room and never
+      // will — "assign a room" is meaningless for them. Grouping them under
+      // "No room" mislabels them as misconfigured physical devices, which is
+      // exactly the nag 0a3da46 removed from the banner but left in the
+      // grouping. Give them their own heading instead.
+      DeviceGroup.room when d.isSystem => kSystemGroup,
       DeviceGroup.room =>
         (d.effectiveArea ?? '').isEmpty ? 'No room' : d.effectiveArea!,
       DeviceGroup.type => facetOf(d, d.schema).label,
@@ -203,10 +214,14 @@ List<DeviceGroupResult> runQuery(List<DeviceState> devices, DeviceQuery q) {
   ];
 
   groups.sort((a, b) {
-    // "No room" is a loose end, not a room — it belongs at the bottom whatever
-    // the alphabet says.
-    if (a.key == 'No room') return 1;
-    if (b.key == 'No room') return -1;
+    // System devices sit below everything — they're not rooms at all. Then
+    // "No room" (a loose end, not a room) above that, whatever the alphabet
+    // says.
+    for (final tail in const [kSystemGroup, 'No room']) {
+      if (a.key == tail && b.key == tail) return 0;
+      if (a.key == tail) return 1;
+      if (b.key == tail) return -1;
+    }
     // A room with something on is more interesting than one that's dark.
     final byActive = (b.onCount > 0 ? 1 : 0).compareTo(a.onCount > 0 ? 1 : 0);
     return byActive != 0 ? byActive : a.key.compareTo(b.key);
