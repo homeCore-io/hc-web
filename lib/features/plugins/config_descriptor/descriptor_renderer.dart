@@ -4,6 +4,7 @@ import 'package:web/web.dart' as web;
 import '../../../core/text/humanize.dart';
 import '../../../design/tokens.dart';
 import 'descriptor.dart';
+import 'descriptor_validation.dart' as v;
 
 /// Renders a [ConfigDescriptor] as an application-like editor: expressive
 /// controls per field `kind`, live conditionals, list/table editors — the
@@ -175,7 +176,7 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
     // Save button there is a button that does nothing, which is what prompted
     // "why is there a save button?".
     final hasConfigToSave =
-        sections.any((s) => s.fields.where(_visible).any(_savesToConfig));
+        sections.any((s) => s.fields.where(_visible).any(v.savesToConfig));
 
     return Column(
       children: [
@@ -189,15 +190,6 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
         if (hasConfigToSave) _saveBar(t),
       ],
     );
-  }
-
-  /// Does this field persist to the plugin config document on Save? Notes and
-  /// links are display-only; a source-bound table edits the live resource and
-  /// writes through immediately. Everything else is config the save bar owns.
-  bool _savesToConfig(CfgField f) {
-    if (f.kind == 'note' || f.kind == 'link') return false;
-    if (f.kind == 'table' && f.source != null) return false;
-    return true;
   }
 
   Widget _section(HcTokens t, CfgSection s) {
@@ -678,8 +670,8 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
       return _Input(
         key: key,
         initial: initial,
-        placeholder: c.placeholder ?? (_isNumericKind(item) ? '1, 2, 3' : ''),
-        validate: (s) => _validateCsv(item, s),
+        placeholder: c.placeholder ?? (v.isNumericKind(item) ? '1, 2, 3' : ''),
+        validate: (s) => v.validateCsv(item, s),
         onChanged: onChanged,
         onCommit: onCommit,
       );
@@ -722,7 +714,7 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
                     initial: items[i]?.toString() ?? '',
                     placeholder: _placeholderFor(f.itemKind),
                     validate: (s) =>
-                        _validateKind(f.itemKind ?? 'text', s, allowEmpty: true),
+                        v.validateKind(f.itemKind ?? 'text', s, allowEmpty: true),
                     onChanged: (s) {
                       items[i] = s;
                       write(List<Object?>.from(items));
@@ -973,9 +965,9 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
         // Empty means "no entries", i.e. an empty array — not a null, which
         // would drop the key and read back as a missing field.
         final item = c.itemKind ?? 'text';
-        return _splitCsv(s)
+        return v.splitCsv(s)
             .map<Object>(
-                (tok) => _isNumericKind(item) ? (num.tryParse(tok) ?? tok) : tok)
+                (tok) => v.isNumericKind(item) ? (num.tryParse(tok) ?? tok) : tok)
             .toList();
       default:
         return s;
@@ -1152,119 +1144,17 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
 
   /// Everything wrong with the document right now, in operator language.
   ///
-  /// Validates the **stored values**, not the widgets, so a row that arrived
-  /// from an `import` is checked exactly as strictly as one that was typed —
-  /// and a control the operator never touched cannot hide a bad value.
-  List<String> _problems() {
-    final out = <String>[];
-    final only = widget.onlySectionId;
-    for (final s in widget.descriptor.sections) {
-      if (only != null && s.id != only) continue;
-      for (final f in s.fields) {
-        if (!_visible(f) || !_savesToConfig(f) || f.key == null) continue;
-        final label = f.label ?? f.key!;
-        if (f.kind == 'table') {
-          final cols = f.itemFields ?? const <CfgField>[];
-          final rows = _rowsFor(f.key!);
-          for (var i = 0; i < rows.length; i++) {
-            for (final c in cols) {
-              if (c.key == null) continue;
-              final problem = _valueProblem(c, rows[i][c.key]);
-              if (problem != null) {
-                out.add('$label row ${i + 1}: ${c.label ?? c.key} $problem');
-              }
-            }
-          }
-        } else {
-          final problem = _valueProblem(f, _effective(f));
-          if (problem != null) out.add('$label $problem');
-        }
-      }
-    }
-    return out;
-  }
-
-  /// What is wrong with `v` for field `f`, or null if it is fine.
-  ///
-  /// Type is checked before text: the failure that actually reaches the plugin
-  /// is a `String` sitting where a number or bool belongs, which no amount of
-  /// re-validating the text would catch once the control has been left.
-  String? _valueProblem(CfgField f, Object? v) {
-    final required = _isRequired(f);
-    if (v == null || (v is String && v.isEmpty)) {
-      return required ? 'is required' : null;
-    }
-    switch (f.kind) {
-      case 'int':
-      case 'duration':
-        if (v is! num || v != v.roundToDouble()) return 'must be a whole number';
-      // Its own case, not folded in with `int`: a port carries a range the
-      // kind itself implies, and routing it through the integer branch meant
-      // the control showed "1–65535" while Save stayed happily enabled.
-      case 'port':
-        if (v is! num || v != v.roundToDouble()) return 'must be a whole number';
-        if (v < 1 || v > 65535) return 'must be between 1 and 65535';
-      case 'number':
-        if (v is! num) return 'must be a number';
-      case 'toggle':
-        if (v is! bool) return 'must be true or false';
-      case 'list':
-        if (v is! List) return 'must be a list';
-        if (_isNumericKind(f.itemKind ?? 'text') && v.any((e) => e is! num)) {
-          return 'must contain only numbers';
-        }
-      default:
-        final err = _validateKind(f.kind, '$v', allowEmpty: !required);
-        if (err != null) return '— $err';
-    }
-    if (v is num) {
-      if (f.min != null && v < f.min!) return 'must be at least ${f.min}';
-      if (f.max != null && v > f.max!) return 'must be at most ${f.max}';
-    }
-    return null;
-  }
+  /// The logic lives in `descriptor_validation.dart` so it can be tested
+  /// without a widget — see `descriptor_validation_test.dart`.
+  List<String> _problems() => v.documentProblems(
+        descriptor: widget.descriptor,
+        values: _values,
+        defaults: _defaults,
+        onlySectionId: widget.onlySectionId,
+      );
 
   String? _validateScalar(CfgField f, String s) =>
-      _validateKind(f.kind, s, allowEmpty: !_isRequired(f));
-
-  static String? _validateKind(String kind, String s,
-      {bool allowEmpty = true}) {
-    if (s.isEmpty) return allowEmpty ? null : 'Required';
-    switch (kind) {
-      case 'host':
-      case 'ip':
-        final ok = RegExp(r'^(\d{1,3}\.){3}\d{1,3}$').hasMatch(s) ||
-            RegExp(r'^[a-zA-Z0-9.\-:]+$').hasMatch(s);
-        return ok ? null : 'Not a valid host / IP';
-      case 'port':
-        final p = int.tryParse(s);
-        return (p != null && p >= 1 && p <= 65535) ? null : '1–65535';
-      case 'url':
-        return Uri.tryParse(s)?.hasScheme == true ? null : 'Not a URL';
-      default:
-        return null;
-    }
-  }
-
-  static bool _isNumericKind(String kind) =>
-      kind == 'int' || kind == 'number' || kind == 'port' || kind == 'duration';
-
-  /// Split a comma-separated cell into trimmed, non-empty tokens.
-  static List<String> _splitCsv(String s) =>
-      s.split(',').map((t) => t.trim()).where((t) => t.isNotEmpty).toList();
-
-  /// Every token must be valid for the list's item kind, so a typo is caught
-  /// in the cell rather than silently written as a string the plugin rejects.
-  static String? _validateCsv(String itemKind, String s) {
-    for (final tok in _splitCsv(s)) {
-      if (_isNumericKind(itemKind) && num.tryParse(tok) == null) {
-        return 'Not a number: $tok';
-      }
-      final err = _validateKind(itemKind, tok, allowEmpty: false);
-      if (err != null) return err;
-    }
-    return null;
-  }
+      v.validateKind(f.kind, s, allowEmpty: !_isRequired(f));
 
   /// How a stored cell value reads in its control. A list joins back to the
   /// comma-separated form `_coerceColumn` parses; everything else stringifies.
