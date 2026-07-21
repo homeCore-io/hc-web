@@ -12,6 +12,7 @@ import '../../../core/providers/plugins_provider.dart';
 import '../../../core/text/humanize.dart';
 import '../../../design/tokens.dart';
 import '../../../core/schema/plugin_capabilities.dart';
+import 'config_merge.dart';
 import 'descriptor.dart';
 import 'descriptor_renderer.dart';
 
@@ -92,6 +93,9 @@ class _DescriptorConfigPaneState extends ConsumerState<DescriptorConfigPane> {
                     style: TextStyle(color: t.accent.warn))),
             data: (cfg) {
               final values = Map<String, dynamic>.from(cfg?.config ?? const {});
+              // The baseline a save diffs against — what this editor was shown,
+              // which may already be behind the server.
+              _loaded = Map<String, dynamic>.from(cfg?.config ?? const {});
               return ConfigDescriptorRenderer(
                 descriptor: widget.descriptor,
                 onlySectionId: widget.sectionId,
@@ -243,15 +247,40 @@ class _DescriptorConfigPaneState extends ConsumerState<DescriptorConfigPane> {
     throw 'The import ended without a result.';
   }
 
+  /// The config as it was when this editor rendered it.
+  Map<String, dynamic> _loaded = const {};
+
   Future<void> _save(
     Map<String, dynamic> values,
     Map<String, Map<Object?, Map<String, dynamic>>> edits,
   ) async {
     setState(() => _saving = true);
     try {
-      await ref
-          .read(pluginsApiProvider)
-          .putConfig(widget.pluginId, config: values);
+      final api = ref.read(pluginsApiProvider);
+
+      // Send what changed, not the copy this editor loaded. `PUT /config`
+      // replaces the document, so sending a stale copy silently reverts
+      // anything added since — which is how a Lutron repeater's host and
+      // credentials once vanished on an otherwise ordinary save.
+      final fresh = Map<String, dynamic>.from(
+          (await api.getConfig(widget.pluginId))?.config ?? const {});
+      final patch = diffConfig(_loaded, values);
+      final clashes = conflictingPaths(_loaded, fresh, patch);
+      if (clashes.isNotEmpty) {
+        // Both edits are deliberate; only a person can say which wins.
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(
+              'Not saved — ${clashes.join(', ')} changed elsewhere since this '
+              'page loaded. Reload to see the current values.',
+            ),
+          ));
+          setState(() => _saving = false);
+        }
+        return;
+      }
+
+      await api.putConfig(widget.pluginId, config: applyPatch(fresh, patch));
       final devicesApi = ref.read(devicesApiProvider);
       for (final rows in edits.values) {
         for (final entry in rows.entries) {
