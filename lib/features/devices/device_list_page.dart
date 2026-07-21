@@ -6,6 +6,7 @@ import '../../core/text/humanize.dart';
 import '../../core/devices/presentation.dart';
 import '../../core/models/device_state.dart';
 import '../../core/providers/devices_provider.dart';
+import '../../core/providers/plugins_provider.dart';
 import '../../design/components/hc_tile.dart';
 import '../../design/hc_icons.dart';
 import '../../design/tokens.dart';
@@ -21,7 +22,12 @@ final _queryProvider = StateProvider<DeviceQuery>((_) => const DeviceQuery());
 /// is *wrong*, groups by room because a room is how a person thinks, and sorts
 /// active-first because the handful that are on are the story.
 class DeviceListPage extends ConsumerStatefulWidget {
-  const DeviceListPage({super.key});
+  const DeviceListPage({super.key, this.pluginId});
+
+  /// When set (from `/devices?plugin=<id>`), the list opens scoped to that
+  /// plugin's devices. The route keys the page on this value, so arriving with
+  /// a different scope always remounts and re-seeds.
+  final String? pluginId;
 
   @override
   ConsumerState<DeviceListPage> createState() => _DeviceListPageState();
@@ -29,6 +35,22 @@ class DeviceListPage extends ConsumerStatefulWidget {
 
 class _DeviceListPageState extends ConsumerState<DeviceListPage> {
   final _search = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    // Seed the plugin scope from the route. Provider mutation can't happen
+    // during build, so defer a frame. Landing on /devices with no param clears
+    // any scope a previous visit left set.
+    final plugin = widget.pluginId;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final notifier = ref.read(_queryProvider.notifier);
+      notifier.state = plugin == null
+          ? notifier.state.copyWith(clearPluginId: true)
+          : notifier.state.copyWith(pluginId: plugin);
+    });
+  }
 
   @override
   void dispose() {
@@ -46,7 +68,14 @@ class _DeviceListPageState extends ConsumerState<DeviceListPage> {
       body: devicesAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('$e')),
-        data: (devices) {
+        data: (allDevices) {
+          // Scope the whole view to one plugin when arriving from its
+          // "View all" — the counts, problems, no-room bucket and filter chips
+          // all read from this list, so scoping here keeps them consistent
+          // instead of showing whole-house numbers over a filtered grid.
+          final devices = q.pluginId == null
+              ? allDevices
+              : allDevices.where((d) => d.pluginId == q.pluginId).toList();
           final groups = runQuery(devices, q);
           final problems = problemsIn(devices);
           final noRoom = unassigned(devices);
@@ -62,6 +91,13 @@ class _DeviceListPageState extends ConsumerState<DeviceListPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _Header(total: devices.length, shown: shown),
+                      if (q.pluginId != null) ...[
+                        SizedBox(height: t.space.sm),
+                        _ScopePill(
+                          pluginId: q.pluginId!,
+                          onClear: () => context.go('/devices'),
+                        ),
+                      ],
                       SizedBox(height: t.space.md),
                       _Controls(search: _search, query: q),
                       SizedBox(height: t.space.sm),
@@ -190,6 +226,51 @@ class _Header extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// "Showing <plugin> devices ✕" — makes the plugin scope visible and, more
+/// importantly, escapable, so arriving from a plugin's "View all" is never a
+/// one-way trip.
+class _ScopePill extends ConsumerWidget {
+  const _ScopePill({required this.pluginId, required this.onClear});
+
+  final String pluginId;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = HcTokens.of(context);
+    // Prefer the plugin's own display name; fall back to a humanized id.
+    final match = ref
+        .watch(pluginsProvider)
+        .valueOrNull
+        ?.where((p) => p.pluginId == pluginId);
+    final name = (match != null && match.isNotEmpty)
+        ? match.first.displayName
+        : humanize(pluginId.replaceFirst('plugin.', ''));
+
+    return Material(
+      color: t.accent.active.withValues(alpha: 0.12),
+      borderRadius: BorderRadius.circular(t.radius.pill),
+      child: InkWell(
+        onTap: onClear,
+        borderRadius: BorderRadius.circular(t.radius.pill),
+        child: Padding(
+          padding: EdgeInsets.symmetric(
+              horizontal: t.space.md, vertical: t.space.xs + 2),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Text('Showing $name devices',
+                style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: t.accent.active)),
+            SizedBox(width: t.space.sm),
+            Icon(Icons.close, size: 14, color: t.accent.active),
+          ]),
+        ),
+      ),
     );
   }
 }

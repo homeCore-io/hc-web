@@ -127,7 +127,17 @@ GoRouter _buildRouter(Ref ref) {
             builder: (_, state) =>
                 DashboardEditorPage(dashboardId: state.pathParameters['id']!),
           ),
-          GoRoute(path: '/devices', builder: (_, __) => const DeviceListPage()),
+          GoRoute(
+              path: '/devices',
+              builder: (_, state) {
+                // `?plugin=<id>` scopes the list to that plugin (a plugin's
+                // "View all"). Key on it so a new scope remounts + re-seeds.
+                final plugin = state.uri.queryParameters['plugin'];
+                return DeviceListPage(
+                  key: ValueKey('devices-${plugin ?? 'all'}'),
+                  pluginId: plugin,
+                );
+              }),
           GoRoute(
               path: '/automations',
               builder: (_, __) => const AutomationListPage()),

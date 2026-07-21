@@ -764,7 +764,10 @@ class _OverviewPane extends ConsumerWidget {
             _cardLabel(t, 'Devices'),
             const Spacer(),
             InkWell(
-              onTap: () => context.go('/devices'),
+              // Scope the destination to this plugin — "View all" here means
+              // all of *this* plugin's devices, not the whole house.
+              onTap: () => context.go(
+                  '/devices?plugin=${Uri.encodeComponent(plugin.pluginId)}'),
               borderRadius: BorderRadius.circular(6),
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),

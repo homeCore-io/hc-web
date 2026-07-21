@@ -33,6 +33,7 @@ class DeviceQuery {
     this.sort = DeviceSort.activeFirst,
     this.filter = DeviceFilter.all,
     this.compact = false,
+    this.pluginId,
   });
 
   final String search;
@@ -43,12 +44,20 @@ class DeviceQuery {
   /// The operator density — a sortable table instead of the glowing grid.
   final bool compact;
 
+  /// Scope the whole list to one plugin's devices. Set when you arrive from a
+  /// plugin's "View all" — that link means "this plugin's devices", not the
+  /// whole house. Null shows every device.
+  final String? pluginId;
+
   DeviceQuery copyWith({
     String? search,
     DeviceGroup? group,
     DeviceSort? sort,
     DeviceFilter? filter,
     bool? compact,
+    // Nullable field needs an explicit clear path, since `null` means "keep".
+    String? pluginId,
+    bool clearPluginId = false,
   }) =>
       DeviceQuery(
         search: search ?? this.search,
@@ -56,6 +65,7 @@ class DeviceQuery {
         sort: sort ?? this.sort,
         filter: filter ?? this.filter,
         compact: compact ?? this.compact,
+        pluginId: clearPluginId ? null : (pluginId ?? this.pluginId),
       );
 }
 
@@ -193,6 +203,7 @@ class DeviceGroupResult {
 /// Filter → search → group → sort. The whole pipeline, in one place.
 List<DeviceGroupResult> runQuery(List<DeviceState> devices, DeviceQuery q) {
   final matched = devices
+      .where((d) => q.pluginId == null || d.pluginId == q.pluginId)
       .where((d) => _passesFilter(d, q.filter))
       .where((d) => deviceMatches(d, q.search))
       .toList();
