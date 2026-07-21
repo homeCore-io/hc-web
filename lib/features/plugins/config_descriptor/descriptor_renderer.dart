@@ -23,6 +23,7 @@ class ConfigDescriptorRenderer extends StatefulWidget {
     this.dynamicDefaults = const {},
     this.onCreateInSource,
     this.onSourceEdit,
+    this.onImport,
   });
 
   final ConfigDescriptor descriptor;
@@ -75,6 +76,17 @@ class ConfigDescriptorRenderer extends StatefulWidget {
   final Future<void> Function(Object? rowKey, Map<String, dynamic> patch)?
       onSourceEdit;
 
+  /// Run an `import` field's plugin action over pasted text and return the
+  /// rows it parsed, keyed by target field.
+  ///
+  /// The plugin parses because only it knows its vendor's export format; the
+  /// renderer appends because config is core-owned and must stay reviewable —
+  /// imported rows land unsaved, exactly as if they had been typed.
+  ///
+  /// Throws with a human-readable message the field surfaces verbatim.
+  final Future<Map<String, dynamic>> Function(String action, String text)?
+      onImport;
+
   @override
   State<ConfigDescriptorRenderer> createState() =>
       _ConfigDescriptorRendererState();
@@ -87,6 +99,12 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
   /// Edits to source-bound rows, destined for the live resource, not config:
   /// `{fieldKey: {rowKey: {col: val}}}`.
   final Map<String, Map<Object?, Map<String, dynamic>>> _sourceEdits = {};
+
+  // ── import fields: paste buffer, in-flight set, and last outcome ──────────
+  final Map<String, TextEditingController> _importText = {};
+  final Set<String> _importBusy = {};
+  final Map<String, String> _importNote = {};
+  final Set<String> _importFailed = {};
 
   @override
   void initState() {
@@ -223,9 +241,148 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
         return _listEditor(t, f);
       case 'table':
         return _tableEditor(t, f);
+      case 'import':
+        return _importField(t, f);
       default:
         return _scalarRow(t, f);
     }
+  }
+
+  /// Paste-and-parse. The plugin action turns pasted text into rows; we append
+  /// them to the declared targets, unsaved, so they can be reviewed and edited
+  /// like any typed row.
+  Widget _importField(HcTokens t, CfgField f) {
+    final key = f.key ?? f.action ?? 'import';
+    final controller = _importText[key] ??= TextEditingController();
+    final busy = _importBusy.contains(key);
+
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: t.space.sm),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _labelBlock(t, f),
+          SizedBox(height: t.space.sm),
+          TextField(
+            controller: controller,
+            maxLines: 6,
+            minLines: 3,
+            style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+            decoration: InputDecoration(
+              hintText: f.placeholder,
+              hintStyle: TextStyle(
+                  fontSize: 12, color: t.surface.onBaseMuted.withValues(alpha: 0.5)),
+              filled: true,
+              fillColor: t.surface.raised,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(t.radius.sm),
+                borderSide: BorderSide(color: t.stroke.hairline),
+              ),
+            ),
+          ),
+          SizedBox(height: t.space.sm),
+          Row(children: [
+            _AddButton(
+              label: busy ? 'Importing…' : 'Import',
+              onPressed: busy ? null : () => _runImport(f, controller.text),
+            ),
+            if (_importNote[key] != null)
+              Expanded(
+                child: Padding(
+                  padding: EdgeInsets.only(left: t.space.sm),
+                  child: Text(
+                    _importNote[key]!,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: _importFailed.contains(key)
+                          ? t.accent.warn
+                          : t.surface.onBaseMuted,
+                    ),
+                  ),
+                ),
+              ),
+          ]),
+        ],
+      ),
+    );
+  }
+
+  /// Run the action, then append what it returned to each declared target.
+  ///
+  /// Rows already present are skipped rather than duplicated, matched on the
+  /// target table's `key_by` — pasting the same report twice is a no-op, which
+  /// is what an operator re-checking their work expects.
+  Future<void> _runImport(CfgField f, String text) async {
+    final key = f.key ?? f.action ?? 'import';
+    final run = widget.onImport;
+    final action = f.action;
+    if (run == null || action == null) return;
+
+    setState(() {
+      _importBusy.add(key);
+      _importNote.remove(key);
+      _importFailed.remove(key);
+    });
+    try {
+      final result = await run(action, text);
+      var added = 0;
+      var skipped = 0;
+      for (final target in f.targets ?? const <String>[]) {
+        final incoming = result[target];
+        if (incoming is! List) continue;
+        final table = _fieldByKey(target);
+        final existing = _rowsFor(target);
+        final idKey = table?.keyBy;
+        for (final row in incoming) {
+          if (row is! Map) continue;
+          final candidate = Map<String, dynamic>.from(row);
+          final duplicate = idKey != null &&
+              candidate[idKey] != null &&
+              existing.any((r) => '${r[idKey]}' == '${candidate[idKey]}');
+          if (duplicate) {
+            skipped++;
+            continue;
+          }
+          existing.add(candidate);
+          added++;
+        }
+        _set(target, existing);
+      }
+      final summary = result['summary'];
+      setState(() {
+        _importNote[key] = [
+          if (summary is String && summary.isNotEmpty) summary,
+          if (added > 0) 'Added $added row${added == 1 ? '' : 's'}.',
+          if (skipped > 0) 'Skipped $skipped already present.',
+          if (added == 0 && skipped == 0) 'Nothing to add.',
+        ].join(' ');
+      });
+    } catch (e) {
+      setState(() {
+        _importFailed.add(key);
+        _importNote[key] = '$e';
+      });
+    } finally {
+      if (mounted) setState(() => _importBusy.remove(key));
+    }
+  }
+
+  /// The declared field for `key`, searched across every section.
+  CfgField? _fieldByKey(String key) {
+    for (final s in widget.descriptor.sections) {
+      for (final f in s.fields) {
+        if (f.key == key) return f;
+      }
+    }
+    return null;
+  }
+
+  /// Current rows of an array field, as a mutable copy.
+  List<Map<String, dynamic>> _rowsFor(String key) {
+    final raw = _get(key);
+    return raw is List
+        ? [for (final r in raw) Map<String, dynamic>.from(r as Map)]
+        : <Map<String, dynamic>>[];
   }
 
   // ── scalar row: [label + help | control] ──────────────────────────────────
@@ -1093,7 +1250,8 @@ class _Segmented extends StatelessWidget {
 class _AddButton extends StatelessWidget {
   const _AddButton({required this.label, required this.onPressed});
   final String label;
-  final VoidCallback onPressed;
+  /// Null disables the button — an import in flight, for instance.
+  final VoidCallback? onPressed;
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);

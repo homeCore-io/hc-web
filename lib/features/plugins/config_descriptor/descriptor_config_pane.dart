@@ -1,12 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../../core/api/action_stream.dart';
+import '../../../core/api/plugins_api.dart';
 import '../../../core/providers/areas_provider.dart';
 import '../../../core/providers/devices_provider.dart';
 import '../../../core/providers/plugin_config_provider.dart';
 import '../../../core/providers/plugins_provider.dart';
 import '../../../core/text/humanize.dart';
 import '../../../design/tokens.dart';
+import '../../../core/schema/plugin_capabilities.dart';
 import 'descriptor.dart';
 import 'descriptor_renderer.dart';
 
@@ -98,6 +103,7 @@ class _DescriptorConfigPaneState extends ConsumerState<DescriptorConfigPane> {
                 dynamicDefaults: {'api.callback_host': Uri.base.host},
                 onCreateInSource: _createInSource,
                 onSourceEdit: _saveSourceEdit,
+                onImport: _runImport,
                 onSave: _save,
               );
             },
@@ -194,6 +200,47 @@ class _DescriptorConfigPaneState extends ConsumerState<DescriptorConfigPane> {
         );
       }
     }
+  }
+
+  /// Hand pasted text to a plugin `import` action and return the rows it
+  /// parsed. The renderer appends them; nothing is written until Save.
+  ///
+  /// These actions stream, so the POST only *starts* the run — the parsed rows
+  /// arrive on the terminal SSE event. Failure terminals carry the plugin's own
+  /// message ("That does not parse as JSON…"), which is far more use to the
+  /// operator than a generic error, so it is thrown verbatim.
+  Future<Map<String, dynamic>> _runImport(String actionId, String text) async {
+    final api = ref.read(pluginsApiProvider);
+    final action = PluginAction(id: actionId, label: actionId, stream: true);
+    final outcome = await api.invoke(widget.pluginId, action, {'text': text});
+
+    // A `CommandDone` here means the plugin answered without streaming, which
+    // an import never does — treat it as a contract violation rather than
+    // silently importing nothing.
+    final requestId = switch (outcome) {
+      CommandStreaming(:final requestId) => requestId,
+      // Attach to a run already in flight instead of starting a second one.
+      CommandBusy(:final activeRequestId) => activeRequestId,
+      CommandDone() => null,
+    };
+    if (requestId == null) {
+      throw 'The plugin answered without starting an import.';
+    }
+
+    final token = (await SharedPreferences.getInstance()).getString('jwt_token');
+    if (token == null) throw 'Not signed in.';
+
+    await for (final e in openActionStream(
+      pluginId: widget.pluginId,
+      requestId: requestId,
+      token: token,
+    )) {
+      if (!e.stage.isTerminal) continue;
+      if (e.stage.isFailure) throw e.message ?? 'the plugin reported a failure';
+      final data = e.data;
+      return data is Map ? Map<String, dynamic>.from(data) : <String, dynamic>{};
+    }
+    throw 'The import ended without a result.';
   }
 
   Future<void> _save(

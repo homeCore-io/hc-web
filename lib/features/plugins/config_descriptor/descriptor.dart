@@ -86,6 +86,8 @@ class CfgField {
     this.source,
     this.allowCreate = false,
     this.href,
+    this.action,
+    this.targets,
   });
 
   /// Dotted path into the config JSON, e.g. `sonos.manual_hosts`. Null for
@@ -129,6 +131,14 @@ class CfgField {
   /// `{client_host}` from the address homeCore is served on.
   final String? href;
 
+  /// For `import`: the plugin action that parses the pasted text.
+  final String? action;
+
+  /// For `import`: which field keys the action's result may be written into.
+  /// The renderer appends only these, so an action cannot reach into config
+  /// the descriptor never offered it.
+  final List<String>? targets;
+
   final CfgCondition? visibleWhen;
   final CfgCondition? requiredWhen;
 
@@ -136,7 +146,7 @@ class CfgField {
   /// devices, a core resource) and reconcile against the stored value.
   final CfgSource? source;
 
-  bool get isValueless => kind == 'note' || kind == 'action';
+  bool get isValueless => kind == 'note' || kind == 'action' || kind == 'import';
 
   factory CfgField.fromJson(Map<String, dynamic> j) {
     final item = j['item'];
@@ -166,6 +176,10 @@ class CfgField {
           ? [for (final f in item) CfgField.fromJson(f as Map<String, dynamic>)]
           : null,
       keyBy: j['key_by'] as String?,
+      action: j['action'] as String?,
+      targets: j['targets'] is List
+          ? [for (final t in (j['targets'] as List)) '$t']
+          : null,
       noteText: j['text'] as String?,
       visibleWhen: CfgCondition.maybe(j['visible_when']),
       requiredWhen: CfgCondition.maybe(j['required_when']),
