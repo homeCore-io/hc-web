@@ -499,10 +499,38 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
       return _selectControl(
           t, c, initial.isEmpty ? null : initial, (v) => onChanged('${v ?? ''}'));
     }
+    // A bool column needs a switch for the same reason an enum needs a
+    // dropdown: left as a text box it stores the *string* "true", which fails
+    // to deserialize into the plugin's bool. Absent cell reads as false, which
+    // matches serde's `#[serde(default)]`.
+    if (c.kind == 'toggle') {
+      return Switch(
+        value: initial == 'true',
+        activeThumbColor: t.accent.active,
+        onChanged: (b) => onChanged('$b'),
+      );
+    }
+    // A list column is comma-separated text, not the stacked add/remove editor
+    // a section-level list gets — that control is taller than a table row and
+    // these lists are short (a keypad's button components). `_coerceColumn`
+    // parses it back into a real JSON array.
+    if (c.kind == 'list') {
+      final item = c.itemKind ?? 'text';
+      return _Input(
+        key: key,
+        initial: initial,
+        placeholder: c.placeholder ?? (_isNumericKind(item) ? '1, 2, 3' : ''),
+        validate: (s) => _validateCsv(item, s),
+        onChanged: onChanged,
+        onCommit: onCommit,
+      );
+    }
+    const numericKinds = {'int', 'number', 'port', 'duration'};
     return _Input(
       key: key,
       initial: initial,
       placeholder: c.placeholder,
+      numeric: numericKinds.contains(c.kind),
       onChanged: onChanged,
       onCommit: onCommit,
     );
@@ -659,7 +687,7 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
                             child: _columnControl(
                               t,
                               c,
-                              '${rowEdits?[c.key] ?? item[c.key] ?? ''}',
+                              _columnInitial(c, rowEdits?[c.key] ?? item[c.key]),
                               // A dropdown commits on selection; a text field
                               // echoes locally per keystroke and commits on
                               // blur/submit, so we don't PATCH per character.
@@ -763,6 +791,32 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
     return p;
   }
 
+  /// Convert a manual-table cell's text to the JSON type its column declares,
+  /// so numeric config fields round-trip. An empty numeric cell becomes null
+  /// (the field is absent) rather than 0, which would be a real value.
+  Object? _coerceColumn(CfgField c, String s) {
+    switch (c.kind) {
+      case 'int':
+      case 'port':
+      case 'duration':
+        return s.isEmpty ? null : (int.tryParse(s) ?? s);
+      case 'number':
+        return s.isEmpty ? null : (num.tryParse(s) ?? s);
+      case 'toggle':
+        return s == 'true';
+      case 'list':
+        // Empty means "no entries", i.e. an empty array — not a null, which
+        // would drop the key and read back as a missing field.
+        final item = c.itemKind ?? 'text';
+        return _splitCsv(s)
+            .map<Object>(
+                (tok) => _isNumericKind(item) ? (num.tryParse(tok) ?? tok) : tok)
+            .toList();
+      default:
+        return s;
+    }
+  }
+
   Widget _manualTable(HcTokens t, CfgField f) {
     final raw = _effective(f);
     final rows = raw is List
@@ -813,19 +867,32 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
                                     color: t.surface.onBaseMuted))),
                         Expanded(
                           child: c.readOnly
-                              ? Text('${rows[i][c.key] ?? '—'}',
+                              ? Text(
+                                  rows[i][c.key] == null
+                                      ? '—'
+                                      : _columnInitial(c, rows[i][c.key]),
                                   style: TextStyle(
                                       fontSize: 13,
                                       color: t.surface.onBase,
                                       fontFeatures: const []))
-                              : _Input(
-                                  key: ValueKey('${f.key}[$i].${c.key}'),
-                                  initial: '${rows[i][c.key] ?? ''}',
-                                  placeholder: c.placeholder,
-                                  onChanged: (s) {
-                                    rows[i][c.key!] = s;
+                              // Same control set as a sourced table's columns,
+                              // so an enum column (e.g. a device `kind`) renders
+                              // as a dropdown instead of a free-text box you can
+                              // typo into.
+                              : _columnControl(
+                                  t,
+                                  c,
+                                  _columnInitial(c, rows[i][c.key]),
+                                  (s) {
+                                    // Coerce to the column's type — a manual
+                                    // table writes straight to the config
+                                    // document, and an integration_id stored as
+                                    // the string "19" fails to deserialize into
+                                    // the u32 the plugin expects.
+                                    rows[i][c.key!] = _coerceColumn(c, s);
                                     write();
                                   },
+                                  key: ValueKey('${f.key}[$i].${c.key}'),
                                 ),
                         ),
                       ]),
@@ -914,6 +981,36 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
       default:
         return null;
     }
+  }
+
+  static bool _isNumericKind(String kind) =>
+      kind == 'int' || kind == 'number' || kind == 'port' || kind == 'duration';
+
+  /// Split a comma-separated cell into trimmed, non-empty tokens.
+  static List<String> _splitCsv(String s) =>
+      s.split(',').map((t) => t.trim()).where((t) => t.isNotEmpty).toList();
+
+  /// Every token must be valid for the list's item kind, so a typo is caught
+  /// in the cell rather than silently written as a string the plugin rejects.
+  static String? _validateCsv(String itemKind, String s) {
+    for (final tok in _splitCsv(s)) {
+      if (_isNumericKind(itemKind) && num.tryParse(tok) == null) {
+        return 'Not a number: $tok';
+      }
+      final err = _validateKind(itemKind, tok, allowEmpty: false);
+      if (err != null) return err;
+    }
+    return null;
+  }
+
+  /// How a stored cell value reads in its control. A list joins back to the
+  /// comma-separated form `_coerceColumn` parses; everything else stringifies.
+  static String _columnInitial(CfgField c, Object? v) {
+    if (v == null) return '';
+    if (c.kind == 'list') {
+      return v is List ? v.join(', ') : '$v';
+    }
+    return '$v';
   }
 
   static String? _placeholderFor(String? kind) {
