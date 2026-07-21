@@ -465,8 +465,10 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
           numeric: true,
           suffix: f.unit ?? (f.kind == 'port' ? null : null),
           validate: (s) => _validateScalar(f, s),
-          onChanged: (s) => _set(f.key!,
-              f.kind == 'number' ? num.tryParse(s) : int.tryParse(s)),
+          // Unparseable text is kept as text rather than becoming null. Null
+          // reads as "unset", so a typo silently *cleared* the field and saved
+          // happily; keeping the text makes it a value the save bar can refuse.
+          onChanged: (s) => _set(f.key!, _coerceScalar(f, s)),
         );
       case 'secret':
         return _Input(
@@ -951,6 +953,12 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
   /// Convert a manual-table cell's text to the JSON type its column declares,
   /// so numeric config fields round-trip. An empty numeric cell becomes null
   /// (the field is absent) rather than 0, which would be a real value.
+  /// Same contract as [_coerceColumn], for a scalar field's own control.
+  Object? _coerceScalar(CfgField f, String s) {
+    if (s.isEmpty) return null;
+    return f.kind == 'number' ? (num.tryParse(s) ?? s) : (int.tryParse(s) ?? s);
+  }
+
   Object? _coerceColumn(CfgField c, String s) {
     switch (c.kind) {
       case 'int':
@@ -1100,24 +1108,122 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
         ]),
       );
 
-  Widget _saveBar(HcTokens t) => Container(
-        padding: EdgeInsets.all(t.space.md),
-        decoration: BoxDecoration(
-          border: Border(top: BorderSide(color: t.stroke.hairline)),
+  Widget _saveBar(HcTokens t) {
+    // Saving a bad value is worse than refusing to: the plugin restarts on
+    // save, and a String where its config wants a number means it fails to
+    // parse and drops offline entirely.
+    final problems = _problems();
+    final blocked = problems.isNotEmpty;
+    return Container(
+      padding: EdgeInsets.all(t.space.md),
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: t.stroke.hairline)),
+      ),
+      child: Row(children: [
+        if (blocked)
+          Expanded(
+            child: Text(
+              problems.length == 1
+                  ? problems.first
+                  : '${problems.first}  (+${problems.length - 1} more)',
+              style: TextStyle(fontSize: 12, color: t.accent.warn),
+              overflow: TextOverflow.ellipsis,
+            ),
+          )
+        else
+          const Spacer(),
+        SizedBox(width: t.space.md),
+        FilledButton(
+          style: FilledButton.styleFrom(
+              backgroundColor: t.accent.active,
+              foregroundColor: t.surface.base,
+              disabledBackgroundColor: t.stroke.hairline,
+              disabledForegroundColor: t.surface.onBaseMuted),
+          onPressed: widget.saving || blocked
+              ? null
+              : () => widget.onSave(_values, _sourceEdits),
+          child: Text(widget.saving ? 'Saving…' : 'Save changes'),
         ),
-        child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
-          FilledButton(
-            style: FilledButton.styleFrom(
-                backgroundColor: t.accent.active,
-                foregroundColor: t.surface.base),
-            onPressed:
-                widget.saving ? null : () => widget.onSave(_values, _sourceEdits),
-            child: Text(widget.saving ? 'Saving…' : 'Save changes'),
-          ),
-        ]),
-      );
+      ]),
+    );
+  }
 
   // ── validation ────────────────────────────────────────────────────────────
+
+  /// Everything wrong with the document right now, in operator language.
+  ///
+  /// Validates the **stored values**, not the widgets, so a row that arrived
+  /// from an `import` is checked exactly as strictly as one that was typed —
+  /// and a control the operator never touched cannot hide a bad value.
+  List<String> _problems() {
+    final out = <String>[];
+    final only = widget.onlySectionId;
+    for (final s in widget.descriptor.sections) {
+      if (only != null && s.id != only) continue;
+      for (final f in s.fields) {
+        if (!_visible(f) || !_savesToConfig(f) || f.key == null) continue;
+        final label = f.label ?? f.key!;
+        if (f.kind == 'table') {
+          final cols = f.itemFields ?? const <CfgField>[];
+          final rows = _rowsFor(f.key!);
+          for (var i = 0; i < rows.length; i++) {
+            for (final c in cols) {
+              if (c.key == null) continue;
+              final problem = _valueProblem(c, rows[i][c.key]);
+              if (problem != null) {
+                out.add('$label row ${i + 1}: ${c.label ?? c.key} $problem');
+              }
+            }
+          }
+        } else {
+          final problem = _valueProblem(f, _effective(f));
+          if (problem != null) out.add('$label $problem');
+        }
+      }
+    }
+    return out;
+  }
+
+  /// What is wrong with `v` for field `f`, or null if it is fine.
+  ///
+  /// Type is checked before text: the failure that actually reaches the plugin
+  /// is a `String` sitting where a number or bool belongs, which no amount of
+  /// re-validating the text would catch once the control has been left.
+  String? _valueProblem(CfgField f, Object? v) {
+    final required = _isRequired(f);
+    if (v == null || (v is String && v.isEmpty)) {
+      return required ? 'is required' : null;
+    }
+    switch (f.kind) {
+      case 'int':
+      case 'duration':
+        if (v is! num || v != v.roundToDouble()) return 'must be a whole number';
+      // Its own case, not folded in with `int`: a port carries a range the
+      // kind itself implies, and routing it through the integer branch meant
+      // the control showed "1–65535" while Save stayed happily enabled.
+      case 'port':
+        if (v is! num || v != v.roundToDouble()) return 'must be a whole number';
+        if (v < 1 || v > 65535) return 'must be between 1 and 65535';
+      case 'number':
+        if (v is! num) return 'must be a number';
+      case 'toggle':
+        if (v is! bool) return 'must be true or false';
+      case 'list':
+        if (v is! List) return 'must be a list';
+        if (_isNumericKind(f.itemKind ?? 'text') && v.any((e) => e is! num)) {
+          return 'must contain only numbers';
+        }
+      default:
+        final err = _validateKind(f.kind, '$v', allowEmpty: !required);
+        if (err != null) return '— $err';
+    }
+    if (v is num) {
+      if (f.min != null && v < f.min!) return 'must be at least ${f.min}';
+      if (f.max != null && v > f.max!) return 'must be at most ${f.max}';
+    }
+    return null;
+  }
+
   String? _validateScalar(CfgField f, String s) =>
       _validateKind(f.kind, s, allowEmpty: !_isRequired(f));
 
