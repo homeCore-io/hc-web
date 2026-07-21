@@ -88,6 +88,8 @@ class CfgField {
     this.href,
     this.action,
     this.targets,
+    this.groupBy,
+    this.promptWhenEmpty = false,
   });
 
   /// Dotted path into the config JSON, e.g. `sonos.manual_hosts`. Null for
@@ -134,6 +136,12 @@ class CfgField {
   /// For `import`: the plugin action that parses the pasted text.
   final String? action;
 
+  /// For `table`: the column rows are grouped under.
+  final String? groupBy;
+
+  /// For a column: empty is worth flagging, though it does not block a save.
+  final bool promptWhenEmpty;
+
   /// For `import`: which field keys the action's result may be written into.
   /// The renderer appends only these, so an action cannot reach into config
   /// the descriptor never offered it.
@@ -176,6 +184,8 @@ class CfgField {
           ? [for (final f in item) CfgField.fromJson(f as Map<String, dynamic>)]
           : null,
       keyBy: j['key_by'] as String?,
+      groupBy: j['group_by'] as String?,
+      promptWhenEmpty: j['prompt_when_empty'] as bool? ?? false,
       action: j['action'] as String?,
       targets: j['targets'] is List
           ? [for (final t in (j['targets'] as List)) '$t']

@@ -101,6 +101,12 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
   /// `{fieldKey: {rowKey: {col: val}}}`.
   final Map<String, Map<Object?, Map<String, dynamic>>> _sourceEdits = {};
 
+  // ── list tables: which rows are open, picked, searched or filtered ───────
+  final Map<String, Set<int>> _tableExpanded = {};
+  final Map<String, Set<int>> _tableSelection = {};
+  final Map<String, String> _tableQuery = {};
+  final Set<String> _tableFilter = {};
+
   // ── import fields: paste buffer, in-flight set, and last outcome ──────────
   final Map<String, TextEditingController> _importText = {};
   final Set<String> _importBusy = {};
@@ -746,7 +752,430 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
   //    stored overrides; without, edit the stored array directly.
   Widget _tableEditor(HcTokens t, CfgField f) {
     if (f.source != null) return _sourcedTable(t, f);
+    if (f.render == 'list') return _listTable(t, f);
     return _manualTable(t, f);
+  }
+
+  // ── list table ────────────────────────────────────────────────────────────
+  //
+  // A card per row costs ~150px, so a dozen devices is a wall of scrolling and
+  // twenty is unusable. This renders one line each — the fields you scan by —
+  // and opens the full editor only for the row you are working on.
+
+  /// Rows of `f`, as a mutable copy, paired with their index in the stored
+  /// list. Filtering and grouping reorder what is shown, but every edit still
+  /// has to address the row where it actually lives.
+  List<({int index, Map<String, dynamic> row})> _indexedRows(CfgField f) {
+    final raw = _effective(f);
+    if (raw is! List) return const [];
+    return [
+      for (var i = 0; i < raw.length; i++)
+        (index: i, row: Map<String, dynamic>.from(raw[i] as Map)),
+    ];
+  }
+
+  void _writeRows(CfgField f, List<({int index, Map<String, dynamic> row})> all) {
+    _set(f.key!, [for (final e in all) e.row]);
+  }
+
+  /// Does this row still want attention — any column declaring
+  /// `prompt_when_empty` that has no value?
+  bool _rowNeedsAttention(CfgField f, Map<String, dynamic> row) {
+    for (final c in f.itemFields ?? const <CfgField>[]) {
+      if (!c.promptWhenEmpty || c.key == null) continue;
+      final v = row[c.key];
+      if (v == null || (v is String && v.isEmpty)) return true;
+    }
+    return false;
+  }
+
+  String _cellText(CfgField c, Object? v) {
+    if (v == null || (v is String && v.isEmpty)) return '';
+    if (c.options != null) {
+      for (final o in c.options!) {
+        if ('${o.value}' == '$v') return o.label;
+      }
+    }
+    return _columnInitial(c, v);
+  }
+
+  Widget _listTable(HcTokens t, CfgField f) {
+    final key = f.key!;
+    final all = _indexedRows(f);
+    final cols = f.itemFields ?? const <CfgField>[];
+    final query = (_tableQuery[key] ?? '').trim().toLowerCase();
+    final onlyAttention = _tableFilter.contains(key);
+    final selected = _tableSelection[key] ??= <int>{};
+
+    final attentionCount =
+        all.where((e) => _rowNeedsAttention(f, e.row)).length;
+
+    var shown = all;
+    if (onlyAttention) {
+      shown = shown.where((e) => _rowNeedsAttention(f, e.row)).toList();
+    }
+    if (query.isNotEmpty) {
+      shown = shown.where((e) {
+        final hay = [
+          for (final c in cols)
+            if (c.key != null) _cellText(c, e.row[c.key]),
+          ...e.row.values.map((v) => '$v'),
+        ].join(' ').toLowerCase();
+        return hay.contains(query);
+      }).toList();
+    }
+
+    // Group only when the descriptor says how, and keep the empty bucket last
+    // so "unassigned" reads as leftovers rather than a place.
+    final groupKey = f.groupBy;
+    final groups = <String, List<({int index, Map<String, dynamic> row})>>{};
+    if (groupKey != null) {
+      final col = cols.where((c) => c.key == groupKey).firstOrNull;
+      for (final e in shown) {
+        final label = col == null
+            ? '${e.row[groupKey] ?? ''}'
+            : _cellText(col, e.row[groupKey]);
+        groups.putIfAbsent(label.isEmpty ? '' : label, () => []).add(e);
+      }
+    } else {
+      groups[''] = shown;
+    }
+    final orderedGroups = groups.keys.toList()
+      ..sort((a, b) => a.isEmpty
+          ? 1
+          : b.isEmpty
+              ? -1
+              : a.compareTo(b));
+
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: t.space.sm),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _labelBlock(t, f),
+          SizedBox(height: t.space.sm),
+          if (all.length > 4 || attentionCount > 0)
+            _listToolbar(t, f, all.length, attentionCount),
+          if (selected.isNotEmpty) _bulkBar(t, f, all, selected),
+          Container(
+            decoration: BoxDecoration(
+              // Rows sit on `raised`, group bands on `sunken`. Against the bare
+              // page ground all three were the same near-black and the
+              // structure vanished.
+              color: t.surface.raised,
+              border: Border.all(color: t.stroke.hairline),
+              borderRadius: BorderRadius.circular(t.radius.md),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: Column(children: [
+              if (shown.isEmpty)
+                Padding(
+                  padding: EdgeInsets.all(t.space.lg),
+                  child: Text(
+                    all.isEmpty
+                        ? 'No ${_plural(f)} yet — add one below.'
+                        : 'No ${_plural(f)} match that search.',
+                    style:
+                        TextStyle(fontSize: 12, color: t.surface.onBaseMuted),
+                  ),
+                ),
+              for (final g in orderedGroups) ...[
+                if (groupKey != null)
+                  _groupHeader(t, g.isEmpty ? 'Unassigned' : g,
+                      groups[g]!.length),
+                for (final e in groups[g]!)
+                  _listRow(t, f, e, cols, selected, all,
+                      last: e == groups[g]!.last),
+              ],
+            ]),
+          ),
+          SizedBox(height: t.space.sm),
+          _AddButton(
+            label: 'Add ${_singular(f)}',
+            onPressed: () {
+              final next = _indexedRows(f);
+              next.add((
+                index: next.length,
+                row: {for (final c in cols) c.key!: ''}
+              ));
+              _writeRows(f, next);
+              setState(() => _tableExpanded
+                  .putIfAbsent(key, () => <int>{})
+                  .add(next.length - 1));
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _listToolbar(HcTokens t, CfgField f, int total, int attention) {
+    final key = f.key!;
+    final onlyAttention = _tableFilter.contains(key);
+    return Padding(
+      padding: EdgeInsets.only(bottom: t.space.sm),
+      child: Row(children: [
+        Expanded(
+          child: _Input(
+            key: ValueKey('$key.__search'),
+            initial: _tableQuery[key] ?? '',
+            placeholder: 'Search ${_plural(f)}',
+            onChanged: (s) => setState(() => _tableQuery[key] = s),
+          ),
+        ),
+        if (attention > 0) ...[
+          SizedBox(width: t.space.sm),
+          _FilterChip(
+            label: 'Needs attention',
+            count: attention,
+            selected: onlyAttention,
+            onTap: () => setState(() => onlyAttention
+                ? _tableFilter.remove(key)
+                : _tableFilter.add(key)),
+          ),
+        ],
+        SizedBox(width: t.space.sm),
+        Text('$total',
+            style: TextStyle(
+                fontSize: 12,
+                fontFeatures: const [FontFeature.tabularFigures()],
+                color: t.surface.onBaseMuted)),
+      ]),
+    );
+  }
+
+  /// Applying one value to many rows is the difference between two
+  /// interactions and twenty — an imported report lands a whole tableful of
+  /// rows all wanting the same answer.
+  Widget _bulkBar(HcTokens t, CfgField f,
+      List<({int index, Map<String, dynamic> row})> all, Set<int> selected) {
+    final cols = f.itemFields ?? const <CfgField>[];
+    // Only columns offering a fixed set of choices can be applied blind; free
+    // text across twenty rows is a mistake waiting to happen. Source-bound
+    // columns count — assigning a room to everything in a report is exactly
+    // the tedium this exists to remove.
+    final settable =
+        cols.where((c) => c.key != null && _optionsFor(c).isNotEmpty);
+    return Container(
+      margin: EdgeInsets.only(bottom: t.space.sm),
+      padding: EdgeInsets.symmetric(
+          horizontal: t.space.md, vertical: t.space.sm),
+      decoration: BoxDecoration(
+        color: t.accent.active.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(t.radius.sm),
+      ),
+      child: Row(children: [
+        Text('${selected.length} selected',
+            style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: t.surface.onBase)),
+        SizedBox(width: t.space.md),
+        for (final c in settable) ...[
+          _BulkSet(
+            label: 'Set ${(c.label ?? c.key!).toLowerCase()}…',
+            options: _optionsFor(c),
+            onPicked: (value) {
+              final next = _indexedRows(f);
+              for (final e in next) {
+                if (selected.contains(e.index)) e.row[c.key!] = value;
+              }
+              _writeRows(f, next);
+              setState(() => selected.clear());
+            },
+          ),
+          SizedBox(width: t.space.sm),
+        ],
+        const Spacer(),
+        TextButton(
+          onPressed: () {
+            final next = _indexedRows(f)
+                .where((e) => !selected.contains(e.index))
+                .toList();
+            _writeRows(f, next);
+            setState(() {
+              selected.clear();
+              _tableExpanded[f.key!]?.clear();
+            });
+          },
+          child: Text('Remove', style: TextStyle(color: t.accent.warn)),
+        ),
+        TextButton(
+          onPressed: () => setState(selected.clear),
+          child: Text('Cancel',
+              style: TextStyle(color: t.surface.onBaseMuted)),
+        ),
+      ]),
+    );
+  }
+
+  Widget _groupHeader(HcTokens t, String label, int count) => Container(
+        width: double.infinity,
+        padding: EdgeInsets.symmetric(
+            horizontal: t.space.md, vertical: t.space.sm),
+        decoration: BoxDecoration(
+          color: t.surface.sunken,
+          border: Border(
+            top: BorderSide(color: t.stroke.hairline),
+            bottom: BorderSide(color: t.stroke.hairline),
+          ),
+        ),
+        child: Row(children: [
+          Text(humanize(label).toUpperCase(),
+              style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.8,
+                  color: t.surface.onBaseMuted)),
+          SizedBox(width: t.space.xs),
+          Text('· $count',
+              style: TextStyle(
+                  fontSize: 10,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                  color: t.surface.onBaseMuted)),
+        ]),
+      );
+
+  Widget _listRow(
+    HcTokens t,
+    CfgField f,
+    ({int index, Map<String, dynamic> row}) entry,
+    List<CfgField> cols,
+    Set<int> selected,
+    List<({int index, Map<String, dynamic> row})> all, {
+    required bool last,
+  }) {
+    final key = f.key!;
+    final expanded = (_tableExpanded[key] ?? const <int>{}).contains(entry.index);
+    final isSelected = selected.contains(entry.index);
+    final needs = _rowNeedsAttention(f, entry.row);
+
+    // The first text column titles the row; the identity column trails it.
+    final titleCol = cols.firstWhere(
+        (c) => c.kind == 'text' && c.key != f.groupBy,
+        orElse: () => cols.isEmpty ? CfgField(kind: 'text') : cols.first);
+    final idCol = f.keyBy == null
+        ? null
+        : cols.where((c) => c.key == f.keyBy).firstOrNull;
+    final title = _cellText(titleCol, entry.row[titleCol.key]);
+    final promptCol = cols.where((c) => c.promptWhenEmpty).firstOrNull;
+
+    return Column(children: [
+      InkWell(
+        hoverColor: t.surface.overlay,
+        onTap: () => setState(() {
+          final open = _tableExpanded.putIfAbsent(key, () => <int>{});
+          expanded ? open.remove(entry.index) : open.add(entry.index);
+        }),
+        child: Container(
+          color: isSelected
+              ? t.accent.active.withValues(alpha: 0.07)
+              : Colors.transparent,
+          padding: EdgeInsets.symmetric(
+              horizontal: t.space.sm, vertical: t.space.sm),
+          child: Row(children: [
+            SizedBox(
+              width: 30,
+              child: Checkbox(
+                value: isSelected,
+                visualDensity: VisualDensity.compact,
+                activeColor: t.accent.active,
+                onChanged: (v) => setState(() => v == true
+                    ? selected.add(entry.index)
+                    : selected.remove(entry.index)),
+              ),
+            ),
+            Expanded(
+              child: Text(title.isEmpty ? 'Untitled' : title,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      fontSize: 13.5,
+                      color: title.isEmpty
+                          ? t.surface.onBaseMuted
+                          : t.surface.onBase)),
+            ),
+            if (idCol != null) ...[
+              Text('#${_cellText(idCol, entry.row[idCol.key])}',
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                      color: t.surface.onBaseMuted)),
+              SizedBox(width: t.space.sm),
+            ],
+            if (promptCol != null)
+              _StateChip(
+                label: needs
+                    ? 'Set ${(promptCol.label ?? promptCol.key!).toLowerCase()}'
+                    : _cellText(promptCol, entry.row[promptCol.key]),
+                attention: needs,
+              ),
+            Icon(expanded ? Icons.expand_more : Icons.chevron_right,
+                size: 18, color: t.surface.onBaseMuted),
+          ]),
+        ),
+      ),
+      if (expanded)
+        Container(
+          width: double.infinity,
+          color: t.surface.sunken,
+          padding: EdgeInsets.fromLTRB(
+              t.space.lg, t.space.sm, t.space.md, t.space.md),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            for (final c in cols)
+              if (c.key != null) _rowField(t, f, entry.index, c),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                icon: Icon(Icons.close, size: 16, color: t.accent.warn),
+                label:
+                    Text('Remove', style: TextStyle(color: t.accent.warn)),
+                onPressed: () {
+                  final next = _indexedRows(f)
+                    ..removeWhere((e) => e.index == entry.index);
+                  _writeRows(f, next);
+                  setState(() => _tableExpanded[key]?.clear());
+                },
+              ),
+            ),
+          ]),
+        ),
+      if (!last)
+        Divider(height: 1, thickness: 1, color: t.stroke.hairline),
+    ]);
+  }
+
+  Widget _rowField(HcTokens t, CfgField f, int rowIndex, CfgField c) {
+    final rows = _indexedRows(f);
+    final entry = rows.where((e) => e.index == rowIndex).firstOrNull;
+    if (entry == null) return const SizedBox.shrink();
+    return Padding(
+      padding: EdgeInsets.only(bottom: t.space.sm),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+        SizedBox(
+          width: 132,
+          child: Text(c.label ?? c.key!,
+              style: TextStyle(fontSize: 12, color: t.surface.onBaseMuted)),
+        ),
+        Expanded(
+          child: c.readOnly
+              ? Text(_cellText(c, entry.row[c.key]),
+                  style: TextStyle(fontSize: 13, color: t.surface.onBase))
+              : _columnControl(
+                  t,
+                  c,
+                  _columnInitial(c, entry.row[c.key]),
+                  (s) {
+                    final next = _indexedRows(f);
+                    for (final e in next) {
+                      if (e.index == rowIndex) e.row[c.key!] = _coerceColumn(c, s);
+                    }
+                    _writeRows(f, next);
+                  },
+                  key: ValueKey('${f.key}[$rowIndex].${c.key}'),
+                ),
+        ),
+      ]),
+    );
   }
 
   /// Live-bound table: one card per discovered item, prefilled from the stored
@@ -1378,6 +1807,130 @@ class _InputState extends State<_Input> {
               style: TextStyle(fontSize: 11, color: t.accent.warn)),
         ),
       ],
+    );
+  }
+}
+
+
+/// A count-carrying toggle, for narrowing a long table to the rows that still
+/// want something.
+class _FilterChip extends StatelessWidget {
+  const _FilterChip({
+    required this.label,
+    required this.count,
+    required this.selected,
+    required this.onTap,
+  });
+  final String label;
+  final int count;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Material(
+      color: selected
+          ? t.accent.active.withValues(alpha: 0.16)
+          : Colors.transparent,
+      borderRadius: BorderRadius.circular(t.radius.pill),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(t.radius.pill),
+        onTap: onTap,
+        child: Container(
+          padding: EdgeInsets.symmetric(
+              horizontal: t.space.sm, vertical: t.space.xs),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(t.radius.pill),
+            border: Border.all(
+                color: selected ? Colors.transparent : t.stroke.hairline),
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Text(label,
+                style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: selected ? t.accent.active : t.surface.onBaseMuted)),
+            SizedBox(width: t.space.xs),
+            Text('$count',
+                style: TextStyle(
+                    fontSize: 12,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                    color: selected ? t.accent.active : t.surface.onBaseMuted)),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+/// The row's headline state. Amber when it still wants a value, so a table of
+/// freshly imported rows reads at a glance.
+class _StateChip extends StatelessWidget {
+  const _StateChip({required this.label, required this.attention});
+  final String label;
+  final bool attention;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    if (label.isEmpty) return const SizedBox.shrink();
+    return Container(
+      margin: EdgeInsets.only(right: t.space.xs),
+      padding: EdgeInsets.symmetric(horizontal: t.space.sm, vertical: 2),
+      decoration: BoxDecoration(
+        color: attention
+            ? t.accent.active.withValues(alpha: 0.16)
+            : t.surface.overlay,
+        borderRadius: BorderRadius.circular(t.radius.pill),
+      ),
+      child: Text(label,
+          style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w600,
+              color: attention ? t.accent.active : t.surface.onBaseMuted)),
+    );
+  }
+}
+
+/// Apply one option to every selected row.
+class _BulkSet extends StatelessWidget {
+  const _BulkSet({
+    required this.label,
+    required this.options,
+    required this.onPicked,
+  });
+  final String label;
+  final List<CfgOption> options;
+  final ValueChanged<Object?> onPicked;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return PopupMenuButton<Object?>(
+      tooltip: label,
+      onSelected: onPicked,
+      itemBuilder: (_) => [
+        for (final o in options)
+          PopupMenuItem<Object?>(value: o.value, child: Text(o.label)),
+      ],
+      child: Container(
+        padding: EdgeInsets.symmetric(
+            horizontal: t.space.sm, vertical: t.space.xs),
+        decoration: BoxDecoration(
+          color: t.surface.raised,
+          borderRadius: BorderRadius.circular(t.radius.sm),
+          border: Border.all(color: t.stroke.hairline),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Text(label,
+              style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: t.surface.onBase)),
+          Icon(Icons.arrow_drop_down, size: 16, color: t.surface.onBaseMuted),
+        ]),
+      ),
     );
   }
 }
