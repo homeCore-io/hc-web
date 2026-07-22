@@ -80,7 +80,7 @@ class _PluginSheet extends ConsumerWidget {
                           fontSize: 19,
                           fontWeight: FontWeight.w600)),
                   Text(
-                    '${plugin.pluginId}${plugin.version != null ? ' · SDK v${plugin.version}' : ''}',
+                    '${plugin.pluginId}${plugin.version != null ? ' · running v${plugin.version}' : ''}',
                     style: TextStyle(
                         color: t.surface.onBaseMuted.withValues(alpha: 0.8),
                         fontSize: 12.5),

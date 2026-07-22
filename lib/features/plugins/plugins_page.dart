@@ -78,7 +78,7 @@ class _PluginsView extends ConsumerWidget {
           sliver: SliverGrid(
             gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
               maxCrossAxisExtent: 320,
-              mainAxisExtent: 128,
+              mainAxisExtent: 132,
               crossAxisSpacing: 14,
               mainAxisSpacing: 14,
             ),

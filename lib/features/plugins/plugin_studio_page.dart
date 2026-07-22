@@ -315,7 +315,7 @@ class _Header extends ConsumerWidget {
                     fontWeight: FontWeight.w700,
                     letterSpacing: -0.4)),
             Text(
-              '${plugin.pluginId}${plugin.managed ? ' · local child' : ' · remote'}${plugin.version != null ? ' · SDK v${plugin.version}' : ''}',
+              '${plugin.pluginId}${plugin.managed ? ' · local child' : ' · remote'}${plugin.version != null ? ' · running v${plugin.version}' : ''}',
               style: TextStyle(
                   color: t.surface.onBaseMuted,
                   fontSize: 12.5,
