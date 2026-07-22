@@ -181,6 +181,11 @@ List<String> documentProblems({
 ///
 /// Used by the Studio rail so a section that does not apply takes its
 /// navigation entry with it instead of leading to an empty pane.
+///
+/// Only call this once the config has actually loaded. Passing `{}` does not
+/// mean "no values" to a condition — every key falls through to its declared
+/// default, so the switch resolves to whichever arm the plugin author made
+/// default. Use [unconditionalSections] until the real values arrive.
 List<CfgSection> visibleSections(
   ConfigDescriptor descriptor,
   Map<String, dynamic> values,
@@ -197,3 +202,17 @@ List<CfgSection> visibleSections(
       if (!s.hidden && (s.visibleWhen?.evaluate(readEff) ?? true)) s,
   ];
 }
+
+/// The sections that hold no matter what the config says — everything without
+/// a `visible_when`.
+///
+/// For the window before a plugin's config resolves. A conditional section
+/// cannot be judged then: [visibleSections] would fall through to the declared
+/// defaults and answer confidently from a guess, which is how a hub configured
+/// for YoLink's local mode briefly advertised "YoLink cloud account". Showing
+/// only the unconditional entries keeps the rail honest and monotonic — items
+/// appear as they are confirmed, and none is ever swapped for another.
+List<CfgSection> unconditionalSections(ConfigDescriptor descriptor) => [
+      for (final s in descriptor.sections)
+        if (!s.hidden && s.visibleWhen == null) s,
+    ];

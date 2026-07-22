@@ -60,8 +60,13 @@ class _RegistrySheetState extends ConsumerState<_RegistrySheet> {
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
     final catalog = ref.watch(registryPluginsProvider);
+    // Which plugins are installed decides whether a row offers Install or
+    // reports Installed. An empty map is not "none installed", it is "not
+    // known yet" — rendering it as the former invites installing something
+    // that is already there, so the list waits for the real answer.
+    final installed = ref.watch(pluginsProvider);
     final installedVersions = <String, String?>{
-      for (final p in (ref.watch(pluginsProvider).valueOrNull ?? const []))
+      for (final p in (installed.valueOrNull ?? const []))
         p.pluginId: p.installedVersion,
     };
 
@@ -98,7 +103,11 @@ class _RegistrySheetState extends ConsumerState<_RegistrySheet> {
                 height: 220, child: Center(child: CircularProgressIndicator())),
             error: (_, __) => _empty(t, 'No registry available',
                 'Set [registry] (url + public_key) in homecore config to browse and install plugins.'),
-            data: (plugins) => plugins.isEmpty
+            data: (plugins) => !installed.hasValue
+                ? const SizedBox(
+                    height: 220,
+                    child: Center(child: CircularProgressIndicator()))
+                : plugins.isEmpty
                 ? _empty(t, 'Registry is empty', 'No plugins are published yet.')
                 : ListView.separated(
                     padding: EdgeInsets.all(t.space.md),

@@ -345,6 +345,31 @@ void _sectionVisibilityTests() {
     });
   });
 
+  group('unconditionalSections', () {
+    test('offers only what is true without consulting any config', () {
+      final ids = [for (final s in unconditionalSections(modeGatedDescriptor())) s.id];
+      expect(ids, ['mode']);
+    });
+
+    test('hidden sections stay hidden here too', () {
+      final ids = [for (final s in unconditionalSections(modeGatedDescriptor())) s.id];
+      expect(ids, isNot(contains('connection')));
+    });
+
+    test('never guesses an arm the way an empty-values read does', () {
+      // The distinction the rail turns on. `visibleSections({})` is right for
+      // config that loaded with nothing saved — the declared default is then
+      // genuinely what the plugin will use. It is wrong for config that has
+      // not loaded, where the default is only a guess about this hub: YoLink
+      // defaults to cloud, so a local hub advertised "YoLink cloud account"
+      // and then swapped it. Unconditional sections cannot be wrong either way.
+      final d = modeGatedDescriptor();
+      expect([for (final s in visibleSections(d, {})) s.id], ['mode', 'cloud']);
+      expect([for (final s in unconditionalSections(d)) s.id],
+          isNot(contains('cloud')));
+    });
+  });
+
   group('documentProblems and invisible sections', () {
     test('a required field in a switched-off section does not block save', () {
       // Otherwise Save is refused because `local.hub_ip` is empty, while the

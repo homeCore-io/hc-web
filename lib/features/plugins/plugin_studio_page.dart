@@ -107,7 +107,8 @@ class _PluginStudioPageState extends ConsumerState<PluginStudioPage> {
           );
         }
 
-        final update = _updateAvailable(plugin);
+        final standing = _registryStanding(plugin);
+        final update = standing.newer;
         final nav = _railItems(plugin, update);
         // The selection can name a section this plugin does not have: go_router
         // reuses this page across `/plugins/:id`, so the rail's state survives
@@ -138,7 +139,9 @@ class _PluginStudioPageState extends ConsumerState<PluginStudioPage> {
                       onSelect: (k) => setState(() => _selected = k),
                     ),
                     VerticalDivider(width: 1, color: t.stroke.hairline),
-                    Expanded(child: _pane(plugin, update, selected)),
+                    Expanded(
+                        child: _pane(plugin, update, standing.answered,
+                            selected)),
                   ],
                 ),
               ),
@@ -149,13 +152,26 @@ class _PluginStudioPageState extends ConsumerState<PluginStudioPage> {
     );
   }
 
-  /// Newer registry version than what's installed?
-  String? _updateAvailable(PluginEntry p) {
+  /// What the registry can say about this plugin's version.
+  ///
+  /// [answered] is false while the index is still loading, when no registry is
+  /// configured, and when the registry simply does not carry this plugin. None
+  /// of those mean the installed version is current — they mean nobody asked,
+  /// or nobody knows. Collapsing them into "no newer version" is what let the
+  /// Version tile read "up to date" for a plugin it had never checked.
+  ({bool answered, String? newer}) _registryStanding(PluginEntry p) {
     final reg = ref.watch(registryPluginsProvider).valueOrNull;
-    if (reg == null || p.installedVersion == null) return null;
+    if (reg == null || p.installedVersion == null) {
+      return (answered: false, newer: null);
+    }
     final match = reg.where((r) => r.id == p.pluginId);
-    final latest = match.isEmpty ? null : match.first.latest;
-    return (latest != null && latest != p.installedVersion) ? latest : null;
+    if (match.isEmpty) return (answered: false, newer: null);
+    final latest = match.first.latest;
+    if (latest == null) return (answered: false, newer: null);
+    return (
+      answered: true,
+      newer: latest != p.installedVersion ? latest : null,
+    );
   }
 
   List<_NavItem> _railItems(PluginEntry p, String? update) {
@@ -170,9 +186,20 @@ class _PluginStudioPageState extends ConsumerState<PluginStudioPage> {
       // credentials or local-hub credentials, never both), so the rail is
       // computed from the current values — a section that does not apply takes
       // its entry with it rather than leading to an empty pane.
-      final cfg = ref.watch(pluginConfigProvider(p.pluginId)).valueOrNull;
-      final values = Map<String, dynamic>.from(cfg?.config ?? const {});
-      for (final s in visibleSections(descriptor, values)) {
+      //
+      // Until the config actually arrives there is nothing to evaluate against:
+      // `visibleSections` would fall back to each field's declared default, and
+      // a default is a guess about this hub, not a reading of it. YoLink
+      // defaults `mode` to cloud, so a locally-configured hub showed "YoLink
+      // cloud account" and then swapped it for "Local hub". Conditional
+      // sections therefore wait for the config; unconditional ones are true
+      // regardless and appear immediately, so the rail only ever grows.
+      final cfg = ref.watch(pluginConfigProvider(p.pluginId));
+      final values = Map<String, dynamic>.from(cfg.valueOrNull?.config ?? const {});
+      final sections = cfg.hasValue
+          ? visibleSections(descriptor, values)
+          : unconditionalSections(descriptor);
+      for (final s in sections) {
         configNav.add(_NavItem('config:${s.id}', s.title, Icons.tune_rounded,
             group: 'Configuration'));
       }
@@ -218,11 +245,13 @@ class _PluginStudioPageState extends ConsumerState<PluginStudioPage> {
     ];
   }
 
-  Widget _pane(PluginEntry p, String? update, String selected) {
+  Widget _pane(PluginEntry p, String? update, bool registryAnswered,
+      String selected) {
     if (selected == 'overview') {
       return _OverviewPane(
         plugin: p,
         update: update,
+        registryAnswered: registryAnswered,
         onNavigate: (k) => setState(() => _selected = k),
       );
     }
@@ -525,9 +554,16 @@ class _PaneScaffold extends StatelessWidget {
 // ── Overview pane ───────────────────────────────────────────────────────────
 class _OverviewPane extends ConsumerWidget {
   const _OverviewPane(
-      {required this.plugin, required this.update, this.onNavigate});
+      {required this.plugin,
+      required this.update,
+      required this.registryAnswered,
+      this.onNavigate});
   final PluginEntry plugin;
   final String? update;
+
+  /// Whether the registry actually answered for this plugin — see
+  /// `_registryStanding`. False means unknown, which must not read as current.
+  final bool registryAnswered;
   final void Function(String key)? onNavigate;
 
   @override
@@ -597,7 +633,11 @@ class _OverviewPane extends ConsumerWidget {
                 plugin.installedVersion ?? plugin.version ?? '—',
                 update != null
                     ? '$update available'
-                    : (plugin.installedVersion != null ? 'up to date' : ''),
+                    // Only the registry can call a version current, and only
+                    // once it has answered for this plugin. Before that it is
+                    // unknown, which says nothing rather than saying "up to
+                    // date" about a check that never ran.
+                    : (registryAnswered ? 'up to date' : ''),
                 update != null ? t.accent.active : t.surface.onBase,
                 c.maxWidth,
                 cols),
