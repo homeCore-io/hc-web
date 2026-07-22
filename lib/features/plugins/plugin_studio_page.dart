@@ -109,6 +109,18 @@ class _PluginStudioPageState extends ConsumerState<PluginStudioPage> {
 
         final update = _updateAvailable(plugin);
         final nav = _railItems(plugin, update);
+        // The selection can name a section this plugin does not have: go_router
+        // reuses this page across `/plugins/:id`, so the rail's state survives
+        // the plugin changing, and a conditional section disappears when the
+        // config that revealed it changes (YoLink's cloud/local pair). Left
+        // alone that renders a pane titled after the *first* section with an
+        // empty body, because the header falls back and the renderer does not.
+        //
+        // Resolved for rendering only, never written back to `_selected` — a
+        // section is also absent for the frames before its descriptor loads,
+        // and the choice has to survive that and come back.
+        final selected =
+            nav.any((i) => i.key == _selected) ? _selected : 'overview';
 
         return ColoredBox(
           color: t.surface.base,
@@ -122,11 +134,11 @@ class _PluginStudioPageState extends ConsumerState<PluginStudioPage> {
                   children: [
                     _Rail(
                       items: nav,
-                      selected: _selected,
+                      selected: selected,
                       onSelect: (k) => setState(() => _selected = k),
                     ),
                     VerticalDivider(width: 1, color: t.stroke.hairline),
-                    Expanded(child: _pane(plugin, update)),
+                    Expanded(child: _pane(plugin, update, selected)),
                   ],
                 ),
               ),
@@ -206,15 +218,15 @@ class _PluginStudioPageState extends ConsumerState<PluginStudioPage> {
     ];
   }
 
-  Widget _pane(PluginEntry p, String? update) {
-    if (_selected == 'overview') {
+  Widget _pane(PluginEntry p, String? update, String selected) {
+    if (selected == 'overview') {
       return _OverviewPane(
         plugin: p,
         update: update,
         onNavigate: (k) => setState(() => _selected = k),
       );
     }
-    if (_selected == 'actions') {
+    if (selected == 'actions') {
       return _PaneScaffold(
         title: 'Actions',
         subtitle: 'Everything this plugin can do on demand.',
@@ -222,9 +234,9 @@ class _PluginStudioPageState extends ConsumerState<PluginStudioPage> {
             pluginId: p.pluginId, layout: PluginActionsLayout.cards),
       );
     }
-    if (_selected.startsWith('config')) {
+    if (selected.startsWith('config')) {
       final section =
-          _selected == 'config' ? '' : _selected.substring('config:'.length);
+          selected == 'config' ? '' : selected.substring('config:'.length);
       final descriptor =
           ref.watch(pluginDescriptorProvider(p.pluginId)).valueOrNull;
       if (descriptor != null) {
@@ -245,11 +257,11 @@ class _PluginStudioPageState extends ConsumerState<PluginStudioPage> {
         error: _cfgError,
       );
     }
-    if (_selected == 'update' && update != null) {
+    if (selected == 'update' && update != null) {
       return _UpdatePane(plugin: p, version: update);
     }
-    if (_selected == 'enabled') return _EnablePane(plugin: p);
-    if (_selected == 'uninstall') return _UninstallPane(plugin: p);
+    if (selected == 'enabled') return _EnablePane(plugin: p);
+    if (selected == 'uninstall') return _UninstallPane(plugin: p);
     return const SizedBox.shrink();
   }
 }
