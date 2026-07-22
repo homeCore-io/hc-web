@@ -56,6 +56,45 @@ void main() {
     });
   });
 
+  group('adding a row', () {
+    test('an empty table still yields a list you can add to', () {
+      // The whole "add your first thermostat/device" flow: with no stored
+      // value, this returned `const []` and the add button threw
+      // `Unsupported operation: add`, so the first row could never be created.
+      final rows = indexedRowsOf(null);
+      expect(rows, isEmpty);
+      expect(() => rows.add((index: 0, row: <String, dynamic>{})),
+          returnsNormally);
+    });
+
+    test('existing rows are copies, addressed by their stored index', () {
+      final stored = [
+        {'integration_id': 2, 'kind': 'switch'},
+        {'integration_id': 5, 'kind': 'pico'},
+      ];
+      final rows = indexedRowsOf(stored);
+      expect(rows.map((e) => e.index), [0, 1]);
+      rows[0].row['kind'] = 'edited';
+      expect(stored[0]['kind'], 'switch', reason: 'must not mutate the source');
+    });
+
+    test('a new row starts at the defaults the descriptor declares', () {
+      // A column that publishes a default is answering "what if you do not
+      // choose" — a blank there misrepresents what the plugin will do.
+      final cols = CfgField.fromJson({
+        'key': 'thermostats',
+        'kind': 'table',
+        'item': [
+          {'key': 'id', 'kind': 'text', 'prompt_when_empty': true},
+          {'key': 'aggregation', 'kind': 'select', 'default': 'average'},
+          {'key': 'setpoint', 'kind': 'float', 'default': 20.5},
+        ],
+      }).itemFields!;
+      expect(newRowFor(cols),
+          {'id': '', 'aggregation': 'average', 'setpoint': 20.5});
+    });
+  });
+
   group('attention', () {
     // Mirrors _rowNeedsAttention: any prompt_when_empty column with no value.
     bool needsAttention(CfgField table, Map<String, dynamic> row) {

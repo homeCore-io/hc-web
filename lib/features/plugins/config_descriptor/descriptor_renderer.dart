@@ -781,14 +781,8 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
   /// Rows of `f`, as a mutable copy, paired with their index in the stored
   /// list. Filtering and grouping reorder what is shown, but every edit still
   /// has to address the row where it actually lives.
-  List<({int index, Map<String, dynamic> row})> _indexedRows(CfgField f) {
-    final raw = _effective(f);
-    if (raw is! List) return const [];
-    return [
-      for (var i = 0; i < raw.length; i++)
-        (index: i, row: Map<String, dynamic>.from(raw[i] as Map)),
-    ];
-  }
+  List<({int index, Map<String, dynamic> row})> _indexedRows(CfgField f) =>
+      indexedRowsOf(_effective(f));
 
   void _writeRows(CfgField f, List<({int index, Map<String, dynamic> row})> all) {
     _set(f.key!, [for (final e in all) e.row]);
@@ -910,10 +904,7 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
             label: 'Add ${_singular(f)}',
             onPressed: () {
               final next = _indexedRows(f);
-              next.add((
-                index: next.length,
-                row: {for (final c in cols) c.key!: ''}
-              ));
+              next.add((index: next.length, row: newRowFor(cols)));
               _writeRows(f, next);
               setState(() => _tableExpanded
                   .putIfAbsent(key, () => <int>{})
@@ -1518,7 +1509,7 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
           _AddButton(
             label: 'Add ${_singular(f)}',
             onPressed: () {
-              rows.add({for (final c in cols) c.key!: ''});
+              rows.add(newRowFor(cols));
               write();
             },
           ),

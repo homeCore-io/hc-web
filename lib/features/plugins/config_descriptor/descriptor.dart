@@ -287,3 +287,26 @@ class CfgCondition {
   static bool _truthy(Object? v) =>
       v != null && v != false && v != 0 && v != '' && v != <dynamic>[];
 }
+
+/// Rows of a table field's stored value, as mutable copies paired with their
+/// index in that list. Filtering and grouping reorder what is shown, but every
+/// edit still has to address the row where it actually lives.
+///
+/// Always growable, including when there is no stored value yet: callers append
+/// to this list to add a row, and an empty table is exactly the case where the
+/// first row gets added. Returning `const []` here made "add the first row"
+/// throw `Unsupported operation: add` for every plugin.
+List<({int index, Map<String, dynamic> row})> indexedRowsOf(Object? raw) {
+  if (raw is! List) return [];
+  return [
+    for (var i = 0; i < raw.length; i++)
+      (index: i, row: Map<String, dynamic>.from(raw[i] as Map)),
+  ];
+}
+
+/// A blank row for [cols], seeded with each column's declared default —
+/// publishing a default is how a plugin says "this is the value if you don't
+/// choose one". Columns without one stay empty, so `prompt_when_empty` still
+/// flags them as needing attention.
+Map<String, dynamic> newRowFor(List<CfgField> cols) =>
+    {for (final c in cols) c.key!: c.defaultValue ?? ''};
