@@ -163,8 +163,7 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
       ? f.defaultValue
       : (_get(f.key!) ?? _defaults[f.key!] ?? f.defaultValue);
 
-  bool _visible(CfgField f) =>
-      f.visibleWhen?.evaluate(_readEff) ?? true;
+  bool _visible(CfgField f) => f.visibleWhen?.evaluate(_readEff) ?? true;
 
   /// A whole section can be conditional too — YoLink's cloud credentials do
   /// not apply to a local hub. Evaluated against the same effective values as
@@ -180,7 +179,8 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
     final only = widget.onlySectionId;
     final sections = [
       for (final s in widget.descriptor.sections)
-        if (!s.hidden && _sectionVisible(s) && (only == null || s.id == only)) s,
+        if (!s.hidden && _sectionVisible(s) && (only == null || s.id == only))
+          s,
     ];
     // Only show Save when a visible field actually writes to plugin config on
     // save. A section that is nothing but a live-resource table (Sonos's
@@ -225,8 +225,7 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
             Padding(
               padding: EdgeInsets.only(top: t.space.xs),
               child: Text(s.help!,
-                  style:
-                      TextStyle(fontSize: 12, color: t.surface.onBaseMuted)),
+                  style: TextStyle(fontSize: 12, color: t.surface.onBaseMuted)),
             ),
           SizedBox(height: t.space.md),
           for (final f in fields) _field(t, f),
@@ -275,7 +274,8 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
             decoration: InputDecoration(
               hintText: f.placeholder,
               hintStyle: TextStyle(
-                  fontSize: 12, color: t.surface.onBaseMuted.withValues(alpha: 0.5)),
+                  fontSize: 12,
+                  color: t.surface.onBaseMuted.withValues(alpha: 0.5)),
               filled: true,
               fillColor: t.surface.raised,
               border: OutlineInputBorder(
@@ -411,15 +411,14 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
           Row(children: [
             Flexible(
                 child: Text(f.label ?? humanize(f.key?.split('.').last),
-                    style:
-                        TextStyle(fontSize: 14, color: t.surface.onBase))),
+                    style: TextStyle(fontSize: 14, color: t.surface.onBase))),
             if (_isRequired(f))
               Text('  •  required',
                   style: TextStyle(fontSize: 11, color: t.accent.warn)),
           ]),
           if (f.help != null)
             Padding(
-              padding: EdgeInsets.only(top: 2),
+              padding: const EdgeInsets.only(top: 2),
               child: Text(f.help!,
                   style: TextStyle(
                       fontSize: 12,
@@ -507,7 +506,8 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
         ? (f.placeholder ?? 'Select')
         : opts
             .firstWhere((o) => o.value == value,
-                orElse: () => CfgOption(value: value, label: humanize('$value')))
+                orElse: () =>
+                    CfgOption(value: value, label: humanize('$value')))
             .label;
     return PopupMenuButton<Object?>(
       tooltip: '',
@@ -646,8 +646,7 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
   }
 
   String _hrefFor(String template) {
-    var s =
-        template.replaceAll('{client_host}', web.window.location.hostname);
+    var s = template.replaceAll('{client_host}', web.window.location.hostname);
     s = s.replaceAllMapped(RegExp(r'\{([a-zA-Z0-9_.]+)\}'), (m) {
       final key = m.group(1)!;
       return '${_get(key) ?? _defaults[key] ?? ''}';
@@ -659,8 +658,8 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
       HcTokens t, CfgField c, String initial, ValueChanged<String> onChanged,
       {Key? key, ValueChanged<String>? onCommit}) {
     if (c.kind == 'select') {
-      return _selectControl(
-          t, c, initial.isEmpty ? null : initial, (v) => onChanged('${v ?? ''}'));
+      return _selectControl(t, c, initial.isEmpty ? null : initial,
+          (v) => onChanged('${v ?? ''}'));
     }
     // A bool column needs a switch for the same reason an enum needs a
     // dropdown: left as a text box it stores the *string* "true", which fails
@@ -735,8 +734,8 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
                     key: ValueKey('${f.key}[$i]'),
                     initial: items[i]?.toString() ?? '',
                     placeholder: _placeholderFor(f.itemKind),
-                    validate: (s) =>
-                        v.validateKind(f.itemKind ?? 'text', s, allowEmpty: true),
+                    validate: (s) => v.validateKind(f.itemKind ?? 'text', s,
+                        allowEmpty: true),
                     onChanged: (s) {
                       items[i] = s;
                       write(List<Object?>.from(items));
@@ -744,7 +743,8 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
                   ),
                 ),
                 IconButton(
-                  icon: Icon(Icons.close, size: 18, color: t.surface.onBaseMuted),
+                  icon:
+                      Icon(Icons.close, size: 18, color: t.surface.onBaseMuted),
                   onPressed: () {
                     items.removeAt(i);
                     write(List<Object?>.from(items));
@@ -784,7 +784,8 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
   List<({int index, Map<String, dynamic> row})> _indexedRows(CfgField f) =>
       indexedRowsOf(_effective(f));
 
-  void _writeRows(CfgField f, List<({int index, Map<String, dynamic> row})> all) {
+  void _writeRows(
+      CfgField f, List<({int index, Map<String, dynamic> row})> all) {
     _set(f.key!, [for (final e in all) e.row]);
   }
 
@@ -891,8 +892,8 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
                 ),
               for (final g in orderedGroups) ...[
                 if (groupKey != null)
-                  _groupHeader(t, g.isEmpty ? 'Unassigned' : g,
-                      groups[g]!.length),
+                  _groupHeader(
+                      t, g.isEmpty ? 'Unassigned' : g, groups[g]!.length),
                 for (final e in groups[g]!)
                   _listRow(t, f, e, cols, selected, all,
                       last: e == groups[g]!.last),
@@ -965,8 +966,8 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
         cols.where((c) => c.key != null && _optionsFor(c).isNotEmpty);
     return Container(
       margin: EdgeInsets.only(bottom: t.space.sm),
-      padding: EdgeInsets.symmetric(
-          horizontal: t.space.md, vertical: t.space.sm),
+      padding:
+          EdgeInsets.symmetric(horizontal: t.space.md, vertical: t.space.sm),
       decoration: BoxDecoration(
         color: t.accent.active.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(t.radius.sm),
@@ -1009,8 +1010,7 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
         ),
         TextButton(
           onPressed: () => setState(selected.clear),
-          child: Text('Cancel',
-              style: TextStyle(color: t.surface.onBaseMuted)),
+          child: Text('Cancel', style: TextStyle(color: t.surface.onBaseMuted)),
         ),
       ]),
     );
@@ -1018,8 +1018,8 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
 
   Widget _groupHeader(HcTokens t, String label, int count) => Container(
         width: double.infinity,
-        padding: EdgeInsets.symmetric(
-            horizontal: t.space.md, vertical: t.space.sm),
+        padding:
+            EdgeInsets.symmetric(horizontal: t.space.md, vertical: t.space.sm),
         decoration: BoxDecoration(
           color: t.surface.sunken,
           border: Border(
@@ -1053,7 +1053,8 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
     required bool last,
   }) {
     final key = f.key!;
-    final expanded = (_tableExpanded[key] ?? const <int>{}).contains(entry.index);
+    final expanded =
+        (_tableExpanded[key] ?? const <int>{}).contains(entry.index);
     final isSelected = selected.contains(entry.index);
     final needs = _rowNeedsAttention(f, entry.row);
 
@@ -1127,17 +1128,18 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
           color: t.surface.sunken,
           padding: EdgeInsets.fromLTRB(
               t.space.lg, t.space.sm, t.space.md, t.space.md),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             // A generated column is identity the client minted; there is
             // nothing to show and nothing to edit.
             for (final c in cols)
-              if (c.key != null && !c.generated) _rowField(t, f, entry.index, c),
+              if (c.key != null && !c.generated)
+                _rowField(t, f, entry.index, c),
             Align(
               alignment: Alignment.centerRight,
               child: TextButton.icon(
                 icon: Icon(Icons.close, size: 16, color: t.accent.warn),
-                label:
-                    Text('Remove', style: TextStyle(color: t.accent.warn)),
+                label: Text('Remove', style: TextStyle(color: t.accent.warn)),
                 onPressed: () {
                   final next = _indexedRows(f)
                     ..removeWhere((e) => e.index == entry.index);
@@ -1148,8 +1150,7 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
             ),
           ]),
         ),
-      if (!last)
-        Divider(height: 1, thickness: 1, color: t.stroke.hairline),
+      if (!last) Divider(height: 1, thickness: 1, color: t.stroke.hairline),
     ]);
   }
 
@@ -1176,7 +1177,9 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
                   (s) {
                     final next = _indexedRows(f);
                     for (final e in next) {
-                      if (e.index == rowIndex) e.row[c.key!] = _coerceColumn(c, s);
+                      if (e.index == rowIndex) {
+                        e.row[c.key!] = _coerceColumn(c, s);
+                      }
                     }
                     _writeRows(f, next);
                   },
@@ -1264,36 +1267,37 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
                     SizedBox(height: t.space.sm),
                     for (final c in cols)
                       if (!c.generated)
-                      Padding(
-                        padding: EdgeInsets.symmetric(vertical: t.space.xs),
-                        child: Row(children: [
-                          SizedBox(
-                              width: 90,
-                              child: Text(c.label ?? c.key ?? '',
-                                  style: TextStyle(
-                                      fontSize: 13,
-                                      color: t.surface.onBaseMuted))),
-                          Expanded(
-                            child: _columnControl(
-                              t,
-                              c,
-                              _columnInitial(c, rowEdits?[c.key] ?? item[c.key]),
-                              // A dropdown commits on selection; a text field
-                              // echoes locally per keystroke and commits on
-                              // blur/submit, so we don't PATCH per character.
-                              (s) => setCol(k, c.key!, s,
-                                  commit: c.kind == 'select'),
-                              onCommit: (s) => setCol(k, c.key!, s),
-                              key: ValueKey('${f.key}.$k.${c.key}'),
+                        Padding(
+                          padding: EdgeInsets.symmetric(vertical: t.space.xs),
+                          child: Row(children: [
+                            SizedBox(
+                                width: 90,
+                                child: Text(c.label ?? c.key ?? '',
+                                    style: TextStyle(
+                                        fontSize: 13,
+                                        color: t.surface.onBaseMuted))),
+                            Expanded(
+                              child: _columnControl(
+                                t,
+                                c,
+                                _columnInitial(
+                                    c, rowEdits?[c.key] ?? item[c.key]),
+                                // A dropdown commits on selection; a text field
+                                // echoes locally per keystroke and commits on
+                                // blur/submit, so we don't PATCH per character.
+                                (s) => setCol(k, c.key!, s,
+                                    commit: c.kind == 'select'),
+                                onCommit: (s) => setCol(k, c.key!, s),
+                                key: ValueKey('${f.key}.$k.${c.key}'),
+                              ),
                             ),
-                          ),
-                          // When the row carries the upstream value, say so and
-                          // offer a way back to it. Overriding is a deliberate
-                          // act, so it should be visible and reversible.
-                          ..._overrideAffordance(t, c, item, rowEdits,
-                              (v) => setCol(k, c.key!, v)),
-                        ]),
-                      ),
+                            // When the row carries the upstream value, say so and
+                            // offer a way back to it. Overriding is a deliberate
+                            // act, so it should be visible and reversible.
+                            ..._overrideAffordance(t, c, item, rowEdits,
+                                (v) => setCol(k, c.key!, v)),
+                          ]),
+                        ),
                   ],
                 ),
               );
@@ -1373,11 +1377,15 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
   /// label that reads well either way.
   String _singular(CfgField f) {
     final p = _plural(f);
-    if (p.endsWith('ies') && p.length > 3) return '${p.substring(0, p.length - 3)}y';
+    if (p.endsWith('ies') && p.length > 3) {
+      return '${p.substring(0, p.length - 3)}y';
+    }
     if (p.endsWith('ses') || p.endsWith('xes') || p.endsWith('zes')) {
       return p.substring(0, p.length - 2);
     }
-    if (p.endsWith('s') && !p.endsWith('ss')) return p.substring(0, p.length - 1);
+    if (p.endsWith('s') && !p.endsWith('ss')) {
+      return p.substring(0, p.length - 1);
+    }
     return p;
   }
 
@@ -1404,9 +1412,10 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
         // Empty means "no entries", i.e. an empty array — not a null, which
         // would drop the key and read back as a missing field.
         final item = c.itemKind ?? 'text';
-        return v.splitCsv(s)
-            .map<Object>(
-                (tok) => v.isNumericKind(item) ? (num.tryParse(tok) ?? tok) : tok)
+        return v
+            .splitCsv(s)
+            .map<Object>((tok) =>
+                v.isNumericKind(item) ? (num.tryParse(tok) ?? tok) : tok)
             .toList();
       default:
         return s;
@@ -1436,8 +1445,7 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
                 borderRadius: BorderRadius.circular(t.radius.md),
               ),
               child: Text('No ${_plural(f)} yet — add one below.',
-                  style:
-                      TextStyle(fontSize: 12, color: t.surface.onBaseMuted)),
+                  style: TextStyle(fontSize: 12, color: t.surface.onBaseMuted)),
             ),
           for (var i = 0; i < rows.length; i++)
             Container(
@@ -1453,52 +1461,51 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
                 children: [
                   for (final c in cols)
                     if (!c.generated)
-                    Padding(
-                      padding: EdgeInsets.symmetric(vertical: t.space.xs),
-                      child: Row(children: [
-                        SizedBox(
-                            width: 120,
-                            child: Text(c.label ?? c.key ?? '',
-                                style: TextStyle(
-                                    fontSize: 13,
-                                    color: t.surface.onBaseMuted))),
-                        Expanded(
-                          child: c.readOnly
-                              ? Text(
-                                  rows[i][c.key] == null
-                                      ? '—'
-                                      : _columnInitial(c, rows[i][c.key]),
+                      Padding(
+                        padding: EdgeInsets.symmetric(vertical: t.space.xs),
+                        child: Row(children: [
+                          SizedBox(
+                              width: 120,
+                              child: Text(c.label ?? c.key ?? '',
                                   style: TextStyle(
                                       fontSize: 13,
-                                      color: t.surface.onBase,
-                                      fontFeatures: const []))
-                              // Same control set as a sourced table's columns,
-                              // so an enum column (e.g. a device `kind`) renders
-                              // as a dropdown instead of a free-text box you can
-                              // typo into.
-                              : _columnControl(
-                                  t,
-                                  c,
-                                  _columnInitial(c, rows[i][c.key]),
-                                  (s) {
-                                    // Coerce to the column's type — a manual
-                                    // table writes straight to the config
-                                    // document, and an integration_id stored as
-                                    // the string "19" fails to deserialize into
-                                    // the u32 the plugin expects.
-                                    rows[i][c.key!] = _coerceColumn(c, s);
-                                    write();
-                                  },
-                                  key: ValueKey('${f.key}[$i].${c.key}'),
-                                ),
-                        ),
-                      ]),
-                    ),
+                                      color: t.surface.onBaseMuted))),
+                          Expanded(
+                            child: c.readOnly
+                                ? Text(
+                                    rows[i][c.key] == null
+                                        ? '—'
+                                        : _columnInitial(c, rows[i][c.key]),
+                                    style: TextStyle(
+                                        fontSize: 13,
+                                        color: t.surface.onBase,
+                                        fontFeatures: const []))
+                                // Same control set as a sourced table's columns,
+                                // so an enum column (e.g. a device `kind`) renders
+                                // as a dropdown instead of a free-text box you can
+                                // typo into.
+                                : _columnControl(
+                                    t,
+                                    c,
+                                    _columnInitial(c, rows[i][c.key]),
+                                    (s) {
+                                      // Coerce to the column's type — a manual
+                                      // table writes straight to the config
+                                      // document, and an integration_id stored as
+                                      // the string "19" fails to deserialize into
+                                      // the u32 the plugin expects.
+                                      rows[i][c.key!] = _coerceColumn(c, s);
+                                      write();
+                                    },
+                                    key: ValueKey('${f.key}[$i].${c.key}'),
+                                  ),
+                          ),
+                        ]),
+                      ),
                   Align(
                     alignment: Alignment.centerRight,
                     child: TextButton.icon(
-                      icon: Icon(Icons.close,
-                          size: 16, color: t.accent.warn),
+                      icon: Icon(Icons.close, size: 16, color: t.accent.warn),
                       label: Text('Remove',
                           style: TextStyle(color: t.accent.warn)),
                       onPressed: () {
@@ -1692,8 +1699,8 @@ class _MultiSelect extends StatelessWidget {
               GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onTap: () => onChanged([...selected]..remove(id)),
-                child: Icon(Icons.close,
-                    size: 14, color: t.surface.onBaseMuted),
+                child:
+                    Icon(Icons.close, size: 14, color: t.surface.onBaseMuted),
               ),
             ]),
           ),
@@ -1707,8 +1714,7 @@ class _MultiSelect extends StatelessWidget {
                 PopupMenuItem(
                   value: '${o.value}',
                   child: Text(o.label,
-                      style:
-                          TextStyle(color: t.surface.onBase, fontSize: 14)),
+                      style: TextStyle(color: t.surface.onBase, fontSize: 14)),
                 ),
             ],
             onSelected: (v) => onChanged([...selected, v]),
@@ -1764,9 +1770,8 @@ class _Segmented extends StatelessWidget {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
                 decoration: BoxDecoration(
-                  color: o.value == value
-                      ? t.accent.active
-                      : Colors.transparent,
+                  color:
+                      o.value == value ? t.accent.active : Colors.transparent,
                   borderRadius: BorderRadius.circular(999),
                 ),
                 child: Text(o.label,
@@ -1788,6 +1793,7 @@ class _Segmented extends StatelessWidget {
 class _AddButton extends StatelessWidget {
   const _AddButton({required this.label, required this.onPressed});
   final String label;
+
   /// Null disables the button — an import in flight, for instance.
   final VoidCallback? onPressed;
   @override
@@ -1924,7 +1930,6 @@ class _InputState extends State<_Input> {
   }
 }
 
-
 /// A count-carrying toggle, for narrowing a long table to the rows that still
 /// want something.
 class _FilterChip extends StatelessWidget {
@@ -2028,8 +2033,8 @@ class _BulkSet extends StatelessWidget {
           PopupMenuItem<Object?>(value: o.value, child: Text(o.label)),
       ],
       child: Container(
-        padding: EdgeInsets.symmetric(
-            horizontal: t.space.sm, vertical: t.space.xs),
+        padding:
+            EdgeInsets.symmetric(horizontal: t.space.sm, vertical: t.space.xs),
         decoration: BoxDecoration(
           color: t.surface.raised,
           borderRadius: BorderRadius.circular(t.radius.sm),

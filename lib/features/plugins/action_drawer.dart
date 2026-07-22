@@ -178,8 +178,7 @@ class _ActionDrawerState extends State<ActionDrawer> {
             )
           : Icon(
               _terminal!.isFailure ? Icons.error_outline : Icons.check_circle,
-              color:
-                  _terminal!.isFailure ? t.accent.danger : t.accent.success,
+              color: _terminal!.isFailure ? t.accent.danger : t.accent.success,
             ),
       actions: [
         if (running && widget.onCancel != null)

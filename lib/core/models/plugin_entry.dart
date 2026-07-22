@@ -27,6 +27,7 @@ class PluginEntry {
   /// Local child process (true) vs remote MQTT-only (false).
   final bool managed;
   final int deviceCount;
+
   /// Version the running process reports — what is actually executing.
   final String? version;
 
@@ -117,7 +118,9 @@ class PluginEntry {
   /// Needs both to be known — an unmanaged plugin has no record to differ from,
   /// and absence is not disagreement.
   bool get versionDiverged =>
-      version != null && installedVersion != null && version != installedVersion;
+      version != null &&
+      installedVersion != null &&
+      version != installedVersion;
 
   /// Whether [latest] from the registry is actually something to fetch.
   ///

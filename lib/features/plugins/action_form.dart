@@ -86,8 +86,8 @@ class _ActionFormState extends State<ActionForm> {
                     action.cancelable
                         ? 'Reports progress live, and can be cancelled.'
                         : 'Reports progress live.',
-                    style: TextStyle(
-                        fontSize: 12.5, color: t.surface.onBaseMuted),
+                    style:
+                        TextStyle(fontSize: 12.5, color: t.surface.onBaseMuted),
                   ),
                 ),
               ],
@@ -119,7 +119,8 @@ class _ActionFormState extends State<ActionForm> {
   /// the app: presented names are human-facing.
   Widget _param(ParamSpec p) {
     final t = HcTokens.of(context);
-    final label = p.required ? humanize(p.name) : '${humanize(p.name)}  ·  optional';
+    final label =
+        p.required ? humanize(p.name) : '${humanize(p.name)}  ·  optional';
     final help = switch (p.type) {
       // Surface the declared bounds — core and the plugin enforce them, so the
       // user should not have to discover them by being rejected.
@@ -167,15 +168,18 @@ class _ActionFormState extends State<ActionForm> {
             horizontal: t.space.md, vertical: t.space.sm + 2),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(t.radius.md),
-          borderSide: BorderSide(color: t.stroke.hairline, width: t.stroke.width),
+          borderSide:
+              BorderSide(color: t.stroke.hairline, width: t.stroke.width),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(t.radius.md),
-          borderSide: BorderSide(color: t.stroke.hairline, width: t.stroke.width),
+          borderSide:
+              BorderSide(color: t.stroke.hairline, width: t.stroke.width),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(t.radius.md),
-          borderSide: BorderSide(color: t.stroke.focus, width: t.stroke.width + 1),
+          borderSide:
+              BorderSide(color: t.stroke.focus, width: t.stroke.width + 1),
         ),
       );
 

@@ -109,8 +109,9 @@ List<DeviceProblem> problemsIn(List<DeviceState> devices) {
 /// worse without one. Built-in/virtual devices (modes, timers, switches —
 /// `core.*`) are excluded: they aren't physical, so "assign a room" is
 /// meaningless for them and nagging about it is noise.
-List<DeviceState> unassigned(List<DeviceState> devices) =>
-    devices.where((d) => (d.effectiveArea ?? '').isEmpty && !d.isSystem).toList();
+List<DeviceState> unassigned(List<DeviceState> devices) => devices
+    .where((d) => (d.effectiveArea ?? '').isEmpty && !d.isSystem)
+    .toList();
 
 /// Matches a device against a query string.
 ///

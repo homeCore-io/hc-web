@@ -161,8 +161,7 @@ List<String> documentProblems({
           }
         }
       } else {
-        final problem =
-            valueProblem(f, effective(f), required: isRequired(f));
+        final problem = valueProblem(f, effective(f), required: isRequired(f));
         if (problem != null) out.add('$label $problem');
       }
     }

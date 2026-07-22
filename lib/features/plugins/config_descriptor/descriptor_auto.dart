@@ -85,9 +85,8 @@ CfgField _fieldOf(WidgetConfigField f, SchemaFields sf) {
     secret: secret,
     min: sf.minimums[f.name],
     max: sf.maximums[f.name],
-    render: kind == 'enum' && (f.options?.length ?? 0) <= 4
-        ? 'segmented'
-        : null,
+    render:
+        kind == 'enum' && (f.options?.length ?? 0) <= 4 ? 'segmented' : null,
     options: f.options == null
         ? null
         : [for (final o in f.options!) CfgOption(value: o, label: humanize(o))],
@@ -143,8 +142,8 @@ List<CfgField>? _itemFields(
 ) {
   Map<String, dynamic>? node = schema;
   for (final part in dottedPath.split('.')) {
-    final props = (_deref(node, defs)?['properties'] as Map?)
-        ?.cast<String, dynamic>();
+    final props =
+        (_deref(node, defs)?['properties'] as Map?)?.cast<String, dynamic>();
     node = (props?[part] as Map?)?.cast<String, dynamic>();
     if (node == null) return null;
   }
@@ -201,7 +200,7 @@ Map<String, dynamic>? _deref(
 
 String _leaf(String dotted) => dotted.split('.').last;
 
-String _slug(String s) =>
-    s.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '_').replaceAll(
-        RegExp(r'^_+|_+$'), '');
-
+String _slug(String s) => s
+    .toLowerCase()
+    .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
+    .replaceAll(RegExp(r'^_+|_+$'), '');

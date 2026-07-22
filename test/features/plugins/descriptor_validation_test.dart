@@ -321,10 +321,18 @@ void _sectionVisibilityTests() {
   group('visibleSections', () {
     test('only the arm matching the mode is offered', () {
       final d = modeGatedDescriptor();
-      expect([for (final s in visibleSections(d, {'mode': 'cloud'})) s.id],
-          ['mode', 'cloud']);
-      expect([for (final s in visibleSections(d, {'mode': 'local'})) s.id],
-          ['mode', 'local']);
+      expect([
+        for (final s in visibleSections(d, {'mode': 'cloud'})) s.id
+      ], [
+        'mode',
+        'cloud'
+      ]);
+      expect([
+        for (final s in visibleSections(d, {'mode': 'local'})) s.id
+      ], [
+        'mode',
+        'local'
+      ]);
     });
 
     test('an unsaved default still picks an arm', () {
@@ -332,13 +340,16 @@ void _sectionVisibilityTests() {
       // null and *both* arms fail their condition — leaving a freshly
       // installed plugin with nowhere to enter credentials. The declared
       // default has to count.
-      final ids = [for (final s in visibleSections(modeGatedDescriptor(), {})) s.id];
+      final ids = [
+        for (final s in visibleSections(modeGatedDescriptor(), {})) s.id
+      ];
       expect(ids, ['mode', 'cloud']);
     });
 
     test('hidden sections never appear, condition or not', () {
       final ids = [
-        for (final s in visibleSections(modeGatedDescriptor(), {'mode': 'cloud'}))
+        for (final s
+            in visibleSections(modeGatedDescriptor(), {'mode': 'cloud'}))
           s.id
       ];
       expect(ids, isNot(contains('connection')));
@@ -347,12 +358,16 @@ void _sectionVisibilityTests() {
 
   group('unconditionalSections', () {
     test('offers only what is true without consulting any config', () {
-      final ids = [for (final s in unconditionalSections(modeGatedDescriptor())) s.id];
+      final ids = [
+        for (final s in unconditionalSections(modeGatedDescriptor())) s.id
+      ];
       expect(ids, ['mode']);
     });
 
     test('hidden sections stay hidden here too', () {
-      final ids = [for (final s in unconditionalSections(modeGatedDescriptor())) s.id];
+      final ids = [
+        for (final s in unconditionalSections(modeGatedDescriptor())) s.id
+      ];
       expect(ids, isNot(contains('connection')));
     });
 
@@ -377,7 +392,10 @@ void _sectionVisibilityTests() {
       // reachable fix.
       final problems = documentProblems(
         descriptor: modeGatedDescriptor(),
-        values: {'mode': 'cloud', 'cloud': {'uaid': 'abc'}},
+        values: {
+          'mode': 'cloud',
+          'cloud': {'uaid': 'abc'}
+        },
         defaults: {'mode': 'cloud'},
       );
       expect(problems, isEmpty);

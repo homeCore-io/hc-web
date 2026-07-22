@@ -15,12 +15,12 @@ void main() {
     });
 
     test('absent config key means shown — old cameras keep appearing', () {
-      final w = DashboardWidgetModel(
+      const w = DashboardWidgetModel(
         id: 'a',
         type: 'camera_video',
         title: 'Driveway',
         refreshPolicy: DashboardRefreshPolicy.live,
-        config: const {'url': 'http://x/stream', 'source_type': 'webrtc'},
+        config: {'url': 'http://x/stream', 'source_type': 'webrtc'},
       );
       expect(Camera.fromWidget(w)!.showOnHome, isTrue);
     });

@@ -204,8 +204,8 @@ class _ConfigFormState extends ConsumerState<_ConfigForm> {
         throw 'this plugin has no "unpair_bridge" action — rebuild/restart it';
       }
       final api = ref.read(pluginsApiProvider);
-      final outcome =
-          await api.invoke(widget.plugin.pluginId, action, {'bridge_id': bridgeId});
+      final outcome = await api
+          .invoke(widget.plugin.pluginId, action, {'bridge_id': bridgeId});
       int removed = 0;
       switch (outcome) {
         case CommandDone(:final data):
@@ -269,7 +269,9 @@ class _ConfigFormState extends ConsumerState<_ConfigForm> {
             (b['bridge_id'] ?? '').toString().toLowerCase() ==
                 bridgeId.toLowerCase()))
         .toList();
-    if (kept.length == bridges.length) return; // learned-only; nothing in config
+    if (kept.length == bridges.length) {
+      return; // learned-only; nothing in config
+    }
     final patched = _deepCopy(config);
     patched['bridges'] = kept;
     await ref
@@ -643,10 +645,21 @@ class _ObjectArraySection extends StatelessWidget {
   final void Function(Map<String, dynamic> item)? onRemove;
 
   static const _primaryKeys = [
-    'name', 'label', 'title', 'bridge_id', 'id', 'host', 'ip'
+    'name',
+    'label',
+    'title',
+    'bridge_id',
+    'id',
+    'host',
+    'ip'
   ];
   static const _subtitleKeys = [
-    'host', 'ip', 'address', 'bridge_id', 'serial', 'model'
+    'host',
+    'ip',
+    'address',
+    'bridge_id',
+    'serial',
+    'model'
   ];
 
   @override
@@ -678,8 +691,7 @@ class _ObjectArraySection extends StatelessWidget {
         if (items.isEmpty)
           _card(t,
               child: Text('None paired yet',
-                  style:
-                      TextStyle(color: t.surface.onBaseMuted, fontSize: 13)))
+                  style: TextStyle(color: t.surface.onBaseMuted, fontSize: 13)))
         else
           for (var i = 0; i < items.length; i++) ...[
             if (i > 0) const SizedBox(height: 8),

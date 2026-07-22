@@ -168,14 +168,14 @@ void main() {
     });
 
     test('a raw hls stream URL is suppressed', () {
-      final url = 'hls.m3u8?rj-ttl=5&rj-tok=AAABn3HDYNcAMqHoG3c7jmCp4Q';
+      const url = 'hls.m3u8?rj-ttl=5&rj-tok=AAABn3HDYNcAMqHoG3c7jmCp4Q';
       expect(media(url).cleanTitle, isNull);
       // Falls back to the human playback state instead of the URL junk.
       expect(media(url).mediaSubtitle, 'paused');
     });
 
     test('a query-string blob title is suppressed', () {
-      final blob = 'a24943?fbbroadcast=0&devicename=sonos&clientType=sonos';
+      const blob = 'a24943?fbbroadcast=0&devicename=sonos&clientType=sonos';
       expect(media(blob).cleanTitle, isNull);
     });
 

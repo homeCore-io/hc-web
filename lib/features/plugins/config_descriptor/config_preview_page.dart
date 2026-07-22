@@ -55,8 +55,7 @@ class _ConfigPreviewPageState extends ConsumerState<ConfigPreviewPage> {
           ),
           Expanded(
             child: doc.when(
-              loading: () =>
-                  const Center(child: CircularProgressIndicator()),
+              loading: () => const Center(child: CircularProgressIndicator()),
               error: (e, _) => Center(
                 child: Text('Could not load config: $e',
                     style: TextStyle(color: t.accent.warn)),

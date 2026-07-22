@@ -168,7 +168,8 @@ class CfgField {
   /// devices, a core resource) and reconcile against the stored value.
   final CfgSource? source;
 
-  bool get isValueless => kind == 'note' || kind == 'action' || kind == 'import';
+  bool get isValueless =>
+      kind == 'note' || kind == 'action' || kind == 'import';
 
   factory CfgField.fromJson(Map<String, dynamic> j) {
     final item = j['item'];
@@ -245,8 +246,7 @@ class CfgSource {
         kind: j['kind'] as String? ?? 'static',
         ref: j['ref'] as String? ?? '',
         itemKey: j['item_key'] as String?,
-        labels: (j['labels'] as Map?)
-            ?.map((k, v) => MapEntry('$k', '$v')),
+        labels: (j['labels'] as Map?)?.map((k, v) => MapEntry('$k', '$v')),
         capability: j['capability'] as String?,
       );
 }
@@ -336,9 +336,7 @@ List<({int index, Map<String, dynamic> row})> indexedRowsOf(Object? raw) {
 /// that deterministic for tests; production passes the row's creation time.
 Map<String, dynamic> newRowFor(List<CfgField> cols, {int? idSeed}) => {
       for (final c in cols)
-        c.key!: c.generated
-            ? generatedRowId(idSeed)
-            : (c.defaultValue ?? ''),
+        c.key!: c.generated ? generatedRowId(idSeed) : (c.defaultValue ?? ''),
     };
 
 /// An opaque, stable row identity.

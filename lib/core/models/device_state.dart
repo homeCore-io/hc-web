@@ -4,6 +4,7 @@ class DeviceState {
   final String id;
   final String? canonicalName;
   final String pluginId;
+
   /// The label **as delivered by the plugin** that owns the device. Keeps
   /// syncing, so a rename in the vendor's own app reaches homeCore. Show
   /// [displayName], not this, unless you mean "what does the bridge call it".

@@ -47,8 +47,8 @@ class _RegistrySheetState extends ConsumerState<_RegistrySheet> {
       ref.invalidate(pluginsProvider);
       ref.invalidate(registryPluginsProvider);
       messenger.showSnackBar(SnackBar(
-          content: Text(
-              '${upgrade ? 'Updated' : 'Installed'} ${p.displayName}')));
+          content:
+              Text('${upgrade ? 'Updated' : 'Installed'} ${p.displayName}')));
     } catch (e) {
       setState(() => _error = '${upgrade ? 'Update' : 'Install'} failed: $e');
     } finally {
@@ -108,21 +108,23 @@ class _RegistrySheetState extends ConsumerState<_RegistrySheet> {
                     height: 220,
                     child: Center(child: CircularProgressIndicator()))
                 : plugins.isEmpty
-                ? _empty(t, 'Registry is empty', 'No plugins are published yet.')
-                : ListView.separated(
-                    padding: EdgeInsets.all(t.space.md),
-                    itemCount: plugins.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 10),
-                    itemBuilder: (_, i) =>
-                        _row(t, plugins[i], installedVersions),
-                  ),
+                    ? _empty(
+                        t, 'Registry is empty', 'No plugins are published yet.')
+                    : ListView.separated(
+                        padding: EdgeInsets.all(t.space.md),
+                        itemCount: plugins.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 10),
+                        itemBuilder: (_, i) =>
+                            _row(t, plugins[i], installedVersions),
+                      ),
           ),
         ),
       ],
     );
   }
 
-  Widget _row(HcTokens t, RegistryPlugin p, Map<String, String?> installedVersions) {
+  Widget _row(
+      HcTokens t, RegistryPlugin p, Map<String, String?> installedVersions) {
     final installed = installedVersions.containsKey(p.id);
     final installedVer = installedVersions[p.id];
     final updateAvailable =
@@ -196,7 +198,9 @@ class _RegistrySheetState extends ConsumerState<_RegistrySheet> {
       HcTokens t, RegistryPlugin p, bool installed, bool updateAvailable) {
     if (_installing == p.id) {
       return const SizedBox(
-          width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2));
+          width: 20,
+          height: 20,
+          child: CircularProgressIndicator(strokeWidth: 2));
     }
     if (updateAvailable) {
       return _filledButton(t, 'Update to v${p.latest}',

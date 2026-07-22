@@ -171,9 +171,8 @@ class HcButton extends StatelessWidget {
     return Opacity(
       opacity: enabled ? 1 : 0.5,
       child: Material(
-        color: filled
-            ? (enabled ? accent : t.surface.raised)
-            : Colors.transparent,
+        color:
+            filled ? (enabled ? accent : t.surface.raised) : Colors.transparent,
         borderRadius: BorderRadius.circular(t.radius.pill),
         child: InkWell(
           onTap: onPressed,

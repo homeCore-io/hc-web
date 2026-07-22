@@ -22,8 +22,7 @@ void main() {
         'lutron': {'host': '10.0.10.24', 'username': 'rti'},
       };
 
-      final merged =
-          mergeForSave(loaded: loaded, edited: edited, fresh: fresh);
+      final merged = mergeForSave(loaded: loaded, edited: edited, fresh: fresh);
 
       expect(merged['lutron'], isNotNull,
           reason: 'the repeater settings must not vanish');
@@ -163,8 +162,7 @@ void main() {
       };
       final patch = diffConfig(loaded, edited);
       expect(conflictingPaths(loaded, fresh, patch), isEmpty);
-      final merged =
-          mergeForSave(loaded: loaded, edited: edited, fresh: fresh);
+      final merged = mergeForSave(loaded: loaded, edited: edited, fresh: fresh);
       // Somebody else's host edit stands; ours adds the devices.
       expect((merged['lutron'] as Map)['host'], '10.0.0.9');
       expect(merged['devices'], hasLength(1));

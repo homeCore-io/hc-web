@@ -78,11 +78,11 @@ class _DescriptorConfigPaneState extends ConsumerState<DescriptorConfigPane> {
                       fontSize: 18,
                       fontWeight: FontWeight.w600,
                       color: t.surface.onBase)),
-              Text(_sectionIsLiveResource
-                  ? 'Changes take effect immediately.'
-                  : 'Operator settings — changes apply on save (restarts the plugin).',
-                  style:
-                      TextStyle(fontSize: 12, color: t.surface.onBaseMuted)),
+              Text(
+                  _sectionIsLiveResource
+                      ? 'Changes take effect immediately.'
+                      : 'Operator settings — changes apply on save (restarts the plugin).',
+                  style: TextStyle(fontSize: 12, color: t.surface.onBaseMuted)),
             ],
           ),
         ),
@@ -160,8 +160,7 @@ class _DescriptorConfigPaneState extends ConsumerState<DescriptorConfigPane> {
       // matched; only the label is the human name. Device names arrive human
       // already, so they are NOT humanized (see core/text/humanize.dart).
       'all_devices': [
-        for (final d in devices)
-          {'value': d.id, 'label': d.displayName},
+        for (final d in devices) {'value': d.id, 'label': d.displayName},
       ],
       // Capability-filtered variants of the same list. A descriptor asks for
       // one with `source.capability`, and the renderer looks it up under
@@ -188,7 +187,6 @@ class _DescriptorConfigPaneState extends ConsumerState<DescriptorConfigPane> {
       ],
     };
   }
-
 
   /// Capabilities this descriptor actually asks for, so no list is built that
   /// nothing renders.
@@ -268,7 +266,8 @@ class _DescriptorConfigPaneState extends ConsumerState<DescriptorConfigPane> {
   /// Persist a single edit to a live source row — a Sonos speaker's name or
   /// room — the moment it's made. These are the live device registry, not
   /// plugin config: `PATCH /devices/:id`, no restart, nothing to "apply".
-  Future<void> _saveSourceEdit(Object? rowKey, Map<String, dynamic> patch) async {
+  Future<void> _saveSourceEdit(
+      Object? rowKey, Map<String, dynamic> patch) async {
     if (rowKey == null) return;
     try {
       await ref.read(devicesApiProvider).updateDevice('$rowKey', patch);
@@ -307,7 +306,8 @@ class _DescriptorConfigPaneState extends ConsumerState<DescriptorConfigPane> {
       throw 'The plugin answered without starting an import.';
     }
 
-    final token = (await SharedPreferences.getInstance()).getString('jwt_token');
+    final token =
+        (await SharedPreferences.getInstance()).getString('jwt_token');
     if (token == null) throw 'Not signed in.';
 
     await for (final e in openActionStream(
@@ -318,7 +318,9 @@ class _DescriptorConfigPaneState extends ConsumerState<DescriptorConfigPane> {
       if (!e.stage.isTerminal) continue;
       if (e.stage.isFailure) throw e.message ?? 'the plugin reported a failure';
       final data = e.data;
-      return data is Map ? Map<String, dynamic>.from(data) : <String, dynamic>{};
+      return data is Map
+          ? Map<String, dynamic>.from(data)
+          : <String, dynamic>{};
     }
     throw 'The import ended without a result.';
   }

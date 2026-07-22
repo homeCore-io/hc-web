@@ -110,7 +110,8 @@ void main() {
       final t = devicesTable();
       expect(needsAttention(t, {'integration_id': 2, 'name': 'Zone'}), isTrue);
       expect(needsAttention(t, {'integration_id': 2, 'kind': ''}), isTrue);
-      expect(needsAttention(t, {'integration_id': 2, 'kind': 'switch'}), isFalse);
+      expect(
+          needsAttention(t, {'integration_id': 2, 'kind': 'switch'}), isFalse);
     });
 
     test('a missing column that is not prompted is ignored', () {
@@ -176,7 +177,8 @@ void main() {
           {'integration_id': 'nineteen'},
         ],
       });
-      expect(problems, ['Devices row 2: Integration ID must be a whole number']);
+      expect(
+          problems, ['Devices row 2: Integration ID must be a whole number']);
     });
   });
 

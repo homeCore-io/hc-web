@@ -59,11 +59,13 @@ void main() {
       // Exactly the sandbox state: binaries rebuilt at 0.1.6 while the install
       // record still said 0.1.5. Both were reported, neither was compared, and
       // the tile called it "up to date".
-      expect(entry(running: '0.1.6', installed: '0.1.5').versionDiverged, isTrue);
+      expect(
+          entry(running: '0.1.6', installed: '0.1.5').versionDiverged, isTrue);
     });
 
     test('agreement is not divergence', () {
-      expect(entry(running: '0.1.6', installed: '0.1.6').versionDiverged, isFalse);
+      expect(
+          entry(running: '0.1.6', installed: '0.1.6').versionDiverged, isFalse);
     });
 
     test('a plugin with no install record cannot diverge', () {

@@ -140,8 +140,8 @@ class _PluginStudioPageState extends ConsumerState<PluginStudioPage> {
                     ),
                     VerticalDivider(width: 1, color: t.stroke.hairline),
                     Expanded(
-                        child: _pane(plugin, update, standing.answered,
-                            selected)),
+                        child:
+                            _pane(plugin, update, standing.answered, selected)),
                   ],
                 ),
               ),
@@ -192,7 +192,8 @@ class _PluginStudioPageState extends ConsumerState<PluginStudioPage> {
       // sections therefore wait for the config; unconditional ones are true
       // regardless and appear immediately, so the rail only ever grows.
       final cfg = ref.watch(pluginConfigProvider(p.pluginId));
-      final values = Map<String, dynamic>.from(cfg.valueOrNull?.config ?? const {});
+      final values =
+          Map<String, dynamic>.from(cfg.valueOrNull?.config ?? const {});
       final sections = cfg.hasValue
           ? visibleSections(descriptor, values)
           : unconditionalSections(descriptor);
@@ -219,8 +220,9 @@ class _PluginStudioPageState extends ConsumerState<PluginStudioPage> {
         }
       }
       if (sections.isEmpty) {
-        configNav.add(const _NavItem('config', 'Configuration',
-            Icons.tune_rounded, group: 'Configuration'));
+        configNav.add(const _NavItem(
+            'config', 'Configuration', Icons.tune_rounded,
+            group: 'Configuration'));
       } else {
         for (final s in sections) {
           configNav.add(_NavItem('config:$s', s, Icons.tune_rounded,
@@ -242,8 +244,8 @@ class _PluginStudioPageState extends ConsumerState<PluginStudioPage> {
     ];
   }
 
-  Widget _pane(PluginEntry p, String? update, bool registryAnswered,
-      String selected) {
+  Widget _pane(
+      PluginEntry p, String? update, bool registryAnswered, String selected) {
     if (selected == 'overview') {
       return _OverviewPane(
         plugin: p,
@@ -1223,8 +1225,11 @@ class _ConfigSectionPane extends ConsumerWidget {
 
   String? _unitFor(String name) {
     final n = name.toLowerCase();
-    if (n.endsWith('_secs') || n.contains('interval') || n.contains('timeout'))
+    if (n.endsWith('_secs') ||
+        n.contains('interval') ||
+        n.contains('timeout')) {
       return 'secs';
+    }
     if (n.endsWith('_ms')) return 'ms';
     if (n.contains('size_mb') || n.endsWith('_mb')) return 'MB';
     if (n.contains('days')) return 'days';

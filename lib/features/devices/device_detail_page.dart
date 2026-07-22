@@ -87,8 +87,9 @@ class _DeviceDetailView extends ConsumerWidget {
                   _InfoRow(label: 'Plugin', value: device.pluginId),
                   _InfoRow(
                       label: 'Area',
-                      value:
-                          device.effectiveArea != null ? humanize(device.effectiveArea!) : '—'),
+                      value: device.effectiveArea != null
+                          ? humanize(device.effectiveArea!)
+                          : '—'),
                   if (device.deviceType != null)
                     _InfoRow(
                         label: 'Type', value: humanize(device.deviceType!)),
@@ -343,7 +344,8 @@ class _EditDeviceDialogState extends State<_EditDeviceDialog> {
             const SizedBox(height: 16),
             // Area field with autocomplete from existing areas
             Autocomplete<String>(
-              initialValue: TextEditingValue(text: widget.device.effectiveArea ?? ''),
+              initialValue:
+                  TextEditingValue(text: widget.device.effectiveArea ?? ''),
               optionsBuilder: (value) {
                 if (value.text.isEmpty) return widget.existingAreas;
                 final q = value.text.toLowerCase();

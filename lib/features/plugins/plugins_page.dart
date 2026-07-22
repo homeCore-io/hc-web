@@ -304,7 +304,9 @@ class _Chip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
         border: Border.all(
-            color: warn ? t.accent.warn.withValues(alpha: 0.5) : t.stroke.hairline),
+            color: warn
+                ? t.accent.warn.withValues(alpha: 0.5)
+                : t.stroke.hairline),
         borderRadius: BorderRadius.circular(t.radius.pill),
       ),
       child: Text(text, style: TextStyle(color: color, fontSize: 11)),
