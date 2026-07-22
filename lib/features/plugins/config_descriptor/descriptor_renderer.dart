@@ -578,8 +578,8 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
 
   List<CfgOption> _optionsFor(CfgField f) {
     if (f.options != null) return f.options!;
-    final ref = f.source?.ref;
-    final items = ref == null ? const [] : (widget.sourceData[ref] ?? const []);
+    final key = f.source?.dataKey;
+    final items = key == null ? const [] : (widget.sourceData[key] ?? const []);
     return [
       for (final m in items)
         CfgOption(
@@ -1128,8 +1128,10 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
           padding: EdgeInsets.fromLTRB(
               t.space.lg, t.space.sm, t.space.md, t.space.md),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            // A generated column is identity the client minted; there is
+            // nothing to show and nothing to edit.
             for (final c in cols)
-              if (c.key != null) _rowField(t, f, entry.index, c),
+              if (c.key != null && !c.generated) _rowField(t, f, entry.index, c),
             Align(
               alignment: Alignment.centerRight,
               child: TextButton.icon(
@@ -1189,7 +1191,7 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
   /// override (or the live value), editing writes only the override row back.
   Widget _sourcedTable(HcTokens t, CfgField f) {
     final src = f.source!;
-    final live = widget.sourceData[src.ref] ?? const [];
+    final live = widget.sourceData[src.dataKey] ?? const [];
     final keyBy = f.keyBy ?? src.itemKey ?? 'id';
     final cols = f.itemFields ?? const [];
     final edits = _sourceEdits[f.key!] ??= {};
@@ -1261,6 +1263,7 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
                     ]),
                     SizedBox(height: t.space.sm),
                     for (final c in cols)
+                      if (!c.generated)
                       Padding(
                         padding: EdgeInsets.symmetric(vertical: t.space.xs),
                         child: Row(children: [
@@ -1449,6 +1452,7 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   for (final c in cols)
+                    if (!c.generated)
                     Padding(
                       padding: EdgeInsets.symmetric(vertical: t.space.xs),
                       child: Row(children: [

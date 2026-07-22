@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/api/action_stream.dart';
 import '../../../core/api/plugins_api.dart';
+import '../../../core/models/device_state.dart';
 import '../../../core/providers/areas_provider.dart';
 import '../../../core/providers/devices_provider.dart';
 import '../../../core/providers/plugin_config_provider.dart';
@@ -162,6 +163,18 @@ class _DescriptorConfigPaneState extends ConsumerState<DescriptorConfigPane> {
         for (final d in devices)
           {'value': d.id, 'label': d.displayName},
       ],
+      // Capability-filtered variants of the same list. A descriptor asks for
+      // one with `source.capability`, and the renderer looks it up under
+      // `all_devices#<capability>`.
+      //
+      // Filtered on what each device actually publishes rather than on
+      // `supported_actions`, which hc-hue and hc-lutron do not send at all —
+      // trusting it would empty every picker.
+      for (final cap in _capabilitiesUsed())
+        'all_devices#$cap': [
+          for (final d in devices)
+            if (_hasCapability(d, cap)) {'value': d.id, 'label': d.displayName},
+        ],
       // Area keys are backend identifiers (`living_room`): the *value* must stay
       // raw so it round-trips, but the *label* is humanized so `snake_case`
       // never reaches a person. Device names, by contrast, already arrive human
@@ -174,6 +187,54 @@ class _DescriptorConfigPaneState extends ConsumerState<DescriptorConfigPane> {
           },
       ],
     };
+  }
+
+
+  /// Capabilities this descriptor actually asks for, so no list is built that
+  /// nothing renders.
+  Set<String> _capabilitiesUsed() {
+    final out = <String>{};
+    void scan(CfgField f) {
+      final c = f.source?.capability;
+      if (c != null) out.add(c);
+      for (final col in f.itemFields ?? const <CfgField>[]) {
+        scan(col);
+      }
+    }
+
+    for (final s in widget.descriptor.sections) {
+      for (final f in s.fields) {
+        scan(f);
+      }
+    }
+    return out;
+  }
+
+  /// Can this device do the job the field is asking for?
+  ///
+  /// Deliberately about published state, not device_type alone: a plugin is
+  /// free to call something a `switch`, but what decides whether a thermostat
+  /// can drive it is whether it carries `on` and nothing dimmable.
+  bool _hasCapability(DeviceState d, String capability) {
+    switch (capability) {
+      // Reports a temperature reading. Matching the attribute by name is what
+      // lets the descriptor drop its "which attribute" field: if the device is
+      // selectable, the answer is `temperature`.
+      case 'temperature':
+        return d.state.containsKey('temperature');
+      // Binary on/off. `brightness` disqualifies a dimmer or lamp: driving one
+      // from a thermostat would work but is never what was meant, and the
+      // on/off payload stops being implied once a level is involved.
+      case 'switch':
+        return d.state.containsKey('on') &&
+            !d.state.containsKey('brightness') &&
+            !d.state.containsKey('brightness_pct');
+      // An unknown capability filters nothing away rather than emptying the
+      // picker — a newer plugin naming one this client has not learned yet
+      // should degrade to "unfiltered", not to "no devices".
+      default:
+        return true;
+    }
   }
 
   /// Create a new entry in a source-backed list. Only `areas` is creatable

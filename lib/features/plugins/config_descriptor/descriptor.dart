@@ -98,6 +98,7 @@ class CfgField {
     this.targets,
     this.groupBy,
     this.promptWhenEmpty = false,
+    this.generated = false,
   });
 
   /// Dotted path into the config JSON, e.g. `sonos.manual_hosts`. Null for
@@ -150,6 +151,11 @@ class CfgField {
   /// For a column: empty is worth flagging, though it does not block a save.
   final bool promptWhenEmpty;
 
+  /// The client mints this value when a row is created and never renders a
+  /// control for it — identity the operator should not be inventing. See
+  /// `Field::generated` in the SDK.
+  final bool generated;
+
   /// For `import`: which field keys the action's result may be written into.
   /// The renderer appends only these, so an action cannot reach into config
   /// the descriptor never offered it.
@@ -194,6 +200,7 @@ class CfgField {
       keyBy: j['key_by'] as String?,
       groupBy: j['group_by'] as String?,
       promptWhenEmpty: j['prompt_when_empty'] as bool? ?? false,
+      generated: j['generated'] as bool? ?? false,
       action: j['action'] as String?,
       targets: j['targets'] is List
           ? [for (final t in (j['targets'] as List)) '$t']
@@ -214,11 +221,25 @@ class CfgField {
 /// (a plugin action id, or a core resource); the renderer resolves it and
 /// reconciles the live items (identified by [itemKey]) with the stored value.
 class CfgSource {
-  CfgSource({required this.kind, required this.ref, this.itemKey, this.labels});
+  CfgSource(
+      {required this.kind,
+      required this.ref,
+      this.itemKey,
+      this.labels,
+      this.capability});
   final String kind; // plugin_action | core_resource | static
   final String ref;
   final String? itemKey;
   final Map<String, String>? labels; // e.g. {title: name, subtitle: device_id}
+
+  /// Narrows a device source to devices that can do the job — `temperature`,
+  /// `switch`. Offering the whole house and trusting the operator to know which
+  /// entries apply is how a thermostat ends up averaging a light bulb.
+  final String? capability;
+
+  /// Key this source's resolved rows are looked up under. A capability makes it
+  /// a different list, so it cannot share the unfiltered ref's key.
+  String get dataKey => capability == null ? ref : '$ref#$capability';
 
   factory CfgSource.fromJson(Map<String, dynamic> j) => CfgSource(
         kind: j['kind'] as String? ?? 'static',
@@ -226,6 +247,7 @@ class CfgSource {
         itemKey: j['item_key'] as String?,
         labels: (j['labels'] as Map?)
             ?.map((k, v) => MapEntry('$k', '$v')),
+        capability: j['capability'] as String?,
       );
 }
 
@@ -308,5 +330,25 @@ List<({int index, Map<String, dynamic> row})> indexedRowsOf(Object? raw) {
 /// publishing a default is how a plugin says "this is the value if you don't
 /// choose one". Columns without one stay empty, so `prompt_when_empty` still
 /// flags them as needing attention.
-Map<String, dynamic> newRowFor(List<CfgField> cols) =>
-    {for (final c in cols) c.key!: c.defaultValue ?? ''};
+///
+/// A `generated` column is minted here instead: it is identity the operator
+/// never sees, so the row has to arrive with one already set. [idSeed] makes
+/// that deterministic for tests; production passes the row's creation time.
+Map<String, dynamic> newRowFor(List<CfgField> cols, {int? idSeed}) => {
+      for (final c in cols)
+        c.key!: c.generated
+            ? generatedRowId(idSeed)
+            : (c.defaultValue ?? ''),
+    };
+
+/// An opaque, stable row identity.
+///
+/// Opaque on purpose. It reaches people as a device id (`thermostat_<id>`),
+/// and core gives every device a canonical name from its area and display name
+/// (`hallway.upstairs`) which is what rules are written against — so this only
+/// has to be unique and never change, not to mean anything. Deriving it from
+/// the name instead would make a rename silently repoint every rule.
+String generatedRowId([int? seed]) {
+  final n = seed ?? DateTime.now().microsecondsSinceEpoch;
+  return 't_${n.toRadixString(36)}';
+}

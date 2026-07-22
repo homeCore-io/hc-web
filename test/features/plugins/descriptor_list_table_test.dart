@@ -179,6 +179,73 @@ void main() {
       expect(problems, ['Devices row 2: Integration ID must be a whole number']);
     });
   });
+
+  group('generated columns', () {
+    List<CfgField> cols() => CfgField.fromJson({
+          'key': 'thermostat',
+          'kind': 'table',
+          'item': [
+            {'key': 'id', 'kind': 'text', 'generated': true},
+            {'key': 'name', 'kind': 'text', 'prompt_when_empty': true},
+            {'key': 'aggregation', 'kind': 'select', 'default': 'average'},
+          ],
+        }).itemFields!;
+
+    test('a new row arrives with its generated id already set', () {
+      // The operator never sees this column, so the row cannot be created
+      // without one — an empty id would fail the plugin's own validation
+      // ("thermostat id is required") on the very first save.
+      final row = newRowFor(cols(), idSeed: 1234567);
+      expect(row['id'], isNotEmpty);
+      expect(row['name'], '');
+      expect(row['aggregation'], 'average');
+    });
+
+    test('generated ids are opaque and distinct per row', () {
+      final a = newRowFor(cols(), idSeed: 1)['id'];
+      final b = newRowFor(cols(), idSeed: 2)['id'];
+      expect(a, isNot(b));
+      // Opaque on purpose: rules are written against the canonical name core
+      // derives from the area and display name, so this must never carry
+      // meaning that a rename could invalidate.
+      expect(a, isNot(contains('thermostat')));
+    });
+
+    test('the flag is off unless the descriptor asks for it', () {
+      final name = cols().firstWhere((c) => c.key == 'name');
+      expect(name.generated, isFalse);
+      expect(cols().firstWhere((c) => c.key == 'id').generated, isTrue);
+    });
+  });
+
+  group('capability-filtered sources', () {
+    CfgField sensors() => CfgField.fromJson({
+          'key': 'sensor_device_ids',
+          'kind': 'list',
+          'item': 'text',
+          'source': {
+            'kind': 'core_resource',
+            'ref': 'all_devices',
+            'capability': 'temperature',
+          },
+        });
+
+    test('a capability picks its own resolved list', () {
+      // Sharing `all_devices` would hand the filtered picker the unfiltered
+      // rows — every light in the house offered as a temperature sensor.
+      expect(sensors().source!.dataKey, 'all_devices#temperature');
+    });
+
+    test('an unfiltered source keeps using the bare ref', () {
+      final f = CfgField.fromJson({
+        'key': 'x',
+        'kind': 'select',
+        'source': {'kind': 'core_resource', 'ref': 'areas'},
+      });
+      expect(f.source!.capability, isNull);
+      expect(f.source!.dataKey, 'areas');
+    });
+  });
 }
 
 /// Round-trips a field back to JSON so a descriptor can be assembled from one.
