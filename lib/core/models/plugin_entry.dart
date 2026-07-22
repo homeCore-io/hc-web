@@ -27,9 +27,14 @@ class PluginEntry {
   /// Local child process (true) vs remote MQTT-only (false).
   final bool managed;
   final int deviceCount;
+  /// Version the running process reports — what is actually executing.
   final String? version;
 
   /// Installed artifact version (registry/managed plugins), for "update available".
+  ///
+  /// Null for a plugin nobody installed: one declared straight in `homecore.toml`
+  /// against a build path (hue in the sandbox) has no install record to keep, and
+  /// so can never disagree with one.
   final String? installedVersion;
   final DateTime? uptimeStarted;
   final DateTime? lastHeartbeat;
@@ -99,6 +104,33 @@ class PluginEntry {
     if (d.inHours < 24) return '${d.inHours}h';
     return '${d.inDays}d';
   }
+
+  /// The process is running a build other than the one the install record
+  /// names — an upgrade that wrote the record but never restarted the child, a
+  /// restart that came back on the old artifact, or a binary swapped underneath.
+  ///
+  /// Whatever the cause, the two disagree and only one of them is real: what
+  /// [version] says is executing. Reporting the installed version alone hides
+  /// that, and comparing the installed version against the registry answers a
+  /// question about an artifact nobody is running.
+  ///
+  /// Needs both to be known — an unmanaged plugin has no record to differ from,
+  /// and absence is not disagreement.
+  bool get versionDiverged =>
+      version != null && installedVersion != null && version != installedVersion;
+
+  /// Whether [latest] from the registry is actually something to fetch.
+  ///
+  /// Not merely "differs from the install record". A plugin can already be
+  /// *running* the version the registry offers while its record lags behind
+  /// (see [versionDiverged]), and then "Update to v0.1.4" is a button that
+  /// downloads what is already executing. What that plugin needs is its record
+  /// reconciled, not an artifact.
+  ///
+  /// Deliberately equality, not ordering: these versions are opaque strings
+  /// here, and guessing at precedence would be worse than asking for neither.
+  bool wouldInstall(String? latest) =>
+      latest != null && latest != installedVersion && latest != version;
 
   /// A heartbeat within ~90s means the supervisor still hears from the child.
   bool get heartbeatHealthy {

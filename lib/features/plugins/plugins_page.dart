@@ -229,7 +229,12 @@ class _PluginCard extends StatelessWidget {
             const SizedBox(width: 6),
             Text('devices', style: TextStyle(color: t.surface.onBaseMuted)),
             const Spacer(),
-            if (p.version != null) _Chip(p.version!),
+            if (p.version != null)
+              _Chip(p.version!,
+                  warn: p.versionDiverged,
+                  tooltip: p.versionDiverged
+                      ? 'Running ${p.version}, but ${p.installedVersion} is installed'
+                      : null),
           ]),
           const SizedBox(height: 10),
           Divider(height: 1, color: t.stroke.hairline.withValues(alpha: 0.6)),
@@ -282,20 +287,29 @@ class _Dot extends StatelessWidget {
 }
 
 class _Chip extends StatelessWidget {
-  const _Chip(this.text);
+  const _Chip(this.text, {this.tooltip, this.warn = false});
   final String text;
+  final String? tooltip;
+
+  /// Marks a version that is not the one installed — see
+  /// [PluginEntry.versionDiverged]. Worth catching from the grid rather than
+  /// only after opening the plugin.
+  final bool warn;
+
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
-    return Container(
+    final color = warn ? t.accent.warn : t.surface.onBaseMuted;
+    final chip = Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-        border: Border.all(color: t.stroke.hairline),
+        border: Border.all(
+            color: warn ? t.accent.warn.withValues(alpha: 0.5) : t.stroke.hairline),
         borderRadius: BorderRadius.circular(t.radius.pill),
       ),
-      child: Text(text,
-          style: TextStyle(color: t.surface.onBaseMuted, fontSize: 11)),
+      child: Text(text, style: TextStyle(color: color, fontSize: 11)),
     );
+    return tooltip == null ? chip : Tooltip(message: tooltip!, child: chip);
   }
 }
 

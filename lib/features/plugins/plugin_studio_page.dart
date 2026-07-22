@@ -168,10 +168,7 @@ class _PluginStudioPageState extends ConsumerState<PluginStudioPage> {
     if (match.isEmpty) return (answered: false, newer: null);
     final latest = match.first.latest;
     if (latest == null) return (answered: false, newer: null);
-    return (
-      answered: true,
-      newer: latest != p.installedVersion ? latest : null,
-    );
+    return (answered: true, newer: p.wouldInstall(latest) ? latest : null);
   }
 
   List<_NavItem> _railItems(PluginEntry p, String? update) {
@@ -627,18 +624,30 @@ class _OverviewPane extends ConsumerWidget {
                 hb != null ? t.surface.onBase : t.surface.onBaseMuted,
                 c.maxWidth,
                 cols),
+            // Divergence outranks whatever the registry thinks. When the
+            // process is not running the installed artifact, "up to date" is a
+            // statement about a build nobody is executing — and the operator
+            // needs to reconcile the two before an upgrade, not after.
             _stat(
                 t,
                 'Version',
-                plugin.installedVersion ?? plugin.version ?? '—',
-                update != null
-                    ? '$update available'
-                    // Only the registry can call a version current, and only
-                    // once it has answered for this plugin. Before that it is
-                    // unknown, which says nothing rather than saying "up to
-                    // date" about a check that never ran.
-                    : (registryAnswered ? 'up to date' : ''),
-                update != null ? t.accent.active : t.surface.onBase,
+                plugin.versionDiverged
+                    ? '${plugin.version}'
+                    : (plugin.installedVersion ?? plugin.version ?? '—'),
+                plugin.versionDiverged
+                    ? 'running · installed ${plugin.installedVersion}'
+                    : update != null
+                        ? '$update available'
+                        // Only the registry can call a version current, and
+                        // only once it has answered for this plugin. Before
+                        // that it is unknown, which says nothing rather than
+                        // saying "up to date" about a check that never ran.
+                        : (registryAnswered ? 'up to date' : ''),
+                plugin.versionDiverged
+                    ? t.accent.warn
+                    : update != null
+                        ? t.accent.active
+                        : t.surface.onBase,
                 c.maxWidth,
                 cols),
           ]);
