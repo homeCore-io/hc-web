@@ -165,6 +165,12 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
 
   bool _visible(CfgField f) =>
       f.visibleWhen?.evaluate(_readEff) ?? true;
+
+  /// A whole section can be conditional too — YoLink's cloud credentials do
+  /// not apply to a local hub. Evaluated against the same effective values as
+  /// field conditions, so switching the mode field updates it live.
+  bool _sectionVisible(CfgSection s) =>
+      s.visibleWhen?.evaluate(_readEff) ?? true;
   bool _isRequired(CfgField f) =>
       f.required || (f.requiredWhen?.evaluate(_readEff) ?? false);
 
@@ -174,7 +180,7 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
     final only = widget.onlySectionId;
     final sections = [
       for (final s in widget.descriptor.sections)
-        if (!s.hidden && (only == null || s.id == only)) s,
+        if (!s.hidden && _sectionVisible(s) && (only == null || s.id == only)) s,
     ];
     // Only show Save when a visible field actually writes to plugin config on
     // save. A section that is nothing but a live-resource table (Sonos's
@@ -671,6 +677,16 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
     // a section-level list gets — that control is taller than a table row and
     // these lists are short (a keypad's button components). `_coerceColumn`
     // parses it back into a real JSON array.
+    // A list bound to a source is a *set of references* — pick them, don't
+    // type them. See _MultiSelect.
+    if (c.kind == 'list' && c.source != null) {
+      return _MultiSelect(
+        options: _optionsFor(c),
+        selected: v.splitCsv(initial),
+        placeholder: c.placeholder,
+        onChanged: (ids) => onChanged(ids.join(', ')),
+      );
+    }
     if (c.kind == 'list') {
       final item = c.itemKind ?? 'text';
       return _Input(
@@ -1623,6 +1639,108 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
 // ── controls ────────────────────────────────────────────────────────────────
 
 /// The segmented pill control — the LUX/RAW, C/F look, generalised.
+/// Pick several values from a source-backed list — the control behind a `list`
+/// column that declares a `source`.
+///
+/// The plain CSV box every other list column gets works mechanically, but it
+/// asks the operator to know and retype raw device ids. A thermostat's sensors
+/// are exactly that: references to devices owned by *other* plugins, which
+/// nobody has memorised. Chips name what is chosen; the menu offers only what
+/// is not chosen yet.
+///
+/// Values are emitted as CSV so `_coerceColumn` parses them back into a real
+/// JSON array, the same as a typed list column.
+class _MultiSelect extends StatelessWidget {
+  const _MultiSelect({
+    required this.options,
+    required this.selected,
+    required this.onChanged,
+    this.placeholder,
+  });
+
+  final List<CfgOption> options;
+  final List<String> selected;
+  final ValueChanged<List<String>> onChanged;
+  final String? placeholder;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    final remaining =
+        options.where((o) => !selected.contains('${o.value}')).toList();
+
+    // A stored id with no matching option means the device is gone (or belongs
+    // to a plugin that is offline). Show the raw id rather than dropping the
+    // chip — silently discarding it would edit the config by rendering it.
+    String labelFor(String id) => options
+        .firstWhere((o) => '${o.value}' == id,
+            orElse: () => CfgOption(value: id, label: id))
+        .label;
+
+    return Wrap(
+      spacing: t.space.xs,
+      runSpacing: t.space.xs,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        for (final id in selected)
+          Container(
+            padding: const EdgeInsets.fromLTRB(10, 4, 4, 4),
+            decoration: BoxDecoration(
+              color: t.surface.sunken,
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: t.stroke.hairline),
+            ),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Text(labelFor(id),
+                  style: TextStyle(fontSize: 13, color: t.surface.onBase)),
+              const SizedBox(width: 4),
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => onChanged([...selected]..remove(id)),
+                child: Icon(Icons.close,
+                    size: 14, color: t.surface.onBaseMuted),
+              ),
+            ]),
+          ),
+        if (remaining.isNotEmpty)
+          PopupMenuButton<String>(
+            tooltip: '',
+            color: t.surface.overlay,
+            position: PopupMenuPosition.under,
+            itemBuilder: (_) => [
+              for (final o in remaining)
+                PopupMenuItem(
+                  value: '${o.value}',
+                  child: Text(o.label,
+                      style:
+                          TextStyle(color: t.surface.onBase, fontSize: 14)),
+                ),
+            ],
+            onSelected: (v) => onChanged([...selected, v]),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: t.stroke.hairline),
+              ),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(Icons.add, size: 14, color: t.accent.active),
+                const SizedBox(width: 4),
+                Text(placeholder ?? 'Add',
+                    style: TextStyle(fontSize: 13, color: t.accent.active)),
+              ]),
+            ),
+          )
+        else if (selected.isEmpty)
+          Text('Nothing available to choose.',
+              style: TextStyle(
+                  fontSize: 12,
+                  color: t.surface.onBaseMuted.withValues(alpha: 0.7))),
+      ],
+    );
+  }
+}
+
 class _Segmented extends StatelessWidget {
   const _Segmented(
       {required this.options, required this.value, required this.onChanged});

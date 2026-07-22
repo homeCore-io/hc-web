@@ -17,6 +17,7 @@ ConfigDescriptor descriptorWith(List<Map<String, dynamic>> fields,
     });
 
 void main() {
+  _sectionVisibilityTests();
   group('valueProblem — types', () {
     test('a string where a number belongs is rejected', () {
       // The bug this whole file exists for: a manual table wrote
@@ -272,6 +273,98 @@ void main() {
     test('validateCsv reports the offending token', () {
       expect(validateCsv('int', '1, 2, x'), 'Not a number: x');
       expect(validateCsv('int', '1, 2, 3'), isNull);
+    });
+  });
+}
+
+/// A descriptor with two mode-gated sections plus an ungated one — YoLink's
+/// shape, reduced.
+ConfigDescriptor modeGatedDescriptor() => ConfigDescriptor.fromJson({
+      'plugin_id': 'plugin.yolink',
+      'descriptor_version': 1,
+      'sections': [
+        {
+          'id': 'mode',
+          'title': 'Connection',
+          'fields': [
+            {'key': 'mode', 'kind': 'enum', 'default': 'cloud'}
+          ]
+        },
+        {
+          'id': 'cloud',
+          'title': 'Cloud',
+          'visible_when': {'field': 'mode', 'eq': 'cloud'},
+          'fields': [
+            {'key': 'cloud.uaid', 'kind': 'text', 'required': true}
+          ]
+        },
+        {
+          'id': 'local',
+          'title': 'Local hub',
+          'visible_when': {'field': 'mode', 'eq': 'local'},
+          'fields': [
+            {'key': 'local.hub_ip', 'kind': 'host', 'required': true}
+          ]
+        },
+        {
+          'id': 'connection',
+          'title': 'Connection',
+          'hidden': true,
+          'fields': [
+            {'key': 'homecore.broker_host', 'kind': 'host'}
+          ]
+        },
+      ],
+    });
+
+void _sectionVisibilityTests() {
+  group('visibleSections', () {
+    test('only the arm matching the mode is offered', () {
+      final d = modeGatedDescriptor();
+      expect([for (final s in visibleSections(d, {'mode': 'cloud'})) s.id],
+          ['mode', 'cloud']);
+      expect([for (final s in visibleSections(d, {'mode': 'local'})) s.id],
+          ['mode', 'local']);
+    });
+
+    test('an unsaved default still picks an arm', () {
+      // The trap this guards: with no `mode` written yet, a naive read returns
+      // null and *both* arms fail their condition — leaving a freshly
+      // installed plugin with nowhere to enter credentials. The declared
+      // default has to count.
+      final ids = [for (final s in visibleSections(modeGatedDescriptor(), {})) s.id];
+      expect(ids, ['mode', 'cloud']);
+    });
+
+    test('hidden sections never appear, condition or not', () {
+      final ids = [
+        for (final s in visibleSections(modeGatedDescriptor(), {'mode': 'cloud'}))
+          s.id
+      ];
+      expect(ids, isNot(contains('connection')));
+    });
+  });
+
+  group('documentProblems and invisible sections', () {
+    test('a required field in a switched-off section does not block save', () {
+      // Otherwise Save is refused because `local.hub_ip` is empty, while the
+      // Local hub section is not on screen to fill in — an error with no
+      // reachable fix.
+      final problems = documentProblems(
+        descriptor: modeGatedDescriptor(),
+        values: {'mode': 'cloud', 'cloud': {'uaid': 'abc'}},
+        defaults: {'mode': 'cloud'},
+      );
+      expect(problems, isEmpty);
+    });
+
+    test('a required field in the active section still blocks save', () {
+      final problems = documentProblems(
+        descriptor: modeGatedDescriptor(),
+        values: {'mode': 'local'},
+        defaults: {'mode': 'cloud'},
+      );
+      expect(problems, ['local.hub_ip is required']);
     });
   });
 }

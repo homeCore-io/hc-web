@@ -147,6 +147,21 @@ class _DescriptorConfigPaneState extends ConsumerState<DescriptorConfigPane> {
     return {
       'devices': mine,
       'sonos_devices': mine,
+      // Every device in the house, as pickable `{value: id, label: name}`.
+      //
+      // Deliberately NOT filtered to this plugin. A plugin whose config
+      // *references* devices is usually referencing someone else's: a
+      // thermostat averages temperature sensors from Z-Wave or Ecowitt and
+      // switches a relay owned by Insteon. Filtering to `mine` would leave
+      // those pickers permanently empty.
+      //
+      // The value stays the raw device id because that is what gets stored and
+      // matched; only the label is the human name. Device names arrive human
+      // already, so they are NOT humanized (see core/text/humanize.dart).
+      'all_devices': [
+        for (final d in devices)
+          {'value': d.id, 'label': d.displayName},
+      ],
       // Area keys are backend identifiers (`living_room`): the *value* must stay
       // raw so it round-trips, but the *label* is humanized so `snake_case`
       // never reaches a person. Device names, by contrast, already arrive human

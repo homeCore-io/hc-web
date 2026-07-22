@@ -28,6 +28,7 @@ CfgField devicesTable() => CfgField.fromJson({
     });
 
 void main() {
+  _sourceBoundListColumnTests();
   group('descriptor parsing', () {
     test('a list table carries its render, grouping and identity', () {
       final f = devicesTable();
@@ -165,4 +166,53 @@ extension on CfgField {
             }
         ],
       };
+}
+
+/// hc-thermostat's sensor column: a `list` that declares a source, which is
+/// what makes it a picker rather than a comma-separated text box.
+CfgField sensorColumn() => CfgField.fromJson({
+      'key': 'sensor_device_ids',
+      'kind': 'list',
+      'item': 'text',
+      'label': 'Sensors',
+      'source': {'kind': 'core_resource', 'ref': 'all_devices'},
+    });
+
+void _sourceBoundListColumnTests() {
+  group('source-bound list column', () {
+    test('a list column with a source is distinguishable from a plain one', () {
+      // This is the whole switch in _columnControl: with a source it renders
+      // the chips picker, without one a CSV text box. A thermostat's sensors
+      // are references to other plugins' devices, which nobody can retype.
+      final picker = sensorColumn();
+      expect(picker.kind, 'list');
+      expect(picker.source?.ref, 'all_devices');
+
+      final plain = CfgField.fromJson({
+        'key': 'buttons',
+        'kind': 'list',
+        'item': 'int',
+      });
+      expect(plain.source, isNull);
+    });
+
+    test('a list of device ids round-trips through the CSV representation', () {
+      // _MultiSelect emits CSV and _coerceColumn parses it back, so the stored
+      // value must end up a real JSON array — a string here would fail to
+      // deserialize into Vec<String> and take the plugin offline on the
+      // restart that saving triggers.
+      final ids = ['zwave_12', 'ecowitt_outdoor_temp'];
+      final csv = ids.join(', ');
+      expect(splitCsv(csv), ids);
+      expect(valueProblem(sensorColumn(), splitCsv(csv)), isNull);
+      expect(valueProblem(sensorColumn(), csv), 'must be a list');
+    });
+
+    test('an id with no matching device is still a valid stored value', () {
+      // A device can be removed while its id sits in a thermostat's sensor
+      // list. The control shows the raw id rather than dropping the chip —
+      // silently discarding it would edit the config by rendering it.
+      expect(valueProblem(sensorColumn(), ['gone_device']), isNull);
+    });
+  });
 }

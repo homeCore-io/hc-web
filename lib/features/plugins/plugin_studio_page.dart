@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/dashboard/widget_registry.dart';
 import '../../core/models/device_state.dart';
 import 'config_descriptor/descriptor_config_pane.dart';
+import 'config_descriptor/descriptor_validation.dart';
 import 'config_descriptor/descriptor_provider.dart';
 import '../../core/models/plugin_config.dart';
 import '../../core/models/plugin_entry.dart';
@@ -153,11 +154,15 @@ class _PluginStudioPageState extends ConsumerState<PluginStudioPage> {
         ref.watch(pluginDescriptorProvider(p.pluginId)).valueOrNull;
     final configNav = <_NavItem>[];
     if (descriptor != null) {
-      for (final s in descriptor.sections) {
-        if (!s.hidden) {
-          configNav.add(_NavItem('config:${s.id}', s.title,
-              Icons.tune_rounded, group: 'Configuration'));
-        }
+      // Sections can be conditional on the config itself (YoLink shows cloud
+      // credentials or local-hub credentials, never both), so the rail is
+      // computed from the current values — a section that does not apply takes
+      // its entry with it rather than leading to an empty pane.
+      final cfg = ref.watch(pluginConfigProvider(p.pluginId)).valueOrNull;
+      final values = Map<String, dynamic>.from(cfg?.config ?? const {});
+      for (final s in visibleSections(descriptor, values)) {
+        configNav.add(_NavItem('config:${s.id}', s.title, Icons.tune_rounded,
+            group: 'Configuration'));
       }
     } else {
       final fields =

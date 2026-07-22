@@ -37,6 +37,7 @@ class CfgSection {
     this.icon,
     this.help,
     this.hidden = false,
+    this.visibleWhen,
     required this.fields,
   });
 
@@ -45,6 +46,12 @@ class CfgSection {
   final String? icon;
   final String? help;
   final bool hidden;
+
+  /// Show this section only when the condition holds — distinct from [hidden],
+  /// which is unconditional. A section that does not apply (YoLink's cloud
+  /// credentials on a local hub) disappears entirely, rail entry included,
+  /// rather than standing empty.
+  final CfgCondition? visibleWhen;
   final List<CfgField> fields;
 
   factory CfgSection.fromJson(Map<String, dynamic> j) => CfgSection(
@@ -53,6 +60,7 @@ class CfgSection {
         icon: j['icon'] as String?,
         help: j['help'] as String?,
         hidden: j['hidden'] as bool? ?? false,
+        visibleWhen: CfgCondition.maybe(j['visible_when']),
         fields: [
           for (final f in (j['fields'] as List? ?? const []))
             CfgField.fromJson(f as Map<String, dynamic>),

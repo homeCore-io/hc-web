@@ -137,6 +137,10 @@ List<String> documentProblems({
   final out = <String>[];
   for (final s in descriptor.sections) {
     if (onlySectionId != null && s.id != onlySectionId) continue;
+    // A section switched off by its own condition contributes nothing. Without
+    // this, a `required` field inside one blocks Save with a complaint about a
+    // field that is not on screen — an error the operator cannot act on.
+    if (!(s.visibleWhen?.evaluate(readEff) ?? true)) continue;
     for (final f in s.fields) {
       if (!visible(f) || !savesToConfig(f) || f.key == null) continue;
       final label = f.label ?? f.key!;
@@ -164,4 +168,32 @@ List<String> documentProblems({
     }
   }
   return out;
+}
+
+/// The sections a person should actually see, given the current config values.
+///
+/// `hidden` sections are plumbing and never appear. A section carrying
+/// `visible_when` appears only while its condition holds — evaluated against
+/// the *effective* value (stored, else the field's declared default), exactly
+/// as the renderer does. That detail matters: a mode field whose default has
+/// never been saved reads as null, and a naive check would hide both arms of
+/// the switch, leaving the plugin unconfigurable.
+///
+/// Used by the Studio rail so a section that does not apply takes its
+/// navigation entry with it instead of leading to an empty pane.
+List<CfgSection> visibleSections(
+  ConfigDescriptor descriptor,
+  Map<String, dynamic> values,
+) {
+  final defaults = <String, Object?>{};
+  for (final s in descriptor.sections) {
+    for (final f in s.fields) {
+      if (f.key != null) defaults[f.key!] = f.defaultValue;
+    }
+  }
+  Object? readEff(String key) => readPath(values, key) ?? defaults[key];
+  return [
+    for (final s in descriptor.sections)
+      if (!s.hidden && (s.visibleWhen?.evaluate(readEff) ?? true)) s,
+  ];
 }
