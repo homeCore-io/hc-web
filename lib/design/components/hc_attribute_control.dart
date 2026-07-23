@@ -87,8 +87,8 @@ class HcAttributeControl extends StatelessWidget {
   Widget _control(BuildContext context, HcTokens t) {
     if (!schema.writable) return _readonly(context, t);
 
-    return switch (schema.kind) {
-      AttributeKind.bool_ => _boolControl(),
+    final control = switch (schema.kind) {
+      AttributeKind.bool_ => _boolControl(t),
       AttributeKind.enum_ => _enumControl(context),
       AttributeKind.integer ||
       AttributeKind.float ||
@@ -100,15 +100,33 @@ class HcAttributeControl extends StatelessWidget {
         _colorControl(context, t),
       AttributeKind.json => _readonly(context, t),
     };
+
+    // Studio control styling: amber, not Material blue. A gradient (colour-temp)
+    // slider keeps its own transparent track — the gradient is the label — but
+    // inherits the amber thumb from here.
+    return SliderTheme(
+      data: SliderTheme.of(context).copyWith(
+        activeTrackColor: t.accent.active,
+        inactiveTrackColor: t.surface.overlay,
+        thumbColor: t.accent.active,
+        overlayColor: t.accent.active.withValues(alpha: 0.14),
+        trackHeight: 5,
+      ),
+      child: control,
+    );
   }
 
   // -- controls ------------------------------------------------------------
 
-  Widget _boolControl() => Align(
+  Widget _boolControl(HcTokens t) => Align(
         alignment: Alignment.centerLeft,
         child: Switch(
           value: value == true,
           onChanged: _live ? (v) => onCommit!(v) : null,
+          activeThumbColor: t.accent.active,
+          activeTrackColor: t.accent.active.withValues(alpha: 0.35),
+          inactiveThumbColor: t.surface.onBaseMuted,
+          inactiveTrackColor: t.surface.overlay,
         ),
       );
 
@@ -230,6 +248,7 @@ class HcAttributeControl extends StatelessWidget {
         if (_live)
           TextButton(
             onPressed: () => _pickColor(context),
+            style: TextButton.styleFrom(foregroundColor: t.accent.active),
             child: const Text('Change'),
           ),
       ],

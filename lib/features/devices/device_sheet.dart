@@ -12,6 +12,7 @@ import '../../core/providers/automations_provider.dart';
 import '../../core/providers/devices_provider.dart';
 import '../../design/components/hc_attribute_control.dart';
 import '../../design/components/hc_controls.dart';
+import '../../design/components/hc_dialog.dart';
 import '../../design/components/hc_history_chart.dart';
 import '../../design/hc_icons.dart';
 import '../../design/tokens.dart';
@@ -20,32 +21,41 @@ import '../automations/rule_phrasing.dart';
 
 /// A device, laid over the house rather than replacing it.
 ///
-/// Shows what you actually came for: the controls, the live state, and — the
-/// part no page offered before — *which automations depend on this device*.
-/// That last one is the question you ask right before you rename or delete
-/// something, and answering it anywhere other than here means going and looking
-/// through 42 rules by hand.
-///
-/// The full 872-line detail page still exists behind "Open full detail". This is
-/// not a replacement for it; it is the 90% you wanted without leaving home.
+/// One panel does everything — glance, control, edit, inspect — so there is no
+/// jump to a separate page. It's a bottom sheet on a phone and a right drawer on
+/// a wide screen (see [showHcSheet]); a fixed header carries the essentials and
+/// the Control / Info / History segments keep even a busy device compact.
 Future<void> showDeviceSheet(BuildContext context, String deviceId) =>
     showHcSheet<void>(
       context,
       title: 'Device',
-      child: _DeviceSheet(deviceId: deviceId),
+      child: DevicePanel(deviceId: deviceId),
     );
 
-class _DeviceSheet extends ConsumerWidget {
-  const _DeviceSheet({required this.deviceId});
+/// The device panel — used both inside the sheet and as the full page reached by
+/// deep link / command palette. [showClose] draws the sheet's close button; the
+/// full page hides it (its scaffold owns the back arrow).
+class DevicePanel extends ConsumerStatefulWidget {
+  const DevicePanel({super.key, required this.deviceId, this.showClose = true});
 
   final String deviceId;
+  final bool showClose;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<DevicePanel> createState() => _DevicePanelState();
+}
+
+class _DevicePanelState extends ConsumerState<DevicePanel> {
+  int _tab = 0;
+
+  @override
+  Widget build(BuildContext context) {
     final t = HcTokens.of(context);
     final devices = ref.watch(devicesProvider).valueOrNull ?? const [];
-    final device =
-        devices.where((d) => d.id == deviceId).cast<DeviceState?>().firstOrNull;
+    final device = devices
+        .where((d) => d.id == widget.deviceId)
+        .cast<DeviceState?>()
+        .firstOrNull;
 
     if (device == null) {
       return Padding(
@@ -60,70 +70,279 @@ class _DeviceSheet extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          _Identity(device: device),
-
+          _Header(device: device, showClose: widget.showClose),
           if (!device.available)
             const _Banner(
               icon: HcIcons.offline,
               message: 'This device is offline. Commands will not reach it.',
             ),
-
-          // Controls come from the device's own schema, so a plugin that adds an
-          // attribute gets a correct control for free — no per-device UI code.
-          _Controls(device: device),
-
-          // A number is a fact; a number over the last day is a story. Sensors
-          // get their trend inline, not one route away.
-          _SheetHistory(device: device),
-
-          _UsedBy(device: device),
-
           Padding(
-            padding: EdgeInsets.fromLTRB(
-                t.space.lg, t.space.sm, t.space.lg, t.space.lg),
-            child: Row(
-              children: [
-                TextButton.icon(
-                  icon: const Icon(HcIcons.clock, size: 14),
-                  label: const Text('History'),
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                    context.push('/devices/${device.id}/history');
-                  },
-                ),
-                const Spacer(),
-                TextButton(
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                    context.push('/devices/${device.id}');
-                  },
-                  child: const Text('Open full detail'),
-                ),
-              ],
+            padding: EdgeInsets.fromLTRB(t.space.lg, t.space.xs, t.space.lg, 0),
+            child: _Segmented(
+              index: _tab,
+              labels: const ['Control', 'Info', 'History'],
+              onChanged: (i) => setState(() => _tab = i),
             ),
           ),
+          SizedBox(height: t.space.md),
+          switch (_tab) {
+            0 => _Controls(device: device),
+            1 => _InfoTab(device: device),
+            _ => _HistoryTab(device: device),
+          },
+          SizedBox(height: t.space.lg),
         ],
       ),
     );
   }
 }
 
-/// The sheet's head: the device's name and where it lives, its power toggle, and
-/// — the part that was a whole separate page before — a pencil that turns the
-/// name and room into fields you edit right here. A device that arrives named
-/// `hue-001788ff` is the reason: you rename it once, in the place you found it,
-/// and it is that name everywhere after.
-class _Identity extends ConsumerStatefulWidget {
-  const _Identity({required this.device});
+// ── Header ───────────────────────────────────────────────────────────────────
 
+class _Header extends ConsumerWidget {
+  const _Header({required this.device, this.showClose = true});
+  final DeviceState device;
+  final bool showClose;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = HcTokens.of(context);
+    final facet = facetOf(device, device.schema);
+    final on = device.available && isOn(device);
+
+    final room =
+        device.effectiveArea != null ? humanize(device.effectiveArea!) : null;
+    final String stateWord;
+    final Color stateColor;
+    if (!device.available) {
+      stateWord = 'Offline';
+      stateColor = t.accent.offline;
+    } else if (facet.isActuator) {
+      stateWord = on ? 'On' : 'Off';
+      stateColor = on ? t.accent.active : t.surface.onBaseMuted;
+    } else {
+      stateWord =
+          device.deviceType != null ? humanize(device.deviceType!) : 'Device';
+      stateColor = t.surface.onBaseMuted;
+    }
+
+    return Padding(
+      padding:
+          EdgeInsets.fromLTRB(t.space.lg, t.space.md, t.space.sm, t.space.sm),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: on
+                  ? t.accent.active.withValues(alpha: 0.14)
+                  : t.surface.overlay,
+              borderRadius: BorderRadius.circular(13),
+            ),
+            child: Icon(HcIcons.devices,
+                size: 21, color: on ? t.accent.active : t.surface.onBaseMuted),
+          ),
+          SizedBox(width: t.space.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(height: t.space.xs),
+                Text(
+                  device.displayName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 19,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.3,
+                    color: t.surface.onBase,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Row(
+                  children: [
+                    if (room != null) ...[
+                      Flexible(
+                        child: Text(room,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                fontSize: 12.5, color: t.surface.onBaseMuted)),
+                      ),
+                      Text(' · ',
+                          style: TextStyle(
+                              fontSize: 12.5, color: t.surface.onBaseMuted)),
+                    ],
+                    Text(stateWord,
+                        style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w600,
+                            color: stateColor)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          if (facet.isActuator && device.available)
+            Padding(
+              padding: EdgeInsets.only(top: t.space.sm, right: t.space.xs),
+              child: HcToggle(
+                value: on,
+                semanticLabel: device.displayName,
+                onChanged: (v) => ref
+                    .read(devicesProvider.notifier)
+                    .command(device.id, {'on': v}),
+              ),
+            ),
+          if (showClose)
+            IconButton(
+              icon: const Icon(HcIcons.x, size: 16),
+              tooltip: 'Close',
+              color: t.surface.onBaseMuted,
+              onPressed: () => Navigator.of(context).maybePop(),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Segmented control ─────────────────────────────────────────────────────────
+
+class _Segmented extends StatelessWidget {
+  const _Segmented(
+      {required this.index, required this.labels, required this.onChanged});
+  final int index;
+  final List<String> labels;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: t.surface.sunken,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: t.stroke.hairline),
+      ),
+      child: Row(
+        children: [
+          for (var i = 0; i < labels.length; i++)
+            Expanded(
+              child: GestureDetector(
+                onTap: () => onChanged(i),
+                behavior: HitTestBehavior.opaque,
+                child: Container(
+                  alignment: Alignment.center,
+                  padding: const EdgeInsets.symmetric(vertical: 7),
+                  decoration: BoxDecoration(
+                    color: index == i ? t.surface.overlay : Colors.transparent,
+                    borderRadius: BorderRadius.circular(7),
+                  ),
+                  child: Text(labels[i],
+                      style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                          color: index == i
+                              ? t.surface.onBase
+                              : t.surface.onBaseMuted)),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Control tab ───────────────────────────────────────────────────────────────
+
+/// Every writable attribute the device declares, as the control its kind calls
+/// for. `on` already has the header toggle, so it is not repeated. A device with
+/// no schema falls back to plainly-worded readings.
+class _Controls extends ConsumerWidget {
+  const _Controls({required this.device});
   final DeviceState device;
 
   @override
-  ConsumerState<_Identity> createState() => _IdentityState();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = HcTokens.of(context);
+    final schema = device.schema;
+    final notifier = ref.read(devicesProvider.notifier);
+
+    if (schema == null || schema.attributes.isEmpty) {
+      if (device.state.isEmpty) {
+        return Padding(
+          padding: EdgeInsets.symmetric(horizontal: t.space.lg),
+          child: Text('No adjustable settings.',
+              style: TextStyle(fontSize: 12.5, color: t.surface.onBaseMuted)),
+        );
+      }
+      return Padding(
+        padding: EdgeInsets.symmetric(horizontal: t.space.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (final e in device.state.entries)
+              _Reading(name: e.key, value: _readable(e.value)),
+          ],
+        ),
+      );
+    }
+
+    final entries =
+        schema.attributes.entries.where((e) => e.key != 'on').toList();
+
+    if (entries.isEmpty) {
+      return Padding(
+        padding: EdgeInsets.symmetric(horizontal: t.space.lg),
+        child: Text('No adjustable settings beyond power.',
+            style: TextStyle(fontSize: 12.5, color: t.surface.onBaseMuted)),
+      );
+    }
+
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: t.space.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final e in entries)
+            Padding(
+              padding: EdgeInsets.only(bottom: t.space.md),
+              child: HcAttributeControl(
+                name: e.key,
+                schema: e.value,
+                value: device.state[e.key],
+                enabled: device.available,
+                onCommit: e.value.writable
+                    ? (v) => notifier.command(device.id, {e.key: v})
+                    : null,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }
 
-class _IdentityState extends ConsumerState<_Identity> {
+// ── Info tab ──────────────────────────────────────────────────────────────────
+
+class _InfoTab extends ConsumerStatefulWidget {
+  const _InfoTab({required this.device});
+  final DeviceState device;
+
+  @override
+  ConsumerState<_InfoTab> createState() => _InfoTabState();
+}
+
+class _InfoTabState extends ConsumerState<_InfoTab> {
   bool _editing = false;
+  bool _tech = false;
   bool _busy = false;
   String? _error;
   final _name = TextEditingController();
@@ -157,9 +376,6 @@ class _IdentityState extends ConsumerState<_Identity> {
     final areaText = _area.text.trim();
     final body = <String, dynamic>{};
     if (name != _d.displayName) body['name'] = name;
-    // Areas are stored as snake_case keys and shown humanized, so compare the
-    // typed text against the humanized current value; core re-normalizes what we
-    // send, so a human "Family Room" lands on the existing `family_room`.
     if (areaText != _currentArea) {
       body['area'] = areaText.isEmpty ? null : areaText;
     }
@@ -181,90 +397,162 @@ class _IdentityState extends ConsumerState<_Identity> {
     }
   }
 
+  Future<void> _remove() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => HcDialog(
+        title: 'Remove ${_d.displayName}?',
+        description:
+            'The device is removed from homeCore. If its plugin still sees it, '
+            'it may reappear on the next sync.',
+        actions: [
+          HcButton(label: 'Cancel', onPressed: () => Navigator.pop(ctx, false)),
+          HcButton(
+              label: 'Remove',
+              kind: HcButtonKind.danger,
+              onPressed: () => Navigator.pop(ctx, true)),
+        ],
+        child: const SizedBox.shrink(),
+      ),
+    );
+    if (ok == true) {
+      try {
+        await ref.read(devicesProvider.notifier).deleteDevice(_d.id);
+        if (mounted) Navigator.of(context).maybePop();
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text('Remove failed: $e')));
+        }
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
-    return _editing ? _editor(t) : _display(t);
-  }
+    if (_editing) return _editor(t);
 
-  Widget _display(HcTokens t) {
-    final facet = facetOf(_d, _d.schema);
-    final on = _d.available && isOn(_d);
+    final source = humanize(_d.pluginId.replaceFirst('plugin.', ''));
     return Padding(
-      padding:
-          EdgeInsets.fromLTRB(t.space.lg, t.space.md, t.space.sm, t.space.sm),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      padding: EdgeInsets.symmetric(horizontal: t.space.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        _d.displayName,
-                        style: TextStyle(
-                          fontSize: 19,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: -0.3,
-                          color: t.surface.onBase,
-                        ),
-                      ),
-                    ),
-                    SizedBox(width: t.space.xs),
-                    IconButton(
-                      visualDensity: VisualDensity.compact,
-                      padding: EdgeInsets.zero,
-                      constraints:
-                          const BoxConstraints.tightFor(width: 26, height: 26),
-                      iconSize: 13,
-                      color: t.surface.onBaseMuted,
-                      tooltip: 'Rename',
-                      icon: const Icon(HcIcons.pencil),
-                      onPressed: _start,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  [
-                    if (_d.effectiveArea != null) humanize(_d.effectiveArea!),
-                    if (_d.deviceType != null) humanize(_d.deviceType!),
-                    if (!_d.available) 'offline',
-                  ].join(' · '),
-                  style:
-                      TextStyle(fontSize: 12.5, color: t.surface.onBaseMuted),
-                ),
-              ],
-            ),
-          ),
-          if (facet.isActuator && _d.available)
-            Padding(
-              padding: EdgeInsets.only(top: t.space.xs),
-              child: HcToggle(
-                value: on,
-                semanticLabel: _d.displayName,
-                onChanged: (v) => ref
-                    .read(devicesProvider.notifier)
-                    .command(_d.id, {'on': v}),
+          _kv(t, 'Name', _d.displayName, onEdit: _start),
+          _kv(t, 'Room', _currentArea.isEmpty ? 'No room' : _currentArea,
+              onEdit: _start, actionLabel: 'change'),
+          if (_d.deviceType != null) _kv(t, 'Type', humanize(_d.deviceType!)),
+          _kv(t, 'Source', source),
+          SizedBox(height: t.space.sm),
+          Divider(height: 1, color: t.stroke.hairline),
+          SizedBox(height: t.space.sm),
+          _UsedBy(device: _d),
+          Divider(height: 1, color: t.stroke.hairline),
+
+          // Technical details — folded away; a person renaming a lamp does not
+          // need its raw id, but an integrator debugging a rule does.
+          InkWell(
+            onTap: () => setState(() => _tech = !_tech),
+            borderRadius: t.radius.smR,
+            child: Padding(
+              padding: EdgeInsets.symmetric(vertical: t.space.sm),
+              child: Row(
+                children: [
+                  Text('Technical details',
+                      style: TextStyle(
+                          fontSize: 12.5, color: t.surface.onBaseMuted)),
+                  const Spacer(),
+                  Icon(
+                      _tech
+                          ? Icons.keyboard_arrow_up_rounded
+                          : Icons.keyboard_arrow_down_rounded,
+                      size: 18,
+                      color: t.surface.onBaseMuted),
+                ],
               ),
             ),
-          IconButton(
-            icon: const Icon(HcIcons.x, size: 16),
-            tooltip: 'Close',
-            color: t.surface.onBaseMuted,
-            onPressed: () => Navigator.of(context).maybePop(),
+          ),
+          if (_tech) ...[
+            _mono(t, 'Device ID', _d.id),
+            if (_d.canonicalName != null)
+              _mono(t, 'Canonical', _d.canonicalName!),
+            _mono(t, 'Plugin', _d.pluginId),
+            SizedBox(height: t.space.sm),
+          ],
+          Divider(height: 1, color: t.stroke.hairline),
+          SizedBox(height: t.space.md),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: _remove,
+              icon:
+                  Icon(Icons.delete_outline, size: 16, color: t.accent.danger),
+              label: Text('Remove device',
+                  style: TextStyle(
+                      color: t.accent.danger, fontWeight: FontWeight.w600)),
+              style: TextButton.styleFrom(padding: EdgeInsets.zero),
+            ),
           ),
         ],
       ),
     );
   }
 
+  Widget _kv(HcTokens t, String key, String value,
+      {VoidCallback? onEdit, String actionLabel = 'edit'}) {
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: t.space.xs + 1),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 76,
+            child: Text(key,
+                style: TextStyle(fontSize: 13, color: t.surface.onBaseMuted)),
+          ),
+          Expanded(
+            child: Text(value,
+                style: TextStyle(fontSize: 13, color: t.surface.onBase)),
+          ),
+          if (onEdit != null)
+            GestureDetector(
+              onTap: onEdit,
+              behavior: HitTestBehavior.opaque,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                child: Text(actionLabel,
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: t.accent.active)),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _mono(HcTokens t, String key, String value) => Padding(
+        padding: EdgeInsets.symmetric(vertical: t.space.xs),
+        child: Row(
+          children: [
+            SizedBox(
+                width: 76,
+                child: Text(key,
+                    style:
+                        TextStyle(fontSize: 12, color: t.surface.onBaseMuted))),
+            Expanded(
+              child: Text(value,
+                  style: TextStyle(
+                      fontSize: 11.5,
+                      color: t.surface.onBaseMuted,
+                      fontFeatures: t.numericFontFeatures)),
+            ),
+          ],
+        ),
+      );
+
   Widget _editor(HcTokens t) {
-    // Rooms already in use, humanized, so a rename lands things in the same room
-    // rather than a snake_case twin.
     final areas = (ref.watch(devicesProvider).valueOrNull ?? const [])
         .map((d) => d.effectiveArea)
         .whereType<String>()
@@ -274,8 +562,7 @@ class _IdentityState extends ConsumerState<_Identity> {
       ..sort();
 
     return Padding(
-      padding:
-          EdgeInsets.fromLTRB(t.space.lg, t.space.md, t.space.lg, t.space.sm),
+      padding: EdgeInsets.symmetric(horizontal: t.space.lg),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -341,71 +628,10 @@ class _IdentityState extends ConsumerState<_Identity> {
   }
 }
 
-/// Every writable attribute the device declares, as the control its kind calls
-/// for. Read-only attributes are shown as values rather than hidden — a sensor
-/// with nothing to twiddle still has something to say.
-class _Controls extends ConsumerWidget {
-  const _Controls({required this.device});
-
-  final DeviceState device;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final t = HcTokens.of(context);
-    final schema = device.schema;
-    final notifier = ref.read(devicesProvider.notifier);
-
-    if (schema == null || schema.attributes.isEmpty) {
-      // No schema is not an error — most plugins do not ship one. Fall back to
-      // whatever state the device is actually reporting.
-      return Padding(
-        padding: EdgeInsets.symmetric(horizontal: t.space.lg),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            for (final e in device.state.entries)
-              _Reading(name: e.key, value: _readable(e.value)),
-          ],
-        ),
-      );
-    }
-
-    // `on` already has the toggle in the header; repeating it here would be two
-    // controls for one fact, which is how they end up disagreeing.
-    final entries =
-        schema.attributes.entries.where((e) => e.key != 'on').toList();
-
-    return Padding(
-      padding: EdgeInsets.symmetric(horizontal: t.space.lg),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          for (final e in entries)
-            Padding(
-              padding: EdgeInsets.only(bottom: t.space.md),
-              child: HcAttributeControl(
-                name: e.key,
-                schema: e.value,
-                value: device.state[e.key],
-                enabled: device.available,
-                onCommit: e.value.writable
-                    ? (v) => notifier.command(device.id, {e.key: v})
-                    : null,
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-/// The automations that mention this device.
-///
-/// This is the question you ask before renaming or deleting something, and until
-/// now the only way to answer it was to read 42 rules by hand.
+/// The automations that mention this device — the question you ask before
+/// renaming or deleting something.
 class _UsedBy extends ConsumerWidget {
   const _UsedBy({required this.device});
-
   final DeviceState device;
 
   @override
@@ -414,8 +640,6 @@ class _UsedBy extends ConsumerWidget {
     final rules = ref.watch(automationsProvider).valueOrNull ?? const [];
     final all = ref.watch(devicesProvider).valueOrNull ?? const <DeviceState>[];
 
-    // Without this the sentence reads "the yolink_d88b4c0400064299 closes".
-    // A rule may name a device by raw id OR canonical name, so index both.
     final names = <String, String>{
       for (final d in all) ...{
         d.id: d.displayName,
@@ -424,8 +648,6 @@ class _UsedBy extends ConsumerWidget {
     };
     String label(String ref) => names[ref] ?? ref;
 
-    // A rule may refer to a device by its raw id OR its canonical name — core's
-    // resolver accepts both — so match on either, or the count silently lies.
     final refs = {
       device.id,
       if (device.canonicalName != null) device.canonicalName!
@@ -437,95 +659,171 @@ class _UsedBy extends ConsumerWidget {
 
     if (using.isEmpty) {
       return Padding(
-        padding: EdgeInsets.fromLTRB(t.space.lg, 0, t.space.lg, t.space.md),
-        child: Text(
-          'No automations use this device.',
-          style: TextStyle(fontSize: 12.5, color: t.surface.onBaseMuted),
-        ),
+        padding: EdgeInsets.symmetric(vertical: t.space.sm),
+        child: Text('Not used by any automation.',
+            style: TextStyle(fontSize: 12.5, color: t.surface.onBaseMuted)),
       );
     }
 
-    return Padding(
-      padding:
-          EdgeInsets.fromLTRB(t.space.lg, t.space.sm, t.space.lg, t.space.md),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            using.length == 1
-                ? 'USED BY 1 AUTOMATION'
-                : 'USED BY ${using.length} AUTOMATIONS',
-            style: TextStyle(
-              fontSize: 10.5,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.9,
-              color: t.surface.onBaseMuted,
-            ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(height: t.space.xs),
+        Text(
+          using.length == 1
+              ? 'USED BY 1 AUTOMATION'
+              : 'USED BY ${using.length} AUTOMATIONS',
+          style: TextStyle(
+            fontSize: 10.5,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 0.9,
+            color: t.surface.onBaseMuted,
           ),
-          SizedBox(height: t.space.sm),
-          for (final r in using)
-            InkWell(
-              onTap: () {
-                Navigator.of(context).pop();
-                context.push('/automations/${r.id}');
-              },
-              borderRadius: t.radius.smR,
-              child: Padding(
-                padding: EdgeInsets.symmetric(vertical: t.space.xs + 2),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 6,
-                      height: 6,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: r.enabled
-                            ? t.accent.success
-                            : t.surface.onBaseMuted.withValues(alpha: 0.5),
-                      ),
+        ),
+        SizedBox(height: t.space.xs),
+        for (final r in using)
+          InkWell(
+            onTap: () {
+              Navigator.of(context).pop();
+              context.push('/automations/${r.id}');
+            },
+            borderRadius: t.radius.smR,
+            child: Padding(
+              padding: EdgeInsets.symmetric(vertical: t.space.xs + 2),
+              child: Row(
+                children: [
+                  Container(
+                    width: 6,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: r.enabled
+                          ? t.accent.success
+                          : t.surface.onBaseMuted.withValues(alpha: 0.5),
                     ),
-                    SizedBox(width: t.space.sm),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            r.name,
+                  ),
+                  SizedBox(width: t.space.sm),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(r.name,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                              fontSize: 13,
-                              color: t.surface.onBase,
-                            ),
-                          ),
-                          Text(
-                            triggerSentence(r.trigger, label: label) ?? '',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 11.5,
-                              color: t.surface.onBaseMuted,
-                            ),
-                          ),
-                        ],
-                      ),
+                                fontSize: 13, color: t.surface.onBase)),
+                        Text(
+                          triggerSentence(r.trigger, label: label) ?? '',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                              fontSize: 11.5, color: t.surface.onBaseMuted),
+                        ),
+                      ],
                     ),
-                    Icon(HcIcons.caretRight,
-                        size: 12, color: t.surface.onBaseMuted),
-                  ],
-                ),
+                  ),
+                  Icon(HcIcons.caretRight,
+                      size: 12, color: t.surface.onBaseMuted),
+                ],
               ),
             ),
-        ],
+          ),
+        SizedBox(height: t.space.xs),
+      ],
+    );
+  }
+}
+
+// ── History tab ───────────────────────────────────────────────────────────────
+
+class _HistoryTab extends ConsumerWidget {
+  const _HistoryTab({required this.device});
+  final DeviceState device;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = HcTokens.of(context);
+    final async = ref.watch(_sheetHistoryProvider(device.id));
+
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: t.space.lg),
+      child: async.when(
+        loading: () => const Padding(
+          padding: EdgeInsets.all(20),
+          child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+        ),
+        error: (_, __) => Text('Could not load history.',
+            style: TextStyle(fontSize: 12.5, color: t.surface.onBaseMuted)),
+        data: (entries) {
+          if (entries.isEmpty) {
+            return Text('No recent changes.',
+                style: TextStyle(fontSize: 12.5, color: t.surface.onBaseMuted));
+          }
+
+          final chartAttr = _pickAttribute(entries);
+          final series = chartAttr == null
+              ? const <HistoryEntry>[]
+              : entries
+                  .where((e) => e.attribute == chartAttr && e.value is num)
+                  .toList();
+
+          final recent = [...entries]
+            ..sort((a, b) => b.recordedAt.compareTo(a.recordedAt));
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (series.length >= 2) ...[
+                Text(chartAttr!.replaceAll('_', ' ').toUpperCase(),
+                    style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 1.1,
+                        color: t.surface.onBaseMuted)),
+                SizedBox(height: t.space.sm),
+                HcHistoryChart(entries: series),
+                SizedBox(height: t.space.md),
+              ],
+              Text('RECENT CHANGES',
+                  style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.1,
+                      color: t.surface.onBaseMuted)),
+              SizedBox(height: t.space.xs),
+              for (final e in recent.take(40))
+                Padding(
+                  padding: EdgeInsets.symmetric(vertical: t.space.xs + 1),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '${e.attribute.replaceAll('_', ' ')} → ${_readable(e.value)}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                              fontSize: 12.5, color: t.surface.onBase),
+                        ),
+                      ),
+                      SizedBox(width: t.space.sm),
+                      Text(_ago(e.recordedAt),
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: t.surface.onBaseMuted,
+                              fontFeatures: t.numericFontFeatures)),
+                    ],
+                  ),
+                ),
+            ],
+          );
+        },
       ),
     );
   }
 }
 
-/// A raw state value, said the way a person would say it.
-///
-/// `on: false` is not a reading, it is a field dump — the same habit the rule
-/// sentences exist to kill.
+// ── Shared bits ───────────────────────────────────────────────────────────────
+
 String _readable(Object? v) => switch (v) {
       true => 'on',
       false => 'off',
@@ -533,9 +831,16 @@ String _readable(Object? v) => switch (v) {
       _ => '$v',
     };
 
+String _ago(DateTime dt) {
+  final diff = DateTime.now().difference(dt);
+  if (diff.inSeconds < 60) return 'just now';
+  if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+  if (diff.inHours < 24) return '${diff.inHours}h ago';
+  return '${diff.inDays}d ago';
+}
+
 class _Reading extends StatelessWidget {
   const _Reading({required this.name, required this.value});
-
   final String name;
   final String value;
 
@@ -546,19 +851,14 @@ class _Reading extends StatelessWidget {
       padding: EdgeInsets.symmetric(vertical: t.space.xs),
       child: Row(
         children: [
-          Text(
-            name.replaceAll('_', ' '),
-            style: TextStyle(fontSize: 12.5, color: t.surface.onBaseMuted),
-          ),
+          Text(name.replaceAll('_', ' '),
+              style: TextStyle(fontSize: 12.5, color: t.surface.onBaseMuted)),
           const Spacer(),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 13,
-              color: t.surface.onBase,
-              fontFeatures: t.numericFontFeatures,
-            ),
-          ),
+          Text(value,
+              style: TextStyle(
+                  fontSize: 13,
+                  color: t.surface.onBase,
+                  fontFeatures: t.numericFontFeatures)),
         ],
       ),
     );
@@ -567,7 +867,6 @@ class _Reading extends StatelessWidget {
 
 class _Banner extends StatelessWidget {
   const _Banner({required this.icon, required this.message});
-
   final IconData icon;
   final String message;
 
@@ -575,7 +874,7 @@ class _Banner extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
     return Container(
-      margin: EdgeInsets.fromLTRB(t.space.lg, 0, t.space.lg, t.space.md),
+      margin: EdgeInsets.fromLTRB(t.space.lg, 0, t.space.lg, t.space.sm),
       padding: EdgeInsets.all(t.space.sm + 2),
       decoration: BoxDecoration(
         color: t.accent.warn.withValues(alpha: 0.10),
@@ -586,10 +885,8 @@ class _Banner extends StatelessWidget {
           Icon(icon, size: 14, color: t.accent.warn),
           SizedBox(width: t.space.sm),
           Expanded(
-            child: Text(
-              message,
-              style: TextStyle(fontSize: 12, color: t.accent.warn),
-            ),
+            child: Text(message,
+                style: TextStyle(fontSize: 12, color: t.accent.warn)),
           ),
         ],
       ),
@@ -597,8 +894,7 @@ class _Banner extends StatelessWidget {
   }
 }
 
-/// The metrics worth trending, in the order we'd rather show them. A device may
-/// report several numbers; this picks the one a person came to see.
+// The metrics worth trending, best-first.
 const _metricPriority = <String>[
   'temperature',
   'current_temperature',
@@ -613,97 +909,24 @@ const _metricPriority = <String>[
   'battery',
 ];
 
-bool _isMetric(String attr, Object? value) =>
-    value is num && (_metricPriority.contains(attr) || attr.endsWith('_pct'));
-
-/// True when the device exposes at least one number worth a chart — so we never
-/// fire a history request for a plain on/off switch.
-bool _hasMetric(DeviceState d) =>
-    d.state.entries.any((e) => _isMetric(e.key, e.value));
-
 final _sheetHistoryProvider =
     FutureProvider.family.autoDispose<List<HistoryEntry>, String>((ref, id) {
   final client = ref.watch(homecoreClientProvider);
   return HistoryApi(client).getHistory(id, limit: 500);
 });
 
-/// The recent trend for a device's primary metric, drawn inline in the sheet.
-class _SheetHistory extends ConsumerWidget {
-  const _SheetHistory({required this.device});
-
-  final DeviceState device;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final t = HcTokens.of(context);
-    if (!_hasMetric(device)) return const SizedBox.shrink();
-
-    final async = ref.watch(_sheetHistoryProvider(device.id));
-    return async.when(
-      loading: () => const SizedBox(height: 44),
-      error: (_, __) => const SizedBox.shrink(),
-      data: (entries) {
-        final attr = _pickAttribute(entries);
-        if (attr == null) return const SizedBox.shrink();
-        final series = entries
-            .where((e) => e.attribute == attr && e.value is num)
-            .toList();
-        if (series.length < 2) return const SizedBox.shrink();
-
-        return Padding(
-          padding: EdgeInsets.fromLTRB(
-              t.space.lg, t.space.sm, t.space.lg, t.space.sm),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Text(
-                    attr.replaceAll('_', ' ').toUpperCase(),
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 1.1,
-                      color: t.surface.onBaseMuted,
-                    ),
-                  ),
-                  const Spacer(),
-                  Text(
-                    'RECENT',
-                    style: TextStyle(
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 1,
-                      color: t.surface.onBaseMuted.withValues(alpha: 0.6),
-                    ),
-                  ),
-                ],
-              ),
-              SizedBox(height: t.space.sm),
-              HcHistoryChart(entries: series),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  /// The numeric attribute to chart: the highest-priority metric that actually
-  /// has history, falling back to whichever numeric attribute has the most
-  /// points.
-  static String? _pickAttribute(List<HistoryEntry> entries) {
-    final numericAttrs = <String, int>{};
-    for (final e in entries) {
-      if (e.value is num) {
-        numericAttrs[e.attribute] = (numericAttrs[e.attribute] ?? 0) + 1;
-      }
+/// The numeric attribute to chart: highest-priority metric with history, else
+/// whichever numeric attribute has the most points.
+String? _pickAttribute(List<HistoryEntry> entries) {
+  final numericAttrs = <String, int>{};
+  for (final e in entries) {
+    if (e.value is num) {
+      numericAttrs[e.attribute] = (numericAttrs[e.attribute] ?? 0) + 1;
     }
-    if (numericAttrs.isEmpty) return null;
-    for (final metric in _metricPriority) {
-      if (numericAttrs.containsKey(metric)) return metric;
-    }
-    return numericAttrs.entries
-        .reduce((a, b) => a.value >= b.value ? a : b)
-        .key;
   }
+  if (numericAttrs.isEmpty) return null;
+  for (final metric in _metricPriority) {
+    if (numericAttrs.containsKey(metric)) return metric;
+  }
+  return numericAttrs.entries.reduce((a, b) => a.value >= b.value ? a : b).key;
 }
