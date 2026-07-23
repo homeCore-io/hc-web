@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/models/device_state.dart';
 import '../../core/providers/areas_provider.dart';
 import '../../core/providers/devices_provider.dart';
+import '../../core/text/humanize.dart';
 import '../../design/components/hc_dialog.dart';
 import '../../design/components/hc_surface.dart';
 import '../../design/tokens.dart';
@@ -41,9 +42,9 @@ class AreasPage extends ConsumerWidget {
           if (areas.isEmpty) {
             return _Empty(onAdd: () => _showCreateDialog(context, ref));
           }
-          final sorted = [...areas]..sort((a, b) => '${a['name']}'
+          final sorted = [...areas]..sort((a, b) => humanize('${a['name']}')
               .toLowerCase()
-              .compareTo('${b['name']}'.toLowerCase()));
+              .compareTo(humanize('${b['name']}').toLowerCase()));
           return Builder(builder: (context) {
             final t = HcTokens.of(context);
             return ListView.separated(
@@ -77,6 +78,11 @@ class _AreaCard extends ConsumerWidget {
 
   String get id => area['id'] as String;
   String get name => area['name'] as String;
+
+  /// The area's stored `name` is a normalized slug (`bedroom_3`); people should
+  /// never see that. The backend re-normalizes on write, so editing the
+  /// humanized form round-trips to the same slug and id.
+  String get displayName => humanize(name);
   List<String> get deviceIds =>
       List<String>.from(area['device_ids'] as List? ?? []);
 
@@ -95,7 +101,7 @@ class _AreaCard extends ConsumerWidget {
                 size: 18, color: t.surface.onBaseMuted),
             SizedBox(width: t.space.md),
             Expanded(
-              child: Text(name,
+              child: Text(displayName,
                   style: TextStyle(
                       color: t.surface.onBase,
                       fontSize: 15.5,
@@ -145,9 +151,11 @@ class _AreaCard extends ConsumerWidget {
 
   Future<void> _rename(BuildContext context, WidgetRef ref) async {
     final messenger = ScaffoldMessenger.of(context);
-    final next =
-        await _promptForName(context, title: 'Rename area', initial: name);
-    if (next == null || next.isEmpty || next == name) return;
+    final next = await _promptForName(context,
+        title: 'Rename area', initial: displayName);
+    // Compare against the humanized initial: leaving "Bedroom 3" untouched is
+    // not a rename, even though the stored slug is `bedroom_3`.
+    if (next == null || next.isEmpty || next == displayName) return;
     try {
       await ref.read(areasApiProvider).renameArea(id, next);
       ref.invalidate(areasProvider);
@@ -225,7 +233,7 @@ class _AreaCard extends ConsumerWidget {
 
   Future<void> _delete(BuildContext context, WidgetRef ref) async {
     final messenger = ScaffoldMessenger.of(context);
-    final ok = await _confirmDelete(context, name);
+    final ok = await _confirmDelete(context, displayName);
     if (ok != true) return;
     try {
       await ref.read(areasApiProvider).deleteArea(id);
