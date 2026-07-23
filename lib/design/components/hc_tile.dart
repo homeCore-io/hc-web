@@ -373,16 +373,26 @@ String summarise(DeviceState d) {
     bits.add('off');
   }
 
+  final facet = facetOf(d, d.schema);
+
   if (s['locked'] case final bool l) bits.add(l ? 'locked' : 'unlocked');
   if (s['open'] case final bool o) bits.add(o ? 'open' : 'closed');
-  if (s['motion'] case final bool m) bits.add(m ? 'motion' : 'clear');
 
   // Every sensor kind on the real install publishes its own vocabulary, and a
   // reading we cannot name renders as "—" — which is exactly as useless as no
   // tile at all. Occupancy sensors say `occupancy`/`occupied`; leak sensors say
-  // `leak`/`water_detected`.
+  // `leak`/`water_detected`. A motion/occupancy sensor that hasn't reported yet
+  // (Lutron only pushes a GROUP transition, never an initial state) reads
+  // "clear" rather than "—" — the same default the old UI used.
+  if (s['motion'] case final bool m) {
+    bits.add(m ? 'motion' : 'clear');
+  } else if (facet == DeviceFacet.motion) {
+    bits.add('clear');
+  }
   if ((s['occupancy'] ?? s['occupied']) case final bool o) {
-    bits.add(o ? 'occupied' : 'empty');
+    bits.add(o ? 'occupied' : 'clear');
+  } else if (facet == DeviceFacet.occupancy) {
+    bits.add('clear');
   }
   if ((s['leak'] ?? s['water_detected']) case final bool w) {
     bits.add(w ? 'WATER' : 'dry');
