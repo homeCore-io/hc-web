@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/schema/device_schema.dart';
 import '../tokens.dart';
+import 'hc_dialog.dart';
 import 'hc_surface.dart';
 
 /// Renders the right control for one device attribute, from its schema.
@@ -409,59 +410,92 @@ class _ColorPickerState extends State<_ColorPicker> {
 
   @override
   Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
     final color = _hsv.withValue(1).withAlpha(1).toColor();
+    final pure = HSVColor.fromAHSV(1, _hsv.hue, 1, 1).toColor();
 
-    return AlertDialog(
-      title: const Text('Colour'),
-      content: SizedBox(
-        width: 320,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              height: 56,
-              decoration: BoxDecoration(
-                color: color,
-                borderRadius: BorderRadius.circular(8),
+    return HcDialog(
+      title: 'Colour',
+      actions: [
+        HcButton(label: 'Cancel', onPressed: () => Navigator.pop(context)),
+        HcButton(
+            label: 'Apply',
+            kind: HcButtonKind.primary,
+            onPressed: () => Navigator.pop(context, color)),
+      ],
+      child: SizedBox(
+        width: 300,
+        child: SliderTheme(
+          data: SliderTheme.of(context).copyWith(
+            thumbColor: Colors.white,
+            overlayColor: Colors.white.withValues(alpha: 0.12),
+            trackHeight: 8,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // A living preview that glows its own colour.
+              Container(
+                height: 64,
+                decoration: BoxDecoration(
+                  color: color,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                        color: color.withValues(alpha: 0.55),
+                        blurRadius: 18,
+                        spreadRadius: -2),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(height: 16),
-            _row(
-              'Hue',
-              Slider(
-                value: _hsv.hue,
-                max: 360,
-                onChanged: (v) => setState(() => _hsv = _hsv.withHue(v)),
-              ),
-            ),
-            _row(
-              'Saturation',
-              Slider(
-                value: _hsv.saturation,
-                onChanged: (v) => setState(() => _hsv = _hsv.withSaturation(v)),
-              ),
-            ),
-          ],
+              const SizedBox(height: 18),
+              _row(t, 'Hue', () {
+                return _GradientSlider(
+                  value: _hsv.hue,
+                  min: 0,
+                  max: 360,
+                  gradient: const LinearGradient(colors: [
+                    Color(0xFFFF0000),
+                    Color(0xFFFFFF00),
+                    Color(0xFF00FF00),
+                    Color(0xFF00FFFF),
+                    Color(0xFF0000FF),
+                    Color(0xFFFF00FF),
+                    Color(0xFFFF0000),
+                  ]),
+                  onChanged: (v) => setState(() => _hsv = _hsv.withHue(v)),
+                );
+              }()),
+              _row(t, 'Saturation', () {
+                return _GradientSlider(
+                  value: _hsv.saturation,
+                  min: 0,
+                  max: 1,
+                  gradient:
+                      LinearGradient(colors: [const Color(0xFFBFC7D2), pure]),
+                  onChanged: (v) =>
+                      setState(() => _hsv = _hsv.withSaturation(v)),
+                );
+              }()),
+            ],
+          ),
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.pop(context, color),
-          child: const Text('Apply'),
-        ),
-      ],
     );
   }
 
-  Widget _row(String label, Widget child) => Row(
-        children: [
-          SizedBox(width: 84, child: Text(label)),
-          Expanded(child: child),
-        ],
+  Widget _row(HcTokens t, String label, Widget child) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Row(
+          children: [
+            SizedBox(
+                width: 84,
+                child: Text(label,
+                    style:
+                        TextStyle(fontSize: 13, color: t.surface.onBaseMuted))),
+            Expanded(child: child),
+          ],
+        ),
       );
 }
 

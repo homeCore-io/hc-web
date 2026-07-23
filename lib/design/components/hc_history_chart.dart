@@ -16,11 +16,16 @@ class HcHistoryChart extends StatelessWidget {
     super.key,
     required this.entries,
     this.height = 132,
+    this.color,
   });
 
   /// Points for ONE attribute, in time order.
   final List<HistoryEntry> entries;
   final double height;
+
+  /// The line/fill colour — each metric gets its own so a multisensor's charts
+  /// read apart at a glance. Defaults to the house accent.
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
@@ -54,7 +59,7 @@ class HcHistoryChart extends StatelessWidget {
     minY -= pad;
     maxY += pad;
 
-    final accent = t.accent.active;
+    final accent = color ?? t.accent.active;
 
     return SizedBox(
       height: height,
@@ -119,16 +124,18 @@ class HcHistoryChart extends StatelessWidget {
               curveSmoothness: 0.25,
               preventCurveOverShooting: true,
               color: accent,
-              barWidth: 2,
+              barWidth: 2.4,
               dotData: const FlDotData(show: false),
+              shadow:
+                  Shadow(color: accent.withValues(alpha: 0.5), blurRadius: 8),
               belowBarData: BarAreaData(
                 show: true,
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    accent.withValues(alpha: 0.28),
-                    accent.withValues(alpha: 0.0),
+                    accent.withValues(alpha: 0.38),
+                    accent.withValues(alpha: 0.02),
                   ],
                 ),
               ),

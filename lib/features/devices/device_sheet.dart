@@ -142,7 +142,7 @@ class _Header extends ConsumerWidget {
                   : t.surface.overlay,
               borderRadius: BorderRadius.circular(13),
             ),
-            child: Icon(HcIcons.devices,
+            child: Icon(facet.icon,
                 size: 21, color: on ? t.accent.active : t.surface.onBaseMuted),
           ),
           SizedBox(width: t.space.md),
@@ -289,7 +289,11 @@ class _Controls extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             for (final e in device.state.entries)
-              _Reading(name: e.key, value: _readable(e.value)),
+              _Reading(
+                name: _metricName(e.key),
+                value:
+                    '${_readable(e.value)}${e.value is num ? _unit(e.key) : ''}',
+              ),
           ],
         ),
       );
@@ -736,14 +740,22 @@ class _UsedBy extends ConsumerWidget {
 
 // ── History tab ───────────────────────────────────────────────────────────────
 
-class _HistoryTab extends ConsumerWidget {
+class _HistoryTab extends ConsumerStatefulWidget {
   const _HistoryTab({required this.device});
   final DeviceState device;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_HistoryTab> createState() => _HistoryTabState();
+}
+
+class _HistoryTabState extends ConsumerState<_HistoryTab> {
+  static const _cap = 8;
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
     final t = HcTokens.of(context);
-    final async = ref.watch(_sheetHistoryProvider(device.id));
+    final async = ref.watch(_sheetHistoryProvider(widget.device.id));
 
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: t.space.lg),
@@ -760,28 +772,26 @@ class _HistoryTab extends ConsumerWidget {
                 style: TextStyle(fontSize: 12.5, color: t.surface.onBaseMuted));
           }
 
-          final chartAttr = _pickAttribute(entries);
-          final series = chartAttr == null
-              ? const <HistoryEntry>[]
-              : entries
-                  .where((e) => e.attribute == chartAttr && e.value is num)
-                  .toList();
-
+          // Every numeric metric with enough points gets its own vibrant chart,
+          // its own colour — a temp/humidity/lux multisensor shows all three.
+          final metrics = _chartableMetrics(entries);
           final recent = [...entries]
             ..sort((a, b) => b.recordedAt.compareTo(a.recordedAt));
+          final shown = _expanded ? recent : recent.take(_cap).toList();
 
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (series.length >= 2) ...[
-                Text(chartAttr!.replaceAll('_', ' ').toUpperCase(),
-                    style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 1.1,
-                        color: t.surface.onBaseMuted)),
+              for (final attr in metrics) ...[
+                _metricLabel(t, attr, entries),
                 SizedBox(height: t.space.sm),
-                HcHistoryChart(entries: series),
+                HcHistoryChart(
+                  entries: entries
+                      .where((e) => e.attribute == attr && e.value is num)
+                      .toList(),
+                  height: 112,
+                  color: _metricColor(t, attr),
+                ),
                 SizedBox(height: t.space.md),
               ],
               Text('RECENT CHANGES',
@@ -791,14 +801,15 @@ class _HistoryTab extends ConsumerWidget {
                       letterSpacing: 1.1,
                       color: t.surface.onBaseMuted)),
               SizedBox(height: t.space.xs),
-              for (final e in recent.take(40))
+              for (final e in shown)
                 Padding(
                   padding: EdgeInsets.symmetric(vertical: t.space.xs + 1),
                   child: Row(
                     children: [
                       Expanded(
                         child: Text(
-                          '${e.attribute.replaceAll('_', ' ')} → ${_readable(e.value)}',
+                          '${_metricName(e.attribute)} → ${_readable(e.value)}'
+                          '${e.value is num ? _unit(e.attribute) : ''}',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
@@ -814,10 +825,59 @@ class _HistoryTab extends ConsumerWidget {
                     ],
                   ),
                 ),
+              if (!_expanded && recent.length > _cap)
+                Padding(
+                  padding: EdgeInsets.only(top: t.space.sm),
+                  child: GestureDetector(
+                    onTap: () => setState(() => _expanded = true),
+                    behavior: HitTestBehavior.opaque,
+                    child: Text('Show all ${recent.length} changes',
+                        style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w600,
+                            color: t.accent.active)),
+                  ),
+                ),
             ],
           );
         },
       ),
+    );
+  }
+
+  Widget _metricLabel(HcTokens t, String attr, List<HistoryEntry> entries) {
+    HistoryEntry? latest;
+    for (final e in entries) {
+      if (e.attribute == attr && e.value is num) {
+        if (latest == null || e.recordedAt.isAfter(latest.recordedAt)) {
+          latest = e;
+        }
+      }
+    }
+    final c = _metricColor(t, attr);
+    return Row(
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(color: c, shape: BoxShape.circle),
+        ),
+        SizedBox(width: t.space.sm),
+        Text(_metricName(attr).toUpperCase(),
+            style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1.1,
+                color: t.surface.onBaseMuted)),
+        const Spacer(),
+        if (latest != null)
+          Text('${_readable(latest.value)}${_unit(attr)}',
+              style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: c,
+                  fontFeatures: t.numericFontFeatures)),
+      ],
     );
   }
 }
@@ -915,18 +975,61 @@ final _sheetHistoryProvider =
   return HistoryApi(client).getHistory(id, limit: 500);
 });
 
-/// The numeric attribute to chart: highest-priority metric with history, else
-/// whichever numeric attribute has the most points.
-String? _pickAttribute(List<HistoryEntry> entries) {
-  final numericAttrs = <String, int>{};
+/// Numeric metrics worth charting, best-first — priority metrics ahead of the
+/// rest — and capped so a chatty device doesn't become a wall of charts.
+List<String> _chartableMetrics(List<HistoryEntry> entries) {
+  final counts = <String, int>{};
   for (final e in entries) {
-    if (e.value is num) {
-      numericAttrs[e.attribute] = (numericAttrs[e.attribute] ?? 0) + 1;
+    if (e.value is num) counts[e.attribute] = (counts[e.attribute] ?? 0) + 1;
+  }
+  final withHistory =
+      counts.entries.where((e) => e.value >= 2).map((e) => e.key).toSet();
+  final ordered = <String>[
+    for (final m in _metricPriority)
+      if (withHistory.contains(m)) m,
+    for (final a in withHistory)
+      if (!_metricPriority.contains(a)) a,
+  ];
+  return ordered.take(4).toList();
+}
+
+/// A vibrant, distinct colour per metric so a multisensor's charts read apart.
+Color _metricColor(HcTokens t, String attr) {
+  final a = attr.toLowerCase();
+  if (a.contains('temp')) return const Color(0xFFFF8A5B); // warm orange
+  if (a.contains('humid')) return const Color(0xFF4CC9F0); // cyan
+  if (a.contains('illumin') || a.contains('lux')) {
+    return const Color(0xFFFFD166); // amber-yellow
+  }
+  if (a.contains('co2')) return const Color(0xFF6FD1A6); // green
+  if (a.contains('pm2')) return const Color(0xFFB98BFF); // violet
+  if (a.contains('pressure')) return const Color(0xFF7CC4FF); // blue
+  if (a.contains('power') || a.contains('watt')) return t.accent.active;
+  if (a.contains('batt')) return const Color(0xFF6FD1A6); // green
+  if (a.contains('bright')) return const Color(0xFFFFD166);
+  return t.accent.primary;
+}
+
+/// A metric name without its unit suffix, humanized: `humidity_pct` → Humidity.
+String _metricName(String attr) {
+  var s = attr;
+  for (final suffix in const ['_pct', '_lux', '_f', '_c']) {
+    if (s.endsWith(suffix)) {
+      s = s.substring(0, s.length - suffix.length);
+      break;
     }
   }
-  if (numericAttrs.isEmpty) return null;
-  for (final metric in _metricPriority) {
-    if (numericAttrs.containsKey(metric)) return metric;
+  return humanize(s);
+}
+
+/// A best-effort unit for a numeric metric, for a humanized reading.
+String _unit(String attr) {
+  final a = attr.toLowerCase();
+  if (a.endsWith('_pct') || a.contains('humid') || a.contains('batt')) {
+    return '%';
   }
-  return numericAttrs.entries.reduce((a, b) => a.value >= b.value ? a : b).key;
+  if (a.contains('temp')) return '°';
+  if (a.contains('lux') || a.contains('illumin')) return ' lux';
+  if (a.contains('power') || a.contains('watt')) return ' W';
+  return '';
 }
