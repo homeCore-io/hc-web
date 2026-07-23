@@ -265,47 +265,51 @@ class _Segmented extends StatelessWidget {
 /// Every writable attribute the device declares, as the control its kind calls
 /// for. `on` already has the header toggle, so it is not repeated. A device with
 /// no schema falls back to plainly-worded readings.
-class _Controls extends ConsumerWidget {
+class _Controls extends ConsumerStatefulWidget {
   const _Controls({required this.device});
   final DeviceState device;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_Controls> createState() => _ControlsState();
+}
+
+class _ControlsState extends ConsumerState<_Controls> {
+  bool _advOpen = false;
+
+  DeviceState get _d => widget.device;
+
+  @override
+  Widget build(BuildContext context) {
     final t = HcTokens.of(context);
-    final schema = device.schema;
-    final notifier = ref.read(devicesProvider.notifier);
+    final schema = _d.schema;
+    final hasSchema = schema != null && schema.attributes.isNotEmpty;
 
-    if (schema == null || schema.attributes.isEmpty) {
-      if (device.state.isEmpty) {
-        return Padding(
-          padding: EdgeInsets.symmetric(horizontal: t.space.lg),
-          child: Text('No adjustable settings.',
-              style: TextStyle(fontSize: 12.5, color: t.surface.onBaseMuted)),
-        );
-      }
+    // The attributes to show — the schema where we have one, else the device's
+    // own reported state. `on` already has the header toggle.
+    final keys = (hasSchema
+            ? schema.attributes.keys.where((k) => k != 'on')
+            : _d.state.keys.where((k) => k != 'on'))
+        .toList();
+    final present = keys.toSet();
+
+    // Hidden outright: plumbing, and the raw twin of a percentage (a light
+    // reports both `brightness` and `brightness_pct` — keep the %).
+    bool hidden(String k) =>
+        _isMetadata(k) || (!k.endsWith('_pct') && present.contains('${k}_pct'));
+    final visible = keys.where((k) => !hidden(k)).toList();
+
+    // Advanced: Z-wave command-class dumps (cc134_… firmware versions, cc99_…
+    // user-code slots) — real, but noise for most people, so folded away.
+    final primary = visible.where((k) => !_isAdvancedAttr(k)).toList();
+    final advanced = visible.where((k) => _isAdvancedAttr(k)).toList();
+
+    if (primary.isEmpty && advanced.isEmpty) {
       return Padding(
         padding: EdgeInsets.symmetric(horizontal: t.space.lg),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            for (final e in device.state.entries)
-              if (!_isMetadata(e.key))
-                _Reading(
-                  name: _metricName(e.key),
-                  value: _readingValue(device, e.key, e.value),
-                ),
-          ],
-        ),
-      );
-    }
-
-    final entries =
-        schema.attributes.entries.where((e) => e.key != 'on').toList();
-
-    if (entries.isEmpty) {
-      return Padding(
-        padding: EdgeInsets.symmetric(horizontal: t.space.lg),
-        child: Text('No adjustable settings beyond power.',
+        child: Text(
+            hasSchema
+                ? 'No adjustable settings beyond power.'
+                : 'No adjustable settings.',
             style: TextStyle(fontSize: 12.5, color: t.surface.onBaseMuted)),
       );
     }
@@ -315,20 +319,54 @@ class _Controls extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          for (final e in entries)
-            Padding(
-              padding: EdgeInsets.only(bottom: t.space.md),
-              child: HcAttributeControl(
-                name: e.key,
-                schema: e.value,
-                value: device.state[e.key],
-                enabled: device.available,
-                onCommit: e.value.writable
-                    ? (v) => notifier.command(device.id, {e.key: v})
-                    : null,
+          for (final k in primary) _item(t, hasSchema, k),
+          if (advanced.isNotEmpty) ...[
+            SizedBox(height: t.space.xs),
+            InkWell(
+              onTap: () => setState(() => _advOpen = !_advOpen),
+              borderRadius: t.radius.smR,
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: t.space.sm),
+                child: Row(
+                  children: [
+                    Text('Advanced · ${advanced.length}',
+                        style: TextStyle(
+                            fontSize: 12.5, color: t.surface.onBaseMuted)),
+                    const Spacer(),
+                    Icon(
+                        _advOpen
+                            ? Icons.keyboard_arrow_up_rounded
+                            : Icons.keyboard_arrow_down_rounded,
+                        size: 18,
+                        color: t.surface.onBaseMuted),
+                  ],
+                ),
               ),
             ),
+            if (_advOpen)
+              for (final k in advanced) _item(t, hasSchema, k),
+          ],
         ],
+      ),
+    );
+  }
+
+  Widget _item(HcTokens t, bool hasSchema, String k) {
+    if (!hasSchema) {
+      return _Reading(
+          name: _metricName(k), value: _readingValue(_d, k, _d.state[k]));
+    }
+    final attr = _d.schema!.attributes[k]!;
+    return Padding(
+      padding: EdgeInsets.only(bottom: t.space.md),
+      child: HcAttributeControl(
+        name: k,
+        schema: attr,
+        value: _d.state[k],
+        enabled: _d.available,
+        onCommit: attr.writable
+            ? (v) => ref.read(devicesProvider.notifier).command(_d.id, {k: v})
+            : null,
       ),
     );
   }
@@ -777,7 +815,7 @@ class _HistoryTabState extends ConsumerState<_HistoryTab> {
           final metrics = _chartableMetrics(entries);
           final recent = [
             for (final e in entries)
-              if (!_isMetadata(e.attribute)) e
+              if (!_isMetadata(e.attribute) && !_isAdvancedAttr(e.attribute)) e
           ]..sort((a, b) => b.recordedAt.compareTo(a.recordedAt));
           final shown = _expanded ? recent : recent.take(_cap).toList();
 
@@ -982,7 +1020,11 @@ final _sheetHistoryProvider =
 List<String> _chartableMetrics(List<HistoryEntry> entries) {
   final counts = <String, int>{};
   for (final e in entries) {
-    if (e.value is num) counts[e.attribute] = (counts[e.attribute] ?? 0) + 1;
+    if (e.value is num &&
+        !_isAdvancedAttr(e.attribute) &&
+        !_isMetadata(e.attribute)) {
+      counts[e.attribute] = (counts[e.attribute] ?? 0) + 1;
+    }
   }
   final withHistory =
       counts.entries.where((e) => e.value >= 2).map((e) => e.key).toSet();
@@ -1042,6 +1084,7 @@ bool _isMetadata(String key) {
   final k = key.toLowerCase();
   return k.endsWith('_unit') ||
       const {
+        'name',
         'kind',
         'bridge_id',
         'resource_id',
@@ -1050,6 +1093,12 @@ bool _isMetadata(String key) {
         'group_kind',
       }.contains(k);
 }
+
+/// Z-wave (and similar) command-class dumps — `cc134_applicationversion`,
+/// `cc99_usercode_pk7` — real data, but noise the drawer folds behind "Advanced"
+/// and keeps out of the charts and change log.
+final _ccAttr = RegExp(r'^cc\d+_');
+bool _isAdvancedAttr(String key) => _ccAttr.hasMatch(key);
 
 /// A reading said the human way, with its unit folded in — temperature carries
 /// the device's own `°F`/`°C` when it reports one.

@@ -30,7 +30,7 @@ class DeviceQuery {
   const DeviceQuery({
     this.search = '',
     this.group = DeviceGroup.room,
-    this.sort = DeviceSort.activeFirst,
+    this.sort = DeviceSort.name,
     this.filter = DeviceFilter.all,
     this.compact = false,
     this.pluginId,
