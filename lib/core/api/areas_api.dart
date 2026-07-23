@@ -1,3 +1,5 @@
+import 'package:dio/dio.dart';
+
 import 'homecore_client.dart';
 
 class AreasApi {
@@ -25,8 +27,14 @@ class AreasApi {
 
   Future<Map<String, dynamic>> setDevices(
       String id, List<String> deviceIds) async {
-    final response =
-        await client.dio.put('/areas/$id/devices', data: deviceIds);
+    // The body is a bare JSON array. Dio doesn't set a content-type for that on
+    // its own, and axum's `Json<Vec<String>>` extractor rejects a missing one
+    // with 415 — so declare it explicitly.
+    final response = await client.dio.put(
+      '/areas/$id/devices',
+      data: deviceIds,
+      options: Options(contentType: Headers.jsonContentType),
+    );
     return Map<String, dynamic>.from(response.data as Map);
   }
 }
