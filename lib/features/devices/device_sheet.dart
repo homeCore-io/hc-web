@@ -289,11 +289,11 @@ class _Controls extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             for (final e in device.state.entries)
-              _Reading(
-                name: _metricName(e.key),
-                value:
-                    '${_readable(e.value)}${e.value is num ? _unit(e.key) : ''}',
-              ),
+              if (!_isMetadata(e.key))
+                _Reading(
+                  name: _metricName(e.key),
+                  value: _readingValue(device, e.key, e.value),
+                ),
           ],
         ),
       );
@@ -775,8 +775,10 @@ class _HistoryTabState extends ConsumerState<_HistoryTab> {
           // Every numeric metric with enough points gets its own vibrant chart,
           // its own colour — a temp/humidity/lux multisensor shows all three.
           final metrics = _chartableMetrics(entries);
-          final recent = [...entries]
-            ..sort((a, b) => b.recordedAt.compareTo(a.recordedAt));
+          final recent = [
+            for (final e in entries)
+              if (!_isMetadata(e.attribute)) e
+          ]..sort((a, b) => b.recordedAt.compareTo(a.recordedAt));
           final shown = _expanded ? recent : recent.take(_cap).toList();
 
           return Column(
@@ -808,8 +810,8 @@ class _HistoryTabState extends ConsumerState<_HistoryTab> {
                     children: [
                       Expanded(
                         child: Text(
-                          '${_metricName(e.attribute)} → ${_readable(e.value)}'
-                          '${e.value is num ? _unit(e.attribute) : ''}',
+                          '${_metricName(e.attribute)} → '
+                          '${_readingValue(widget.device, e.attribute, e.value)}',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
@@ -871,7 +873,7 @@ class _HistoryTabState extends ConsumerState<_HistoryTab> {
                 color: t.surface.onBaseMuted)),
         const Spacer(),
         if (latest != null)
-          Text('${_readable(latest.value)}${_unit(attr)}',
+          Text(_readingValue(widget.device, attr, latest.value),
               style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
@@ -1032,4 +1034,30 @@ String _unit(String attr) {
   if (a.contains('lux') || a.contains('illumin')) return ' lux';
   if (a.contains('power') || a.contains('watt')) return ' W';
   return '';
+}
+
+/// Attributes that are plumbing, not readings — a unit field belongs *on* the
+/// value it describes, and ids/kinds aren't something a person reads.
+bool _isMetadata(String key) {
+  final k = key.toLowerCase();
+  return k.endsWith('_unit') ||
+      const {
+        'kind',
+        'bridge_id',
+        'resource_id',
+        'group_rid',
+        'group_name',
+        'group_kind',
+      }.contains(k);
+}
+
+/// A reading said the human way, with its unit folded in — temperature carries
+/// the device's own `°F`/`°C` when it reports one.
+String _readingValue(DeviceState d, String key, Object? value) {
+  if (value is! num) return _readable(value);
+  if (key.toLowerCase().contains('temp')) {
+    final u = d.state['temperature_unit'];
+    return '${_readable(value)}°${u is String && u.isNotEmpty ? u : ''}';
+  }
+  return '${_readable(value)}${_unit(key)}';
 }
