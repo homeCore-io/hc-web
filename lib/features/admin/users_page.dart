@@ -12,7 +12,7 @@ import '../../core/providers/users_provider.dart';
 import '../../design/components/hc_dialog.dart';
 import '../../design/components/hc_surface.dart';
 import '../../design/tokens.dart';
-import 'admin_scaffold.dart';
+import '../../shared/widgets/section_scaffold.dart';
 
 class UsersPage extends ConsumerWidget {
   const UsersPage({super.key});
@@ -23,9 +23,17 @@ class UsersPage extends ConsumerWidget {
     final currentId =
         ref.watch(currentUserProvider).valueOrNull?['id'] as String?;
 
-    return AdminScaffold(
+    final users = usersAsync.valueOrNull ?? const [];
+    final admins = users.where((u) => u.role == 'admin').length;
+
+    return SectionScaffold(
       title: 'Users',
-      subtitle: 'Accounts, roles, dashboard access, and keys',
+      stats: usersAsync.hasValue
+          ? [
+              SectionStat(value: '${users.length}', label: 'users'),
+              if (admins > 0) SectionStat(value: '$admins', label: 'admins'),
+            ]
+          : const [],
       actions: [
         Builder(builder: (context) {
           final t = HcTokens.of(context);
@@ -35,7 +43,7 @@ class UsersPage extends ConsumerWidget {
             onPressed: () => ref.invalidate(usersProvider),
           );
         }),
-        AdminHeaderAction(
+        SectionHeaderAction(
           icon: Icons.person_add_alt_1_rounded,
           label: 'Add user',
           onPressed: () => _showCreateUser(context, ref),

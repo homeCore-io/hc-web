@@ -7,6 +7,9 @@ import '../../core/text/humanize.dart';
 import '../../core/models/hc_event.dart';
 import '../../core/providers/events_provider.dart';
 import '../../core/providers/time_display_provider.dart';
+import '../../design/tokens.dart';
+import '../../shared/widgets/section_scaffold.dart';
+import '../../shared/widgets/section_toolbar.dart';
 
 // Rolling live events list
 final _liveEventsProvider = StateProvider<List<HcEvent>>((ref) => []);
@@ -30,40 +33,6 @@ final _historyEventsProvider = FutureProvider.autoDispose
   return EventsHistoryApi(client).listEvents(limit: limit);
 });
 
-class EventsPage extends ConsumerWidget {
-  const EventsPage({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    // Accumulate live events
-    ref.listen(eventsStreamProvider, (_, next) {
-      next.whenData((event) {
-        ref.read(_liveEventsProvider.notifier).update((list) {
-          final updated = [event, ...list];
-          return updated.length > 200 ? updated.sublist(0, 200) : updated;
-        });
-      });
-    });
-
-    return DefaultTabController(
-      length: 2,
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Events'),
-          bottom: const TabBar(tabs: [
-            Tab(text: 'Live'),
-            Tab(text: 'History'),
-          ]),
-        ),
-        body: const TabBarView(children: [
-          _LiveTab(),
-          _HistoryTab(),
-        ]),
-      ),
-    );
-  }
-}
-
 const _allEventTypes = [
   'device_state_changed',
   'device_availability_changed',
@@ -73,6 +42,228 @@ const _allEventTypes = [
   'plugin_offline',
   'system_alert',
 ];
+
+/// The colour a given event type takes on its severity stripe. Token-based so
+/// it tracks the skin — no hand-picked hues.
+Color eventColor(HcTokens t, String type, {bool? available}) {
+  switch (type) {
+    case 'device_state_changed':
+      return t.accent.primary;
+    case 'rule_fired':
+    case 'plugin_registered':
+      return t.accent.success;
+    case 'device_availability_changed':
+      return available == false ? t.accent.danger : t.accent.success;
+    case 'system_alert':
+    case 'plugin_offline':
+      return t.accent.danger;
+    case 'scene_activated':
+      return t.accent.active;
+    default:
+      return t.surface.onBaseMuted;
+  }
+}
+
+class EventsPage extends ConsumerStatefulWidget {
+  const EventsPage({super.key});
+
+  @override
+  ConsumerState<EventsPage> createState() => _EventsPageState();
+}
+
+class _EventsPageState extends ConsumerState<EventsPage> {
+  int _tab = 0; // 0 = Live, 1 = History
+
+  @override
+  Widget build(BuildContext context) {
+    // Accumulate live events regardless of which tab is shown.
+    ref.listen(eventsStreamProvider, (_, next) {
+      next.whenData((event) {
+        ref.read(_liveEventsProvider.notifier).update((list) {
+          final updated = [event, ...list];
+          return updated.length > 200 ? updated.sublist(0, 200) : updated;
+        });
+      });
+    });
+
+    final liveCount = ref.watch(_liveEventsProvider).length;
+
+    return SectionScaffold(
+      title: 'Events',
+      stats: [
+        SectionStat(
+            value: '$liveCount',
+            label: 'live',
+            tone: SectionTone.success,
+            glow: liveCount > 0),
+      ],
+      actions: [
+        _Segmented(
+          index: _tab,
+          labels: const ['Live', 'History'],
+          onChanged: (i) => setState(() => _tab = i),
+        ),
+      ],
+      child: IndexedStack(
+        index: _tab,
+        children: const [_LiveTab(), _HistoryTab()],
+      ),
+    );
+  }
+}
+
+// ── Segmented Live/History control ─────────────────────────────────────────────
+
+class _Segmented extends StatelessWidget {
+  const _Segmented(
+      {required this.index, required this.labels, required this.onChanged});
+  final int index;
+  final List<String> labels;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: t.surface.sunken,
+        borderRadius: BorderRadius.circular(9),
+        border: Border.all(color: t.stroke.hairline),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (var i = 0; i < labels.length; i++)
+            GestureDetector(
+              onTap: () => onChanged(i),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                decoration: BoxDecoration(
+                  color: index == i ? t.surface.overlay : Colors.transparent,
+                  borderRadius: BorderRadius.circular(7),
+                ),
+                child: Text(labels[i],
+                    style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: index == i
+                            ? t.surface.onBase
+                            : t.surface.onBaseMuted)),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Shared filter widgets ──────────────────────────────────────────────────────
+
+class _TypeChips extends StatelessWidget {
+  const _TypeChips({required this.selected, required this.onToggle});
+  final Set<String> selected;
+  final ValueChanged<String> onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return SizedBox(
+      height: 34,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        children: [
+          for (final ty in _allEventTypes)
+            Padding(
+              padding: const EdgeInsets.only(right: 6),
+              child: GestureDetector(
+                onTap: () => onToggle(ty),
+                child: Container(
+                  alignment: Alignment.center,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: selected.contains(ty)
+                        ? t.accent.active.withValues(alpha: 0.14)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(t.radius.pill),
+                    border: Border.all(
+                        color: selected.contains(ty)
+                            ? Colors.transparent
+                            : t.stroke.hairline),
+                  ),
+                  child: Text(humanize(ty),
+                      style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: selected.contains(ty)
+                              ? t.accent.active
+                              : t.surface.onBaseMuted)),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EventRow extends StatelessWidget {
+  const _EventRow({
+    required this.color,
+    required this.type,
+    required this.deviceId,
+    required this.time,
+  });
+  final Color color;
+  final String type;
+  final String? deviceId;
+  final String time;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: t.stroke.hairline)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 3,
+            height: 24,
+            decoration: BoxDecoration(
+                color: color, borderRadius: BorderRadius.circular(3)),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(humanize(type),
+                style: TextStyle(fontSize: 13.5, color: t.surface.onBase)),
+          ),
+          if (deviceId != null) ...[
+            Flexible(
+              child: Text(deviceId!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.right,
+                  style: TextStyle(
+                      fontSize: 11.5,
+                      color: t.surface.onBaseMuted,
+                      fontFeatures: t.numericFontFeatures)),
+            ),
+            const SizedBox(width: 14),
+          ],
+          Text(time,
+              style: TextStyle(
+                  fontSize: 11.5,
+                  color: t.surface.onBaseMuted,
+                  fontFeatures: t.numericFontFeatures)),
+        ],
+      ),
+    );
+  }
+}
 
 // ── Live tab ──────────────────────────────────────────────────────────────────
 
@@ -85,8 +276,6 @@ class _LiveTab extends ConsumerStatefulWidget {
 
 class _LiveTabState extends ConsumerState<_LiveTab> {
   final _searchCtrl = TextEditingController();
-  final _scrollCtrl = ScrollController();
-  bool _autoScroll = true;
   String _deviceSearch = '';
 
   @override
@@ -95,33 +284,24 @@ class _LiveTabState extends ConsumerState<_LiveTab> {
     _searchCtrl.addListener(() {
       setState(() => _deviceSearch = _searchCtrl.text);
     });
-    _scrollCtrl.addListener(_onScroll);
   }
 
   @override
   void dispose() {
     _searchCtrl.dispose();
-    _scrollCtrl.dispose();
     super.dispose();
-  }
-
-  void _onScroll() {
-    final pos = _scrollCtrl.position;
-    final atTop = pos.pixels <= 40; // list is newest-first, so top = newest
-    if (atTop != _autoScroll) {
-      setState(() => _autoScroll = atTop);
-    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    final isUtc = ref.watch(timeUtcProvider);
     final events = ref.watch(_liveEventsProvider);
     final typeFilter = ref.watch(_liveTypeFilterProvider);
 
     var filtered = typeFilter.isEmpty
         ? events
         : events.where((e) => typeFilter.contains(e.type)).toList();
-
     if (_deviceSearch.isNotEmpty) {
       final q = _deviceSearch.toLowerCase();
       filtered = filtered
@@ -131,131 +311,59 @@ class _LiveTabState extends ConsumerState<_LiveTab> {
 
     return Column(
       children: [
-        // Search + clear row
         Padding(
-          padding: const EdgeInsets.fromLTRB(8, 6, 8, 2),
+          padding: EdgeInsets.fromLTRB(
+              t.space.lg, t.space.sm, t.space.lg, t.space.sm),
           child: Row(
             children: [
               Expanded(
-                child: TextField(
-                  controller: _searchCtrl,
-                  decoration: InputDecoration(
-                    hintText: 'Filter by device ID…',
-                    prefixIcon: const Icon(Icons.search, size: 18),
-                    suffixIcon: _searchCtrl.text.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.clear, size: 16),
-                            onPressed: () => _searchCtrl.clear(),
-                          )
-                        : null,
-                    isDense: true,
-                    border: const OutlineInputBorder(),
-                    contentPadding:
-                        const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
-                  ),
-                ),
+                child: SectionSearchField(
+                    controller: _searchCtrl, hint: 'Filter by device ID…'),
               ),
-              const SizedBox(width: 8),
+              SizedBox(width: t.space.sm),
               IconButton(
-                icon: const Icon(Icons.delete_sweep_outlined),
+                icon: Icon(Icons.delete_sweep_outlined,
+                    color: t.surface.onBaseMuted),
                 tooltip: 'Clear buffer',
                 onPressed: () =>
                     ref.read(_liveEventsProvider.notifier).state = [],
               ),
-              IconButton(
-                icon: Icon(_autoScroll
-                    ? Icons.vertical_align_top
-                    : Icons.pause_outlined),
-                tooltip: _autoScroll ? 'Auto-scroll on' : 'Auto-scroll off',
-                onPressed: () => setState(() => _autoScroll = !_autoScroll),
-              ),
             ],
           ),
         ),
-        // Filter chips
-        SizedBox(
-          height: 44,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            children: _allEventTypes.map((t) {
-              final selected = typeFilter.contains(t);
-              return Padding(
-                padding: const EdgeInsets.only(right: 4),
-                child: FilterChip(
-                  label:
-                      Text(humanize(t), style: const TextStyle(fontSize: 11)),
-                  selected: selected,
-                  visualDensity: VisualDensity.compact,
-                  onSelected: (val) {
-                    final current = Set<String>.from(typeFilter);
-                    if (val) {
-                      current.add(t);
-                    } else {
-                      current.remove(t);
-                    }
-                    ref.read(_liveTypeFilterProvider.notifier).state = current;
-                  },
-                ),
-              );
-            }).toList(),
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: t.space.lg),
+          child: _TypeChips(
+            selected: typeFilter,
+            onToggle: (ty) {
+              final next = Set<String>.from(typeFilter);
+              next.contains(ty) ? next.remove(ty) : next.add(ty);
+              ref.read(_liveTypeFilterProvider.notifier).state = next;
+            },
           ),
         ),
-        const Divider(height: 1),
-        if (filtered.isEmpty)
-          const Expanded(
-              child: Center(
-                  child: Text('No events yet — waiting for activity...')))
-        else
-          Expanded(
-            child: ListView.builder(
-              controller: _scrollCtrl,
-              itemCount: filtered.length,
-              itemBuilder: (context, i) => _LiveEventTile(event: filtered[i]),
-            ),
-          ),
+        SizedBox(height: t.space.sm),
+        Expanded(
+          child: filtered.isEmpty
+              ? Center(
+                  child: Text('No events yet — waiting for activity…',
+                      style: TextStyle(color: t.surface.onBaseMuted)))
+              : ListView.builder(
+                  padding: EdgeInsets.fromLTRB(
+                      t.space.lg, 0, t.space.lg, t.space.lg),
+                  itemCount: filtered.length,
+                  itemBuilder: (context, i) {
+                    final e = filtered[i];
+                    return _EventRow(
+                      color: eventColor(t, e.type, available: e.available),
+                      type: e.type,
+                      deviceId: e.deviceId,
+                      time: fmtTime(e.timestamp, utc: isUtc),
+                    );
+                  },
+                ),
+        ),
       ],
-    );
-  }
-}
-
-class _LiveEventTile extends ConsumerWidget {
-  final HcEvent event;
-  const _LiveEventTile({required this.event});
-
-  Color _color(BuildContext context) {
-    switch (event.type) {
-      case 'device_state_changed':
-        return Theme.of(context).colorScheme.primary;
-      case 'rule_fired':
-        return Colors.green;
-      case 'device_availability_changed':
-        return event.available == true
-            ? Colors.green
-            : Theme.of(context).colorScheme.error;
-      case 'system_alert':
-        return Theme.of(context).colorScheme.error;
-      case 'scene_activated':
-        return Colors.purple;
-      default:
-        return Theme.of(context).colorScheme.outline;
-    }
-  }
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final isUtc = ref.watch(timeUtcProvider);
-    return ListTile(
-      dense: true,
-      leading: SizedBox(
-        width: 4,
-        child: ColoredBox(color: _color(context)),
-      ),
-      title: Text(humanize(event.type),
-          style: Theme.of(context).textTheme.bodyMedium),
-      subtitle: event.deviceId != null ? Text(event.deviceId!) : null,
-      trailing: Text(fmtTime(event.timestamp, utc: isUtc),
-          style: Theme.of(context).textTheme.bodySmall),
     );
   }
 }
@@ -288,6 +396,8 @@ class _HistoryTabState extends ConsumerState<_HistoryTab> {
 
   @override
   Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    final isUtc = ref.watch(timeUtcProvider);
     final limit = ref.watch(_historyLimitProvider);
     final historyAsync = ref.watch(_historyEventsProvider(limit));
     final typeFilter = ref.watch(_historyTypeFilterProvider);
@@ -295,85 +405,72 @@ class _HistoryTabState extends ConsumerState<_HistoryTab> {
 
     return Column(
       children: [
-        // Search + limit row
         Padding(
-          padding: const EdgeInsets.fromLTRB(8, 6, 8, 2),
+          padding: EdgeInsets.fromLTRB(
+              t.space.lg, t.space.sm, t.space.lg, t.space.sm),
           child: Row(
             children: [
               Expanded(
-                child: TextField(
-                  controller: _searchCtrl,
-                  decoration: InputDecoration(
-                    hintText: 'Filter by device ID…',
-                    prefixIcon: const Icon(Icons.search, size: 18),
-                    suffixIcon: _searchCtrl.text.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.clear, size: 16),
-                            onPressed: () => _searchCtrl.clear(),
-                          )
-                        : null,
-                    isDense: true,
-                    border: const OutlineInputBorder(),
-                    contentPadding:
-                        const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
-                  ),
-                ),
+                child: SectionSearchField(
+                    controller: _searchCtrl, hint: 'Filter by device ID…'),
               ),
-              const SizedBox(width: 8),
-              // Limit buttons
-              for (final l in [50, 100, 500])
+              SizedBox(width: t.space.sm),
+              for (final l in const [50, 100, 500])
                 Padding(
-                  padding: const EdgeInsets.only(left: 4),
-                  child: ChoiceChip(
-                    label: Text('$l', style: const TextStyle(fontSize: 11)),
-                    selected: limit == l,
-                    visualDensity: VisualDensity.compact,
-                    onSelected: (_) =>
+                  padding: const EdgeInsets.only(left: 6),
+                  child: GestureDetector(
+                    onTap: () =>
                         ref.read(_historyLimitProvider.notifier).state = l,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 11, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: limit == l
+                            ? t.accent.active.withValues(alpha: 0.14)
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(t.radius.pill),
+                        border: Border.all(
+                            color: limit == l
+                                ? Colors.transparent
+                                : t.stroke.hairline),
+                      ),
+                      child: Text('$l',
+                          style: TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w600,
+                              fontFeatures: t.numericFontFeatures,
+                              color: limit == l
+                                  ? t.accent.active
+                                  : t.surface.onBaseMuted)),
+                    ),
                   ),
                 ),
               IconButton(
-                icon: const Icon(Icons.refresh),
+                icon: Icon(Icons.refresh, color: t.surface.onBaseMuted),
+                tooltip: 'Refresh',
                 onPressed: () => ref.invalidate(_historyEventsProvider(limit)),
               ),
             ],
           ),
         ),
-        // Type chips
-        SizedBox(
-          height: 44,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            children: _allEventTypes.map((t) {
-              final selected = typeFilter.contains(t);
-              return Padding(
-                padding: const EdgeInsets.only(right: 4),
-                child: FilterChip(
-                  label:
-                      Text(humanize(t), style: const TextStyle(fontSize: 11)),
-                  selected: selected,
-                  visualDensity: VisualDensity.compact,
-                  onSelected: (val) {
-                    final current = Set<String>.from(typeFilter);
-                    if (val) {
-                      current.add(t);
-                    } else {
-                      current.remove(t);
-                    }
-                    ref.read(_historyTypeFilterProvider.notifier).state =
-                        current;
-                  },
-                ),
-              );
-            }).toList(),
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: t.space.lg),
+          child: _TypeChips(
+            selected: typeFilter,
+            onToggle: (ty) {
+              final next = Set<String>.from(typeFilter);
+              next.contains(ty) ? next.remove(ty) : next.add(ty);
+              ref.read(_historyTypeFilterProvider.notifier).state = next;
+            },
           ),
         ),
-        const Divider(height: 1),
+        SizedBox(height: t.space.sm),
         Expanded(
           child: historyAsync.when(
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Center(child: Text('Error: $e')),
+            error: (e, _) => Center(
+                child: Text('Error: $e',
+                    style: TextStyle(color: t.accent.danger))),
             data: (entries) {
               var filtered = entries;
               if (typeFilter.isNotEmpty) {
@@ -388,56 +485,32 @@ class _HistoryTabState extends ConsumerState<_HistoryTab> {
                     .toList();
               }
               if (filtered.isEmpty) {
-                return const Center(child: Text('No events match the filter.'));
+                return Center(
+                    child: Text('No events match the filter.',
+                        style: TextStyle(color: t.surface.onBaseMuted)));
               }
               return ListView.builder(
+                padding:
+                    EdgeInsets.fromLTRB(t.space.lg, 0, t.space.lg, t.space.lg),
                 itemCount: filtered.length,
-                itemBuilder: (context, i) =>
-                    _HistoryEventTile(entry: filtered[i]),
+                itemBuilder: (context, i) {
+                  final e = filtered[i];
+                  final ts = e.event['timestamp'] as String?;
+                  final dt = ts != null ? DateTime.tryParse(ts) : null;
+                  return _EventRow(
+                    color: eventColor(t, e.eventType),
+                    type: e.eventType,
+                    deviceId: e.deviceId,
+                    time: dt != null
+                        ? fmtTime(dt, utc: isUtc, showDate: true)
+                        : '',
+                  );
+                },
               );
             },
           ),
         ),
       ],
-    );
-  }
-}
-
-class _HistoryEventTile extends ConsumerWidget {
-  final EventEntry entry;
-  const _HistoryEventTile({required this.entry});
-
-  Color _color(BuildContext context) {
-    switch (entry.eventType) {
-      case 'device_state_changed':
-        return Theme.of(context).colorScheme.primary;
-      case 'rule_fired':
-        return Colors.green;
-      case 'system_alert':
-        return Theme.of(context).colorScheme.error;
-      case 'scene_activated':
-        return Colors.purple;
-      default:
-        return Theme.of(context).colorScheme.outline;
-    }
-  }
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final isUtc = ref.watch(timeUtcProvider);
-    final ts = entry.event['timestamp'] as String?;
-    final dt = ts != null ? DateTime.tryParse(ts) : null;
-    final timeStr = dt != null ? fmtTime(dt, utc: isUtc, showDate: true) : '';
-    return ListTile(
-      dense: true,
-      leading: SizedBox(
-        width: 4,
-        child: ColoredBox(color: _color(context)),
-      ),
-      title: Text(humanize(entry.eventType),
-          style: Theme.of(context).textTheme.bodyMedium),
-      subtitle: entry.deviceId != null ? Text(entry.deviceId!) : null,
-      trailing: Text(timeStr, style: Theme.of(context).textTheme.bodySmall),
     );
   }
 }

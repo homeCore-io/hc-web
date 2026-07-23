@@ -8,7 +8,7 @@ import '../../core/text/humanize.dart';
 import '../../design/components/hc_dialog.dart';
 import '../../design/components/hc_surface.dart';
 import '../../design/tokens.dart';
-import 'admin_scaffold.dart';
+import '../../shared/widgets/section_scaffold.dart';
 
 /// Areas, studio-style: a rail of rooms on the left navigates; the pane shows
 /// only the selected room — its devices, removable in place, with an
@@ -27,9 +27,20 @@ class _AreasPageState extends ConsumerState<AreasPage> {
   Widget build(BuildContext context) {
     final areasAsync = ref.watch(areasProvider);
 
-    return AdminScaffold(
+    final areas = areasAsync.valueOrNull ?? const [];
+    final assigned = areas.fold<int>(
+        0, (a, x) => a + ((x['device_ids'] as List?)?.length ?? 0));
+
+    return SectionScaffold(
       title: 'Areas',
-      subtitle: 'Rooms devices can belong to',
+      stats: areasAsync.hasValue
+          ? [
+              SectionStat(
+                  value: '${areas.length}',
+                  label: areas.length == 1 ? 'room' : 'rooms'),
+              SectionStat(value: '$assigned', label: 'devices'),
+            ]
+          : const [],
       actions: [
         Builder(builder: (context) {
           final t = HcTokens.of(context);
@@ -39,7 +50,7 @@ class _AreasPageState extends ConsumerState<AreasPage> {
             onPressed: () => ref.invalidate(areasProvider),
           );
         }),
-        AdminHeaderAction(
+        SectionHeaderAction(
           icon: Icons.add_rounded,
           label: 'Add area',
           onPressed: () => _createArea(context),

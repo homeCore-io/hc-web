@@ -5,11 +5,15 @@ import 'package:go_router/go_router.dart';
 import '../../core/text/humanize.dart';
 import '../../core/devices/presentation.dart';
 import '../../core/models/device_state.dart';
+import '../../core/providers/collapsed_groups_provider.dart';
 import '../../core/providers/devices_provider.dart';
 import '../../core/providers/plugins_provider.dart';
 import '../../design/components/hc_tile.dart';
 import '../../design/hc_icons.dart';
 import '../../design/tokens.dart';
+import '../../shared/widgets/area_power_toggle.dart';
+import '../../shared/widgets/section_group.dart';
+import '../../shared/widgets/section_scaffold.dart';
 import 'device_query.dart';
 import 'device_sheet.dart';
 
@@ -63,9 +67,29 @@ class _DeviceListPageState extends ConsumerState<DeviceListPage> {
     final t = HcTokens.of(context);
     final q = ref.watch(_queryProvider);
     final devicesAsync = ref.watch(devicesProvider);
+    final collapsed = ref.watch(collapsedGroupsProvider);
 
-    return Scaffold(
-      body: devicesAsync.when(
+    // Header stats mirror the scoped view (plugin scope included).
+    final allForStats = devicesAsync.valueOrNull ?? const <DeviceState>[];
+    final scopedForStats = q.pluginId == null
+        ? allForStats
+        : allForStats.where((d) => d.pluginId == q.pluginId).toList();
+    final onCount = scopedForStats.where((d) => d.available && isOn(d)).length;
+
+    return SectionScaffold(
+      title: 'Devices',
+      stats: devicesAsync.hasValue
+          ? [
+              SectionStat(value: '${scopedForStats.length}', label: 'devices'),
+              if (onCount > 0)
+                SectionStat(
+                    value: '$onCount',
+                    label: 'on',
+                    tone: SectionTone.active,
+                    glow: true),
+            ]
+          : const [],
+      child: devicesAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('$e')),
         data: (allDevices) {
@@ -90,15 +114,13 @@ class _DeviceListPageState extends ConsumerState<DeviceListPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _Header(total: devices.length, shown: shown),
                       if (q.pluginId != null) ...[
-                        SizedBox(height: t.space.sm),
                         _ScopePill(
                           pluginId: q.pluginId!,
                           onClear: () => context.go('/devices'),
                         ),
+                        SizedBox(height: t.space.md),
                       ],
-                      SizedBox(height: t.space.md),
                       _Controls(search: _search, query: q),
                       SizedBox(height: t.space.sm),
                       _Filters(devices: devices, query: q),
@@ -121,7 +143,8 @@ class _DeviceListPageState extends ConsumerState<DeviceListPage> {
                   ),
                 )
               else
-                for (final g in groups) ..._groupSlivers(context, t, g),
+                for (final g in groups)
+                  ..._groupSlivers(context, t, g, collapsed),
               SliverToBoxAdapter(child: SizedBox(height: t.space.xl)),
             ],
           );
@@ -134,11 +157,28 @@ class _DeviceListPageState extends ConsumerState<DeviceListPage> {
     BuildContext context,
     HcTokens t,
     DeviceGroupResult g,
-  ) =>
-      [
-        if (g.key.isNotEmpty) SliverToBoxAdapter(child: _GroupHeader(group: g)),
+    Set<String> collapsed,
+  ) {
+    final id = 'devices:${g.key}';
+    final isCollapsed = g.key.isNotEmpty && collapsed.contains(id);
+    return [
+      if (g.key.isNotEmpty)
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: t.space.md),
+            child: SectionGroupHeader(
+              id: id,
+              title: humanize(g.key),
+              count: '${g.onCount} of ${g.devices.length} on',
+              trailing:
+                  g.hasActuators ? AreaPowerToggle(devices: g.devices) : null,
+            ),
+          ),
+        ),
+      if (!isCollapsed)
         SliverPadding(
-          padding: EdgeInsets.fromLTRB(t.space.md, 0, t.space.md, t.space.lg),
+          padding: EdgeInsets.fromLTRB(
+              t.space.md, t.space.sm, t.space.md, t.space.lg),
           sliver: SliverGrid(
             // Wide enough for a real device name, tall enough for two lines of
             // it plus the dimmer bar.
@@ -154,7 +194,8 @@ class _DeviceListPageState extends ConsumerState<DeviceListPage> {
             ),
           ),
         ),
-      ];
+    ];
+  }
 }
 
 /// A tile wired to the real device: toggling and dimming go through the
@@ -190,42 +231,6 @@ class _Tile extends ConsumerWidget {
                 key: (v * max).round(),
               });
             },
-    );
-  }
-}
-
-class _Header extends StatelessWidget {
-  const _Header({required this.total, required this.shown});
-
-  final int total;
-  final int shown;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = HcTokens.of(context);
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.baseline,
-      textBaseline: TextBaseline.alphabetic,
-      children: [
-        Text(
-          'Devices',
-          style: TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.w700,
-            letterSpacing: -0.4,
-            color: t.surface.onBase,
-          ),
-        ),
-        SizedBox(width: t.space.sm),
-        Text(
-          shown == total ? '$total' : '$shown of $total',
-          style: TextStyle(
-            fontSize: 12,
-            color: t.surface.onBaseMuted,
-            fontFeatures: t.numericFontFeatures,
-          ),
-        ),
-      ],
     );
   }
 }
@@ -642,70 +647,6 @@ class _NeedsAttention extends ConsumerWidget {
                       ),
                     ),
                   ],
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _GroupHeader extends ConsumerWidget {
-  const _GroupHeader({required this.group});
-
-  final DeviceGroupResult group;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final t = HcTokens.of(context);
-    final lit = group.onCount > 0;
-
-    return Padding(
-      padding:
-          EdgeInsets.fromLTRB(t.space.md, t.space.sm, t.space.md, t.space.sm),
-      child: Row(
-        children: [
-          Text(
-            humanize(group.key),
-            style: TextStyle(
-              fontSize: 13.5,
-              fontWeight: FontWeight.w700,
-              letterSpacing: -0.1,
-              color: lit ? t.accent.active : t.surface.onBase,
-            ),
-          ),
-          SizedBox(width: t.space.sm),
-          Text(
-            '${group.onCount} of ${group.devices.length} on',
-            style: TextStyle(
-              fontSize: 11.5,
-              color: t.surface.onBaseMuted,
-              fontFeatures: t.numericFontFeatures,
-            ),
-          ),
-          const Spacer(),
-          // Only offered when the room has something to turn off — a header
-          // button that does nothing is worse than no button.
-          if (lit && group.hasActuators)
-            GestureDetector(
-              onTap: () {
-                final notifier = ref.read(devicesProvider.notifier);
-                for (final d in group.devices) {
-                  if (d.available &&
-                      isOn(d) &&
-                      facetOf(d, d.schema).isActuator) {
-                    notifier.command(d.id, {'on': false});
-                  }
-                }
-              },
-              child: Text(
-                'turn all off',
-                style: TextStyle(
-                  fontSize: 11.5,
-                  color: t.surface.onBaseMuted,
-                  decoration: TextDecoration.underline,
-                  decorationColor: t.stroke.hairline,
                 ),
               ),
             ),

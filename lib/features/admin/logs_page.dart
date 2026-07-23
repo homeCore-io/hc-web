@@ -8,7 +8,7 @@ import '../../core/models/log_entry.dart';
 import '../../core/providers/client_error_log_provider.dart';
 import '../../core/providers/time_display_provider.dart';
 import '../../design/tokens.dart';
-import 'admin_scaffold.dart';
+import '../../shared/widgets/section_scaffold.dart';
 
 final _logsApiProvider = Provider.autoDispose<LogsApi>((ref) {
   final api = LogsApi();
@@ -21,9 +21,16 @@ class LogsPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return AdminScaffold(
+    final errors = ref.watch(clientErrorLogProvider).length;
+    return SectionScaffold(
       title: 'Logs',
-      subtitle: 'Live server stream and this session\'s client errors',
+      stats: [
+        SectionStat(
+          value: '$errors',
+          label: 'client errors',
+          tone: errors > 0 ? SectionTone.danger : SectionTone.neutral,
+        ),
+      ],
       child: DefaultTabController(
         length: 2,
         child: Builder(builder: (context) {

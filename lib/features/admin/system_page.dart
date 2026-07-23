@@ -6,7 +6,7 @@ import '../../core/providers/auth_provider.dart';
 import '../../core/providers/time_display_provider.dart';
 import '../../design/components/hc_surface.dart';
 import '../../design/tokens.dart';
-import 'admin_scaffold.dart';
+import '../../shared/widgets/section_scaffold.dart';
 
 final _healthProvider = FutureProvider<Map<String, dynamic>>((ref) async {
   final client = ref.read(homecoreClientProvider);
@@ -52,9 +52,23 @@ class _SystemPageState extends ConsumerState<SystemPage> {
     final currentUser = ref.watch(currentUserProvider).valueOrNull;
     final isUtc = ref.watch(timeUtcProvider);
 
-    return AdminScaffold(
+    // Headline health, mirroring the Status stat tile in the body.
+    final healthStatus = healthAsync.valueOrNull?['status'] as String? ?? '';
+    final healthy = healthStatus == 'ok';
+    final SectionStat? statusStat = healthAsync.hasError
+        ? const SectionStat(
+            value: 'Unreachable', label: '', tone: SectionTone.danger)
+        : healthAsync.hasValue
+            ? SectionStat(
+                value: healthy ? 'Healthy' : healthStatus,
+                label: '',
+                tone: healthy ? SectionTone.active : SectionTone.warn,
+                glow: healthy)
+            : null;
+
+    return SectionScaffold(
       title: 'System',
-      subtitle: 'Health, status, and this session',
+      stats: [if (statusStat != null) statusStat],
       actions: [
         Builder(builder: (context) {
           final tk = HcTokens.of(context);
@@ -103,7 +117,7 @@ class _SystemPageState extends ConsumerState<SystemPage> {
           SizedBox(height: t.space.lg),
 
           // ── detailed status ──
-          const AdminSectionHeader('Runtime'),
+          const SectionLabel('Runtime'),
           statusAsync.when(
             loading: () => const _Loading(),
             error: (e, _) => _ErrorSurface('Status unavailable', '$e'),
@@ -144,7 +158,7 @@ class _SystemPageState extends ConsumerState<SystemPage> {
           SizedBox(height: t.space.lg),
 
           // ── this session ──
-          const AdminSectionHeader('Signed in as'),
+          const SectionLabel('Signed in as'),
           _RowsSurface([
             _KvRow(
               icon: Icons.account_circle_outlined,
@@ -155,7 +169,7 @@ class _SystemPageState extends ConsumerState<SystemPage> {
           SizedBox(height: t.space.lg),
 
           // ── display preference ──
-          const AdminSectionHeader('Display'),
+          const SectionLabel('Display'),
           HcSurface(
             padding: EdgeInsets.symmetric(
                 horizontal: t.space.md, vertical: t.space.xs),

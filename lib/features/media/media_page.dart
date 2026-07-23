@@ -3,9 +3,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/devices/presentation.dart';
 import '../../core/models/device_state.dart';
+import '../../core/models/plugin_entry.dart';
 import '../../core/providers/devices_provider.dart';
+import '../../core/providers/plugins_provider.dart';
+import '../../core/text/humanize.dart';
 import '../../design/components/hc_now_playing.dart';
 import '../../design/tokens.dart';
+import '../../shared/widgets/section_group.dart';
+import '../../shared/widgets/section_scaffold.dart';
 
 /// Media, as now-playing cards.
 ///
@@ -17,52 +22,130 @@ class MediaPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final t = HcTokens.of(context);
     final devicesAsync = ref.watch(devicesProvider);
+    final plugins = ref.watch(pluginsProvider).valueOrNull;
 
-    return Scaffold(
-      body: devicesAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('$e')),
-        data: (devices) {
-          final players = devices
-              .where((d) => facetOf(d, d.schema) == DeviceFacet.mediaPlayer)
-              .toList();
+    // Header stats are per *group* — the same unit the cards render — so "2
+    // playing" matches two cards, not four speakers.
+    final players = (devicesAsync.valueOrNull ?? const <DeviceState>[])
+        .where((d) => facetOf(d, d.schema) == DeviceFacet.mediaPlayer)
+        .toList();
+    final groups = _groups(players);
+    final playing =
+        groups.where((g) => g.first.playbackState == 'playing').length;
+    final idle = groups.length - playing;
 
-          if (players.isEmpty) {
-            return Center(
-              child: Text(
-                'No media players.',
-                style: TextStyle(color: t.surface.onBaseMuted),
-              ),
+    return SectionScaffold(
+      title: 'Media',
+      stats: devicesAsync.hasValue && groups.isNotEmpty
+          ? [
+              if (playing > 0)
+                SectionStat(
+                    value: '$playing',
+                    label: 'playing',
+                    tone: SectionTone.active,
+                    glow: true),
+              SectionStat(value: '$idle', label: 'idle'),
+            ]
+          : const [],
+      // Built under a Builder so tokens resolve in the Midnight theme the
+      // scaffold applies, not the shell's own skin.
+      child: Builder(builder: (context) {
+        final t = HcTokens.of(context);
+        return devicesAsync.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (e, _) => Center(child: Text('$e')),
+          data: (devices) {
+            final players = devices
+                .where((d) => facetOf(d, d.schema) == DeviceFacet.mediaPlayer)
+                .toList();
+
+            if (players.isEmpty) {
+              return Center(
+                child: Text(
+                  'No media players.',
+                  style: TextStyle(color: t.surface.onBaseMuted),
+                ),
+              );
+            }
+
+            // Same room-then-source grouping as Scenes: a player's room is its
+            // area; players with no room fall into a group named for their
+            // source (Sonos, etc.).
+            final sections = _sections(_groups(players), plugins);
+
+            return ListView(
+              padding: EdgeInsets.fromLTRB(
+                  t.space.md, t.space.sm, t.space.md, t.space.xl),
+              children: [
+                for (final s in sections)
+                  SectionGroup(
+                    id: 'media:${s.key}',
+                    title: s.title,
+                    tag: s.isRoom ? null : 'Source',
+                    tagAccent: true,
+                    count: s.count,
+                    child: Column(
+                      children: [
+                        for (final g in s.groups)
+                          Padding(
+                            padding: EdgeInsets.only(bottom: t.space.sm),
+                            child: _Card(lead: g.first, group: g),
+                          ),
+                      ],
+                    ),
+                  ),
+              ],
             );
-          }
-
-          final groups = _groups(players);
-
-          return ListView(
-            padding: EdgeInsets.all(t.space.md),
-            children: [
-              Text(
-                'Media',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: -0.4,
-                  color: t.surface.onBase,
-                ),
-              ),
-              SizedBox(height: t.space.md),
-              for (final g in groups)
-                Padding(
-                  padding: EdgeInsets.only(bottom: t.space.md),
-                  child: _Card(lead: g.first, group: g),
-                ),
-            ],
-          );
-        },
-      ),
+          },
+        );
+      }),
     );
+  }
+
+  /// Buckets coordinator-groups by room, then by source for the room-less.
+  /// Rooms A→Z first, then source groups A→Z.
+  static List<_MediaSection> _sections(
+      List<List<DeviceState>> groups, List<PluginEntry>? plugins) {
+    final rooms = <String, List<List<DeviceState>>>{};
+    final sources = <String, List<List<DeviceState>>>{};
+    for (final g in groups) {
+      final area = (g.first.effectiveArea?.isNotEmpty ?? false)
+          ? g.first.effectiveArea!
+          : null;
+      if (area != null) {
+        rooms.putIfAbsent(area, () => []).add(g);
+      } else {
+        sources.putIfAbsent(g.first.pluginId, () => []).add(g);
+      }
+    }
+
+    String sourceName(String id) {
+      final match = plugins?.where((p) => p.pluginId == id);
+      return (match != null && match.isNotEmpty)
+          ? match.first.displayName
+          : humanize(id.replaceFirst('plugin.', ''));
+    }
+
+    final out = <_MediaSection>[];
+    final roomKeys = rooms.keys.toList()
+      ..sort((a, b) =>
+          humanize(a).toLowerCase().compareTo(humanize(b).toLowerCase()));
+    for (final k in roomKeys) {
+      out.add(_MediaSection(
+          key: k, title: humanize(k), isRoom: true, groups: rooms[k]!));
+    }
+    final srcKeys = sources.keys.toList()
+      ..sort((a, b) =>
+          sourceName(a).toLowerCase().compareTo(sourceName(b).toLowerCase()));
+    for (final k in srcKeys) {
+      out.add(_MediaSection(
+          key: 'src_$k',
+          title: sourceName(k),
+          isRoom: false,
+          groups: sources[k]!));
+    }
+    return out;
   }
 
   /// Buckets speakers by their group coordinator, leader first.
@@ -96,6 +179,26 @@ class MediaPage extends ConsumerWidget {
     });
     return out;
   }
+}
+
+/// A room (or source) worth of media groups, for one [SectionGroup].
+class _MediaSection {
+  _MediaSection({
+    required this.key,
+    required this.title,
+    required this.isRoom,
+    required this.groups,
+  });
+
+  final String key;
+  final String title;
+  final bool isRoom;
+  final List<List<DeviceState>> groups;
+
+  int get _playing =>
+      groups.where((g) => g.first.playbackState == 'playing').length;
+
+  String get count => '$_playing of ${groups.length} playing';
 }
 
 class _Card extends ConsumerWidget {
