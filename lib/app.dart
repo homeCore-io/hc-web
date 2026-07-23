@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'core/providers/auth_provider.dart';
 import 'design/skins.dart';
-import 'features/admin/admin_shell.dart';
 import 'features/admin/areas_page.dart';
 import 'features/admin/logs_page.dart';
 import 'features/plugins/config_descriptor/config_preview_page.dart';
@@ -176,21 +175,14 @@ GoRouter _buildRouter(Ref ref) {
               path: '/devices/:id/history',
               builder: (_, state) =>
                   DeviceHistoryPage(deviceId: state.pathParameters['id']!)),
-          // Admin sub-section — inner shell provides the tab bar.
-          ShellRoute(
-            builder: (context, state, child) => AdminShell(child: child),
-            routes: [
-              GoRoute(
-                  path: '/admin/users', builder: (_, __) => const UsersPage()),
-              GoRoute(
-                  path: '/admin/areas', builder: (_, __) => const AreasPage()),
-              GoRoute(
-                  path: '/admin/system',
-                  builder: (_, __) => const SystemPage()),
-              GoRoute(
-                  path: '/admin/logs', builder: (_, __) => const LogsPage()),
-            ],
-          ),
+          // Administration destinations — peers of the other Manage entries,
+          // each a standalone full page (the Admin tab shell is gone). Paths
+          // stay under /admin for stable deep links.
+          GoRoute(path: '/admin/users', builder: (_, __) => const UsersPage()),
+          GoRoute(path: '/admin/areas', builder: (_, __) => const AreasPage()),
+          GoRoute(
+              path: '/admin/system', builder: (_, __) => const SystemPage()),
+          GoRoute(path: '/admin/logs', builder: (_, __) => const LogsPage()),
         ],
       ),
     ],

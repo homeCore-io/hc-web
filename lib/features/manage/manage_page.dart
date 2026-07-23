@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/providers/automations_provider.dart';
 import '../../core/providers/devices_provider.dart';
 import '../../core/providers/plugins_provider.dart';
+import '../../core/providers/users_provider.dart';
 import '../../design/hc_icons.dart';
 import '../../design/tokens.dart';
 
@@ -33,7 +34,13 @@ class ManagePage extends ConsumerWidget {
     final pluginsRunning = plugins?.where((p) => p.isActive).length ?? 0;
     final pluginsOffline = plugins?.where((p) => p.isOffline).length ?? 0;
 
-    final entries = <_Entry>[
+    final users = ref.watch(usersProvider).valueOrNull;
+
+    // Two groups, not two nav levels: the things that run the house, and the
+    // things that administer it. Administration used to live behind an extra
+    // "Admin" hop with its own tab bar — these are its former tabs, promoted to
+    // peers here.
+    final houseEntries = <_Entry>[
       _Entry(
         route: '/automations',
         icon: HcIcons.automations,
@@ -72,7 +79,28 @@ class ManagePage extends ConsumerWidget {
               ].join(' · '),
         alert: pluginsOffline > 0,
       ),
-      const _Entry(route: '/admin/users', icon: HcIcons.admin, title: 'Admin'),
+    ];
+
+    // Material icons here (not Phosphor HcIcons): these four are a visually
+    // distinct group under their own subheader, and carried Material glyphs as
+    // the old Admin tabs.
+    final adminEntries = <_Entry>[
+      _Entry(
+        route: '/admin/users',
+        icon: Icons.people_outline,
+        title: 'Users',
+        detail: users == null ? null : '${users.length} users',
+      ),
+      const _Entry(
+          route: '/admin/areas',
+          icon: Icons.meeting_room_outlined,
+          title: 'Areas'),
+      const _Entry(
+          route: '/admin/system',
+          icon: Icons.monitor_heart_outlined,
+          title: 'System'),
+      const _Entry(
+          route: '/admin/logs', icon: Icons.terminal_outlined, title: 'Logs'),
     ];
 
     return Scaffold(
@@ -89,9 +117,36 @@ class ManagePage extends ConsumerWidget {
             ),
           ),
           SizedBox(height: t.space.lg),
-          for (final e in entries)
+          for (final e in houseEntries)
+            _EntryRow(entry: e, onTap: () => context.push(e.route)),
+          const _GroupHeader(label: 'Administration'),
+          for (final e in adminEntries)
             _EntryRow(entry: e, onTap: () => context.push(e.route)),
         ],
+      ),
+    );
+  }
+}
+
+/// A quiet divider between the two groups — a labelled rule, not a second nav
+/// level.
+class _GroupHeader extends StatelessWidget {
+  const _GroupHeader({required this.label});
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Padding(
+      padding: EdgeInsets.only(top: t.space.xl, bottom: t.space.sm),
+      child: Text(
+        label.toUpperCase(),
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 1.0,
+          color: t.surface.onBaseMuted,
+        ),
       ),
     );
   }

@@ -2,10 +2,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../core/api/logs_api.dart';
 import '../../core/models/log_entry.dart';
 import '../../core/providers/client_error_log_provider.dart';
 import '../../core/providers/time_display_provider.dart';
+import '../../design/tokens.dart';
+import 'admin_scaffold.dart';
 
 final _logsApiProvider = Provider.autoDispose<LogsApi>((ref) {
   final api = LogsApi();
@@ -18,24 +21,36 @@ class LogsPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return DefaultTabController(
-      length: 2,
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Logs'),
-          bottom: const TabBar(
-            tabs: [
-              Tab(text: 'Server'),
-              Tab(text: 'Client Errors'),
+    return AdminScaffold(
+      title: 'Logs',
+      subtitle: 'Live server stream and this session\'s client errors',
+      child: DefaultTabController(
+        length: 2,
+        child: Builder(builder: (context) {
+          final t = HcTokens.of(context);
+          return Column(
+            children: [
+              TabBar(
+                labelColor: t.accent.active,
+                unselectedLabelColor: t.surface.onBaseMuted,
+                indicatorColor: t.accent.active,
+                dividerColor: t.stroke.hairline,
+                tabs: const [
+                  Tab(text: 'Server'),
+                  Tab(text: 'Client Errors'),
+                ],
+              ),
+              const Expanded(
+                child: TabBarView(
+                  children: [
+                    _ServerLogsPage(),
+                    _ClientErrorsTab(),
+                  ],
+                ),
+              ),
             ],
-          ),
-        ),
-        body: const TabBarView(
-          children: [
-            _ServerLogsTab(),
-            _ClientErrorsTab(),
-          ],
-        ),
+          );
+        }),
       ),
     );
   }
@@ -122,6 +137,7 @@ class _ServerLogsPageState extends ConsumerState<_ServerLogsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
     var filtered =
         _entries.where((e) => e.severity >= _levelSeverity(_minLevel)).toList();
     if (_moduleFilter.isNotEmpty) {
@@ -132,95 +148,97 @@ class _ServerLogsPageState extends ConsumerState<_ServerLogsPage> {
 
     return Column(
       children: [
-        // Toolbar row
-        Material(
-          elevation: 0,
-          color: Theme.of(context).colorScheme.surface,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            child: Row(
-              children: [
-                Icon(
-                  _connected ? Icons.circle : Icons.circle_outlined,
-                  size: 10,
-                  color: _connected
-                      ? Colors.green
-                      : Theme.of(context).colorScheme.error,
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  _connected ? 'Live' : 'Reconnecting…',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                const SizedBox(width: 12),
-                SizedBox(
-                  width: 160,
-                  child: TextField(
-                    controller: _moduleFilterCtrl,
-                    decoration: InputDecoration(
-                      hintText: 'Filter module…',
-                      isDense: true,
-                      border: const OutlineInputBorder(),
-                      contentPadding: const EdgeInsets.symmetric(
-                          vertical: 4, horizontal: 8),
-                      suffixIcon: _moduleFilterCtrl.text.isNotEmpty
-                          ? IconButton(
-                              icon: const Icon(Icons.clear, size: 14),
-                              onPressed: () => _moduleFilterCtrl.clear(),
-                            )
-                          : null,
-                    ),
-                    style: const TextStyle(fontSize: 12),
+        // Toolbar
+        Container(
+          color: t.surface.raised,
+          padding: EdgeInsets.symmetric(
+              horizontal: t.space.sm, vertical: t.space.xs),
+          child: Row(
+            children: [
+              Icon(Icons.circle,
+                  size: 9,
+                  color: _connected ? t.accent.active : t.accent.danger),
+              const SizedBox(width: 6),
+              Text(_connected ? 'Live' : 'Reconnecting…',
+                  style: TextStyle(color: t.surface.onBaseMuted, fontSize: 12)),
+              SizedBox(width: t.space.md),
+              SizedBox(
+                width: 160,
+                height: 30,
+                child: TextField(
+                  controller: _moduleFilterCtrl,
+                  style: TextStyle(color: t.surface.onBase, fontSize: 12),
+                  decoration: InputDecoration(
+                    hintText: 'Filter module…',
+                    hintStyle:
+                        TextStyle(color: t.surface.onBaseMuted, fontSize: 12),
+                    isDense: true,
+                    contentPadding:
+                        const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                    enabledBorder: OutlineInputBorder(
+                        borderSide: BorderSide(color: t.stroke.hairline)),
+                    focusedBorder: OutlineInputBorder(
+                        borderSide: BorderSide(color: t.accent.active)),
+                    suffixIcon: _moduleFilterCtrl.text.isNotEmpty
+                        ? IconButton(
+                            icon: Icon(Icons.clear,
+                                size: 14, color: t.surface.onBaseMuted),
+                            onPressed: () => _moduleFilterCtrl.clear(),
+                          )
+                        : null,
                   ),
                 ),
-                const Spacer(),
-                for (final level in _levels)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 2),
-                    child: FilterChip(
-                      label: Text(level, style: const TextStyle(fontSize: 11)),
-                      selected: _minLevel == level,
-                      visualDensity: VisualDensity.compact,
-                      onSelected: (_) => setState(() => _minLevel = level),
-                    ),
+              ),
+              const Spacer(),
+              for (final level in _levels)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 2),
+                  child: _LevelChip(
+                    label: level,
+                    selected: _minLevel == level,
+                    onTap: () => setState(() => _minLevel = level),
                   ),
-                const SizedBox(width: 4),
-                IconButton(
-                  icon: const Icon(Icons.delete_sweep_outlined),
-                  tooltip: 'Clear',
-                  onPressed: () => setState(() => _entries.clear()),
                 ),
-                IconButton(
-                  icon: Icon(_autoScroll
-                      ? Icons.vertical_align_bottom
-                      : Icons.pause_outlined),
-                  tooltip: _autoScroll ? 'Auto-scroll on' : 'Auto-scroll off',
-                  onPressed: () => setState(() {
-                    _autoScroll = !_autoScroll;
-                    if (_autoScroll && _scrollController.hasClients) {
-                      _scrollController
-                          .jumpTo(_scrollController.position.maxScrollExtent);
-                    }
-                  }),
-                ),
-              ],
-            ),
+              const SizedBox(width: 4),
+              IconButton(
+                icon: Icon(Icons.delete_sweep_outlined,
+                    color: t.surface.onBaseMuted),
+                tooltip: 'Clear',
+                onPressed: () => setState(() => _entries.clear()),
+              ),
+              IconButton(
+                icon: Icon(
+                    _autoScroll
+                        ? Icons.vertical_align_bottom
+                        : Icons.pause_outlined,
+                    color:
+                        _autoScroll ? t.accent.active : t.surface.onBaseMuted),
+                tooltip: _autoScroll ? 'Auto-scroll on' : 'Auto-scroll off',
+                onPressed: () => setState(() {
+                  _autoScroll = !_autoScroll;
+                  if (_autoScroll && _scrollController.hasClients) {
+                    _scrollController
+                        .jumpTo(_scrollController.position.maxScrollExtent);
+                  }
+                }),
+              ),
+            ],
           ),
         ),
-        const Divider(height: 1),
+        Divider(height: 1, color: t.stroke.hairline),
         Expanded(
           child: filtered.isEmpty
               ? Center(
                   child: Text(
                     _connected ? 'Waiting for log lines…' : 'Connecting…',
-                    style: Theme.of(context).textTheme.bodyMedium,
+                    style: TextStyle(color: t.surface.onBaseMuted),
                   ),
                 )
               : SelectionArea(
                   child: ListView.builder(
                     controller: _scrollController,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: EdgeInsets.symmetric(
+                        horizontal: t.space.sm, vertical: t.space.xs),
                     itemCount: filtered.length,
                     itemBuilder: (context, i) => _LogRow(entry: filtered[i]),
                   ),
@@ -231,12 +249,37 @@ class _ServerLogsPageState extends ConsumerState<_ServerLogsPage> {
   }
 }
 
-// ── Tab wrappers ─────────────────────────────────────────────────────────────
+class _LevelChip extends StatelessWidget {
+  const _LevelChip(
+      {required this.label, required this.selected, required this.onTap});
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
 
-class _ServerLogsTab extends StatelessWidget {
-  const _ServerLogsTab();
   @override
-  Widget build(BuildContext context) => const _ServerLogsPage();
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(t.radius.pill),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: selected
+              ? t.accent.active.withValues(alpha: 0.16)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(t.radius.pill),
+          border:
+              Border.all(color: selected ? t.accent.active : t.stroke.hairline),
+        ),
+        child: Text(label,
+            style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: selected ? t.accent.active : t.surface.onBaseMuted)),
+      ),
+    );
+  }
 }
 
 class _ClientErrorsTab extends ConsumerWidget {
@@ -244,24 +287,31 @@ class _ClientErrorsTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final t = HcTokens.of(context);
     final errors = ref.watch(clientErrorLogProvider);
+    final isUtc = ref.watch(timeUtcProvider);
 
     if (errors.isEmpty) {
-      return const Center(
-          child: Text('No client errors recorded this session.'));
+      return Center(
+        child: Text('No client errors recorded this session.',
+            style: TextStyle(color: t.surface.onBaseMuted)),
+      );
     }
 
     return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        Container(
+          color: t.surface.raised,
+          padding: EdgeInsets.symmetric(
+              horizontal: t.space.md, vertical: t.space.xs),
           child: Row(
             children: [
               Text('${errors.length} error(s)',
-                  style: Theme.of(context).textTheme.bodySmall),
+                  style: TextStyle(color: t.surface.onBaseMuted, fontSize: 12)),
               const Spacer(),
               IconButton(
-                icon: const Icon(Icons.delete_sweep_outlined),
+                icon: Icon(Icons.delete_sweep_outlined,
+                    color: t.surface.onBaseMuted),
                 tooltip: 'Clear',
                 onPressed: () =>
                     ref.read(clientErrorLogProvider.notifier).clear(),
@@ -269,43 +319,39 @@ class _ClientErrorsTab extends ConsumerWidget {
             ],
           ),
         ),
-        const Divider(height: 1),
+        Divider(height: 1, color: t.stroke.hairline),
         Expanded(
           child: SelectionArea(
             child: ListView.separated(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              padding: EdgeInsets.symmetric(
+                  horizontal: t.space.sm, vertical: t.space.xs),
               itemCount: errors.length,
-              separatorBuilder: (_, __) => const Divider(height: 1),
+              separatorBuilder: (_, __) =>
+                  Divider(height: 1, color: t.stroke.hairline),
               itemBuilder: (context, i) {
                 final e = errors[errors.length - 1 - i]; // newest first
-                final isUtc = ref.watch(timeUtcProvider);
                 final timeStr = fmtTime(e.timestamp, utc: isUtc);
                 return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  padding: EdgeInsets.symmetric(vertical: t.space.sm),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
                         children: [
-                          Text(
-                            timeStr,
-                            style: TextStyle(
-                              fontFamily: 'monospace',
-                              fontSize: 11,
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSurface
-                                  .withValues(alpha: 0.5),
-                            ),
-                          ),
+                          Text(timeStr,
+                              style: TextStyle(
+                                  fontFamily: 'monospace',
+                                  fontSize: 11,
+                                  color: t.surface.onBaseMuted)),
                           const SizedBox(width: 8),
-                          Text(
-                            '${e.statusCode ?? '?'} ${e.method} ${e.url}',
-                            style: TextStyle(
-                              fontFamily: 'monospace',
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: Theme.of(context).colorScheme.error,
+                          Flexible(
+                            child: Text(
+                              '${e.statusCode ?? '?'} ${e.method} ${e.url}',
+                              style: TextStyle(
+                                  fontFamily: 'monospace',
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: t.accent.danger),
                             ),
                           ),
                         ],
@@ -313,11 +359,11 @@ class _ClientErrorsTab extends ConsumerWidget {
                       if (e.body.isNotEmpty)
                         Padding(
                           padding: const EdgeInsets.only(top: 2, left: 4),
-                          child: Text(
-                            e.body,
-                            style: const TextStyle(
-                                fontFamily: 'monospace', fontSize: 11),
-                          ),
+                          child: Text(e.body,
+                              style: TextStyle(
+                                  fontFamily: 'monospace',
+                                  fontSize: 11,
+                                  color: t.surface.onBaseMuted)),
                         ),
                     ],
                   ),
@@ -331,25 +377,21 @@ class _ClientErrorsTab extends ConsumerWidget {
   }
 }
 
-// ── Log row ───────────────────────────────────────────────────────────────────
-
 class _LogRow extends ConsumerWidget {
   final LogEntry entry;
   const _LogRow({required this.entry});
 
-  Color _levelColor(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return switch (entry.level) {
-      'ERROR' => cs.error,
-      'WARN' => Colors.orange,
-      'DEBUG' => cs.onSurface.withValues(alpha: 0.4),
-      _ => cs.onSurface,
-    };
-  }
+  Color _levelColor(HcTokens t) => switch (entry.level) {
+        'ERROR' => t.accent.danger,
+        'WARN' => t.accent.warn,
+        'DEBUG' => t.surface.onBaseMuted,
+        _ => t.surface.onBase,
+      };
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final color = _levelColor(context);
+    final t = HcTokens.of(context);
+    final color = _levelColor(t);
     final isUtc = ref.watch(timeUtcProvider);
     final timeStr = fmtTime(entry.timestamp, utc: isUtc);
 
@@ -371,10 +413,7 @@ class _LogRow extends ConsumerWidget {
                   style: TextStyle(
                       fontFamily: 'monospace',
                       fontSize: 11,
-                      color: Theme.of(context)
-                          .colorScheme
-                          .onSurface
-                          .withValues(alpha: 0.5))),
+                      color: t.surface.onBaseMuted)),
             ),
             SizedBox(
               width: 44,
@@ -395,26 +434,18 @@ class _LogRow extends ConsumerWidget {
                   style: TextStyle(
                       fontFamily: 'monospace',
                       fontSize: 11,
-                      color: Theme.of(context).colorScheme.onSurface),
+                      color: t.surface.onBase),
                   children: [
                     TextSpan(
                       text: '${entry.target}  ',
-                      style: TextStyle(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .onSurface
-                              .withValues(alpha: 0.5)),
+                      style: TextStyle(color: t.surface.onBaseMuted),
                     ),
                     TextSpan(text: entry.message),
                     if (entry.fields.isNotEmpty)
                       TextSpan(
                         text:
                             '  ${entry.fields.entries.map((e) => '${e.key}=${e.value}').join(' ')}',
-                        style: TextStyle(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onSurface
-                                .withValues(alpha: 0.5)),
+                        style: TextStyle(color: t.surface.onBaseMuted),
                       ),
                   ],
                 ),
