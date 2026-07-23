@@ -294,3 +294,10 @@ final dashboardTemplatesProvider =
     rethrow;
   }
 });
+
+/// Every dashboard as an access view (owner + grants), for the per-user ACL
+/// admin. autoDispose so it reflects edits on reopen.
+final dashboardAccessProvider =
+    FutureProvider.autoDispose<List<DashboardAccessInfo>>((ref) {
+  return ref.watch(dashboardsApiProvider).listAccess();
+});

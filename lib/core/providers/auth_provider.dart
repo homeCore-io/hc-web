@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../api/homecore_client.dart';
+import '../api/api_keys_api.dart';
 import '../api/auth_api.dart';
 import '../api/users_api.dart';
 import 'client_error_log_provider.dart';
@@ -82,4 +83,21 @@ final currentUserProvider = FutureProvider<Map<String, dynamic>?>((ref) async {
   } catch (_) {
     return null;
   }
+});
+
+/// Access-key API and the roles catalog. Both hang off the same client the
+/// other auth providers use.
+final apiKeysApiProvider = Provider<ApiKeysApi>((ref) {
+  return ApiKeysApi(ref.watch(homecoreClientProvider));
+});
+
+/// The role → scopes catalog from the server, cached for the session.
+final rolesProvider = FutureProvider<List<RoleInfo>>((ref) async {
+  return ref.watch(authApiProvider).roles();
+});
+
+/// All access keys visible to the caller (an admin sees every user's).
+/// autoDispose so it refetches each time the users admin opens.
+final apiKeysProvider = FutureProvider.autoDispose<List<ApiKeySummary>>((ref) {
+  return ref.watch(apiKeysApiProvider).list();
 });

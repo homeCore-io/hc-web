@@ -22,6 +22,33 @@ class UserEntry {
         'admin' => 'Admin',
         'user' => 'User',
         'read_only' => 'Read Only',
+        'observer' => 'Observer',
+        'device_operator' => 'Device Operator',
+        'rule_editor' => 'Rule Editor',
+        'service_operator' => 'Service Operator',
+        _ => role,
+      };
+
+  /// The 7 roles the backend defines, in decreasing privilege — the full ladder
+  /// the picker offers, not the 3 the UI once hardcoded.
+  static const roles = <String>[
+    'admin',
+    'user',
+    'read_only',
+    'observer',
+    'device_operator',
+    'rule_editor',
+    'service_operator',
+  ];
+
+  static String displayRoleOf(String role) => switch (role) {
+        'admin' => 'Admin',
+        'user' => 'User',
+        'read_only' => 'Read Only',
+        'observer' => 'Observer',
+        'device_operator' => 'Device Operator',
+        'rule_editor' => 'Rule Editor',
+        'service_operator' => 'Service Operator',
         _ => role,
       };
 }
