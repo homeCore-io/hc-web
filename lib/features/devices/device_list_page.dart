@@ -71,9 +71,13 @@ class _DeviceListPageState extends ConsumerState<DeviceListPage> {
 
     // Header stats mirror the scoped view (plugin scope included).
     final allForStats = devicesAsync.valueOrNull ?? const <DeviceState>[];
-    final scopedForStats = q.pluginId == null
-        ? allForStats
-        : allForStats.where((d) => d.pluginId == q.pluginId).toList();
+    // Scenes live in their own section and are excluded from the grid, so keep
+    // them out of the header count too — otherwise "N devices" overcounts the
+    // grid by every scene.
+    final scopedForStats = allForStats
+        .where((d) => q.pluginId == null || d.pluginId == q.pluginId)
+        .where((d) => facetOf(d, d.schema) != DeviceFacet.scene)
+        .toList();
     final onCount = scopedForStats.where((d) => d.available && isOn(d)).length;
 
     return SectionScaffold(

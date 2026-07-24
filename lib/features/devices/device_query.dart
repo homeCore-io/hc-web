@@ -205,6 +205,11 @@ class DeviceGroupResult {
 List<DeviceGroupResult> runQuery(List<DeviceState> devices, DeviceQuery q) {
   final matched = devices
       .where((d) => q.pluginId == null || d.pluginId == q.pluginId)
+      // A scene has its own section and is press-to-run, not a device you
+      // toggle. Left in the grid it rendered as a switch whose toggle sent
+      // `{on: …}` — a command a scene cannot honour. Leptos excludes scenes
+      // from every device grid (`!is_scene_like`); mirror that here.
+      .where((d) => facetOf(d, d.schema) != DeviceFacet.scene)
       .where((d) => _passesFilter(d, q.filter))
       .where((d) => deviceMatches(d, q.search))
       .toList();
