@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/rules/node.dart';
 import '../../../core/rules/rule.dart';
 import '../../../core/rules/schema.dart';
+import '../../../design/components/hc_dialog.dart';
 import '../../../design/components/hc_sentence.dart';
 import '../../../design/hc_icons.dart';
 import '../../../design/tokens.dart';
@@ -1000,35 +1001,30 @@ class _PaletteState extends State<_Palette> {
                 v.tag.toLowerCase().contains(_query.toLowerCase()))
             .toList();
 
-    // A Material dialog with its own bounded, scrolling list. HcDialog wraps its
-    // child in a SingleChildScrollView, and tappable list rows inside that did
-    // not reliably receive taps in a release build — a form dialog is fine there
-    // (see _editTest) but a long picker list is not, so this keeps a plain
-    // Dialog while adopting the token palette (search + rows + surface colour).
-    return Dialog(
-      backgroundColor: t.surface.overlay,
+    // The child is a fixed-height Column so the search field stays pinned while
+    // only the list scrolls — HcDialog would otherwise scroll the whole child,
+    // carrying the search box off the top of a long palette.
+    return HcDialog(
+      title: 'Add',
+      width: 520,
       child: SizedBox(
-        width: 520,
-        height: 560,
+        height: 460,
         child: Column(
           children: [
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: TextField(
-                autofocus: true,
-                decoration: fieldDecoration(t, hint: 'Search'),
-                onChanged: (v) => setState(() => _query = v),
-              ),
+            TextField(
+              autofocus: true,
+              decoration: fieldDecoration(t, hint: 'Search'),
+              onChanged: (v) => setState(() => _query = v),
             ),
+            const SizedBox(height: 8),
             Expanded(
               child: ListView(
                 children: [
                   for (final category in widget.categories)
-                    ..._section(t, category, matching),
+                    ..._section(category, matching),
                   // Anything whose category isn't in the list still has to be
                   // reachable, or a new variant could become invisible.
                   ..._section(
-                    t,
                     'Other',
                     matching
                         .where((v) => !widget.categories.contains(v.category))
@@ -1045,7 +1041,6 @@ class _PaletteState extends State<_Palette> {
   }
 
   List<Widget> _section(
-    HcTokens t,
     String category,
     List<HcVariant> pool, {
     bool matchCategory = true,
@@ -1057,18 +1052,13 @@ class _PaletteState extends State<_Palette> {
 
     return [
       Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+        padding: const EdgeInsets.fromLTRB(4, 12, 4, 4),
         child: RailLabel(category),
       ),
       for (final v in items)
-        ListTile(
-          dense: true,
-          title: Text(v.label,
-              style: TextStyle(color: t.surface.onBase, fontSize: 14)),
-          subtitle: v.help == null
-              ? null
-              : Text(v.help!,
-                  style: TextStyle(color: t.surface.onBaseMuted, fontSize: 12)),
+        PickerRow(
+          title: v.label,
+          subtitle: v.help,
           onTap: () => Navigator.pop(context, v),
         ),
     ];

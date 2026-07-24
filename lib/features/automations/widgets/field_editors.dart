@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/models/device_state.dart';
 import '../../../core/rules/schema.dart';
+import '../../../design/components/hc_dialog.dart';
 import '../../../design/tokens.dart';
 import 'editor_style.dart';
 import 'rule_refs.dart';
@@ -279,45 +280,21 @@ class FieldEditor extends StatelessWidget {
   }
 
   Future<String?> _pickDevice(BuildContext context) {
-    final t = HcTokens.of(context);
-    // A Material Dialog + ListTile: the tokenised surface reads studio, and
-    // ListTile's own hit-testing is the reliable one for a long tap list.
     return showDialog<String>(
       context: context,
-      builder: (ctx) => Dialog(
-        backgroundColor: t.surface.overlay,
+      builder: (ctx) => HcDialog(
+        title: 'Add a device',
+        width: 460,
         child: SizedBox(
-          width: 460,
-          height: 460,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          height: 420,
+          child: ListView(
             children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                child: Text('Add a device',
-                    style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: t.surface.onBase)),
-              ),
-              Expanded(
-                child: ListView(
-                  children: [
-                    for (final d in refs.devices)
-                      ListTile(
-                        dense: true,
-                        title: Text(
-                            d.name?.isNotEmpty ?? false ? d.name! : d.id,
-                            style: TextStyle(
-                                color: t.surface.onBase, fontSize: 14)),
-                        subtitle: Text(refs.refFor(d),
-                            style: TextStyle(
-                                color: t.surface.onBaseMuted, fontSize: 12)),
-                        onTap: () => Navigator.pop(ctx, refs.refFor(d)),
-                      ),
-                  ],
+              for (final d in refs.devices)
+                PickerRow(
+                  title: d.name?.isNotEmpty ?? false ? d.name! : d.id,
+                  subtitle: refs.refFor(d),
+                  onTap: () => Navigator.pop(ctx, refs.refFor(d)),
                 ),
-              ),
             ],
           ),
         ),

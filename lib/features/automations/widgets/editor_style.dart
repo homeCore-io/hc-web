@@ -38,6 +38,63 @@ InputDecoration fieldDecoration(
   );
 }
 
+/// One tappable row in an `HcDialog` picker — the add-node palette and the two
+/// device pickers all share this, so a list row reads the same wherever a rule is
+/// edited: a title, an optional muted subtitle, and a soft accent wash when it is
+/// the current selection. Replaces the Material `ListTile` those pickers used to
+/// carry.
+class PickerRow extends StatelessWidget {
+  const PickerRow({
+    super.key,
+    required this.title,
+    required this.onTap,
+    this.subtitle,
+    this.selected = false,
+  });
+
+  final String title;
+  final String? subtitle;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Material(
+      color: selected
+          ? t.accent.active.withValues(alpha: 0.12)
+          : Colors.transparent,
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: TextStyle(
+                  color: selected ? t.accent.active : t.surface.onBase,
+                  fontSize: 14,
+                ),
+              ),
+              if (subtitle != null) ...[
+                const SizedBox(height: 2),
+                Text(
+                  subtitle!,
+                  style: TextStyle(color: t.surface.onBaseMuted, fontSize: 12),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// A small uppercase structural label — "AND", "THEN", "ELSE", "ELSE IF", the
 /// nested-list titles. Muted by default; a branch can pass its depth colour.
 class RailLabel extends StatelessWidget {

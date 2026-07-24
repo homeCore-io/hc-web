@@ -268,27 +268,20 @@ class _DevicePicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final t = HcTokens.of(context);
     final devices = refs.devices;
 
-    // Material Dialog + ListTile on a tokenised surface: studio look, reliable
-    // hit-testing for a long tap list.
-    return Dialog(
-      backgroundColor: t.surface.overlay,
+    return HcDialog(
+      title: 'Device',
+      width: 460,
       child: SizedBox(
-        width: 460,
-        height: 480,
+        height: 440,
         child: ListView(
           children: [
             for (final d in devices)
-              ListTile(
-                dense: true,
+              PickerRow(
                 selected: d.id == current || d.canonicalName == current,
-                title: Text(d.displayName,
-                    style: TextStyle(color: t.surface.onBase, fontSize: 14)),
-                subtitle: Text(d.canonicalName ?? d.id,
-                    style:
-                        TextStyle(color: t.surface.onBaseMuted, fontSize: 12)),
+                title: d.displayName,
+                subtitle: d.canonicalName ?? d.id,
                 // Give back the SAME form of reference the rule already used, so
                 // a rule keyed on canonical names stays keyed on canonical names.
                 onTap: () => Navigator.pop(
