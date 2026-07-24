@@ -145,6 +145,12 @@ class _ServerLogsPageState extends ConsumerState<_ServerLogsPage> {
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
+    // Keep the autoDispose LogsApi alive for as long as this page is mounted.
+    // `_connect()` only `ref.read`s it, which registers no listener, so without
+    // this watch Riverpod tore the provider down the frame after it was created
+    // — running `api.dispose()`, closing the socket, and leaving the page stuck
+    // "reconnecting" forever.
+    ref.watch(_logsApiProvider);
     var filtered =
         _entries.where((e) => e.severity >= _levelSeverity(_minLevel)).toList();
     if (_moduleFilter.isNotEmpty) {
