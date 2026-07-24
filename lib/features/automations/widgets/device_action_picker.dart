@@ -290,52 +290,129 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
-    return HcDialog(
-      title: 'Add action',
-      description: 'Choose a device, then what to do with it.',
-      width: 900,
-      actions: [
-        HcButton(label: 'Cancel', onPressed: () => Navigator.pop(context)),
-        HcButton(
-          label: 'Add action',
-          kind: HcButtonKind.primary,
-          onPressed: _cmd == null
-              ? null
-              : () => Navigator.pop(context, _cmd!.build(_value)),
+    // A custom panel rather than HcDialog: the panes are full-bleed under a
+    // padded header, each on its own surface tone, which is where the depth
+    // comes from — a flat single-surface dialog reads as one grey slab.
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      insetPadding: EdgeInsets.all(t.space.lg),
+      child: Container(
+        width: 960,
+        decoration: BoxDecoration(
+          color: t.surface.overlay,
+          borderRadius: BorderRadius.circular(t.radius.lg),
+          border: Border.all(color: t.stroke.hairline, width: t.stroke.width),
+          boxShadow: t.elevation.overlay,
         ),
-      ],
-      child: SizedBox(
-        height: 460,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            SizedBox(width: 190, child: _rail(t)),
-            _divider(t),
-            Expanded(flex: 3, child: _list(t)),
-            _divider(t),
-            Expanded(flex: 3, child: _detail(t)),
+            _header(t),
+            _hline(t),
+            SizedBox(
+              height: 470,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SizedBox(width: 202, child: _rail(t)),
+                  _hline(t, vertical: true),
+                  Expanded(flex: 3, child: _list(t)),
+                  _hline(t, vertical: true),
+                  Expanded(flex: 3, child: _detail(t)),
+                ],
+              ),
+            ),
+            _hline(t),
+            _footer(t),
           ],
         ),
       ),
     );
   }
 
-  Widget _divider(HcTokens t) => Container(width: 1, color: t.stroke.hairline);
+  Widget _hline(HcTokens t, {bool vertical = false}) => Container(
+        width: vertical ? 1 : null,
+        height: vertical ? null : 1,
+        color: t.stroke.hairline,
+      );
+
+  Widget _header(HcTokens t) => Padding(
+        padding:
+            EdgeInsets.fromLTRB(t.space.lg, t.space.md, t.space.md, t.space.md),
+        child: Row(children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('ADD ACTION · CHOOSE A DEVICE',
+                    style: TextStyle(
+                        fontSize: 10.5,
+                        letterSpacing: 1.4,
+                        fontWeight: FontWeight.w800,
+                        color: t.accent.active)),
+                const SizedBox(height: 3),
+                Text('What should this rule control?',
+                    style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w600,
+                        color: t.surface.onBase)),
+              ],
+            ),
+          ),
+          _seg(t),
+        ]),
+      );
+
+  Widget _seg(HcTokens t) => Container(
+        padding: const EdgeInsets.all(3),
+        decoration: BoxDecoration(
+          color: t.surface.sunken,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: t.stroke.hairline),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          _segBtn(
+              t, 'By type', !_byRoom, () => setState(() => _byRoom = false)),
+          _segBtn(t, 'By room', _byRoom, () {
+            setState(() {
+              _byRoom = true;
+              _room = _rooms.first;
+            });
+          }),
+        ]),
+      );
+
+  Widget _footer(HcTokens t) => Padding(
+        padding: EdgeInsets.symmetric(
+            horizontal: t.space.lg, vertical: t.space.sm + 2),
+        child: Row(children: [
+          Text(_footHint(),
+              style: TextStyle(fontSize: 11.5, color: t.surface.onBaseMuted)),
+          const Spacer(),
+          HcButton(label: 'Cancel', onPressed: () => Navigator.pop(context)),
+          SizedBox(width: t.space.sm),
+          HcButton(
+            label: 'Add action',
+            kind: HcButtonKind.primary,
+            onPressed: _cmd == null
+                ? null
+                : () => Navigator.pop(context, _cmd!.build(_value)),
+          ),
+        ]),
+      );
+
+  String _footHint() {
+    final devs = _entries.where((e) => e.device != null).length;
+    final scenes = _entries.where((e) => e.bucket == 'scene').length;
+    final modes = _entries.where((e) => e.bucket == 'mode').length;
+    return '$devs controllable devices · $scenes scenes · $modes modes · sensors hidden';
+  }
 
   // -- pane 1: rail --------------------------------------------------------
 
   Widget _rail(HcTokens t) {
-    final seg = Row(children: [
-      _segBtn(t, 'By type', !_byRoom, () => setState(() => _byRoom = false)),
-      SizedBox(width: t.space.xs),
-      _segBtn(t, 'By room', _byRoom, () {
-        setState(() {
-          _byRoom = true;
-          _room = _rooms.first;
-        });
-      }),
-    ]);
-
     final List<Widget> items = [];
     if (_byRoom) {
       for (final r in _rooms) {
@@ -362,47 +439,50 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
       }
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(padding: EdgeInsets.all(t.space.sm), child: seg),
-        Expanded(child: ListView(padding: EdgeInsets.zero, children: items)),
-        Padding(
-          padding: EdgeInsets.all(t.space.sm),
-          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Icon(Icons.info_outline, size: 13, color: t.surface.onBaseMuted),
-            SizedBox(width: t.space.xs),
-            Expanded(
-              child: Text(
-                'Sensors are hidden — they belong in conditions, not actions.',
-                style: TextStyle(
-                    fontSize: 10.5, height: 1.4, color: t.surface.onBaseMuted),
+    return Container(
+      color: t.surface.sunken,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(height: t.space.xs),
+          Expanded(child: ListView(padding: EdgeInsets.zero, children: items)),
+          _hline(t),
+          Padding(
+            padding: EdgeInsets.all(t.space.sm),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Icon(Icons.info_outline, size: 13, color: t.surface.onBaseMuted),
+              SizedBox(width: t.space.xs),
+              Expanded(
+                child: Text(
+                  'Sensors are hidden — they belong in conditions, not actions.',
+                  style: TextStyle(
+                      fontSize: 10.5,
+                      height: 1.4,
+                      color: t.surface.onBaseMuted),
+                ),
               ),
-            ),
-          ]),
-        ),
-      ],
+            ]),
+          ),
+        ],
+      ),
     );
   }
 
   Widget _segBtn(HcTokens t, String label, bool on, VoidCallback onTap) =>
-      Expanded(
-        child: Material(
-          color: on ? t.surface.raised : Colors.transparent,
+      Material(
+        color: on ? t.surface.raised : Colors.transparent,
+        borderRadius: BorderRadius.circular(7),
+        child: InkWell(
+          onTap: onTap,
           borderRadius: BorderRadius.circular(7),
-          child: InkWell(
-            onTap: onTap,
-            borderRadius: BorderRadius.circular(7),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 6),
-              child: Text(label,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w700,
-                    color: on ? t.surface.onBase : t.surface.onBaseMuted,
-                  )),
-            ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 6),
+            child: Text(label,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: on ? t.surface.onBase : t.surface.onBaseMuted,
+                )),
           ),
         ),
       );
@@ -461,24 +541,38 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
       }
       rows.add(_deviceRow(t, e));
     }
-    return Column(children: [
-      Padding(
-        padding: EdgeInsets.all(t.space.sm),
-        child: TextField(
-          decoration: fieldDecoration(t, hint: 'Search devices…'),
-          onChanged: (v) => setState(() => _query = v),
+    return DecoratedBox(
+      // A touch darker than the detail pane (which sits on the panel's overlay),
+      // so the list reads as sunk into the shell and the detail as raised out.
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Color.lerp(t.surface.sunken, t.surface.base, 0.5)!,
+            t.surface.sunken,
+          ],
         ),
       ),
-      Expanded(
-        child: pool.isEmpty
-            ? Center(
-                child: Text('No devices match.',
-                    style: TextStyle(color: t.surface.onBaseMuted)))
-            : ListView(
-                padding: EdgeInsets.symmetric(horizontal: t.space.xs),
-                children: rows),
-      ),
-    ]);
+      child: Column(children: [
+        Padding(
+          padding: EdgeInsets.all(t.space.sm),
+          child: TextField(
+            decoration: fieldDecoration(t, hint: 'Search devices…'),
+            onChanged: (v) => setState(() => _query = v),
+          ),
+        ),
+        Expanded(
+          child: pool.isEmpty
+              ? Center(
+                  child: Text('No devices match.',
+                      style: TextStyle(color: t.surface.onBaseMuted)))
+              : ListView(
+                  padding: EdgeInsets.symmetric(horizontal: t.space.xs),
+                  children: rows),
+        ),
+      ]),
+    );
   }
 
   Widget _deviceRow(HcTokens t, _Entry e) {
@@ -530,11 +624,19 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
             ),
             if (e.chip != null) ...[
               SizedBox(width: t.space.xs),
-              Text(e.chip!,
-                  style: TextStyle(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w600,
-                      color: tone)),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: tone.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(color: tone.withValues(alpha: 0.28)),
+                ),
+                child: Text(e.chip!,
+                    style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: tone)),
+              ),
             ],
           ]),
         ),
