@@ -7,6 +7,7 @@ import '../../../design/components/hc_dialog.dart';
 import '../../../design/components/hc_sentence.dart';
 import '../../../design/hc_icons.dart';
 import '../../../design/tokens.dart';
+import 'device_action_picker.dart';
 import 'editor_style.dart';
 import 'field_editors.dart';
 import '../rule_phrasing.dart';
@@ -575,16 +576,56 @@ class ActionTree extends StatelessWidget {
               },
             ),
           const SizedBox(height: 8),
-          AddNodeButton(
-            label: 'Add action',
-            registry: kActions,
-            categories: kActionCategories,
-            onPick: (v) {
-              actions.add(HcRuleAction(action: HcNode.blank(v)));
-              onChanged();
-            },
+          Builder(
+            builder: (context) => Wrap(
+              spacing: 4,
+              children: [
+                _ControlDeviceButton(
+                  refs: refs,
+                  onAdd: (node) {
+                    actions.add(HcRuleAction(action: node));
+                    onChanged();
+                  },
+                ),
+                AddNodeButton(
+                  label: 'More…',
+                  registry: kActions,
+                  categories: kActionCategories,
+                  onPick: (v) {
+                    actions.add(HcRuleAction(action: HcNode.blank(v)));
+                    onChanged();
+                  },
+                ),
+              ],
+            ),
           ),
         ],
+      );
+}
+
+/// The primary "Add action" path: open the multi-pane device picker and drop
+/// the fully-built node it returns straight into the action list.
+class _ControlDeviceButton extends StatelessWidget {
+  const _ControlDeviceButton({required this.refs, required this.onAdd});
+
+  final RuleRefs refs;
+  final ValueChanged<HcNode> onAdd;
+
+  @override
+  Widget build(BuildContext context) => TextButton.icon(
+        icon: const Icon(HcIcons.plus, size: 14),
+        label: const Text('Control a device', style: TextStyle(fontSize: 13)),
+        style: TextButton.styleFrom(
+          visualDensity: VisualDensity.compact,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        ),
+        onPressed: () async {
+          final node = await showDialog<HcNode>(
+            context: context,
+            builder: (_) => DeviceActionPicker(refs: refs),
+          );
+          if (node != null) onAdd(node);
+        },
       );
 }
 
