@@ -6,8 +6,10 @@ import '../../core/providers/automations_provider.dart';
 import '../../core/rules/node.dart';
 import '../../core/rules/rule.dart';
 import '../../core/rules/schema.dart';
+import '../../design/components/hc_dialog.dart';
 import '../../design/components/hc_sentence.dart';
 import '../../design/tokens.dart';
+import '../../shared/widgets/section_scaffold.dart';
 import 'rule_phrasing.dart';
 import 'widgets/node_trees.dart';
 import 'widgets/rule_refs.dart';
@@ -45,6 +47,9 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
 
   void _touch() => setState(() => _dirty = true);
 
+  void _goBack() =>
+      context.canPop() ? context.pop() : context.go('/automations');
+
   @override
   Widget build(BuildContext context) {
     final rulesAsync = ref.watch(automationsProvider);
@@ -57,16 +62,24 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
         _rule = HcRule(id: '', name: '', trigger: HcNode('ManualTrigger'));
       } else {
         if (rulesAsync.isLoading) {
-          return const Scaffold(
-              body: Center(child: CircularProgressIndicator()));
+          return SectionScaffold(
+            title: 'Automations',
+            onBack: _goBack,
+            child: const Center(child: CircularProgressIndicator()),
+          );
         }
         final found = rulesAsync.valueOrNull
             ?.where((r) => r.id == widget.ruleId)
             .firstOrNull;
         if (found == null) {
-          return Scaffold(
-            appBar: AppBar(title: const Text('Automation')),
-            body: const Center(child: Text('Rule not found.')),
+          return SectionScaffold(
+            title: 'Automations',
+            onBack: _goBack,
+            child: Center(
+              child: Text('Rule not found.',
+                  style: TextStyle(
+                      color: HcTokens.of(context).surface.onBaseMuted)),
+            ),
           );
         }
         _rule = found.copy();
@@ -75,84 +88,86 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
 
     final rule = _rule!;
 
-    final t = HcTokens.of(context);
-
-    return Scaffold(
-      // The bar says where you ARE, not what you are called — the rule's own
-      // name is the page's title, in the body, and printing it twice was one of
-      // the things that made this read like a web form with a header.
-      appBar: AppBar(
-        titleSpacing: 0,
-        title: Text(
-          'Automations',
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: t.surface.onBaseMuted,
-          ),
-        ),
-        actions: [
-          if (!_isNew)
-            TextButton(
+    // The header says where you ARE ("Automations"); the rule's own name is the
+    // page's title, in the body, so it is never printed twice.
+    return SectionScaffold(
+      title: 'Automations',
+      onBack: _goBack,
+      actions: [
+        if (!_isNew)
+          Builder(builder: (ctx) {
+            final tt = HcTokens.of(ctx);
+            return TextButton(
               onPressed: _saving ? null : _test,
-              child: const Text('Dry run'),
-            ),
-          SizedBox(width: t.space.sm),
-        ],
-      ),
-      // Save arrives when there is something to save, and leaves when there
-      // isn't. A permanently-greyed Save button in the corner is a web form
-      // telling you about itself.
-      bottomNavigationBar: _SaveBar(
-        visible: _dirty || _isNew,
-        saving: _saving,
-        onSave: _saving ? null : _save,
-        onDiscard: _saving ? null : () => context.pop(),
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
+              style: TextButton.styleFrom(
+                foregroundColor: tt.surface.onBaseMuted,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              ),
+              child: const Text('Dry run',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+            );
+          }),
+      ],
+      child: Column(
         children: [
-          // Core sets `error` on a rule whose file failed to parse or whose
-          // devices were deleted. Such a rule never executes — say so loudly.
-          if (rule.hasError) _banner(context, rule.error!, isError: true),
-          if (_saveError != null) _banner(context, _saveError!, isError: true),
-          if (_wouldFire != null) _testBanner(context),
-          _ruleHeader(rule),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+              children: [
+                // Core sets `error` on a rule whose file failed to parse or
+                // whose devices were deleted. It never executes — say so loudly.
+                if (rule.hasError) _banner(context, rule.error!, isError: true),
+                if (_saveError != null)
+                  _banner(context, _saveError!, isError: true),
+                if (_wouldFire != null) _testBanner(context),
+                _ruleHeader(rule),
 
-          // The clauses read down the page as one sentence about the house,
-          // joined by a rail. There is no card around them: a card says "this is
-          // a form", and the whole point is that a rule is a paragraph.
-          HcClause(
-            label: 'When',
-            // The rail node lights when the trigger's device is already in the
-            // state the rule waits for, so a rule shows you where the house
-            // actually IS, standing still.
-            live: _triggerIsLive(rule, refs),
-            child: _triggerEditor(rule, refs),
-          ),
-          HcClause(
-            label: 'And if',
-            child: ConditionTree(
-              conditions: rule.conditions,
-              refs: refs,
-              results: _testResults,
-              onChanged: _touch,
+                // The clauses read down the page as one sentence about the
+                // house, joined by a rail. There is no card around them: a card
+                // says "this is a form", and a rule is a paragraph.
+                HcClause(
+                  label: 'When',
+                  // The rail node lights when the trigger's device is already in
+                  // the state the rule waits for, so a rule shows you where the
+                  // house actually IS, standing still.
+                  live: _triggerIsLive(rule, refs),
+                  child: _triggerEditor(rule, refs),
+                ),
+                HcClause(
+                  label: 'And if',
+                  child: ConditionTree(
+                    conditions: rule.conditions,
+                    refs: refs,
+                    results: _testResults,
+                    onChanged: _touch,
+                  ),
+                ),
+                HcClause(
+                  label: 'Then',
+                  last: true,
+                  child: ActionTree(
+                    actions: rule.actions,
+                    refs: refs,
+                    onChanged: _touch,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _Section(
+                  title: 'Advanced',
+                  initiallyExpanded: false,
+                  child: _advanced(rule),
+                ),
+              ],
             ),
           ),
-          HcClause(
-            label: 'Then',
-            last: true,
-            child: ActionTree(
-              actions: rule.actions,
-              refs: refs,
-              onChanged: _touch,
-            ),
-          ),
-          const SizedBox(height: 8),
-          _Section(
-            title: 'Advanced',
-            initiallyExpanded: false,
-            child: _advanced(rule),
+          // Save arrives when there is something to save, and leaves when there
+          // isn't — an app tells you when you have something to lose.
+          _SaveBar(
+            visible: _dirty || _isNew,
+            saving: _saving,
+            onSave: _saving ? null : _save,
+            onDiscard: _saving ? null : _goBack,
           ),
         ],
       ),
@@ -398,43 +413,55 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
   // -- banners -------------------------------------------------------------
 
   Widget _banner(BuildContext context, String message, {bool isError = false}) {
-    final scheme = Theme.of(context).colorScheme;
+    final t = HcTokens.of(context);
+    final c = isError ? t.accent.danger : t.surface.onBaseMuted;
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: isError ? scheme.errorContainer : scheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(8),
+        color: c.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: c.withValues(alpha: isError ? 0.4 : 0.25)),
       ),
       child: Row(
         children: [
-          Icon(isError ? Icons.error_outline : Icons.info_outline, size: 18),
+          Icon(isError ? Icons.error_outline : Icons.info_outline,
+              size: 18, color: c),
           const SizedBox(width: 8),
-          Expanded(child: SelectableText(message)),
+          Expanded(
+            child: SelectableText(message,
+                style: TextStyle(fontSize: 13, color: t.surface.onBase)),
+          ),
         ],
       ),
     );
   }
 
   Widget _testBanner(BuildContext context) {
+    final t = HcTokens.of(context);
     final fire = _wouldFire == true;
-    final scheme = Theme.of(context).colorScheme;
+    final c = fire ? t.accent.success : t.surface.onBaseMuted;
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: (fire ? scheme.primary : scheme.outline).withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(8),
+        color: c.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: c.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [
-          Icon(fire ? Icons.check_circle_outline : Icons.block, size: 18),
+          Icon(fire ? Icons.check_circle_outline : Icons.block,
+              size: 18, color: c),
           const SizedBox(width: 8),
           Expanded(
-            child: Text(fire
-                ? 'As things stand right now, this rule would fire.'
-                : 'As things stand right now, this rule would not fire — the '
-                    'failing condition is marked below.'),
+            child: Text(
+              fire
+                  ? 'As things stand right now, this rule would fire.'
+                  : 'As things stand right now, this rule would not fire — the '
+                      'failing condition is marked below.',
+              style: TextStyle(fontSize: 13, color: t.surface.onBase),
+            ),
           ),
         ],
       ),
@@ -693,26 +720,25 @@ class _MetaLine extends StatelessWidget {
     bool nullable = false,
   }) async {
     final controller = TextEditingController(text: value?.toString() ?? '');
-    final t = HcTokens.of(context);
 
     await showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: t.surface.overlay,
-        title: Text(title),
-        content: TextField(
+      builder: (ctx) => HcDialog(
+        title: title,
+        description: help,
+        actions: [
+          HcButton(
+            label: 'Done',
+            kind: HcButtonKind.primary,
+            onPressed: () => Navigator.pop(ctx),
+          ),
+        ],
+        child: TextField(
           controller: controller,
           autofocus: true,
           keyboardType: TextInputType.number,
-          decoration: InputDecoration(helperText: help),
-          onSubmitted: (_) => Navigator.pop(context),
+          onSubmitted: (_) => Navigator.pop(ctx),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Done'),
-          ),
-        ],
       ),
     );
 
@@ -727,57 +753,77 @@ class _MetaLine extends StatelessWidget {
   }
 
   Future<void> _editRunMode(BuildContext context) async {
-    final t = HcTokens.of(context);
-
     await showDialog<void>(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setInner) => AlertDialog(
-          backgroundColor: t.surface.overlay,
-          title: const Text('When it fires again'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              for (final k in RunMode.kinds)
-                RadioListTile<String>(
-                  value: k,
-                  // ignore: deprecated_member_use
-                  groupValue: rule.runMode.kind,
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(
-                      _runMode(RunMode(k, maxQueue: rule.runMode.maxQueue))),
-                  // ignore: deprecated_member_use
-                  onChanged: (v) {
-                    if (v == null) return;
-                    rule.runMode = RunMode(v, maxQueue: rule.runMode.maxQueue);
-                    setInner(() {});
-                    onChanged();
-                  },
-                ),
-              if (rule.runMode.kind == 'Queued')
-                TextFormField(
-                  initialValue: '${rule.runMode.maxQueue}',
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Max queued'),
-                  onChanged: (v) {
-                    final n = int.tryParse(v);
-                    if (n == null) return;
-                    rule.runMode = RunMode('Queued', maxQueue: n);
-                    setInner(() {});
-                    onChanged();
-                  },
-                ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setInner) {
+          final t = HcTokens.of(ctx);
+          return HcDialog(
+            title: 'When it fires again',
+            actions: [
+              HcButton(
+                label: 'Done',
+                kind: HcButtonKind.primary,
+                onPressed: () => Navigator.pop(ctx),
+              ),
             ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Done'),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (final k in RunMode.kinds)
+                  InkWell(
+                    onTap: () {
+                      rule.runMode =
+                          RunMode(k, maxQueue: rule.runMode.maxQueue);
+                      setInner(() {});
+                      onChanged();
+                    },
+                    borderRadius: BorderRadius.circular(8),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 4, vertical: 10),
+                      child: Row(
+                        children: [
+                          Icon(
+                            rule.runMode.kind == k
+                                ? Icons.radio_button_checked
+                                : Icons.radio_button_unchecked,
+                            size: 18,
+                            color: rule.runMode.kind == k
+                                ? t.accent.active
+                                : t.surface.onBaseMuted,
+                          ),
+                          const SizedBox(width: 10),
+                          Text(
+                            _runMode(
+                                RunMode(k, maxQueue: rule.runMode.maxQueue)),
+                            style: TextStyle(
+                                fontSize: 13.5, color: t.surface.onBase),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                if (rule.runMode.kind == 'Queued') ...[
+                  const SizedBox(height: 10),
+                  TextFormField(
+                    initialValue: '${rule.runMode.maxQueue}',
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(labelText: 'Max queued'),
+                    onChanged: (v) {
+                      final n = int.tryParse(v);
+                      if (n == null) return;
+                      rule.runMode = RunMode('Queued', maxQueue: n);
+                      setInner(() {});
+                      onChanged();
+                    },
+                  ),
+                ],
+              ],
             ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
@@ -845,43 +891,75 @@ class _TriggerPalette extends StatelessWidget {
   final String current;
 
   @override
-  Widget build(BuildContext context) => Dialog(
-        child: SizedBox(
-          width: 520,
-          height: 560,
-          child: ListView(
-            children: [
-              for (final category in kTriggerCategories) ...[
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                  child: Text(
-                    category.toUpperCase(),
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: Theme.of(context).colorScheme.outline,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1,
-                        ),
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return HcDialog(
+      title: 'Change the trigger',
+      width: 520,
+      actions: [
+        HcButton(label: 'Cancel', onPressed: () => Navigator.pop(context)),
+      ],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final category in kTriggerCategories) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(2, 12, 2, 6),
+              child: Text(
+                category.toUpperCase(),
+                style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1,
+                    color: t.surface.onBaseMuted),
+              ),
+            ),
+            for (final v
+                in kTriggers.values.where((v) => v.category == category))
+              InkWell(
+                onTap: () => Navigator.pop(context, v),
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  width: double.infinity,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+                  decoration: BoxDecoration(
+                    color: v.tag == current
+                        ? t.accent.active.withValues(alpha: 0.12)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(v.label,
+                          style: TextStyle(
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w600,
+                              color: v.tag == current
+                                  ? t.accent.active
+                                  : t.surface.onBase)),
+                      if (v.help != null) ...[
+                        const SizedBox(height: 2),
+                        Text(v.help!,
+                            style: TextStyle(
+                                fontSize: 11.5, color: t.surface.onBaseMuted)),
+                      ],
+                    ],
                   ),
                 ),
-                for (final v
-                    in kTriggers.values.where((v) => v.category == category))
-                  ListTile(
-                    dense: true,
-                    selected: v.tag == current,
-                    title: Text(v.label),
-                    subtitle: v.help == null ? null : Text(v.help!),
-                    onTap: () => Navigator.pop(context, v),
-                  ),
-              ],
-            ],
-          ),
-        ),
-      );
+              ),
+          ],
+        ],
+      ),
+    );
+  }
 }
 
-/// A titled block. Only Advanced collapses — a rule you cannot see all of is a
-/// rule you will get wrong.
-class _Section extends StatelessWidget {
+/// A titled block on a token surface. Advanced starts collapsed — but the
+/// clauses above it never do: a rule you cannot see all of is one you get wrong.
+class _Section extends StatefulWidget {
   const _Section({
     required this.title,
     required this.child,
@@ -893,37 +971,53 @@ class _Section extends StatelessWidget {
   final bool initiallyExpanded;
 
   @override
+  State<_Section> createState() => _SectionState();
+}
+
+class _SectionState extends State<_Section> {
+  late bool _open = widget.initiallyExpanded;
+
+  @override
   Widget build(BuildContext context) {
-    final body = Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-      child: child,
-    );
-
-    if (!initiallyExpanded) {
-      return Card(
-        margin: const EdgeInsets.only(bottom: 16),
-        child: ExpansionTile(
-          title: Text(title, style: Theme.of(context).textTheme.titleMedium),
-          children: [body],
-        ),
-      );
-    }
-
-    return Card(
+    final t = HcTokens.of(context);
+    return Container(
       margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: t.surface.raised,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: t.stroke.hairline),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: Theme.of(context).textTheme.titleMedium),
-              ],
+          InkWell(
+            onTap: () => setState(() => _open = !_open),
+            borderRadius: BorderRadius.circular(12),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+              child: Row(
+                children: [
+                  Text(widget.title,
+                      style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: t.surface.onBase)),
+                  const Spacer(),
+                  AnimatedRotation(
+                    turns: _open ? 0.5 : 0,
+                    duration: t.motion.fast,
+                    child: Icon(Icons.keyboard_arrow_down_rounded,
+                        color: t.surface.onBaseMuted),
+                  ),
+                ],
+              ),
             ),
           ),
-          body,
+          if (_open)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: widget.child,
+            ),
         ],
       ),
     );
