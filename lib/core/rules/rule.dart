@@ -87,10 +87,10 @@ class HcRule {
     required this.name,
     this.enabled = true,
     this.priority = 0,
-    this.tags = const [],
+    List<String>? tags,
     HcNode? trigger,
-    this.conditions = const [],
-    this.actions = const [],
+    List<HcNode>? conditions,
+    List<HcRuleAction>? actions,
     this.error,
     this.cooldownSecs,
     this.logEvents = false,
@@ -99,10 +99,18 @@ class HcRule {
     this.requiredExpression,
     this.cancelOnFalse = false,
     this.triggerCondition,
-    this.variables = const {},
+    Map<String, Object?>? variables,
     this.triggerLabel,
     this.runMode = RunMode.parallel,
-  }) : trigger = trigger ?? HcNode('ManualTrigger');
+  })  : trigger = trigger ?? HcNode('ManualTrigger'),
+        // Growable, never `const []`: the editor adds and removes conditions,
+        // actions, tags and variables in place, and a const default throws
+        // `Unsupported operation` the moment `Add condition`/`Add action` calls
+        // `.add()` on a fresh rule.
+        tags = tags ?? [],
+        conditions = conditions ?? [],
+        actions = actions ?? [],
+        variables = variables ?? {};
 
   /// Empty on a new rule — core assigns the UUID and, on create, always
   /// overwrites whatever we send.
