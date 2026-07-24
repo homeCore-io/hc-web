@@ -141,6 +141,14 @@ class HcRule {
 
   bool get hasError => error != null && error!.isNotEmpty;
 
+  /// True when the rule uses structure a flat sentence can't hold — an
+  /// Or/Xor/Not condition group, or a Conditional (if/else), loop, wait, or
+  /// parallel action. Drives the "branches" tag in the list; recurses because
+  /// these constructs nest. Computed from the rule alone — no extra data.
+  bool get isBranching =>
+      conditions.any(_nodeBranches) ||
+      actions.any((a) => _nodeBranches(a.action));
+
   factory HcRule.fromJson(Map<String, dynamic> json) => HcRule(
         id: json['id'] as String? ?? '',
         name: json['name'] as String? ?? '',
@@ -307,3 +315,28 @@ bool _eqList(List a, List b) {
   }
   return true;
 }
+
+/// Variant tags that make a rule read as branches rather than a flat sentence:
+/// boolean condition groups, and if/else, loop, wait and parallel actions.
+const _branchingTags = <String>{
+  'Or',
+  'Xor',
+  'Not',
+  'Conditional',
+  'RepeatUntil',
+  'RepeatWhile',
+  'RepeatCount',
+  'Parallel',
+  'WaitForEvent',
+  'WaitForExpression',
+};
+
+bool _nodeBranches(HcNode n) =>
+    _branchingTags.contains(n.tag) || n.fields.values.any(_valueBranches);
+
+bool _valueBranches(Object? v) => switch (v) {
+      HcNode n => _nodeBranches(n),
+      HcBranch b => b.actions.any(_nodeBranches),
+      List l => l.any(_valueBranches),
+      _ => false,
+    };

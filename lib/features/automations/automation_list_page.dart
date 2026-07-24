@@ -4,13 +4,18 @@ import 'package:go_router/go_router.dart';
 import '../../core/rules/rule.dart';
 import '../../core/rules/schema.dart';
 import '../../core/providers/automations_provider.dart';
+import '../../core/providers/collapsed_groups_provider.dart';
 import '../../core/providers/name_resolver_provider.dart';
-import '../../shared/widgets/filter_bar.dart';
-import '../../shared/widgets/skeleton.dart';
 import '../../core/providers/time_display_provider.dart';
+import '../../core/text/humanize.dart';
 import '../../design/components/hc_controls.dart';
+import '../../design/components/hc_dialog.dart';
 import '../../design/hc_icons.dart';
 import '../../design/tokens.dart';
+import '../../shared/widgets/section_group.dart';
+import '../../shared/widgets/section_scaffold.dart';
+import '../../shared/widgets/section_toolbar.dart';
+import '../../shared/widgets/skeleton.dart';
 import 'rule_phrasing.dart';
 import 'widgets/drift_notice.dart';
 
@@ -47,6 +52,13 @@ class _AutomationFilter {
 final _filterProvider = StateProvider<_AutomationFilter>(
   (_) => const _AutomationFilter(),
 );
+
+const _sortLabels = {
+  'priority_desc': 'Priority ↓',
+  'priority_asc': 'Priority ↑',
+  'name_asc': 'Name A→Z',
+  'name_desc': 'Name Z→A',
+};
 
 // ── Bulk selection state ─────────────────────────────────────────────────────
 
@@ -117,171 +129,308 @@ class _AutomationListPageState extends ConsumerState<AutomationListPage> {
     final rulesAsync = ref.watch(automationsProvider);
     final filter = ref.watch(_filterProvider);
     final selection = ref.watch(_selectionProvider);
+    final collapsed = ref.watch(collapsedGroupsProvider);
     final deviceResolver = ref.watch(deviceNameResolverProvider);
     final modeResolver = ref.watch(modeNameResolverProvider);
     final inBulk = selection.isNotEmpty;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: inBulk
-            ? Text('${selection.length} selected')
-            : const Text('Automations'),
-        actions: inBulk
-            ? [
-                TextButton(
-                  onPressed: () async {
-                    await ref
-                        .read(automationsProvider.notifier)
-                        .bulkSetEnabled(selection.toList(), true);
-                    ref.read(_selectionProvider.notifier).state = {};
-                  },
-                  child: const Text('Enable'),
-                ),
-                TextButton(
-                  onPressed: () async {
-                    await ref
-                        .read(automationsProvider.notifier)
-                        .bulkSetEnabled(selection.toList(), false);
-                    ref.read(_selectionProvider.notifier).state = {};
-                  },
-                  child: const Text('Disable'),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close),
-                  onPressed: () =>
-                      ref.read(_selectionProvider.notifier).state = {},
-                ),
-              ]
-            : [
-                IconButton(
-                  icon: const Icon(Icons.group_work_outlined),
-                  tooltip: 'Rule groups',
-                  onPressed: () => context.push('/automations/groups'),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.refresh),
-                  onPressed: () =>
-                      ref.read(automationsProvider.notifier).reload(),
-                ),
-              ],
-      ),
-      floatingActionButton: inBulk
-          ? null
-          : FloatingActionButton(
-              onPressed: () => context.push('/automations/new'),
-              child: const Icon(Icons.add),
-            ),
-      body: rulesAsync.when(
+    // Header stats read from the loaded list (empty while it loads), the same
+    // shape Devices uses — the body still renders via `.when` below.
+    final rules = rulesAsync.valueOrNull ?? const <HcRule>[];
+    final enabledCount = rules.where((r) => r.enabled).length;
+    final brokenCount = rules.where((r) => r.hasError).length;
+
+    return SectionScaffold(
+      title: 'Automations',
+      stats: !rulesAsync.hasValue
+          ? const []
+          : inBulk
+              ? [
+                  SectionStat(
+                      value: '${selection.length}',
+                      label: 'selected',
+                      tone: SectionTone.active,
+                      glow: true),
+                ]
+              : [
+                  SectionStat(value: '${rules.length}', label: 'rules'),
+                  if (enabledCount > 0)
+                    SectionStat(
+                        value: '$enabledCount',
+                        label: 'enabled',
+                        tone: SectionTone.active,
+                        glow: true),
+                  if (brokenCount > 0)
+                    SectionStat(
+                        value: '$brokenCount',
+                        label: 'need attention',
+                        tone: SectionTone.danger),
+                ],
+      actions: inBulk
+          ? [
+              SectionHeaderAction(
+                icon: HcIcons.check,
+                label: 'Enable',
+                onPressed: () async {
+                  await ref
+                      .read(automationsProvider.notifier)
+                      .bulkSetEnabled(selection.toList(), true);
+                  ref.read(_selectionProvider.notifier).state = {};
+                },
+              ),
+              _GhostAction(
+                label: 'Disable',
+                onTap: () async {
+                  await ref
+                      .read(automationsProvider.notifier)
+                      .bulkSetEnabled(selection.toList(), false);
+                  ref.read(_selectionProvider.notifier).state = {};
+                },
+              ),
+              IconButton(
+                icon: const Icon(Icons.close),
+                tooltip: 'Clear selection',
+                onPressed: () =>
+                    ref.read(_selectionProvider.notifier).state = {},
+              ),
+            ]
+          : [
+              IconButton(
+                icon: const Icon(Icons.refresh),
+                tooltip: 'Reload',
+                onPressed: () =>
+                    ref.read(automationsProvider.notifier).reload(),
+              ),
+              _GhostAction(
+                label: 'Groups',
+                icon: Icons.group_work_outlined,
+                onTap: () => context.push('/automations/groups'),
+              ),
+              SectionHeaderAction(
+                icon: HcIcons.plus,
+                label: 'New automation',
+                onPressed: () => context.push('/automations/new'),
+              ),
+            ],
+      child: rulesAsync.when(
         loading: () => const SkeletonList(count: 8, withAvatar: false),
         error: (e, _) => Center(child: Text('Error: $e')),
         data: (rules) {
           final filtered = _applyFilter(rules, filter);
           return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               // Silent unless this app and the core in front of it actually
               // disagree about what a rule may contain. See DriftNotice.
               const DriftNotice(),
-              FilterBar(
-                searchController: _searchCtrl,
-                searchHint: 'Search automations…',
-                countLabel: 'Showing ${filtered.length} of ${rules.length}',
-                chips: [
-                  // Status chips
-                  for (final s in [
-                    ('all', 'All'),
-                    ('enabled', 'Enabled'),
-                    ('disabled', 'Disabled'),
-                    ('broken', 'Broken'),
-                  ])
-                    FilterChip(
-                      label: Text(s.$2, style: const TextStyle(fontSize: 11)),
-                      selected: filter.status == s.$1,
-                      onSelected: (_) => ref
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+                child: SectionToolbar(
+                  controller: _searchCtrl,
+                  hint: 'Search automations…',
+                  trailing: [
+                    _SortMenu(
+                      value: filter.sort,
+                      onPick: (v) => ref
                           .read(_filterProvider.notifier)
-                          .update((f) => f.copyWith(status: s.$1)),
-                      visualDensity: VisualDensity.compact,
+                          .update((f) => f.copyWith(sort: v)),
                     ),
-                  const SizedBox(width: 8),
-                  // One chip per trigger category, straight from the schema.
-                  for (final category in kTriggerCategories)
-                    FilterChip(
-                      label:
-                          Text(category, style: const TextStyle(fontSize: 11)),
-                      selected: filter.triggerTypes.contains(category),
-                      onSelected: (on) {
-                        final next = Set<String>.from(filter.triggerTypes);
-                        if (on) {
-                          next.add(category);
-                        } else {
-                          next.remove(category);
-                        }
-                        ref
-                            .read(_filterProvider.notifier)
-                            .update((f) => f.copyWith(triggerTypes: next));
-                      },
-                      visualDensity: VisualDensity.compact,
-                    ),
-                ],
-                trailing: DropdownButton<String>(
-                  value: filter.sort,
-                  underline: const SizedBox(),
-                  isDense: true,
-                  items: const [
-                    DropdownMenuItem(
-                        value: 'priority_desc',
-                        child:
-                            Text('Priority ↓', style: TextStyle(fontSize: 12))),
-                    DropdownMenuItem(
-                        value: 'priority_asc',
-                        child:
-                            Text('Priority ↑', style: TextStyle(fontSize: 12))),
-                    DropdownMenuItem(
-                        value: 'name_asc',
-                        child:
-                            Text('Name A→Z', style: TextStyle(fontSize: 12))),
-                    DropdownMenuItem(
-                        value: 'name_desc',
-                        child:
-                            Text('Name Z→A', style: TextStyle(fontSize: 12))),
                   ],
-                  onChanged: (v) => ref
-                      .read(_filterProvider.notifier)
-                      .update((f) => f.copyWith(sort: v)),
+                  chips: [
+                    for (final s in const [
+                      ('all', 'All'),
+                      ('enabled', 'Enabled'),
+                      ('disabled', 'Disabled'),
+                      ('broken', 'Broken'),
+                    ])
+                      SectionChip(
+                        label: s.$2,
+                        selected: filter.status == s.$1,
+                        onTap: () => ref
+                            .read(_filterProvider.notifier)
+                            .update((f) => f.copyWith(status: s.$1)),
+                      ),
+                    // One chip per trigger category, straight from the schema.
+                    for (final category in kTriggerCategories)
+                      SectionChip(
+                        label: category,
+                        selected: filter.triggerTypes.contains(category),
+                        onTap: () {
+                          final next = Set<String>.from(filter.triggerTypes);
+                          next.contains(category)
+                              ? next.remove(category)
+                              : next.add(category);
+                          ref
+                              .read(_filterProvider.notifier)
+                              .update((f) => f.copyWith(triggerTypes: next));
+                        },
+                      ),
+                  ],
                 ),
               ),
               Expanded(
                 child: filtered.isEmpty
-                    ? const Center(
-                        child: Text('No automations match the filter.'))
-                    : ListView.builder(
-                        itemCount: filtered.length,
-                        itemBuilder: (context, i) => _RuleTile(
-                          rule: filtered[i],
-                          deviceResolver: deviceResolver,
-                          modeResolver: modeResolver,
-                          selected: selection.contains(filtered[i].id),
-                          onLongPress: () {
-                            ref
-                                .read(_selectionProvider.notifier)
-                                .update((s) => {...s, filtered[i].id});
-                          },
-                          onToggleSelect: (id) {
-                            ref.read(_selectionProvider.notifier).update((s) {
-                              final next = Set<String>.from(s);
-                              if (next.contains(id)) {
-                                next.remove(id);
-                              } else {
-                                next.add(id);
-                              }
-                              return next;
-                            });
-                          },
-                        ),
-                      ),
+                    ? Center(
+                        child: Text('No automations match the filter.',
+                            style: TextStyle(
+                                color:
+                                    HcTokens.of(context).surface.onBaseMuted)),
+                      )
+                    : _grouped(context, filtered, collapsed, deviceResolver,
+                        modeResolver, selection),
               ),
             ],
           );
         },
+      ),
+    );
+  }
+
+  /// Rules grouped by their first tag, "Untagged" last — the same collapsible
+  /// group pattern Devices uses for rooms (`device_list_page.dart`).
+  Widget _grouped(
+    BuildContext context,
+    List<HcRule> filtered,
+    Set<String> collapsed,
+    DeviceNameResolver deviceResolver,
+    ModeNameResolver modeResolver,
+    Set<String> selection,
+  ) {
+    const untagged = 'Untagged';
+    final buckets = <String, List<HcRule>>{};
+    for (final r in filtered) {
+      final key = r.tags.isEmpty ? untagged : r.tags.first;
+      buckets.putIfAbsent(key, () => []).add(r);
+    }
+    final keys = buckets.keys.toList()
+      ..sort((a, b) {
+        if (a == untagged) return 1;
+        if (b == untagged) return -1;
+        return a.toLowerCase().compareTo(b.toLowerCase());
+      });
+
+    final items = <Widget>[];
+    for (final key in keys) {
+      final id = 'automations:$key';
+      final group = buckets[key]!;
+      items.add(Padding(
+        padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
+        child: SectionGroupHeader(
+          id: id,
+          title: key == untagged ? untagged : humanize(key),
+          count: '${group.length} ${group.length == 1 ? 'rule' : 'rules'}',
+        ),
+      ));
+      if (!collapsed.contains(id)) {
+        for (final r in group) {
+          items.add(_RuleTile(
+            rule: r,
+            deviceResolver: deviceResolver,
+            modeResolver: modeResolver,
+            selected: selection.contains(r.id),
+            onLongPress: () => ref
+                .read(_selectionProvider.notifier)
+                .update((s) => {...s, r.id}),
+            onToggleSelect: (id) {
+              ref.read(_selectionProvider.notifier).update((s) {
+                final next = Set<String>.from(s);
+                next.contains(id) ? next.remove(id) : next.add(id);
+                return next;
+              });
+            },
+          ));
+        }
+      }
+    }
+    return ListView(
+      padding: const EdgeInsets.only(bottom: 24),
+      children: items,
+    );
+  }
+}
+
+// ── Sort menu (pill + popup) ─────────────────────────────────────────────────
+
+class _SortMenu extends StatelessWidget {
+  const _SortMenu({required this.value, required this.onPick});
+  final String value;
+  final ValueChanged<String> onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return PopupMenuButton<String>(
+      onSelected: onPick,
+      itemBuilder: (_) => [
+        for (final e in _sortLabels.entries)
+          PopupMenuItem(
+            value: e.key,
+            child: Row(
+              children: [
+                if (e.key == value)
+                  const Icon(Icons.check, size: 14)
+                else
+                  const SizedBox(width: 14),
+                const SizedBox(width: 8),
+                Text(e.value),
+              ],
+            ),
+          ),
+      ],
+      // A plain pill, not SectionMenuButton — the latter's own GestureDetector
+      // would eat the tap before the PopupMenuButton could open.
+      child: Container(
+        height: 34,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(t.radius.pill),
+          border: Border.all(color: t.stroke.hairline),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Sort  ',
+                style: TextStyle(fontSize: 12, color: t.surface.onBaseMuted)),
+            Text(_sortLabels[value] ?? '',
+                style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: t.surface.onBase)),
+            const SizedBox(width: 3),
+            Icon(Icons.keyboard_arrow_down_rounded,
+                size: 15, color: t.surface.onBaseMuted),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A muted text action for the section header (Groups / Disable) that resolves
+/// its colour from the header's own Midnight theme.
+class _GhostAction extends StatelessWidget {
+  const _GhostAction({required this.label, this.icon, required this.onTap});
+  final String label;
+  final IconData? icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return TextButton(
+      onPressed: onTap,
+      style: TextButton.styleFrom(
+        foregroundColor: t.surface.onBaseMuted,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[Icon(icon, size: 16), const SizedBox(width: 6)],
+          Text(label,
+              style:
+                  const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+        ],
       ),
     );
   }
@@ -309,17 +458,18 @@ class _RuleTile extends ConsumerWidget {
   Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {
     final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete automation?'),
-        content: Text('Delete "${rule.name}"? This cannot be undone.'),
+      builder: (ctx) => HcDialog(
+        title: 'Delete automation?',
+        description: 'Delete "${rule.name}"? This cannot be undone.',
         actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
-          FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Delete')),
+          HcButton(label: 'Cancel', onPressed: () => Navigator.pop(ctx, false)),
+          HcButton(
+            label: 'Delete',
+            kind: HcButtonKind.danger,
+            onPressed: () => Navigator.pop(ctx, true),
+          ),
         ],
+        child: const SizedBox.shrink(),
       ),
     );
     if (ok == true) {
@@ -342,52 +492,60 @@ class _RuleTile extends ConsumerWidget {
     final isUtc = ref.read(timeUtcProvider);
     showDialog<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('History: ${rule.name}'),
-        content: SizedBox(
+      builder: (ctx) {
+        final t = HcTokens.of(ctx);
+        return HcDialog(
+          title: 'History · ${rule.name}',
           width: 480,
+          actions: [
+            HcButton(label: 'Close', onPressed: () => Navigator.pop(ctx)),
+          ],
           child: history!.isEmpty
-              ? const Text('No evaluations recorded yet.')
-              : SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: history.map((h) {
-                      final ts = h['timestamp'] as String?;
-                      final dt = ts != null ? DateTime.tryParse(ts) : null;
-                      final condPass = h['conditions_pass'] as bool? ?? false;
-                      final fired = h['would_fire'] as bool? ?? false;
-                      final ms = h['eval_ms'];
-                      return ListTile(
-                        dense: true,
-                        leading: Icon(
-                          fired ? Icons.check_circle : Icons.cancel_outlined,
-                          color: fired
-                              ? Colors.green
-                              : Theme.of(ctx).colorScheme.error,
-                          size: 18,
-                        ),
-                        title: Text(
-                          dt != null
-                              ? fmtTime(dt, utc: isUtc, showDate: true)
-                              : ts ?? '?',
-                          style: const TextStyle(fontSize: 12),
-                        ),
-                        subtitle: Text(
-                          'Conditions: ${condPass ? '✓' : '✗'}  '
-                          'Fired: ${fired ? '✓' : '✗'}'
-                          '${ms != null ? '  ${ms}ms' : ''}',
-                          style: const TextStyle(fontSize: 11),
-                        ),
-                      );
-                    }).toList(),
-                  ),
+              ? Text('No evaluations recorded yet.',
+                  style: TextStyle(color: t.surface.onBaseMuted))
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: history.map((h) {
+                    final ts = h['timestamp'] as String?;
+                    final dt = ts != null ? DateTime.tryParse(ts) : null;
+                    final condPass = h['conditions_pass'] as bool? ?? false;
+                    final fired = h['would_fire'] as bool? ?? false;
+                    final ms = h['eval_ms'];
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      child: Row(
+                        children: [
+                          Icon(
+                            fired ? Icons.check_circle : Icons.cancel_outlined,
+                            color: fired
+                                ? t.accent.success
+                                : t.surface.onBaseMuted,
+                            size: 16,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              dt != null
+                                  ? fmtTime(dt, utc: isUtc, showDate: true)
+                                  : ts ?? '?',
+                              style: TextStyle(
+                                  fontSize: 12.5, color: t.surface.onBase),
+                            ),
+                          ),
+                          Text(
+                            'cond ${condPass ? '✓' : '✗'} · '
+                            'fire ${fired ? '✓' : '✗'}'
+                            '${ms != null ? ' · ${ms}ms' : ''}',
+                            style: TextStyle(
+                                fontSize: 11, color: t.surface.onBaseMuted),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
                 ),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('Close'))
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -397,34 +555,48 @@ class _RuleTile extends ConsumerWidget {
       if (!context.mounted) return;
       showDialog(
         context: context,
-        builder: (ctx) => AlertDialog(
-          title: Text('Test: ${rule.name}'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _TestRow('Conditions pass',
-                  result['conditions_pass'] as bool? ?? false),
-              _TestRow('Would fire', result['would_fire'] as bool? ?? false),
-              if ((result['actions'] as List?)?.isNotEmpty == true) ...[
-                const SizedBox(height: 8),
-                const Text('Actions:',
-                    style: TextStyle(fontWeight: FontWeight.bold)),
-                ...((result['actions'] as List)
-                    .map((a) => Text('• ${(a as Map)['type']}')))
-              ],
+        builder: (ctx) {
+          final t = HcTokens.of(ctx);
+          final actions = (result['actions'] as List?) ?? const [];
+          return HcDialog(
+            title: 'Dry run · ${rule.name}',
+            actions: [
+              HcButton(label: 'Close', onPressed: () => Navigator.pop(ctx)),
             ],
-          ),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(ctx), child: const Text('Close'))
-          ],
-        ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _TestRow('Conditions pass',
+                    result['conditions_pass'] as bool? ?? false),
+                const SizedBox(height: 6),
+                _TestRow('Would fire', result['would_fire'] as bool? ?? false),
+                if (actions.isNotEmpty) ...[
+                  const SizedBox(height: 14),
+                  Text('Actions that would run',
+                      style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.4,
+                          color: t.surface.onBaseMuted)),
+                  const SizedBox(height: 6),
+                  for (final a in actions)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 2),
+                      child: Text('• ${(a as Map)['type']}',
+                          style: TextStyle(
+                              fontSize: 12.5, color: t.surface.onBase)),
+                    ),
+                ],
+              ],
+            ),
+          );
+        },
       );
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Test failed: $e')));
+            .showSnackBar(SnackBar(content: Text('Dry run failed: $e')));
       }
     }
   }
@@ -501,6 +673,9 @@ class _RuleTile extends ConsumerWidget {
                           child: Icon(HcIcons.warning,
                               size: 13, color: t.accent.danger),
                         ),
+                      ] else if (rule.isBranching) ...[
+                        SizedBox(width: t.space.xs),
+                        _BranchesBadge(),
                       ],
                     ],
                   ),
@@ -583,6 +758,29 @@ class _RuleTile extends ConsumerWidget {
   }
 }
 
+/// The "⑂ branches" tag — a rule too structured to read as one sentence.
+class _BranchesBadge extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: t.accent.primary.withValues(alpha: 0.13),
+        borderRadius: BorderRadius.circular(t.radius.pill),
+      ),
+      child: Text(
+        '⑂ branches',
+        style: TextStyle(
+          fontSize: 10.5,
+          fontWeight: FontWeight.w700,
+          color: t.accent.primary,
+        ),
+      ),
+    );
+  }
+}
+
 /// A row that lifts under the pointer and tells its child whether it is hovered.
 class _HoverRow extends StatefulWidget {
   const _HoverRow({
@@ -618,7 +816,7 @@ class _HoverRowState extends State<_HoverRow> {
         child: AnimatedContainer(
           duration: t.motion.fast,
           padding: EdgeInsets.symmetric(
-            horizontal: t.space.md,
+            horizontal: t.space.lg,
             vertical: t.space.sm + 2,
           ),
           decoration: BoxDecoration(
@@ -643,13 +841,15 @@ class _TestRow extends StatelessWidget {
   final bool value;
   const _TestRow(this.label, this.value);
   @override
-  Widget build(BuildContext context) => Row(
-        children: [
-          Icon(value ? Icons.check_circle : Icons.cancel,
-              color: value ? Colors.green : Theme.of(context).colorScheme.error,
-              size: 18),
-          const SizedBox(width: 8),
-          Text(label),
-        ],
-      );
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Row(
+      children: [
+        Icon(value ? Icons.check_circle : Icons.cancel,
+            color: value ? t.accent.success : t.accent.danger, size: 18),
+        const SizedBox(width: 8),
+        Text(label, style: TextStyle(fontSize: 13.5, color: t.surface.onBase)),
+      ],
+    );
+  }
 }
