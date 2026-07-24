@@ -142,10 +142,18 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
     final out = <_Entry>[];
     final seen = <String>{};
 
+    final speakers = widget.refs.devices
+        .where((x) => facetOf(x, x.schema) == DeviceFacet.mediaPlayer)
+        .toList();
+
     for (final d in widget.refs.devices) {
-      final cmds = commandsFor(d);
+      final facet = facetOf(d, d.schema);
+      final peers = facet == DeviceFacet.mediaPlayer
+          ? speakers.where((x) => x.id != d.id).toList()
+          : const <DeviceState>[];
+      final cmds = commandsFor(d, mediaPeers: peers);
       if (cmds.isEmpty) continue; // sensors and non-actuators
-      final bucket = _bucketOf(facetOf(d, d.schema)) ?? 'switch';
+      final bucket = _bucketOf(facet) ?? 'switch';
       seen.add(d.ruleReference);
       final (chip, tone) = _deviceChip(d);
       out.add(_Entry(
@@ -665,7 +673,16 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
       padding: EdgeInsets.all(t.space.md),
       children: [
         Row(children: [
-          Icon(e.icon, size: 20, color: t.accent.active),
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: t.accent.active.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: t.accent.active.withValues(alpha: 0.3)),
+            ),
+            child: Icon(e.icon, size: 21, color: t.accent.active),
+          ),
           SizedBox(width: t.space.sm),
           Expanded(
             child: Column(
@@ -701,19 +718,30 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
   }
 
   Widget _commandGrid(HcTokens t, _Entry e) {
-    return Wrap(
-      spacing: t.space.xs,
-      runSpacing: t.space.xs,
-      children: [
-        for (final c in e.commands)
-          _CommandChip(
-            command: c,
-            selected: _cmd?.key == c.key,
-            onTap: () => _pickCommand(c),
-          ),
-      ],
-    );
+    // A uniform 2-column grid, not a Wrap: every command reads as an equal
+    // choice, and the buttons line up regardless of label length.
+    final cmds = e.commands;
+    final rows = <Widget>[];
+    for (var i = 0; i < cmds.length; i += 2) {
+      final a = cmds[i];
+      final b = i + 1 < cmds.length ? cmds[i + 1] : null;
+      rows.add(Padding(
+        padding: EdgeInsets.only(bottom: t.space.xs),
+        child: Row(children: [
+          Expanded(child: _cmdChip(t, a)),
+          SizedBox(width: t.space.xs),
+          Expanded(child: b == null ? const SizedBox() : _cmdChip(t, b)),
+        ]),
+      ));
+    }
+    return Column(children: rows);
   }
+
+  Widget _cmdChip(HcTokens t, DeviceCommand c) => _CommandChip(
+        command: c,
+        selected: _cmd?.key == c.key,
+        onTap: () => _pickCommand(c),
+      );
 
   String _paramLabel(DeviceCommand c) => switch (c.param.kind) {
         CmdParamKind.slider => c.key == 'vol' || c.key == 'set_volume'
@@ -1067,6 +1095,13 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
           word('on'),
           dev
         ];
+      case 'group':
+        return [
+          tok('group', t.accent.active),
+          dev,
+          word('with'),
+          tok(val, t.accent.active)
+        ];
       case 'next':
         return [
           tok('skip to the next track', t.accent.active),
@@ -1136,15 +1171,20 @@ class _CommandChip extends StatelessWidget {
                 color:
                     selected ? ac.withValues(alpha: 0.4) : t.stroke.hairline),
           ),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
+          child: Row(children: [
             Icon(command.icon,
                 size: 15, color: selected ? ac : t.surface.onBaseMuted),
             SizedBox(width: t.space.xs),
-            Text(command.label,
-                style: TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w600,
-                    color: selected ? ac : t.surface.onBaseMuted)),
+            Expanded(
+              child: Text(command.label,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      height: 1.15,
+                      color: selected ? ac : t.surface.onBaseMuted)),
+            ),
           ]),
         ),
       ),

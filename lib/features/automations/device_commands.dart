@@ -74,7 +74,8 @@ class DeviceCommand {
 
 /// The commands that make sense for [d], in display order. Empty for a sensor —
 /// a sensor has nothing to do, so it never reaches the action picker.
-List<DeviceCommand> commandsFor(DeviceState d) {
+List<DeviceCommand> commandsFor(DeviceState d,
+    {List<DeviceState> mediaPeers = const []}) {
   final facet = facetOf(d, d.schema);
   final ref = d.ruleReference;
 
@@ -84,7 +85,7 @@ List<DeviceCommand> commandsFor(DeviceState d) {
 
   switch (facet) {
     case DeviceFacet.mediaPlayer:
-      return _mediaCommands(d, setState);
+      return _mediaCommands(d, setState, mediaPeers);
 
     case DeviceFacet.scene:
       return [
@@ -304,28 +305,35 @@ List<DeviceCommand> _onOff(HcNode Function(Map<String, Object?>) setState) => [
 List<DeviceCommand> _mediaCommands(
   DeviceState d,
   HcNode Function(Map<String, Object?>) setState,
+  List<DeviceState> peers,
 ) {
   HcNode act(Map<String, Object?> body) => setState(body);
   final has = d.supportsAction;
+  final enrich = d.uiEnrichments;
   final favorites = _strList(d.state['available_favorites']);
   final playlists = _strList(d.state['available_playlists']);
   String? first(List<String> l) => l.isEmpty ? null : l.first;
 
   final out = <DeviceCommand>[];
-  void add(String need, DeviceCommand c) {
-    if (has(need)) out.add(c);
+  void add(bool when, DeviceCommand c) {
+    if (when) out.add(c);
   }
 
   add(
-      'play',
+      has('play'),
       _c('play', 'Play', Icons.play_arrow, const CmdParam.none(),
           (_) => act({'action': 'play'})));
   add(
-      'pause',
+      has('pause'),
       _c('pause', 'Pause', Icons.pause, const CmdParam.none(),
           (_) => act({'action': 'pause'})));
+
+  // Favourites & playlists are advertised through `ui_enrichments` (+ the
+  // catalogue in state), NOT as `supported_actions`: the plugin routes them via
+  // `play_media` but accepts `play_favorite` / `play_playlist` directly. Gating
+  // them on supported_actions (as a first cut did) hid them on every Sonos.
   add(
-      'play_favorite',
+      enrich.contains('favorites') || favorites.isNotEmpty,
       _c(
           'play_favorite',
           'Play favorite',
@@ -334,7 +342,7 @@ List<DeviceCommand> _mediaCommands(
               options: favorites, defaultValue: first(favorites)),
           (v) => act({'action': 'play_favorite', 'favorite': '${v ?? ''}'})));
   add(
-      'play_playlist',
+      enrich.contains('playlists') || playlists.isNotEmpty,
       _c(
           'play_playlist',
           'Play playlist',
@@ -342,8 +350,9 @@ List<DeviceCommand> _mediaCommands(
           CmdParam(CmdParamKind.select,
               options: playlists, defaultValue: first(playlists)),
           (v) => act({'action': 'play_playlist', 'playlist': '${v ?? ''}'})));
+
   add(
-      'set_volume',
+      has('set_volume'),
       _c(
           'set_volume',
           'Set volume',
@@ -352,15 +361,15 @@ List<DeviceCommand> _mediaCommands(
               unit: '%', min: 0, max: 100, defaultValue: d.volumePercent ?? 30),
           (v) => act({'action': 'set_volume', 'volume': _int(v, 30)})));
   add(
-      'next',
+      has('next'),
       _c('next', 'Next track', Icons.skip_next, const CmdParam.none(),
           (_) => act({'action': 'next'})));
   add(
-      'previous',
+      has('previous'),
       _c('previous', 'Previous', Icons.skip_previous, const CmdParam.none(),
           (_) => act({'action': 'previous'})));
   add(
-      'set_shuffle',
+      has('set_shuffle'),
       _c(
           'set_shuffle',
           'Shuffle',
@@ -368,6 +377,21 @@ List<DeviceCommand> _mediaCommands(
           const CmdParam(CmdParamKind.select,
               options: ['on', 'off'], defaultValue: 'on'),
           (v) => act({'action': 'set_shuffle', 'shuffle': v == 'on'})));
+
+  // Grouping: join THIS speaker to another speaker's group. `join` takes the
+  // coordinator's device id (a UUID), so the value is a peer name resolved back
+  // to its id in the closure.
+  final coords = {for (final p in peers) p.displayName: p.id};
+  add(
+      (has('join') || enrich.contains('grouping')) && coords.isNotEmpty,
+      _c(
+          'group',
+          'Group with…',
+          Icons.group_work_outlined,
+          CmdParam(CmdParamKind.select,
+              options: coords.keys.toList(),
+              defaultValue: coords.keys.isEmpty ? null : coords.keys.first),
+          (v) => act({'action': 'join', 'coordinator': coords['$v'] ?? ''})));
   return out;
 }
 

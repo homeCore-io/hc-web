@@ -83,20 +83,56 @@ void main() {
       expect(isActionable(door), isFalse);
     });
 
-    test('media commands are gated by supported_actions', () {
-      final full = _d('sp', type: 'media_player', state: {
-        'supported_actions': ['play', 'pause', 'set_volume', 'play_favorite'],
-      });
-      expect(commandsFor(full).map((c) => c.key),
-          containsAll(['play', 'pause', 'set_volume', 'play_favorite']));
-
+    test('media transport gated by supported_actions', () {
       final limited = _d('sp2', type: 'media_player', state: {
         'supported_actions': ['play', 'pause'],
       });
       final keys = commandsFor(limited).map((c) => c.key);
       expect(keys, containsAll(['play', 'pause']));
-      expect(keys, isNot(contains('play_favorite')));
       expect(keys, isNot(contains('set_volume')));
+      expect(keys, isNot(contains('next')));
+    });
+
+    test('favorites/playlists gate on ui_enrichments, not supported_actions',
+        () {
+      // A Sonos advertises favorites/playlists via ui_enrichments + catalogue,
+      // never as a supported_action — gating on the latter hid them.
+      final sonos = _d('sp', type: 'media_player', state: {
+        'supported_actions': ['play', 'pause', 'set_volume'],
+        'ui_enrichments': ['favorites', 'playlists', 'grouping'],
+        'available_favorites': ['Jazz', 'Focus'],
+        'available_playlists': ['Party'],
+      });
+      final keys = commandsFor(sonos).map((c) => c.key);
+      expect(keys, containsAll(['play_favorite', 'play_playlist']));
+
+      final noEnrich = _d('sp3', type: 'media_player', state: {
+        'supported_actions': ['play', 'pause'],
+      });
+      expect(commandsFor(noEnrich).map((c) => c.key),
+          isNot(contains('play_favorite')));
+    });
+
+    test('grouping shows only with peers, and joins by coordinator id', () {
+      final a =
+          _d('a', type: 'media_player', canonical: 'living.sonos', state: {
+        'supported_actions': ['play', 'join'],
+      });
+      final b = _d('bath-uuid',
+          type: 'media_player',
+          canonical: 'bath.sonos',
+          state: {
+            'supported_actions': ['play', 'join'],
+          });
+      // No peers → no group command.
+      expect(commandsFor(a).map((c) => c.key), isNot(contains('group')));
+      // With a peer → group command whose value is the peer name.
+      final group =
+          commandsFor(a, mediaPeers: [b]).firstWhere((c) => c.key == 'group');
+      final node = group.build(b.displayName);
+      final state = (node['state'] as Map).cast<String, Object?>();
+      expect(state['action'], 'join');
+      expect(state['coordinator'], 'bath-uuid'); // the UUID, not canonical
     });
   });
 
@@ -142,12 +178,9 @@ void main() {
 
     test('media verbs use the {action,...} convention', () {
       final d = _d('sp', type: 'media_player', state: {
-        'supported_actions': [
-          'play',
-          'set_volume',
-          'play_favorite',
-          'set_shuffle'
-        ],
+        'supported_actions': ['play', 'set_volume', 'set_shuffle'],
+        'ui_enrichments': ['favorites'],
+        'available_favorites': ['Jazz'],
       });
       expect(_state(_cmd(d, 'play')), {'action': 'play'});
       expect(_state(_cmd(d, 'set_volume'), 30),
