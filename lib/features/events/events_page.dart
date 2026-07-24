@@ -5,6 +5,7 @@ import '../../core/models/event_entry.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/text/humanize.dart';
 import '../../core/models/hc_event.dart';
+import '../../core/providers/devices_provider.dart';
 import '../../core/providers/events_provider.dart';
 import '../../core/providers/time_display_provider.dart';
 import '../../design/tokens.dart';
@@ -62,6 +63,110 @@ Color eventColor(HcTokens t, String type, {bool? available}) {
     default:
       return t.surface.onBaseMuted;
   }
+}
+
+/// A humanized, condensed line for one event: a subject (the device or thing it
+/// happened to) and, when there is detail, a short description of what changed.
+///
+/// Both the live socket and the history API ship the same payload shape, so a
+/// row can finally read "Garage Temperature Sensor — Temperature 69.8 → 71.6°F"
+/// instead of "Device state changed  yolink_d88b4c01000ce0b6". The event carries
+/// `device_name`; [nameFor] backfills the rare one that doesn't from the device
+/// registry, so a raw id never reaches a person.
+({String subject, String? detail}) describeEvent(
+  String type,
+  Map<String, dynamic> data, [
+  String? Function(String id)? nameFor,
+]) {
+  final id = data['device_id'] as String?;
+  final name = data['device_name'] as String?;
+  String subject() {
+    if (name != null && name.trim().isNotEmpty) return name;
+    if (id != null && id.isNotEmpty) return nameFor?.call(id) ?? id;
+    return humanize(type);
+  }
+
+  switch (type) {
+    case 'device_state_changed':
+      final changed =
+          (data['changed'] as List?)?.whereType<String>().toList() ?? const [];
+      final cur = (data['current'] as Map?) ?? const {};
+      final prev = (data['previous'] as Map?) ?? const {};
+      final parts = <String>[];
+      for (final k in changed.take(3)) {
+        final now = _fmtVal(cur[k], k, cur);
+        final was = prev.containsKey(k) ? _fmtVal(prev[k], k, prev) : null;
+        parts.add(was != null && was != now
+            ? '${_attrLabel(k)} $was → $now'
+            : '${_attrLabel(k)} $now');
+      }
+      if (changed.length > 3) parts.add('+${changed.length - 3} more');
+      return (subject: subject(), detail: parts.isEmpty ? null : parts.join(' · '));
+    case 'device_availability_changed':
+      return (
+        subject: subject(),
+        detail: data['available'] == false ? 'went offline' : 'came online'
+      );
+    case 'scene_activated':
+      return (
+        subject: (data['scene_name'] as String?) ?? subject(),
+        detail: 'activated'
+      );
+    case 'rule_fired':
+      return (
+        subject: (data['rule_name'] as String?) ??
+            (data['name'] as String?) ??
+            'Rule',
+        detail: 'fired'
+      );
+    case 'plugin_registered':
+      return (
+        subject: humanize((data['plugin_id'] as String?)?.replaceFirst('plugin.', '')),
+        detail: 'registered'
+      );
+    case 'plugin_offline':
+      return (
+        subject: humanize((data['plugin_id'] as String?)?.replaceFirst('plugin.', '')),
+        detail: 'went offline'
+      );
+    case 'system_alert':
+      return (
+        subject: 'System alert',
+        detail: (data['message'] as String?) ?? (data['level'] as String?)
+      );
+    default:
+      return (subject: humanize(type), detail: id != null ? subject() : null);
+  }
+}
+
+/// The attribute's label, minus a unit suffix the value already carries, so a
+/// row reads "Humidity 62.7% → 64.5%", not "Humidity Pct 62.7% → 64.5%".
+String _attrLabel(String key) {
+  for (final suf in const ['_pct', '_w', '_kwh', '_lux', '_ppm', '_mirek']) {
+    if (key.endsWith(suf)) return humanize(key.substring(0, key.length - suf.length));
+  }
+  return humanize(key);
+}
+
+/// Formats one attribute value for an event line, with the unit the reading
+/// implies — a bare 71.6 next to "temperature" is ambiguous in a house.
+String _fmtVal(Object? v, String key, Map<dynamic, dynamic> ctx) {
+  if (v == null) return '—';
+  if (v is bool) return v ? 'on' : 'off';
+  if (v is num) {
+    final n = v == v.roundToDouble()
+        ? v.toStringAsFixed(0)
+        : v.toStringAsFixed(1);
+    if (key.startsWith('temperature')) {
+      final u = ctx['temperature_unit'];
+      final unit = u is String ? u.toUpperCase().replaceAll('°', '') : '';
+      return '$n°$unit';
+    }
+    if (key.endsWith('_pct')) return '$n%';
+    if (key == 'power_w' || key.endsWith('_w')) return '${n}W';
+    return n;
+  }
+  return v.toString();
 }
 
 class EventsPage extends ConsumerStatefulWidget {
@@ -211,20 +316,20 @@ class _TypeChips extends StatelessWidget {
 class _EventRow extends StatelessWidget {
   const _EventRow({
     required this.color,
-    required this.type,
-    required this.deviceId,
+    required this.subject,
+    required this.detail,
     required this.time,
   });
   final Color color;
-  final String type;
-  final String? deviceId;
+  final String subject;
+  final String? detail;
   final String time;
 
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 10),
+      padding: const EdgeInsets.symmetric(vertical: 9),
       decoration: BoxDecoration(
         border: Border(bottom: BorderSide(color: t.stroke.hairline)),
       ),
@@ -232,28 +337,40 @@ class _EventRow extends StatelessWidget {
         children: [
           Container(
             width: 3,
-            height: 24,
+            height: 22,
             decoration: BoxDecoration(
                 color: color, borderRadius: BorderRadius.circular(3)),
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: Text(humanize(type),
-                style: TextStyle(fontSize: 13.5, color: t.surface.onBase)),
-          ),
-          if (deviceId != null) ...[
-            Flexible(
-              child: Text(deviceId!,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.right,
-                  style: TextStyle(
-                      fontSize: 11.5,
-                      color: t.surface.onBaseMuted,
-                      fontFeatures: t.numericFontFeatures)),
+            child: Row(
+              children: [
+                Flexible(
+                  child: Text(subject,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w500,
+                          color: t.surface.onBase)),
+                ),
+                if (detail != null) ...[
+                  const SizedBox(width: 10),
+                  Flexible(
+                    flex: 2,
+                    child: Text(detail!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontSize: 12.5,
+                            color: t.surface.onBaseMuted,
+                            fontFeatures: t.numericFontFeatures)),
+                  ),
+                ],
+              ],
             ),
-            const SizedBox(width: 14),
-          ],
+          ),
+          const SizedBox(width: 12),
           Text(time,
               style: TextStyle(
                   fontSize: 11.5,
@@ -298,6 +415,11 @@ class _LiveTabState extends ConsumerState<_LiveTab> {
     final isUtc = ref.watch(timeUtcProvider);
     final events = ref.watch(_liveEventsProvider);
     final typeFilter = ref.watch(_liveTypeFilterProvider);
+    final byId = {
+      for (final d in ref.watch(devicesProvider).valueOrNull ?? const [])
+        d.id: d.displayName
+    };
+    String? nameFor(String id) => byId[id];
 
     var filtered = typeFilter.isEmpty
         ? events
@@ -354,10 +476,11 @@ class _LiveTabState extends ConsumerState<_LiveTab> {
                   itemCount: filtered.length,
                   itemBuilder: (context, i) {
                     final e = filtered[i];
+                    final d = describeEvent(e.type, e.data, nameFor);
                     return _EventRow(
                       color: eventColor(t, e.type, available: e.available),
-                      type: e.type,
-                      deviceId: e.deviceId,
+                      subject: d.subject,
+                      detail: d.detail,
                       time: fmtTime(e.timestamp, utc: isUtc),
                     );
                   },
@@ -402,6 +525,11 @@ class _HistoryTabState extends ConsumerState<_HistoryTab> {
     final historyAsync = ref.watch(_historyEventsProvider(limit));
     final typeFilter = ref.watch(_historyTypeFilterProvider);
     final deviceSearch = ref.watch(_historyDeviceSearchProvider);
+    final byId = {
+      for (final d in ref.watch(devicesProvider).valueOrNull ?? const [])
+        d.id: d.displayName
+    };
+    String? nameFor(String id) => byId[id];
 
     return Column(
       children: [
@@ -497,10 +625,11 @@ class _HistoryTabState extends ConsumerState<_HistoryTab> {
                   final e = filtered[i];
                   final ts = e.event['timestamp'] as String?;
                   final dt = ts != null ? DateTime.tryParse(ts) : null;
+                  final d = describeEvent(e.eventType, e.event, nameFor);
                   return _EventRow(
                     color: eventColor(t, e.eventType),
-                    type: e.eventType,
-                    deviceId: e.deviceId,
+                    subject: d.subject,
+                    detail: d.detail,
                     time: dt != null
                         ? fmtTime(dt, utc: isUtc, showDate: true)
                         : '',
