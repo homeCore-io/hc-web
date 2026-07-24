@@ -5,6 +5,7 @@ import 'package:web/web.dart' as web;
 
 import '../../design/hc_icons.dart';
 import '../../design/tokens.dart';
+import '../../shared/widgets/section_scaffold.dart';
 import 'camera_source.dart';
 import 'camera_store.dart';
 import 'wall_presentations.dart';
@@ -34,76 +35,89 @@ class _CamerasPageState extends ConsumerState<CamerasPage> {
     final t = HcTokens.of(context);
     final cameras = ref.watch(camerasProvider);
 
-    return Scaffold(
-      floatingActionButton: FloatingActionButton.extended(
-        icon: const Icon(HcIcons.plus, size: 16),
-        label: const Text('Add camera'),
-        backgroundColor: t.accent.active,
-        foregroundColor: t.surface.base,
-        onPressed: () => _addCamera(context),
-      ),
-      body: cameras.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(
-            child: Text('$e', style: TextStyle(color: t.surface.onBaseMuted))),
-        data: (list) {
-          if (list.isEmpty) return const _Empty();
+    // The "+ Add camera" affordance every state shares, so an empty wall can be
+    // filled and a full one grown from the same header the other Manage sections
+    // use — no floating button that only some sections have.
+    final addAction = SectionHeaderAction(
+      icon: HcIcons.plus,
+      label: 'Add camera',
+      onPressed: () => _addCamera(context),
+    );
 
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: EdgeInsets.fromLTRB(
-                    t.space.lg, t.space.lg, t.space.lg, t.space.sm),
-                child: Row(
+    return cameras.when(
+      loading: () => const SectionScaffold(
+        title: 'Cameras',
+        child: Center(child: CircularProgressIndicator()),
+      ),
+      error: (e, _) => SectionScaffold(
+        title: 'Cameras',
+        child: Center(
+            child: Text('$e', style: TextStyle(color: t.surface.onBaseMuted))),
+      ),
+      data: (list) {
+        final onHome = list.where((c) => c.showOnHome).length;
+        return SectionScaffold(
+          title: 'Cameras',
+          stats: [
+            SectionStat(value: '${list.length}', label: 'cameras'),
+            if (onHome > 0)
+              SectionStat(
+                value: '$onHome',
+                label: 'on Home',
+                tone: SectionTone.active,
+                glow: true,
+              ),
+          ],
+          actions: [
+            // Wall-preview controls only mean something once there is a wall.
+            if (list.isNotEmpty) ...[
+              _LayoutToggle(
+                value: _preview,
+                onChanged: (v) => setState(() => _preview = v),
+              ),
+              if (_preview == WallLayout.spotlight) ...[
+                const SizedBox(width: 8),
+                _StripToggle(
+                  value: _strip,
+                  onChanged: (v) => setState(() => _strip = v),
+                ),
+              ],
+              const SizedBox(width: 8),
+              TextButton.icon(
+                icon: const Icon(HcIcons.copy, size: 14),
+                label: const Text('Kiosk link'),
+                onPressed: () => _copyKioskLink(context, list),
+              ),
+              const SizedBox(width: 4),
+            ],
+            addAction,
+          ],
+          child: list.isEmpty
+              ? const _Empty()
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Cameras',
-                        style: TextStyle(
-                          fontSize: 30,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: -0.8,
-                          color: t.surface.onBase,
-                        )),
-                    const Spacer(),
-                    _LayoutToggle(
-                      value: _preview,
-                      onChanged: (v) => setState(() => _preview = v),
-                    ),
-                    if (_preview == WallLayout.spotlight) ...[
-                      SizedBox(width: t.space.sm),
-                      _StripToggle(
-                        value: _strip,
-                        onChanged: (v) => setState(() => _strip = v),
+                    // The wall as a device would see it, live, so what you build
+                    // is what you get. Cameras below for management.
+                    Expanded(
+                      child: WallView(
+                        cameras: list,
+                        layout: _preview,
+                        stripPosition: _strip,
                       ),
-                    ],
-                    SizedBox(width: t.space.sm),
-                    TextButton.icon(
-                      icon: const Icon(HcIcons.copy, size: 14),
-                      label: const Text('Kiosk link'),
-                      onPressed: () => _copyKioskLink(context, list),
+                    ),
+                    _CameraStrip(
+                      cameras: list,
+                      onRemove: (id) =>
+                          ref.read(camerasProvider.notifier).remove(id),
+                      onToggleHome: (id, show) => ref
+                          .read(camerasProvider.notifier)
+                          .setShowOnHome(id, show),
                     ),
                   ],
                 ),
-              ),
-              // The wall as a device would see it, live, so what you build is
-              // what you get. Cameras below for management.
-              Expanded(
-                child: WallView(
-                  cameras: list,
-                  layout: _preview,
-                  stripPosition: _strip,
-                ),
-              ),
-              _CameraStrip(
-                cameras: list,
-                onRemove: (id) => ref.read(camerasProvider.notifier).remove(id),
-                onToggleHome: (id, show) =>
-                    ref.read(camerasProvider.notifier).setShowOnHome(id, show),
-              ),
-            ],
-          );
-        },
-      ),
+        );
+      },
     );
   }
 
