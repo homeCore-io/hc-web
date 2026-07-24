@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 
 import '../../../design/components/hc_chip.dart';
+import '../../../design/components/hc_dialog.dart';
 import '../../../design/components/hc_sentence.dart';
 import '../../../design/hc_icons.dart';
 import '../../../design/tokens.dart';
 import '../rhai.dart';
+import 'editor_style.dart';
 import 'rule_refs.dart';
 
 /// A `Conditional`'s predicate, as a sentence where it can be one.
@@ -111,30 +113,38 @@ class RhaiConditionField extends StatelessWidget {
   }
 
   Future<void> _editTest(BuildContext context, RhaiCondition c) async {
-    final t = HcTokens.of(context);
     final attrCtrl = TextEditingController(text: c.attribute);
     final valCtrl = TextEditingController(text: '${c.value}');
     var op = c.op;
 
     final ok = await showDialog<bool>(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setInner) => AlertDialog(
-          backgroundColor: t.surface.overlay,
-          title: const Text('Test'),
-          content: SizedBox(
-            width: 380,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setInner) {
+          final t = HcTokens.of(ctx);
+          return HcDialog(
+            title: 'Test',
+            width: 420,
+            actions: [
+              HcButton(
+                  label: 'Cancel', onPressed: () => Navigator.pop(ctx, false)),
+              HcButton(
+                label: 'Done',
+                kind: HcButtonKind.primary,
+                onPressed: () => Navigator.pop(ctx, true),
+              ),
+            ],
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 TextField(
                   controller: attrCtrl,
-                  decoration: const InputDecoration(labelText: 'Attribute'),
+                  decoration: fieldDecoration(t, label: 'Attribute'),
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                   initialValue: op,
-                  decoration: const InputDecoration(labelText: 'Comparison'),
+                  decoration: fieldDecoration(t, label: 'Comparison'),
                   items: const [
                     DropdownMenuItem(value: '==', child: Text('is')),
                     DropdownMenuItem(value: '!=', child: Text('is not')),
@@ -148,25 +158,13 @@ class RhaiConditionField extends StatelessWidget {
                 const SizedBox(height: 12),
                 TextField(
                   controller: valCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Value',
-                    helperText: 'true, false, a number, or text',
-                  ),
+                  decoration: fieldDecoration(t,
+                      label: 'Value', help: 'true, false, a number, or text'),
                 ),
               ],
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Done'),
-            ),
-          ],
-        ),
+          );
+        },
       ),
     );
 
@@ -273,10 +271,12 @@ class _DevicePicker extends StatelessWidget {
     final t = HcTokens.of(context);
     final devices = refs.devices;
 
+    // Material Dialog + ListTile on a tokenised surface: studio look, reliable
+    // hit-testing for a long tap list.
     return Dialog(
       backgroundColor: t.surface.overlay,
       child: SizedBox(
-        width: 420,
+        width: 460,
         height: 480,
         child: ListView(
           children: [
@@ -284,11 +284,11 @@ class _DevicePicker extends StatelessWidget {
               ListTile(
                 dense: true,
                 selected: d.id == current || d.canonicalName == current,
-                title: Text(d.displayName),
-                subtitle: Text(
-                  d.canonicalName ?? d.id,
-                  style: const TextStyle(fontSize: 11),
-                ),
+                title: Text(d.displayName,
+                    style: TextStyle(color: t.surface.onBase, fontSize: 14)),
+                subtitle: Text(d.canonicalName ?? d.id,
+                    style:
+                        TextStyle(color: t.surface.onBaseMuted, fontSize: 12)),
                 // Give back the SAME form of reference the rule already used, so
                 // a rule keyed on canonical names stays keyed on canonical names.
                 onTap: () => Navigator.pop(

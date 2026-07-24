@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 
 import '../../../core/models/device_state.dart';
 import '../../../core/rules/schema.dart';
+import '../../../design/tokens.dart';
+import 'editor_style.dart';
 import 'rule_refs.dart';
 
 /// Renders every field of a node from its [HcVariant] descriptor.
@@ -108,13 +110,11 @@ class FieldEditor extends StatelessWidget {
 
   // -- primitives ----------------------------------------------------------
 
-  InputDecoration _dec(BuildContext context, {String? hint}) => InputDecoration(
-        labelText: _label + (field.required ? '' : ' (optional)'),
-        helperText: field.help,
-        helperMaxLines: 3,
-        hintText: hint,
-        isDense: true,
-        border: const OutlineInputBorder(),
+  InputDecoration _dec(BuildContext context, {String? hint}) => fieldDecoration(
+        HcTokens.of(context),
+        label: _label + (field.required ? '' : ' (optional)'),
+        help: field.help,
+        hint: hint,
       );
 
   Widget _textField(BuildContext context, {int lines = 1, bool mono = false}) =>
@@ -226,7 +226,7 @@ class FieldEditor extends StatelessWidget {
                   : 'Unknown device "$current" — it may be offline or removed.',
               style: TextStyle(
                 fontSize: 11,
-                color: Theme.of(context).colorScheme.error,
+                color: HcTokens.of(context).accent.danger,
               ),
             ),
           ),
@@ -239,16 +239,18 @@ class FieldEditor extends StatelessWidget {
       for (final v in (value as List? ?? const [])) '$v',
     ];
 
+    final t = HcTokens.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(_label, style: Theme.of(context).textTheme.labelMedium),
+        RailLabel(_label),
         if (field.help != null)
-          Text(field.help!,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.outline,
-                  )),
-        const SizedBox(height: 4),
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(field.help!,
+                style: TextStyle(fontSize: 11.5, color: t.surface.onBaseMuted)),
+          ),
+        const SizedBox(height: 6),
         Wrap(
           spacing: 6,
           runSpacing: 6,
@@ -276,29 +278,52 @@ class FieldEditor extends StatelessWidget {
     );
   }
 
-  Future<String?> _pickDevice(BuildContext context) => showDialog<String>(
-        context: context,
-        builder: (context) => SimpleDialog(
-          title: const Text('Add a device'),
-          children: [
-            SizedBox(
-              width: 420,
-              height: 420,
-              child: ListView(
-                children: [
-                  for (final d in refs.devices)
-                    ListTile(
-                      dense: true,
-                      title: Text(d.name?.isNotEmpty ?? false ? d.name! : d.id),
-                      subtitle: Text(refs.refFor(d)),
-                      onTap: () => Navigator.pop(context, refs.refFor(d)),
-                    ),
-                ],
+  Future<String?> _pickDevice(BuildContext context) {
+    final t = HcTokens.of(context);
+    // A Material Dialog + ListTile: the tokenised surface reads studio, and
+    // ListTile's own hit-testing is the reliable one for a long tap list.
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: t.surface.overlay,
+        child: SizedBox(
+          width: 460,
+          height: 460,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: Text('Add a device',
+                    style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: t.surface.onBase)),
               ),
-            ),
-          ],
+              Expanded(
+                child: ListView(
+                  children: [
+                    for (final d in refs.devices)
+                      ListTile(
+                        dense: true,
+                        title: Text(
+                            d.name?.isNotEmpty ?? false ? d.name! : d.id,
+                            style: TextStyle(
+                                color: t.surface.onBase, fontSize: 14)),
+                        subtitle: Text(refs.refFor(d),
+                            style: TextStyle(
+                                color: t.surface.onBaseMuted, fontSize: 12)),
+                        onTap: () => Navigator.pop(ctx, refs.refFor(d)),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
-      );
+      ),
+    );
+  }
 
   Widget _attributeField(BuildContext context) {
     final known = siblingDeviceRef == null
@@ -389,8 +414,8 @@ class FieldEditor extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(_label, style: Theme.of(context).textTheme.labelMedium),
-        const SizedBox(height: 4),
+        RailLabel(_label),
+        const SizedBox(height: 6),
         Wrap(
           spacing: 4,
           children: [

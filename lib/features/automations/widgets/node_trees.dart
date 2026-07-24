@@ -6,6 +6,7 @@ import '../../../core/rules/schema.dart';
 import '../../../design/components/hc_sentence.dart';
 import '../../../design/hc_icons.dart';
 import '../../../design/tokens.dart';
+import 'editor_style.dart';
 import 'field_editors.dart';
 import '../rule_phrasing.dart';
 import 'rhai_condition.dart';
@@ -280,13 +281,9 @@ class ConditionTree extends StatelessWidget {
       children: [
         for (var i = 0; i < conditions.length; i++) ...[
           if (i > 0)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Text('AND',
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: Theme.of(context).colorScheme.outline,
-                        fontWeight: FontWeight.bold,
-                      )),
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 4),
+              child: RailLabel('AND'),
             ),
           ConditionNode(
             node: conditions[i],
@@ -495,8 +492,9 @@ class _ResultChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final t = HcTokens.of(context);
     final ok = result.passed;
+    final c = ok ? t.accent.success : t.accent.danger;
     final detail = result.reason ??
         (result.actual != null
             ? 'is ${result.actual}, wanted ${result.expected}'
@@ -507,23 +505,16 @@ class _ResultChip extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
         decoration: BoxDecoration(
-          color: (ok ? scheme.primary : scheme.error).withValues(alpha: 0.12),
+          color: c.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(4),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(ok ? HcIcons.check : HcIcons.x,
-                size: 12, color: ok ? scheme.primary : scheme.error),
+            Icon(ok ? HcIcons.check : HcIcons.x, size: 12, color: c),
             if (detail != null) ...[
               const SizedBox(width: 4),
-              Text(
-                detail,
-                style: TextStyle(
-                  fontSize: 10,
-                  color: ok ? scheme.primary : scheme.error,
-                ),
-              ),
+              Text(detail, style: TextStyle(fontSize: 10, color: c)),
             ],
           ],
         ),
@@ -802,14 +793,7 @@ class _NestedActions extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            title.toUpperCase(),
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: Theme.of(context).colorScheme.outline,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 0.8,
-                ),
-          ),
+          RailLabel(title),
           const SizedBox(height: 4),
           for (var i = 0; i < children.length; i++)
             ActionNode(
@@ -878,15 +862,12 @@ class _ElseIfChain extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    Text('ELSE IF',
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                              color: Theme.of(context).colorScheme.outline,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 0.8,
-                            )),
+                    const RailLabel('ELSE IF'),
                     const Spacer(),
                     IconButton(
-                      icon: const Icon(Icons.delete_outline, size: 16),
+                      icon: Icon(Icons.delete_outline,
+                          size: 16, color: HcTokens.of(context).accent.danger),
+                      tooltip: 'Remove',
                       onPressed: () {
                         branches.removeAt(i);
                         node['else_if'] = branches;
@@ -897,11 +878,8 @@ class _ElseIfChain extends StatelessWidget {
                 ),
                 TextFormField(
                   initialValue: branches[i].condition,
-                  decoration: const InputDecoration(
-                    labelText: 'Expression',
-                    isDense: true,
-                    border: OutlineInputBorder(),
-                  ),
+                  decoration: fieldDecoration(HcTokens.of(context),
+                      label: 'Expression'),
                   style: const TextStyle(fontFamily: 'monospace'),
                   onChanged: (v) {
                     branches[i].condition = v;
@@ -1012,6 +990,7 @@ class _PaletteState extends State<_Palette> {
 
   @override
   Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
     final all = widget.registry.values.toList();
     final matching = _query.isEmpty
         ? all
@@ -1021,7 +1000,13 @@ class _PaletteState extends State<_Palette> {
                 v.tag.toLowerCase().contains(_query.toLowerCase()))
             .toList();
 
+    // A Material dialog with its own bounded, scrolling list. HcDialog wraps its
+    // child in a SingleChildScrollView, and tappable list rows inside that did
+    // not reliably receive taps in a release build — a form dialog is fine there
+    // (see _editTest) but a long picker list is not, so this keeps a plain
+    // Dialog while adopting the token palette (search + rows + surface colour).
     return Dialog(
+      backgroundColor: t.surface.overlay,
       child: SizedBox(
         width: 520,
         height: 560,
@@ -1031,12 +1016,7 @@ class _PaletteState extends State<_Palette> {
               padding: const EdgeInsets.all(12),
               child: TextField(
                 autofocus: true,
-                decoration: const InputDecoration(
-                  prefixIcon: Icon(HcIcons.search, size: 18),
-                  hintText: 'Search',
-                  isDense: true,
-                  border: OutlineInputBorder(),
-                ),
+                decoration: fieldDecoration(t, hint: 'Search'),
                 onChanged: (v) => setState(() => _query = v),
               ),
             ),
@@ -1044,11 +1024,11 @@ class _PaletteState extends State<_Palette> {
               child: ListView(
                 children: [
                   for (final category in widget.categories)
-                    ..._section(context, category, matching),
+                    ..._section(t, category, matching),
                   // Anything whose category isn't in the list still has to be
                   // reachable, or a new variant could become invisible.
                   ..._section(
-                    context,
+                    t,
                     'Other',
                     matching
                         .where((v) => !widget.categories.contains(v.category))
@@ -1065,7 +1045,7 @@ class _PaletteState extends State<_Palette> {
   }
 
   List<Widget> _section(
-    BuildContext context,
+    HcTokens t,
     String category,
     List<HcVariant> pool, {
     bool matchCategory = true,
@@ -1078,20 +1058,17 @@ class _PaletteState extends State<_Palette> {
     return [
       Padding(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-        child: Text(
-          category.toUpperCase(),
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: Theme.of(context).colorScheme.outline,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1,
-              ),
-        ),
+        child: RailLabel(category),
       ),
       for (final v in items)
         ListTile(
           dense: true,
-          title: Text(v.label),
-          subtitle: v.help == null ? null : Text(v.help!),
+          title: Text(v.label,
+              style: TextStyle(color: t.surface.onBase, fontSize: 14)),
+          subtitle: v.help == null
+              ? null
+              : Text(v.help!,
+                  style: TextStyle(color: t.surface.onBaseMuted, fontSize: 12)),
           onTap: () => Navigator.pop(context, v),
         ),
     ];
