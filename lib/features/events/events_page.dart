@@ -88,12 +88,34 @@ Color eventColor(HcTokens t, String type, {bool? available}) {
 
   switch (type) {
     case 'device_state_changed':
-      final changed =
-          (data['changed'] as List?)?.whereType<String>().toList() ?? const [];
       final cur = (data['current'] as Map?) ?? const {};
       final prev = (data['previous'] as Map?) ?? const {};
+      var changed = (data['changed'] as List?)
+              ?.whereType<String>()
+              // Skip noise and any attribute with no current value — a bare
+              // "Temperature 69.5°F → —" is worse than not mentioning it.
+              .where((k) => !_noisyAttr(k) && cur[k] != null)
+              .toList() ??
+          <String>[];
+      // The raw 0–255 brightness is the same fact as its percentage twin, and a
+      // reading's unit-suffixed variants (temperature_f, illuminance_lux) repeat
+      // the canonical one — keep a single line per real reading.
+      if (changed.contains('brightness_pct')) {
+        changed = changed.where((k) => k != 'brightness').toList();
+      }
+      for (final base in const ['temperature', 'illuminance']) {
+        if (changed.contains(base)) {
+          changed =
+              changed.where((k) => k == base || !k.startsWith('${base}_')).toList();
+        }
+      }
       final parts = <String>[];
       for (final k in changed.take(3)) {
+        // "on: off → on" reads better as plain "Turned off/on".
+        if (k == 'on') {
+          parts.add(cur['on'] == true ? 'Turned on' : 'Turned off');
+          continue;
+        }
         final now = _fmtVal(cur[k], k, cur);
         final was = prev.containsKey(k) ? _fmtVal(prev[k], k, prev) : null;
         parts.add(was != null && was != now
@@ -139,6 +161,31 @@ Color eventColor(HcTokens t, String type, {bool? available}) {
   }
 }
 
+/// Attributes not worth a line in an activity feed: device plumbing (bridge and
+/// resource ids, MAC, firmware), unit/validity companions to a real reading, and
+/// the chatty housekeeping a WLED or Z-Wave node reports every few seconds
+/// (uptime, free heap, preset counts, per-command-class registers). Filtering
+/// these is what keeps "Office Motion — Illuminance 27 lux" from drowning under
+/// nine fields nobody watches.
+bool _noisyAttr(String key) {
+  if (key.contains('.')) return true; // WLED's led.rgbw, presets.count, seg.count…
+  if (RegExp(r'^cc\d+_').hasMatch(key)) return true;
+  if (key.endsWith('_unit') ||
+      key.endsWith('_valid') ||
+      key.endsWith('_raw') ||
+      key.endsWith('_id') ||
+      key.startsWith('group_')) {
+    return true;
+  }
+  const noise = {
+    'brand', 'mac', 'kind', 'name', 'enabled', 'arch', 'core_version',
+    'freeheap', 'uptime_secs', 'product', 'firmware', 'ver', 'vid', 'fs',
+    'resource_type', 'battery_state', 'wifi_signal', 'ip', 'device_time',
+    'time', 'rssi', 'ssid', 'signal',
+  };
+  return noise.contains(key);
+}
+
 /// The attribute's label, minus a unit suffix the value already carries, so a
 /// row reads "Humidity 62.7% → 64.5%", not "Humidity Pct 62.7% → 64.5%".
 String _attrLabel(String key) {
@@ -164,6 +211,7 @@ String _fmtVal(Object? v, String key, Map<dynamic, dynamic> ctx) {
     }
     if (key.endsWith('_pct')) return '$n%';
     if (key == 'power_w' || key.endsWith('_w')) return '${n}W';
+    if (key.startsWith('illuminance')) return '$n lux';
     return n;
   }
   return v.toString();
