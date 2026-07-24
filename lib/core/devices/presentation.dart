@@ -372,6 +372,10 @@ bool isOn(DeviceState d) {
   }
   if (d.state['open'] case final bool open) return open;
   if (d.state['motion'] case final bool m) return m;
+  // Occupancy is the same kind of signal as motion: an occupied room is the
+  // state worth noticing, so it lights the tile amber like any other active
+  // device rather than sitting muted next to an "occupied" subtitle.
+  if ((d.state['occupancy'] ?? d.state['occupied']) case final bool o) return o;
   if (d.state['state'] case final String s) {
     return s.toLowerCase() == 'playing' || s.toLowerCase() == 'running';
   }
