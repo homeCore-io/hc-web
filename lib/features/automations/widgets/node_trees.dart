@@ -6,6 +6,7 @@ import '../../../core/rules/schema.dart';
 import '../../../design/components/hc_sentence.dart';
 import '../../../design/hc_icons.dart';
 import '../../../design/tokens.dart';
+import 'depth_palette.dart';
 import 'device_action_picker.dart';
 import 'device_condition_picker.dart';
 import 'editor_style.dart';
@@ -18,15 +19,7 @@ import 'sentence_editor.dart';
 /// Nesting colours. Depth is the only thing that tells you whether you are
 /// inside the `Or` or inside the `Not` inside the `Or`, so it gets a colour and
 /// a rail rather than just indentation.
-const _depthColors = [
-  Color(0xFF6C8CFF),
-  Color(0xFF34C7A6),
-  Color(0xFFE0A33D),
-  Color(0xFFD46FA8),
-  Color(0xFF9D7BE0),
-];
-
-Color _depthColor(int depth) => _depthColors[depth % _depthColors.length];
+Color _depthColor(int depth) => depthColor(depth);
 
 /// Conditions that contain other conditions.
 const _booleanTags = {'And', 'Or', 'Xor'};

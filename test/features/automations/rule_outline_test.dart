@@ -189,6 +189,57 @@ void main() {
       expect(step.label, 'Publish MQTT');
     });
 
+    test('a branch test reads as English, not as its expression', () {
+      // Conditional stores a Rhai string, not a condition node. Dumping it raw
+      // put device_state("yolink_d88b…")["open"] in the outline while the
+      // editor beside it said "the Garage OH1 Door Sensor is open".
+      final r = HcRule(
+        id: 'r4',
+        name: 'n',
+        trigger: HcNode('ManualTrigger'),
+        actions: [
+          HcRuleAction(
+            action: HcNode.fromJson({
+              'Conditional': {
+                'condition': 'device_state("yolink_d88b")["open"] == true',
+                'then_actions': [
+                  {'LogMessage': {'message': 'x'}}
+                ],
+              }
+            }, kActions),
+          ),
+        ],
+      );
+      final row = outlineRows(r,
+              labelFor: (ref) =>
+                  ref == 'yolink_d88b' ? 'Garage OH1 Door Sensor' : ref)
+          .firstWhere((x) => x.tag == 'Conditional');
+      expect(row.label, 'the Garage OH1 Door Sensor is open');
+      expect(row.label, isNot(contains('device_state')));
+    });
+
+    test('an expression we cannot read stays verbatim', () {
+      // Half-translating an expression is worse than showing the code.
+      final r = HcRule(
+        id: 'r5',
+        name: 'n',
+        trigger: HcNode('ManualTrigger'),
+        actions: [
+          HcRuleAction(
+            action: HcNode.fromJson({
+              'Conditional': {
+                'condition': 'hour() > 8 && any_light_on()',
+                'then_actions': <Object>[],
+              }
+            }, kActions),
+          ),
+        ],
+      );
+      final row =
+          rowsOf(r).firstWhere((x) => x.tag == 'Conditional');
+      expect(row.label, 'hour() > 8 && any_light_on()');
+    });
+
     test('device references read as names when a resolver is given', () {
       final rows = outlineRows(nestedRule(),
           labelFor: (ref) => ref == 'lights.all' ? 'All Lights' : ref);

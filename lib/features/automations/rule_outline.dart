@@ -11,6 +11,7 @@ library;
 import '../../core/rules/node.dart';
 import '../../core/rules/rule.dart';
 import '../../core/rules/schema.dart';
+import 'rhai.dart';
 import 'rule_phrasing.dart';
 
 /// Which clause a row belongs to. Drives the section headings, and the colour
@@ -195,7 +196,7 @@ List<OutlineRow> outlineRows(
       keyword: variant?.label ?? n.tag,
       // A container says what it is *doing* — "3 times", "until true" — rather
       // than repeating its own name, which the keyword already carries.
-      label: _containerDetail(n),
+      label: _containerDetail(n, labelFor),
     ));
 
     void arm(String name, Object? children) {
@@ -244,12 +245,43 @@ List<OutlineRow> outlineRows(
 }
 
 /// The detail a container carries beside its keyword.
-String _containerDetail(HcNode n) => switch (n.tag) {
+String _containerDetail(HcNode n, String Function(String)? labelFor) =>
+    switch (n.tag) {
       'RepeatCount' => '${n['count'] ?? '?'} times',
-      'RepeatUntil' => 'until ${n['condition'] ?? '…'}',
-      'RepeatWhile' => 'while ${n['condition'] ?? '…'}',
-      'Conditional' => '${n['condition'] ?? '…'}',
+      'RepeatUntil' => 'until ${_expr(n['condition'], labelFor)}',
+      'RepeatWhile' => 'while ${_expr(n['condition'], labelFor)}',
+      'Conditional' => _expr(n['condition'], labelFor),
       'PingHost' => '${n['host'] ?? '…'}',
       'Parallel' => 'all at once',
       _ => '',
     };
+
+/// A branch's test, said in the same words as everything else.
+///
+/// `Conditional` stores a Rhai string, not a condition node — core's shape, not
+/// a simplification — so a raw dump put `device_state("yolink_d88b…")["open"]`
+/// in the outline while the editor beside it said "the Garage OH1 Door Sensor
+/// is open". `parseRhai` already reads that one shape; anything it cannot read
+/// stays verbatim, because a half-translated expression is worse than the code.
+String _expr(Object? raw, String Function(String)? labelFor) {
+  final text = '${raw ?? ''}'.trim();
+  if (text.isEmpty) return '…';
+  final parsed = parseRhai(text);
+  if (parsed == null) return text;
+
+  final device = labelFor?.call(parsed.deviceRef) ?? parsed.deviceRef;
+  final attr = parsed.attribute.replaceAll('_', ' ');
+  final v = parsed.value;
+  final verb = switch (parsed.op) {
+    '==' => v is bool ? (v ? 'is' : 'is not') : 'is',
+    '!=' => v is bool ? (v ? 'is not' : 'is') : 'is not',
+    '>' => 'is above',
+    '>=' => 'is at least',
+    '<' => 'is below',
+    '<=' => 'is at most',
+    _ => parsed.op,
+  };
+  // A boolean reads as the attribute itself — "is open", not "open is true".
+  if (v is bool) return 'the $device $verb $attr';
+  return 'the $attr of $device $verb $v';
+}

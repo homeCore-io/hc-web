@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/rules/rule.dart';
 import '../../../design/tokens.dart';
 import '../rule_outline.dart';
+import 'depth_palette.dart';
 import 'editor_style.dart';
 import 'rule_refs.dart';
 
@@ -21,16 +22,6 @@ class RuleOutlinePane extends StatelessWidget {
 
   final HcRule rule;
   final RuleRefs refs;
-
-  /// One colour per nesting level, matching the tree's own rail palette so the
-  /// two panes describe the same rule in the same terms.
-  static const _depth = [
-    Color(0xFF6C8CFF),
-    Color(0xFF34C7A6),
-    Color(0xFFE0A33D),
-    Color(0xFFD46FA8),
-    Color(0xFF9D7BE0),
-  ];
 
   @override
   Widget build(BuildContext context) {
@@ -119,9 +110,9 @@ class RuleOutlinePane extends StatelessWidget {
   /// One colour per clause — the same three the editor's own rails use, so a
   /// glance at either pane says which part of the rule you are reading.
   static Color _clauseColor(OutlineClause c) => switch (c) {
-        OutlineClause.when => _depth[0],
-        OutlineClause.ifClause => _depth[1],
-        OutlineClause.then => _depth[2],
+        OutlineClause.when => depthColor(0),
+        OutlineClause.ifClause => depthColor(1),
+        OutlineClause.then => depthColor(2),
       };
 
   Widget _row(HcTokens t, OutlineRow row, Color clause) {
@@ -138,7 +129,7 @@ class RuleOutlinePane extends StatelessWidget {
         decoration: BoxDecoration(
           border: Border(
             left: BorderSide(
-              color: _depth[d % _depth.length].withValues(alpha: 0.45),
+              color: depthColor(d).withValues(alpha: 0.45),
             ),
           ),
         ),
@@ -183,7 +174,7 @@ class RuleOutlinePane extends StatelessWidget {
                         fontWeight: FontWeight.w800,
                         letterSpacing: 0.7,
                         color: isStructure
-                            ? _depth[(row.depth + 1) % _depth.length]
+                            ? depthColor(row.depth + 1)
                             : muted,
                       )),
                   if (row.label.isNotEmpty) SizedBox(width: t.space.xs),
