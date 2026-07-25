@@ -756,7 +756,10 @@ class ActionNode extends StatelessWidget {
                 registry: kActions,
                 refs: refs,
                 onChanged: onChanged,
-                phraseFor: actionPhrase,
+                // The lookup is what lets a declared action read as the
+                // plugin wrote it — "launch Netflix on Office TV" — instead of
+                // its raw payload.
+                phraseFor: (n) => actionPhrase(n, schemas: refs.schemaFor),
               ),
       );
     }

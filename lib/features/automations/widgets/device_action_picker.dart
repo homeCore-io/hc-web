@@ -214,7 +214,11 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
 
   _Entry? _sel;
   DeviceCommand? _cmd;
-  Object? _value;
+  /// Chosen values, keyed by the payload key each control fills. A
+  /// hand-written command has at most one entry; a declared action has one
+  /// per parameter — "press {key} {count} times" needs both or it silently
+  /// drops the count.
+  final Map<String, Object?> _values = {};
 
   // Template detail state, shared where the control is the same.
   int _secs = 300;
@@ -253,11 +257,34 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
     final entry = _firstOrNull(_entries, (e) => e.ref == ref);
     if (entry == null) return;
     _sel = entry;
+
+    // A declared action round-trips exactly: its id names the command and its
+    // payload keys are the parameter names, so nothing has to be reverse
+    // engineered the way the hand-written payloads do below.
+    final state = (node['state'] as Map?)?.cast<String, Object?>() ?? const {};
+    if (state['action'] case final String id) {
+      final declared = _firstOrNull(entry.commands, (c) => c.key == 'act:$id');
+      if (declared != null) {
+        _cmd = declared;
+        _resetValues();
+        for (final pr in declared.params) {
+          final v = state[pr.name];
+          if (v != null) _values[pr.name] = pr.kind == CmdParamKind.select ? '$v' : v;
+        }
+        return;
+      }
+    }
+
     final (cmd, value) = _matchCommand(entry, node);
     _cmd = cmd ?? entry.commands.first;
-    _value = value ?? _cmd!.param.defaultValue;
-    if (_cmd!.param.kind == CmdParamKind.color && _value is! Color) {
-      _value = _swatches[2].$2;
+    _resetValues();
+    if (value != null && _cmd!.params.isNotEmpty) {
+      _values[_cmd!.param.name] = value;
+    }
+    for (final pr in _cmd!.params) {
+      if (pr.kind == CmdParamKind.color && _values[pr.name] is! Color) {
+        _values[pr.name] = _swatches[2].$2;
+      }
     }
   }
 
@@ -508,7 +535,7 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
         return;
       }
       _cmd = e.commands.first;
-      _value = _cmd!.param.defaultValue;
+      _resetValues();
     });
   }
 
@@ -531,7 +558,14 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
   HcNode? _result() {
     final e = _sel;
     if (e == null) return null;
-    if (e.kind == _Kind.device) return _cmd?.build(_value);
+    if (e.kind == _Kind.device) {
+      final c = _cmd;
+      if (c == null) return null;
+      // A required parameter with nothing in it disables the button rather
+      // than letting a command through that the plugin would reject.
+      if (c.missingRequirement(_values) != null) return null;
+      return c.buildWith(_values);
+    }
     return _templateNode(e.tag!);
   }
 
@@ -587,10 +621,18 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
   void _pickCommand(DeviceCommand c) {
     setState(() {
       _cmd = c;
-      _value = c.param.kind == CmdParamKind.color
-          ? _swatches[2].$2
-          : c.param.defaultValue;
+      _resetValues();
     });
+  }
+
+  /// Seed every control with its declared default, so a command with sensible
+  /// defaults is addable the moment it is chosen.
+  void _resetValues() {
+    _values.clear();
+    for (final pr in _cmd?.params ?? const <CmdParam>[]) {
+      _values[pr.name] =
+          pr.kind == CmdParamKind.color ? _swatches[2].$2 : pr.defaultValue;
+    }
   }
 
   // -- build ---------------------------------------------------------------
@@ -752,11 +794,21 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
           SizedBox(height: t.space.sm),
           _commandGrid(t, e),
           SizedBox(height: t.space.md),
-          if (_cmd!.param.kind != CmdParamKind.none) ...[
-            RailLabel(_paramLabel(_cmd!)),
-            SizedBox(height: t.space.sm),
-          ],
-          _paramControl(t, _cmd!),
+          if (_cmd!.params.isEmpty)
+            _panel(
+                t,
+                Text(_effectNote(_cmd!),
+                    style: TextStyle(
+                        fontSize: 12.5,
+                        height: 1.5,
+                        color: t.surface.onBaseMuted)))
+          else
+            for (final pr in _cmd!.params) ...[
+              RailLabel(_paramLabel(_cmd!, pr)),
+              SizedBox(height: t.space.sm),
+              _paramControl(t, pr),
+              if (pr != _cmd!.params.last) SizedBox(height: t.space.md),
+            ],
         ],
         SizedBox(height: t.space.md),
         _preview(t, e),
@@ -1078,7 +1130,14 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
         onTap: () => _pickCommand(c),
       );
 
-  String _paramLabel(DeviceCommand c) => switch (c.param.kind) {
+  String _paramLabel(DeviceCommand c, CmdParam p) {
+    // A declared parameter names itself; the hand-written commands never did,
+    // so they keep deriving one from the command's label.
+    if (p.label != null) return p.label!;
+    return _derivedParamLabel(c, p);
+  }
+
+  String _derivedParamLabel(DeviceCommand c, CmdParam p) => switch (p.kind) {
         CmdParamKind.slider => c.key == 'vol' || c.key == 'set_volume'
             ? 'Volume'
             : c.label.replaceFirst('Set ', ''),
@@ -1091,28 +1150,22 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
         _ => 'Value',
       };
 
-  Widget _paramControl(HcTokens t, DeviceCommand c) {
-    switch (c.param.kind) {
+  Widget _paramControl(HcTokens t, CmdParam p) {
+    switch (p.kind) {
       case CmdParamKind.none:
-        return _panel(
-            t,
-            Text(_effectNote(c),
-                style: TextStyle(
-                    fontSize: 12.5,
-                    height: 1.5,
-                    color: t.surface.onBaseMuted)));
+        return const SizedBox.shrink();
       case CmdParamKind.slider:
-        return _panel(t, _slider(t, c));
+        return _panel(t, _slider(t, p));
       case CmdParamKind.stepper:
-        return _panel(t, _stepper(t, c));
+        return _panel(t, _stepper(t, p));
       case CmdParamKind.select:
-        return _panel(t, _selectControl(t, c));
+        return _panel(t, _selectControl(t, p));
       case CmdParamKind.duration:
-        return _panel(t, _duration(t, c));
+        return _panel(t, _duration(t, p));
       case CmdParamKind.color:
-        return _panel(t, _color(t));
+        return _panel(t, _color(t, p));
       case CmdParamKind.text:
-        return _panel(t, _textControl(t, c));
+        return _panel(t, _textControl(t, p));
       case CmdParamKind.multi:
         return _panel(t, const SizedBox.shrink());
     }
@@ -1145,10 +1198,10 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
         _ => 'No parameters.',
       };
 
-  Widget _slider(HcTokens t, DeviceCommand c) {
-    final min = (c.param.min ?? 0).toDouble();
-    final max = (c.param.max ?? 100).toDouble();
-    final v = ((_value as num?) ?? min).toDouble().clamp(min, max);
+  Widget _slider(HcTokens t, CmdParam p) {
+    final min = (p.min ?? 0).toDouble();
+    final max = (p.max ?? 100).toDouble();
+    final v = ((_values[p.name] as num?) ?? min).toDouble().clamp(min, max);
     return Row(children: [
       Expanded(
         child: SliderTheme(
@@ -1162,13 +1215,14 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
             min: min,
             max: max,
             value: v,
-            onChanged: (nv) => setState(() => _value = nv.roundToDouble()),
+            onChanged: (nv) =>
+                setState(() => _values[p.name] = nv.roundToDouble()),
           ),
         ),
       ),
       SizedBox(
         width: 52,
-        child: Text('${v.round()}${c.param.unit ?? ''}',
+        child: Text('${v.round()}${p.unit ?? ''}',
             textAlign: TextAlign.right,
             style: TextStyle(
                 fontWeight: FontWeight.w700,
@@ -1178,10 +1232,10 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
     ]);
   }
 
-  Widget _stepper(HcTokens t, DeviceCommand c) {
-    final step = (c.param.step ?? 1).toDouble();
+  Widget _stepper(HcTokens t, CmdParam p) {
+    final step = (p.step ?? 1).toDouble();
     final v =
-        ((_value as num?) ?? c.param.defaultValue as num? ?? 21).toDouble();
+        ((_values[p.name] as num?) ?? p.defaultValue as num? ?? 21).toDouble();
     Widget btn(IconData i, VoidCallback f) => InkWell(
           onTap: f,
           borderRadius: BorderRadius.circular(10),
@@ -1198,31 +1252,31 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
         );
     return Row(mainAxisAlignment: MainAxisAlignment.center, children: [
       btn(Icons.remove,
-          () => setState(() => _value = (v - step).clamp(5.0, 40.0))),
+          () => setState(() => _values[p.name] = (v - step).clamp(5.0, 40.0))),
       SizedBox(width: t.space.md),
-      Text('${v % 1 == 0 ? v.toInt() : v}${c.param.unit ?? ''}',
+      Text('${v % 1 == 0 ? v.toInt() : v}${p.unit ?? ''}',
           style: TextStyle(
               fontSize: 26,
               fontWeight: FontWeight.w700,
               color: t.accent.active)),
       SizedBox(width: t.space.md),
       btn(Icons.add,
-          () => setState(() => _value = (v + step).clamp(5.0, 40.0))),
+          () => setState(() => _values[p.name] = (v + step).clamp(5.0, 40.0))),
     ]);
   }
 
   /// A free-text value — a writable string attribute whose plugin publishes no
   /// catalogue to pick from (Roku's `tv_channel` before the lineup arrives).
-  Widget _textControl(HcTokens t, DeviceCommand c) => TextFormField(
-        key: ValueKey('text:${_sel?.ref}:${c.key}'),
-        initialValue: '${_value ?? ''}',
-        decoration: fieldDecoration(t, hint: c.label.replaceFirst('Set ', '')),
-        onChanged: (v) => setState(() => _value = v),
+  Widget _textControl(HcTokens t, CmdParam p) => TextFormField(
+        key: ValueKey('text:${_sel?.ref}:${_cmd?.key}:${p.name}'),
+        initialValue: '${_values[p.name] ?? ''}',
+        decoration: fieldDecoration(t, hint: p.label ?? p.name),
+        onChanged: (v) => setState(() => _values[p.name] = v),
       );
 
-  Widget _selectControl(HcTokens t, DeviceCommand c) {
-    final opts = c.param.options ?? const <String>[];
-    final v = (_value as String?) ?? (opts.isEmpty ? null : opts.first);
+  Widget _selectControl(HcTokens t, CmdParam p) {
+    final opts = p.options ?? const <String>[];
+    final v = (_values[p.name] as String?) ?? (opts.isEmpty ? null : opts.first);
     if (opts.isEmpty) {
       return Text('None available on this device.',
           style: TextStyle(fontSize: 12.5, color: t.surface.onBaseMuted));
@@ -1234,15 +1288,16 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
         dropdownColor: t.surface.overlay,
         style: TextStyle(fontSize: 13.5, color: t.surface.onBase),
         items: [
-          for (final o in opts) DropdownMenuItem(value: o, child: Text(o)),
+          for (final o in opts)
+            DropdownMenuItem(value: o, child: Text(p.labelFor(o))),
         ],
-        onChanged: (nv) => setState(() => _value = nv),
+        onChanged: (nv) => setState(() => _values[p.name] = nv),
       ),
     );
   }
 
-  Widget _duration(HcTokens t, DeviceCommand c) {
-    final secs = (_value as num?)?.toInt() ?? 300;
+  Widget _duration(HcTokens t, CmdParam p) {
+    final secs = (_values[p.name] as num?)?.toInt() ?? 300;
     return Wrap(
       spacing: t.space.xs,
       runSpacing: t.space.xs,
@@ -1251,14 +1306,15 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
           _Toggle(
             label: label,
             selected: secs == s,
-            onTap: () => setState(() => _value = s),
+            onTap: () => setState(() => _values[p.name] = s),
           ),
       ],
     );
   }
 
-  Widget _color(HcTokens t) {
-    final sel = _value is Color ? _value as Color : _swatches[2].$2;
+  Widget _color(HcTokens t, CmdParam p) {
+    final sel =
+        _values[p.name] is Color ? _values[p.name] as Color : _swatches[2].$2;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1268,7 +1324,7 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
           children: [
             for (final (_, col) in _swatches)
               InkWell(
-                onTap: () => setState(() => _value = col),
+                onTap: () => setState(() => _values[p.name] = col),
                 customBorder: const CircleBorder(),
                 child: Container(
                   width: 26,
@@ -1355,7 +1411,14 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
           case '{value}':
             parts.add(tok(val.isEmpty ? '…' : val, t.accent.active));
           default:
-            if (piece.trim().isNotEmpty) parts.add(word(piece.trim()));
+            final named = RegExp(r'^\{([a-z_]+)\}$').firstMatch(piece)?.group(1);
+            if (named != null) {
+              final p = _firstOrNull(c.params, (x) => x.name == named);
+              final text = p == null ? '' : _paramValueLabel(p);
+              parts.add(tok(text.isEmpty ? '…' : text, t.accent.active));
+            } else if (piece.trim().isNotEmpty) {
+              parts.add(word(piece.trim()));
+            }
         }
       }
       return parts;
@@ -1546,7 +1609,9 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
   static List<String> _splitTemplate(String template) {
     final out = <String>[];
     var i = 0;
-    for (final m in RegExp(r'\{(device|value)\}').allMatches(template)) {
+    // `{device}` and `{value}` are reserved; everything else names a parameter
+    // of the declared action — "press {key} {count} time(s)".
+    for (final m in RegExp(r'\{([a-z_]+)\}').allMatches(template)) {
       if (m.start > i) out.add(template.substring(i, m.start));
       out.add(m[0]!);
       i = m.end;
@@ -1555,27 +1620,38 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
     return out;
   }
 
-  String _valueLabel(DeviceCommand c) {
-    switch (c.param.kind) {
+  /// The primary control's value, for the hand-written sentences that say
+  /// "{value}" without naming a parameter.
+  String _valueLabel(DeviceCommand c) =>
+      c.params.isEmpty ? '' : _paramValueLabel(c.param);
+
+  /// How one parameter's current value reads in the preview.
+  String _paramValueLabel(CmdParam p) {
+    final v = _values[p.name];
+    switch (p.kind) {
       case CmdParamKind.slider:
-        return '${((_value as num?) ?? 0).round()}${c.param.unit ?? ''}';
+        return '${((v as num?) ?? p.min ?? 0).round()}${p.unit ?? ''}';
       case CmdParamKind.stepper:
-        final v = (_value as num?) ?? 21;
-        return '${v % 1 == 0 ? v.toInt() : v}${c.param.unit ?? ''}C';
+        final n = (v as num?) ?? 21;
+        return '${n % 1 == 0 ? n.toInt() : n}${p.unit ?? ''}C';
       case CmdParamKind.duration:
-        final secs = (_value as num?)?.toInt() ?? 300;
+        final secs = (v as num?)?.toInt() ?? 300;
         return _durations
             .firstWhere((d) => d.$2 == secs, orElse: () => ('$secs sec', secs))
             .$1;
       case CmdParamKind.color:
-        final col = _value is Color ? _value as Color : _swatches[2].$2;
+        final col = v is Color ? v : _swatches[2].$2;
         return _swatches
             .firstWhere((s) => s.$2 == col, orElse: () => _swatches[2])
             .$1;
       case CmdParamKind.select:
-        return '${_value ?? (c.param.options?.isNotEmpty == true ? c.param.options!.first : '')}';
+        // Show what the user sees, not the id we send: a Roku channel is
+        // chosen by id and named "Netflix".
+        final chosen = (v as String?) ??
+            (p.options?.isNotEmpty == true ? p.options!.first : '');
+        return p.labelFor(chosen);
       default:
-        return '${_value ?? ''}';
+        return '${v ?? ''}';
     }
   }
 }

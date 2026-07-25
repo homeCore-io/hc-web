@@ -27,18 +27,30 @@ enum CmdParamKind { none, slider, select, color, stepper, duration, multi, text 
 class CmdParam {
   const CmdParam(
     this.kind, {
+    this.name = 'value',
+    this.label,
     this.unit,
     this.min,
     this.max,
     this.step,
     this.options,
+    this.optionLabels,
     this.defaultValue,
+    this.required = false,
   });
 
   /// A verb with no value — Lock, Open, Play, Activate.
   const CmdParam.none() : this(CmdParamKind.none);
 
   final CmdParamKind kind;
+
+  /// The payload key this control fills. Hand-written commands mostly build
+  /// their payload themselves and leave it at the default; a declared action's
+  /// params each name their own.
+  final String name;
+
+  /// What to call it in the form. Null falls back to the command's own label.
+  final String? label;
   final String? unit;
   final num? min;
   final num? max;
@@ -47,7 +59,21 @@ class CmdParam {
   /// The fixed value set for [CmdParamKind.select] (favorites, sources, modes).
   final List<String>? options;
 
+  /// Display labels for [options], positionally. A Roku channel is picked by id
+  /// and shown by name, so the two cannot be the same list.
+  final List<String>? optionLabels;
+
   final Object? defaultValue;
+
+  /// A required param with no value blocks the command — that is what disables
+  /// the picker's Add button rather than letting a half-built action through.
+  final bool required;
+
+  String labelFor(String value) {
+    final i = options?.indexOf(value) ?? -1;
+    if (i < 0 || optionLabels == null || i >= optionLabels!.length) return value;
+    return optionLabels![i];
+  }
 }
 
 /// One resolved command for a specific device. [build] turns a chosen value into
@@ -61,6 +87,8 @@ class DeviceCommand {
     required this.build,
     this.writes,
     this.sentence,
+    this.extraParams = const [],
+    this.buildAll,
   });
 
   final String key;
@@ -85,23 +113,60 @@ class DeviceCommand {
   /// [value] is null for [CmdParamKind.none]; else the control's current value
   /// (a `num` for sliders/steppers, a `String` for selects, a `List<String>`
   /// for multi, a `Color` for colour).
+  ///
+  /// Single-valued by design: a hand-written command has at most one thing to
+  /// choose. Declared actions can have several, and use [buildAll] instead.
   final HcNode Function(Object? value) build;
+
+  /// Parameters beyond [param]. Only a declared action has these — "press
+  /// {key} {count} times" is two controls, and rendering just the first would
+  /// quietly drop the second from the payload.
+  final List<CmdParam> extraParams;
+
+  /// Builds from every parameter at once. Set only for declared actions.
+  final HcNode Function(Map<String, Object?> values)? buildAll;
+
+  /// Every control this command needs, primary first.
+  List<CmdParam> get params => [
+        if (param.kind != CmdParamKind.none) param,
+        ...extraParams,
+      ];
+
+  /// The node for a filled-in form, whichever builder this command uses.
+  HcNode buildWith(Map<String, Object?> values) =>
+      buildAll?.call(values) ?? build(values[param.name]);
+
+  /// Null when the form is complete; else why the command cannot be added yet.
+  String? missingRequirement(Map<String, Object?> values) {
+    for (final p in params) {
+      if (!p.required) continue;
+      final v = values[p.name];
+      if (v == null || (v is String && v.trim().isEmpty)) {
+        return p.label ?? p.name;
+      }
+    }
+    return null;
+  }
 }
 
-/// The commands that make sense for [d], in display order. Empty for a sensor —
-/// a sensor has nothing to do, so it never reaches the action picker.
+/// The commands that make sense for [d], in display order.
 ///
-/// Two sources, in order:
-///  1. the **facet** commands below — hand-written, and the only ones that know
-///     the payload subtleties (Hue writes Kelvin but reports mirek; a Lutron
-///     shade opens with `raise`, not `position: 100`);
-///  2. the device's **own schema** — every writable attribute the facet
-///     commands did not already cover, rendered from its declared kind, range,
-///     unit and options.
+/// Three tiers, and the first that applies wins outright:
 ///
-/// (2) is what stops a plugin's capabilities from depending on someone editing
-/// this file. hc-roku declares `on`, `state`, `source` and `tv_channel` as
-/// writable; before this, a Roku offered Play and Pause and nothing else.
+/// 1. **Declared actions** — `schema.actions`, plus any writable attribute no
+///    action claims via `writes`. A plugin that declares actions has described
+///    itself completely, so nothing here is merged in on top: union semantics
+///    would mean a plugin could never *remove* a capability, and this file's
+///    guesses would outlive the knowledge that replaced them.
+/// 2. **`supported_actions`** — the legacy hc-sonos convention. Gates a
+///    hand-written media command set. Retired once every media plugin declares
+///    actions; see `claude-notes/plans/device_action_descriptor.md` §C.
+/// 3. **Facet defaults** — hand-written per device kind. Still the only source
+///    for the 161-of-177 devices that publish no schema at all, and the only
+///    one that knows the payload subtleties (Hue writes Kelvin but reports
+///    mirek; a Lutron shade opens with `raise`, not `position: 100`).
+///
+/// Empty for a sensor — it has nothing to do, so it never reaches the picker.
 List<DeviceCommand> commandsFor(DeviceState d,
     {List<DeviceState> mediaPeers = const []}) {
   final facet = facetOf(d, d.schema);
@@ -111,13 +176,24 @@ List<DeviceCommand> commandsFor(DeviceState d,
   HcNode setState(Map<String, Object?> state) =>
       HcNode('SetDeviceState', {'device_id': ref, 'state': state});
 
+  // ── Tier 1 ────────────────────────────────────────────────────────────
+  final declared = d.schema?.actions ?? const <DeviceActionSpec>[];
+  if (declared.isNotEmpty) {
+    final claimed = d.schema!.attributesClaimedByActions;
+    return [
+      for (final a in declared) _commandForAction(d, a, setState, mediaPeers),
+      ..._schemaCommands(d, setState, claimed),
+    ];
+  }
+
+  // ── Tiers 2 and 3 ─────────────────────────────────────────────────────
   final base = _facetCommands(d, facet, setState, mediaPeers);
 
   // A facet with no commands of its own is a sensor or something unrecognised.
   // It stays out of the action picker even when its schema has writable
   // attributes: the picker promises that sensors are hidden, and a plugin
   // marking a diagnostic knob writable should not turn a motion sensor into an
-  // actuator. Phase 4b's explicit `actions[]` is how such a device opts in.
+  // actuator. Declaring an `actions[]` is how such a device opts in.
   if (base.isEmpty) return const [];
 
   final covered = {
@@ -126,6 +202,255 @@ List<DeviceCommand> commandsFor(DeviceState d,
   };
   return [...base, ..._schemaCommands(d, setState, covered)];
 }
+
+// -- declared actions -------------------------------------------------------
+
+/// A command built from what the plugin says it accepts.
+///
+/// Nothing here knows what a Roku or a Sonos is. The payload is
+/// `{"action": id, …params}` — the same shape the hand-written builders emit,
+/// so a rule authored this way is indistinguishable from one authored before.
+DeviceCommand _commandForAction(
+  DeviceState d,
+  DeviceActionSpec a,
+  HcNode Function(Map<String, Object?>) setState,
+  List<DeviceState> peers,
+) {
+  final controls = [
+    for (final p in a.params)
+      if (_controlFor(d, p, peers) case final c?) c,
+  ];
+
+  // Values arrive keyed by param name; anything the user left blank and did not
+  // have to fill is simply absent from the payload rather than sent as null.
+  HcNode build(Map<String, Object?> values) {
+    final payload = <String, Object?>{'action': a.id};
+    for (final p in a.params) {
+      final raw = values[p.name] ?? p.defaultValue;
+      if (raw == null) continue;
+      payload[p.name] = _coerce(p, raw);
+    }
+    return setState(payload);
+  }
+
+  return DeviceCommand(
+    key: 'act:${a.id}',
+    label: a.label,
+    icon: _iconFor(a.icon),
+    param: controls.isEmpty ? const CmdParam.none() : controls.first,
+    extraParams: controls.length > 1 ? controls.sublist(1) : const [],
+    writes: a.writes,
+    sentence: a.sentence,
+    buildAll: build,
+    build: (v) => build({if (controls.isNotEmpty) controls.first.name: v}),
+  );
+}
+
+/// Wire value for a chosen control value. A colour arrives as a [Color] and has
+/// to become the shape the device's own space expects.
+Object? _coerce(ActionParamSpec p, Object? v) {
+  switch (p.kind) {
+    case ParamKind.int_:
+    case ParamKind.duration:
+    case ParamKind.colorTemp:
+      return _int(v, (p.min ?? 0).round());
+    case ParamKind.float_:
+      return _num(v, p.min ?? 0);
+    case ParamKind.bool_:
+      return v is bool ? v : '$v' == 'true';
+    case ParamKind.colorXy:
+      final xy = rgbToXy(v is Color ? v : const Color(0xFFFFB661));
+      return {'x': xy.$1, 'y': xy.$2};
+    case ParamKind.colorRgb:
+      final c = v is Color ? v : const Color(0xFFFFB661);
+      return {
+        'r': (c.r * 255).round(),
+        'g': (c.g * 255).round(),
+        'b': (c.b * 255).round(),
+      };
+    default:
+      return v is String ? v : '$v';
+  }
+}
+
+/// The control a declared parameter needs, or null when it cannot be rendered.
+CmdParam? _controlFor(
+    DeviceState d, ActionParamSpec p, List<DeviceState> peers) {
+  final label = p.label ?? _humanize(p.name);
+  final (options, optionLabels) = _resolveOptions(d, p, peers);
+
+  switch (p.kind) {
+    case ParamKind.bool_:
+      return CmdParam(CmdParamKind.select,
+          name: p.name,
+          label: label,
+          options: const ['true', 'false'],
+          optionLabels: const ['Yes', 'No'],
+          defaultValue: '${p.defaultValue ?? true}',
+          required: p.required);
+
+    case ParamKind.enum_:
+    case ParamKind.deviceRef:
+      return CmdParam(CmdParamKind.select,
+          name: p.name,
+          label: label,
+          options: options,
+          optionLabels: optionLabels,
+          defaultValue: p.defaultValue?.toString() ??
+              (options.isEmpty ? null : options.first),
+          required: p.required);
+
+    case ParamKind.duration:
+      return CmdParam(CmdParamKind.duration,
+          name: p.name,
+          label: label,
+          defaultValue: (p.defaultValue as num?)?.toInt() ?? 300,
+          required: p.required);
+
+    case ParamKind.int_:
+    case ParamKind.float_:
+    case ParamKind.colorTemp:
+      if (!p.hasRange) {
+        return CmdParam(CmdParamKind.text,
+            name: p.name,
+            label: label,
+            defaultValue: p.defaultValue,
+            required: p.required);
+      }
+      return CmdParam(CmdParamKind.slider,
+          name: p.name,
+          label: label,
+          unit: p.unit,
+          min: p.min,
+          max: p.max,
+          step: p.step,
+          defaultValue: (p.defaultValue as num?) ?? p.min,
+          required: p.required);
+
+    case ParamKind.colorXy:
+    case ParamKind.colorRgb:
+      return CmdParam(CmdParamKind.color,
+          name: p.name, label: label, required: p.required);
+
+    case ParamKind.string:
+      // A string with a published value space is a picker, not a text box.
+      if (options.isNotEmpty) {
+        return CmdParam(CmdParamKind.select,
+            name: p.name,
+            label: label,
+            options: options,
+            optionLabels: optionLabels,
+            defaultValue: p.defaultValue?.toString() ?? options.first,
+            required: p.required);
+      }
+      return CmdParam(CmdParamKind.text,
+          name: p.name,
+          label: label,
+          defaultValue: p.defaultValue,
+          required: p.required);
+
+    case ParamKind.json:
+      // Unrenderable by design — see ParamKind.json. Skipping it is better
+      // than a raw-JSON box in the middle of a sentence.
+      return null;
+  }
+}
+
+/// Resolve a parameter's option set: fixed, or live from wherever the plugin
+/// pointed. Returns (values, labels).
+(List<String>, List<String>) _resolveOptions(
+    DeviceState d, ActionParamSpec p, List<DeviceState> peers) {
+  if (p.options case final fixed?) {
+    return (
+      [for (final o in fixed) o.value],
+      [for (final o in fixed) o.display],
+    );
+  }
+
+  switch (p.optionsFrom) {
+    case AttributeSource(:final attribute, :final labelKey, :final valueKey):
+      final raw = d.state[attribute];
+      if (raw is! List) return (const [], const []);
+      final values = <String>[];
+      final labels = <String>[];
+      for (final e in raw) {
+        if (e is String) {
+          values.add(e);
+          labels.add(e);
+        } else if (e is Map) {
+          final v = valueKey != null ? e[valueKey] : (e['value'] ?? e['id']);
+          if (v == null) continue;
+          values.add('$v');
+          labels.add('${labelKey != null ? e[labelKey] ?? v : v}');
+        }
+      }
+      return (values, labels);
+
+    case DevicesSource(:final facet, :final deviceType, :final pluginId):
+      // `exclude_self` is already honoured by the caller, which passes peers
+      // rather than the whole device list.
+      final matches = peers.where((x) {
+        if (deviceType != null && x.deviceType != deviceType) return false;
+        if (pluginId != null && x.pluginId != pluginId) return false;
+        if (facet != null && facetOf(x, x.schema).name != _facetKey(facet)) {
+          return false;
+        }
+        return true;
+      }).toList();
+      return (
+        [for (final x in matches) x.id],
+        [for (final x in matches) x.displayName],
+      );
+
+    case null:
+    case ModesSource():
+    case ScenesSource():
+      // Modes and scenes are the rule editor's to supply, not a device's; the
+      // pickers that own those lists pass them separately.
+      return (const [], const []);
+  }
+}
+
+/// `media_player` → the DeviceFacet enum's own spelling.
+String _facetKey(String wire) => switch (wire) {
+      'media_player' => 'mediaPlayer',
+      'switch' => 'switch_',
+      _ => wire,
+    };
+
+/// Semantic icon name → this client's icon set. An unknown name is not an
+/// error: a plugin may name an icon no client has yet.
+IconData _iconFor(String? name) => switch (name) {
+      'power' => Icons.power_settings_new,
+      'play' => Icons.play_arrow,
+      'pause' => Icons.pause,
+      'play-pause' => Icons.play_circle_outline,
+      'stop' => Icons.stop_outlined,
+      'skip-next' => Icons.skip_next,
+      'skip-previous' => Icons.skip_previous,
+      'replay' => Icons.replay,
+      'volume-up' => Icons.volume_up_outlined,
+      'volume-down' => Icons.volume_down_outlined,
+      'volume-mute' => Icons.volume_off_outlined,
+      'apps' => Icons.apps_outlined,
+      'input' => Icons.input_outlined,
+      'download' => Icons.download_outlined,
+      'tv' => Icons.tv_outlined,
+      'channel-up' => Icons.arrow_upward,
+      'channel-down' => Icons.arrow_downward,
+      'keyboard' => Icons.keyboard_outlined,
+      'remote' => Icons.settings_remote_outlined,
+      'shuffle' => Icons.shuffle,
+      'repeat' => Icons.repeat,
+      'equalizer' => Icons.equalizer_outlined,
+      'star' => Icons.star_outline,
+      'playlist' => Icons.queue_music_outlined,
+      'link' => Icons.link_outlined,
+      'group' => Icons.group_work_outlined,
+      'ungroup' => Icons.call_split_outlined,
+      'timeline' => Icons.timeline_outlined,
+      _ => Icons.tune_outlined,
+    };
 
 List<DeviceCommand> _facetCommands(
   DeviceState d,

@@ -394,4 +394,211 @@ void main() {
       expect(position.param.unit, '%');
     });
   });
+
+  // The half a plugin owns: nothing below knows what a Roku or a Sonos is.
+  group('declared actions', () {
+    test('a declared action becomes a command, keyed by its id', () {
+      final keys = commandsFor(_roku()).map((c) => c.key).toList();
+      expect(keys,
+          containsAll(['act:power_on', 'act:launch_app', 'act:volume_up']));
+    });
+
+    test('declaring actions replaces the facet guesses entirely', () {
+      // Tier 1 wins outright. Union semantics would mean a plugin could never
+      // remove a capability, and this file's guesses would outlive the
+      // knowledge that replaced them.
+      final keys = commandsFor(_roku()).map((c) => c.key);
+      expect(keys, isNot(contains('play')), reason: 'a facet media command');
+      expect(keys, isNot(contains('pause')));
+    });
+
+    test('an attribute an action claims is not offered twice', () {
+      final keys = commandsFor(_roku()).map((c) => c.key);
+      // power_on writes `on`; launch_app writes `source`.
+      expect(keys, isNot(contains('attr:on:true')));
+      expect(keys, isNot(contains('attr:source')));
+      // …but a writable attribute no action claims still surfaces.
+      expect(keys, contains('attr:tv_channel'));
+    });
+
+    test('the payload is {action, ...params}', () {
+      final launch = _cmd(_roku(), 'act:launch_app');
+      expect(_stateOf(launch, {'app': '12'}),
+          {'action': 'launch_app', 'app': '12'});
+    });
+
+    test('a live option source becomes the dropdown — id in, name out', () {
+      final d = _roku(state: {
+        'available_apps': [
+          {'id': '12', 'name': 'Netflix'},
+          {'id': '13', 'name': 'Prime Video'},
+        ],
+      });
+      final p = _cmd(d, 'act:launch_app').param;
+      expect(p.kind, CmdParamKind.select);
+      expect(p.options, ['12', '13']);
+      // Picked by id, read as a name — the two cannot be one list.
+      expect(p.labelFor('12'), 'Netflix');
+    });
+
+    test('a missing catalogue leaves an empty picker, not a crash', () {
+      expect(_cmd(_roku(), 'act:launch_app').param.options, isEmpty);
+    });
+
+    test('a required param with no value blocks the command', () {
+      final launch = _cmd(_roku(), 'act:launch_app');
+      expect(launch.missingRequirement({}), isNotNull);
+      expect(launch.missingRequirement({'app': '12'}), isNull);
+    });
+
+    test('an unset optional param falls back to its declared default', () {
+      expect(_stateOf(_cmd(_roku(), 'act:volume_up'), {}),
+          {'action': 'volume_up', 'count': 1});
+    });
+
+    test('a numeric param takes its range from the declaration', () {
+      final p = _cmd(_roku(), 'act:volume_up').param;
+      expect(p.kind, CmdParamKind.slider);
+      expect(p.min, 1);
+      expect(p.max, 100);
+    });
+
+    test('a multi-param action renders every control, not just the first', () {
+      // "press {key} {count} time(s)" is two controls; rendering one would
+      // silently drop the other from the payload.
+      final d = _declaring([
+        {
+          'id': 'key',
+          'label': 'Press a key',
+          'sentence': 'press {key} on {device}',
+          'params': [
+            {
+              'name': 'key',
+              'kind': 'enum',
+              'required': true,
+              'options': [
+                {'value': 'Home'},
+                {'value': 'Back'},
+              ],
+            },
+            {'name': 'count', 'kind': 'int', 'min': 1, 'max': 10, 'default': 1},
+          ],
+        }
+      ]);
+      final key = _cmd(d, 'act:key');
+      expect(key.params.map((p) => p.name), ['key', 'count']);
+      expect(_stateOf(key, {'key': 'Home', 'count': 3}),
+          {'action': 'key', 'key': 'Home', 'count': 3});
+    });
+
+    test('an unknown param kind is skipped rather than rendered raw', () {
+      final d = _declaring([
+        {
+          'id': 'beam',
+          'label': 'Beam',
+          'sentence': 'beam {device}',
+          'params': [
+            {'name': 'target', 'kind': 'hologram'}
+          ],
+        }
+      ]);
+      final beam = _cmd(d, 'act:beam');
+      expect(beam.params, isEmpty, reason: 'an unrenderable kind has no control');
+      // The action itself survives as a bare verb rather than vanishing.
+      expect(_stateOf(beam, {}), {'action': 'beam'});
+    });
+
+    test('every declared command carries the plugin\'s own phrasing', () {
+      for (final c
+          in commandsFor(_roku()).where((c) => c.key.startsWith('act:'))) {
+        expect(c.sentence, isNotNull, reason: c.key);
+      }
+    });
+  });
 }
+
+// ---------------------------------------------------------------------------
+// Declared actions — the half a plugin owns
+// ---------------------------------------------------------------------------
+
+/// hc-roku's real declarations, abridged: the shapes that matter are the
+/// live option source, the multi-parameter action, and `writes`.
+DeviceSchema _rokuDeclared() => DeviceSchema.fromJson({
+      'attributes': {
+        'on': {'kind': 'bool', 'writable': true, 'display_name': 'Power'},
+        'source': {'kind': 'string', 'writable': true, 'display_name': 'Source'},
+        'tv_channel': {'kind': 'string', 'writable': true},
+        'media_title': {'kind': 'string', 'writable': false},
+      },
+      'actions': [
+        {
+          'id': 'power_on',
+          'label': 'Turn on',
+          'icon': 'power',
+          'writes': 'on',
+          'sentence': 'turn on {device}',
+        },
+        {
+          'id': 'launch_app',
+          'label': 'Launch a channel',
+          'writes': 'source',
+          'sentence': 'launch {app} on {device}',
+          'params': [
+            {
+              'name': 'app',
+              'kind': 'enum',
+              'required': true,
+              'options_from': {
+                'attribute': {
+                  'attribute': 'available_apps',
+                  'label_key': 'name',
+                  'value_key': 'id',
+                }
+              },
+            }
+          ],
+        },
+        {
+          'id': 'volume_up',
+          'label': 'Volume up',
+          'sentence': 'turn {device} up {count} step(s)',
+          'params': [
+            {
+              'name': 'count',
+              'kind': 'int',
+              'min': 1,
+              'max': 100,
+              'default': 1,
+            }
+          ],
+        },
+      ],
+    });
+
+DeviceState _roku({Map<String, dynamic> state = const {}}) => DeviceState(
+      id: 'roku-1',
+      name: 'Office TV',
+      pluginId: 'plugin.roku',
+      deviceType: 'media_player',
+      available: true,
+      state: state,
+      schema: _rokuDeclared(),
+    );
+
+void mainDeclared() {}
+
+/// A device whose plugin declares [actions] and nothing else.
+DeviceState _declaring(List<Map<String, Object?>> actions) => DeviceState(
+      id: 'decl',
+      name: 'Declaring device',
+      pluginId: 'plugin.test',
+      deviceType: 'media_player',
+      available: true,
+      state: const {},
+      schema: DeviceSchema.fromJson({'attributes': {}, 'actions': actions}),
+    );
+
+/// The `state` map a command builds from a filled-in form.
+Map<String, Object?> _stateOf(DeviceCommand c, Map<String, Object?> values) =>
+    (c.buildWith(values)['state'] as Map).cast<String, Object?>();
+

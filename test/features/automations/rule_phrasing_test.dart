@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hc_web/core/rules/node.dart';
+import 'package:hc_web/core/schema/device_schema.dart';
 import 'package:hc_web/core/rules/schema.dart';
 import 'package:hc_web/features/automations/rule_phrasing.dart';
 
@@ -355,6 +356,82 @@ void _payloadShapes() {
           contains('10-minute'));
       expect(describeState({'command': 'start', 'duration_secs': 45}),
           contains('45-second'));
+    });
+  });
+
+  group('a declared action reads as the plugin wrote it', () {
+    DeviceSchema schema() => DeviceSchema.fromJson({
+          'attributes': {},
+          'actions': [
+            {
+              'id': 'launch_app',
+              'label': 'Launch a channel',
+              'sentence': 'launch {app} on {device}',
+              'params': [
+                {'name': 'app', 'kind': 'enum'}
+              ],
+            },
+            {'id': 'unjoin', 'label': 'Ungroup', 'sentence': 'ungroup {device}'},
+            {'id': 'nameless', 'label': 'Nameless'},
+          ],
+        });
+
+    HcNode launch() => HcNode('SetDeviceState', {
+          'device_id': 'roku-1',
+          'state': {'action': 'launch_app', 'app': 'Netflix'},
+        });
+
+    test('without a schema it is raw payload — the bug this fixes', () {
+      // Every parameter is unaccounted, so describeState refuses to speak and
+      // the rule shows JSON. This is what a new plugin capability looked like.
+      final p = actionPhrase(launch())!;
+      expect(say(launch(), p), contains('app: Netflix'));
+    });
+
+    test('with the schema it reads as English, device in the right place', () {
+      final p = actionPhrase(launch(), schemas: (_) => schema())!;
+      // Not "launch Netflix Office TV" — the template says where the device
+      // goes and which preposition precedes it.
+      expect(say(launch(), p), 'launch Netflix on roku-1');
+    });
+
+    test('a device slot stays a slot, so the chip still resolves a name', () {
+      final p = actionPhrase(launch(), schemas: (_) => schema())!;
+      expect(p.spoken, contains('device_id'));
+    });
+
+    test('an action with no parameters still reads', () {
+      final n = HcNode('SetDeviceState', {
+        'device_id': 'sonos-1',
+        'state': {'action': 'unjoin'},
+      });
+      final p = actionPhrase(n, schemas: (_) => schema())!;
+      expect(say(n, p), 'ungroup sonos-1');
+    });
+
+    test('a declared action with no sentence falls back, never blank', () {
+      final n = HcNode('SetDeviceState', {
+        'device_id': 'roku-1',
+        'state': {'action': 'nameless'},
+      });
+      final said = say(n, actionPhrase(n, schemas: (_) => schema())!);
+      expect(said, isNotEmpty);
+      expect(said, contains('nameless'));
+    });
+
+    test('an unknown device falls back rather than throwing', () {
+      final p = actionPhrase(launch(), schemas: (_) => null)!;
+      expect(say(launch(), p), contains('Netflix'));
+    });
+
+    test('a missing parameter shows a gap, not the word null', () {
+      final n = HcNode('SetDeviceState', {
+        'device_id': 'roku-1',
+        'state': {'action': 'launch_app'},
+      });
+      final said = say(n, actionPhrase(n, schemas: (_) => schema())!);
+      expect(said, isNot(contains('null')));
+      expect(said, contains('…'));
     });
   });
 }

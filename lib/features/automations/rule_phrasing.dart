@@ -1,4 +1,5 @@
 import '../../core/rules/node.dart';
+import '../../core/schema/device_schema.dart';
 import '../../core/rules/schema.dart';
 
 /// Turns a rule node into a sentence.
@@ -157,10 +158,19 @@ Phrase? conditionPhrase(HcNode n) => switch (n.tag) {
       _ => null,
     };
 
+/// Finds the schema of the device a node targets, so a declared action can be
+/// read back in the plugin's own words.
+typedef SchemaLookup = DeviceSchema? Function(String deviceRef);
+
 /// The phrase for an action.
-Phrase? actionPhrase(HcNode n) => switch (n.tag) {
+///
+/// [schemas] is optional and only affects `SetDeviceState`: with it, a payload
+/// built from a declared action is phrased using that action's own `sentence`
+/// template. Without it the generic readings below apply, which is what the
+/// rule *list* uses — it has no device context and does not need one.
+Phrase? actionPhrase(HcNode n, {SchemaLookup? schemas}) => switch (n.tag) {
       // Not a constant: the phrase depends on what the payload actually says.
-      'SetDeviceState' => _setDeviceStatePhrase(n),
+      'SetDeviceState' => _setDeviceStatePhrase(n, schemas),
       'Delay' => const Phrase(['wait', Slot('duration_secs'), 'seconds']),
       'Notify' => const Phrase([
           'notify',
@@ -368,8 +378,17 @@ String? _boolStateVerb(String attribute, bool on) => switch (attribute) {
 /// So: [describeState] speaks the payload when it can account for **every** key,
 /// and returns null the moment it cannot. A null falls back to showing the raw
 /// payload in a chip, which is honest.
-Phrase _setDeviceStatePhrase(HcNode n) {
+Phrase _setDeviceStatePhrase(HcNode n, [SchemaLookup? schemas]) {
   const device = Slot('device_id');
+
+  // A declared action says how it reads. Prefer it: this file cannot know what
+  // "launch_app" means, and without the template the payload's parameters go
+  // unaccounted and the whole thing renders as raw JSON.
+  if (schemas != null && n['device_id'] is String) {
+    final declared = _declaredPhrase(n, schemas(n['device_id'] as String));
+    if (declared != null) return declared;
+  }
+
   final said = describeState(n['state']);
 
   if (said == null) {
@@ -392,6 +411,60 @@ Phrase _setDeviceStatePhrase(HcNode n) {
     if (prep != null) prep,
     device,
   ]);
+}
+
+/// Renders a declared action through its own `sentence`, with the device in
+/// the position the plugin put it — "launch Netflix **on** Office TV", not a
+/// verb with the device bolted onto the end by a preposition this file guessed.
+///
+/// Null when there is no schema, no matching action, or no template, so the
+/// generic readings stay in charge of everything they already handled.
+Phrase? _declaredPhrase(HcNode n, DeviceSchema? schema) {
+  if (schema == null) return null;
+  final state = n['state'];
+  if (state is! Map) return null;
+  final id = state['action'];
+  if (id is! String) return null;
+
+  DeviceActionSpec? spec;
+  for (final a in schema.actions) {
+    if (a.id == id) spec = a;
+  }
+  final template = spec?.sentence;
+  if (spec == null || template == null) return null;
+
+  final parts = <Object>[];
+  final buffer = StringBuffer();
+  void flush() {
+    final text = buffer.toString().trim();
+    if (text.isNotEmpty) parts.add(text);
+    buffer.clear();
+  }
+
+  var rest = template;
+  while (true) {
+    final open = rest.indexOf('{');
+    if (open < 0) break;
+    final close = rest.indexOf('}', open);
+    if (close < 0) break;
+    buffer.write(rest.substring(0, open));
+    final name = rest.substring(open + 1, close);
+    if (name == 'device') {
+      flush();
+      parts.add(const Slot('device_id'));
+    } else {
+      // Parameter values are literals, not slots: they live inside the payload
+      // map rather than being fields of the node, so there is nothing for a
+      // chip to edit. The pencil re-opens the builder for that.
+      final v = state[name];
+      buffer.write(v == null ? '…' : '$v');
+    }
+    rest = rest.substring(close + 1);
+  }
+  buffer.write(rest);
+  flush();
+
+  return Phrase(parts);
 }
 
 /// Null when the verb takes the device as a direct object.

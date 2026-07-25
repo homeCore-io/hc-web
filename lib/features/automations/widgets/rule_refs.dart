@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/device_state.dart';
+import '../../../core/schema/device_schema.dart';
 import '../../../core/providers/devices_provider.dart';
 import '../../../core/providers/modes_provider.dart';
 import '../../../core/providers/name_resolver_provider.dart';
@@ -51,6 +52,11 @@ class RuleRefs {
     }
     return null;
   }
+
+  /// The schema behind a reference — what a plugin says the device accepts.
+  /// Phrasing needs it to read a declared action back in the plugin's own
+  /// words instead of showing its payload.
+  DeviceSchema? schemaFor(String ref) => deviceFor(ref)?.schema;
 
   /// Attribute names seen on a device, so the attribute field can suggest
   /// rather than demand that the user remember `color_temp`.
