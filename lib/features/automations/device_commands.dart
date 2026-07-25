@@ -279,6 +279,21 @@ CmdParam? _controlFor(
   final label = p.label ?? _humanize(p.name);
   final (options, optionLabels) = _resolveOptions(d, p, peers);
 
+  // A declared option set wins over the declared kind. A Lutron button is an
+  // `int` — genuinely a number on the wire — but when the device publishes the
+  // buttons it actually has, asking the user to type "3" is asking them to
+  // know something the device just told us. This is why `press_button` showed
+  // a text box despite naming its catalogue.
+  if (options.isNotEmpty && p.kind != ParamKind.bool_) {
+    return CmdParam(CmdParamKind.select,
+        name: p.name,
+        label: label,
+        options: options,
+        optionLabels: optionLabels,
+        defaultValue: p.defaultValue?.toString() ?? options.first,
+        required: p.required);
+  }
+
   switch (p.kind) {
     case ParamKind.bool_:
       return CmdParam(CmdParamKind.select,

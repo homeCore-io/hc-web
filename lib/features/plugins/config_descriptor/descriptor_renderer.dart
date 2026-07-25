@@ -4,6 +4,7 @@ import 'package:web/web.dart' as web;
 import '../../../core/text/humanize.dart';
 import '../../../design/tokens.dart';
 import 'descriptor.dart';
+import 'import_merge.dart';
 import 'descriptor_validation.dart' as v;
 
 /// Renders a [ConfigDescriptor] as an application-like editor: expressive
@@ -331,25 +332,17 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
       final result = await run(action, text);
       var added = 0;
       var skipped = 0;
+      var updated = 0;
       for (final target in f.targets ?? const <String>[]) {
         final incoming = result[target];
         if (incoming is! List) continue;
         final table = _fieldByKey(target);
         final existing = _rowsFor(target);
         final idKey = table?.keyBy;
-        for (final row in incoming) {
-          if (row is! Map) continue;
-          final candidate = Map<String, dynamic>.from(row);
-          final duplicate = idKey != null &&
-              candidate[idKey] != null &&
-              existing.any((r) => '${r[idKey]}' == '${candidate[idKey]}');
-          if (duplicate) {
-            skipped++;
-            continue;
-          }
-          existing.add(candidate);
-          added++;
-        }
+        final outcome = mergeImportedRows(existing, incoming, idKey);
+        added += outcome.added;
+        updated += outcome.updated;
+        skipped += outcome.skipped;
         _set(target, existing);
       }
       final summary = result['summary'];
@@ -357,8 +350,11 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
         _importNote[key] = [
           if (summary is String && summary.isNotEmpty) summary,
           if (added > 0) 'Added $added row${added == 1 ? '' : 's'}.',
-          if (skipped > 0) 'Skipped $skipped already present.',
-          if (added == 0 && skipped == 0) 'Nothing to add.',
+          if (updated > 0)
+            'Filled in new details on $updated existing row'
+                '${updated == 1 ? '' : 's'}.',
+          if (skipped > 0) 'Skipped $skipped already up to date.',
+          if (added == 0 && skipped == 0 && updated == 0) 'Nothing to add.',
         ].join(' ');
       });
     } catch (e) {
