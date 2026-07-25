@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/models/plugin_entry.dart';
 import '../../core/providers/plugins_provider.dart';
+import '../../core/models/registry_plugin.dart';
 import '../../design/components/hc_surface.dart';
 import '../../design/hc_icons.dart';
 import '../../design/tokens.dart';
@@ -25,6 +26,21 @@ class PluginsPage extends ConsumerWidget {
     final offline = plugins.where((p) => p.isOffline).length;
     final devices = plugins.fold<int>(0, (a, p) => a + p.deviceCount);
 
+    // What the registry has, against what is installed. The page knew both
+    // and compared them nowhere, so a published update was invisible until
+    // someone went looking in the registry sheet.
+    final registry = {
+      for (final r in ref.watch(registryPluginsProvider).valueOrNull ??
+          const <RegistryPlugin>[])
+        r.id: r,
+    };
+    final upgrades = {
+      for (final p in plugins)
+        if (registry[p.pluginId]?.updateFrom(p.installedVersion)
+            case final v?)
+          p.pluginId: v,
+    };
+
     return SectionScaffold(
       title: 'Plugins',
       // Counts appear once loaded; the header (back arrow + Add) is there from
@@ -42,6 +58,12 @@ class PluginsPage extends ConsumerWidget {
                     label: 'offline',
                     tone: SectionTone.danger),
               SectionStat(value: '$devices', label: 'devices'),
+              if (upgrades.isNotEmpty)
+                SectionStat(
+                    value: '${upgrades.length}',
+                    label: upgrades.length == 1 ? 'update' : 'updates',
+                    tone: SectionTone.warn,
+                    glow: true),
             ]
           : const [],
       actions: [
@@ -60,15 +82,18 @@ class PluginsPage extends ConsumerWidget {
                 style: TextStyle(color: t.accent.danger)),
           );
         }),
-        data: (plugins) => _PluginsGrid(plugins),
+        data: (plugins) => _PluginsGrid(plugins, upgrades: upgrades),
       ),
     );
   }
 }
 
 class _PluginsGrid extends StatelessWidget {
-  const _PluginsGrid(this.plugins);
+  const _PluginsGrid(this.plugins, {this.upgrades = const {}});
   final List<PluginEntry> plugins;
+
+  /// plugin id → the newer version the registry has.
+  final Map<String, String> upgrades;
 
   @override
   Widget build(BuildContext context) {
@@ -96,6 +121,7 @@ class _PluginsGrid extends StatelessWidget {
             delegate: SliverChildBuilderDelegate(
               (context, i) => _PluginCard(
                 sorted[i],
+                upgradeTo: upgrades[sorted[i].pluginId],
                 onTap: () => context.go('/plugins/${sorted[i].pluginId}'),
               ),
               childCount: sorted.length,
@@ -107,10 +133,44 @@ class _PluginsGrid extends StatelessWidget {
   }
 }
 
+/// "There is a newer version of this" — loud enough to notice from the grid,
+/// because the alternative is finding out months later in the registry sheet.
+class _UpdateBadge extends StatelessWidget {
+  const _UpdateBadge({required this.to});
+  final String to;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    final c = t.accent.warn;
+    return Tooltip(
+      message: 'Version $to is available',
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: c.withValues(alpha: 0.16),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: c.withValues(alpha: 0.45)),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(Icons.arrow_circle_up_outlined, size: 13, color: c),
+          const SizedBox(width: 4),
+          Text(to,
+              style: TextStyle(
+                  fontSize: 11.5, fontWeight: FontWeight.w700, color: c)),
+        ]),
+      ),
+    );
+  }
+}
+
 class _PluginCard extends StatelessWidget {
-  const _PluginCard(this.p, {required this.onTap});
+  const _PluginCard(this.p, {required this.onTap, this.upgradeTo});
   final PluginEntry p;
   final VoidCallback onTap;
+
+  /// The newer version the registry has, when there is one.
+  final String? upgradeTo;
 
   @override
   Widget build(BuildContext context) {
@@ -173,6 +233,10 @@ class _PluginCard extends StatelessWidget {
             const SizedBox(width: 6),
             Text('devices', style: TextStyle(color: t.surface.onBaseMuted)),
             const Spacer(),
+            if (upgradeTo != null) ...[
+              _UpdateBadge(to: upgradeTo!),
+              const SizedBox(width: 6),
+            ],
             if (p.version != null)
               _Chip(p.version!,
                   warn: p.versionDiverged,
