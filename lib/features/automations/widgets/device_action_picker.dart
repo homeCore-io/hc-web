@@ -3,21 +3,28 @@ import 'package:flutter/material.dart';
 import '../../../core/devices/presentation.dart';
 import '../../../core/models/device_state.dart';
 import '../../../core/rules/node.dart';
+import '../../../core/rules/schema.dart';
 import '../../../design/tokens.dart';
 import '../device_commands.dart';
 import 'device_picker_shell.dart';
 import 'editor_style.dart';
 import 'rule_refs.dart';
 
-/// The multi-pane "Add action" picker: choose a device by type or room, then
-/// configure the one command that makes sense for it.
+/// The multi-pane "Add action" picker — the single entry point to a rule's THEN
+/// clause, covering the whole action vocabulary.
 ///
-/// Replaces the flat device list + raw-JSON `state` field. It returns a
-/// fully-built `HcNode` (a `SetDeviceState` / `SetMode`), so the caller drops it
-/// straight into the rule — no second editing step. Sensors never appear: they
-/// report state, so they belong in conditions, not actions.
+/// Rail categories fall into two kinds, exactly as in the condition picker:
+///  * **device** categories (lights … timers, scenes, modes) list real things to
+///    control, then a per-device command grid with a typed control;
+///  * **template** categories (Flow, Wait, Notify, Variables, Rules, Device
+///    extras, Integration) list action *types* whose detail pane is either a
+///    small form (wait for N, notify with this message, …) or — for the
+///    structural and rarely-used ones — a blank node the tree grows in place.
 ///
-/// Shown with `showDialog<HcNode>`; the command payloads come from
+/// It returns a fully-built `HcNode`, so the caller drops it straight into the
+/// rule. Sensors never appear: they report state, so they belong in conditions.
+///
+/// Shown with `showDialog<HcNode>`; the device command payloads come from
 /// [commandsFor] (see `device_commands.dart`).
 class DeviceActionPicker extends StatefulWidget {
   const DeviceActionPicker({super.key, required this.refs, this.initial});
@@ -33,8 +40,11 @@ class DeviceActionPicker extends StatefulWidget {
   State<DeviceActionPicker> createState() => _DeviceActionPickerState();
 }
 
-/// One selectable thing: a device, a native scene, or a mode. Each carries the
-/// commands it can perform, already resolved.
+enum _Kind { device, template }
+
+/// One selectable thing: a device / scene / mode (carrying the commands it can
+/// perform, already resolved), or an action *template* (carrying its variant
+/// tag).
 class _Entry {
   _Entry({
     required this.label,
@@ -43,7 +53,10 @@ class _Entry {
     required this.icon,
     required this.bucket,
     required this.room,
-    required this.commands,
+    required this.order,
+    this.kind = _Kind.device,
+    this.commands = const [],
+    this.tag,
     this.device,
     this.chip,
     this.chipTone,
@@ -55,32 +68,97 @@ class _Entry {
   final IconData icon;
   final String bucket;
   final String room;
+  final _Kind kind;
+
+  /// Declaration order — templates keep the order they are listed in rather
+  /// than being alphabetised, because that order is editorial (the common ones
+  /// first).
+  final int order;
+
   final List<DeviceCommand> commands;
+
+  /// Template entries only: the action variant tag (`Delay`, `Notify`, …).
+  final String? tag;
+
   final DeviceState? device;
   final String? chip;
   final PickerTone? chipTone;
 }
 
-class _Cat {
-  const _Cat(this.key, this.label, this.icon, this.group);
-  final String key;
-  final String label;
-  final IconData icon;
-  final String group;
-}
-
 const _cats = [
-  _Cat('all', 'All controllable', Icons.list_alt_outlined, 'Quick'),
-  _Cat('light', 'Lights', Icons.lightbulb_outline, 'Controls'),
-  _Cat('switch', 'Switches & Outlets', Icons.toggle_on_outlined, 'Controls'),
-  _Cat('cover', 'Shades & Covers', Icons.blinds_outlined, 'Controls'),
-  _Cat('lock', 'Locks', Icons.lock_outline, 'Controls'),
-  _Cat('climate', 'Climate', Icons.hvac_outlined, 'Controls'),
-  _Cat('media', 'Media players', Icons.speaker_outlined, 'Controls'),
-  _Cat('scene', 'Scenes', Icons.auto_awesome_outlined, 'Run'),
-  _Cat('timer', 'Timers', Icons.timer_outlined, 'Run'),
-  _Cat('mode', 'Modes', Icons.brightness_4_outlined, 'Run'),
+  PickerCat('all', 'All controllable', Icons.list_alt_outlined, 'Quick'),
+  PickerCat('light', 'Lights', Icons.lightbulb_outline, 'Controls'),
+  PickerCat(
+      'switch', 'Switches & Outlets', Icons.toggle_on_outlined, 'Controls'),
+  PickerCat('cover', 'Shades & Covers', Icons.blinds_outlined, 'Controls'),
+  PickerCat('lock', 'Locks', Icons.lock_outline, 'Controls'),
+  PickerCat('climate', 'Climate', Icons.hvac_outlined, 'Controls'),
+  PickerCat('media', 'Media players', Icons.speaker_outlined, 'Controls'),
+  PickerCat('scene', 'Scenes', Icons.auto_awesome_outlined, 'Run'),
+  PickerCat('timer', 'Timers', Icons.timer_outlined, 'Run'),
+  PickerCat('mode', 'Modes', Icons.brightness_4_outlined, 'Run'),
+  PickerCat('flow', 'Flow & branching', Icons.alt_route_outlined, 'Logic'),
+  PickerCat('wait', 'Waiting', Icons.hourglass_empty_outlined, 'Logic'),
+  PickerCat('notify', 'Notify & log', Icons.notifications_outlined, 'Tell'),
+  PickerCat('vars', 'Variables & script', Icons.data_object_outlined, 'Data'),
+  PickerCat('rules', 'Other rules', Icons.playlist_play_outlined, 'Data'),
+  PickerCat('extras', 'Device extras', Icons.tune_outlined, 'Advanced'),
+  PickerCat('integration', 'Integrations', Icons.hub_outlined, 'Advanced'),
 ];
+
+/// Template entries: action types with no device to pick. The order here is the
+/// order they appear in the list — commonest first inside each category.
+///
+/// Every action variant that the device panes cannot produce must appear here,
+/// or it becomes unreachable from the editor (`kActionTemplateTags` is asserted
+/// against `kActions` in the tests).
+const _templates = <(String bucket, String tag, String label, IconData icon)>[
+  ('flow', 'Conditional', 'If / else', Icons.alt_route_outlined),
+  ('flow', 'Parallel', 'Run steps at the same time', Icons.call_split_outlined),
+  ('flow', 'RepeatCount', 'Repeat a number of times', Icons.repeat_outlined),
+  ('flow', 'RepeatWhile', 'Repeat while…', Icons.loop_outlined),
+  ('flow', 'RepeatUntil', 'Repeat until…', Icons.loop_outlined),
+  ('flow', 'StopRuleChain', 'Stop the rule chain', Icons.stop_circle_outlined),
+  ('flow', 'ExitRule', 'Exit this rule', Icons.logout_outlined),
+  ('wait', 'Delay', 'Wait a while', Icons.hourglass_empty_outlined),
+  ('wait', 'WaitForEvent', 'Wait for an event', Icons.hourglass_top_outlined),
+  ('wait', 'WaitForExpression', 'Wait for an expression', Icons.code_outlined),
+  ('wait', 'DelayPerMode', 'Wait, per mode', Icons.brightness_4_outlined),
+  ('wait', 'CancelDelays', 'Cancel pending waits', Icons.cancel_outlined),
+  ('wait', 'CancelRuleTimers', "Cancel a rule's timers",
+      Icons.timer_off_outlined),
+  ('notify', 'Notify', 'Send a notification', Icons.notifications_outlined),
+  ('notify', 'LogMessage', 'Write to the log', Icons.article_outlined),
+  ('notify', 'Comment', 'Leave a comment', Icons.sticky_note_2_outlined),
+  ('vars', 'SetVariable', 'Set a rule variable', Icons.data_object_outlined),
+  ('vars', 'SetHubVariable', 'Set a hub variable', Icons.storage_outlined),
+  ('vars', 'SetPrivateBoolean', 'Set a private flag', Icons.flag_outlined),
+  ('vars', 'RunScript', 'Run a Rhai script', Icons.code_outlined),
+  ('rules', 'RunRuleActions', "Run another rule's actions",
+      Icons.playlist_play_outlined),
+  ('rules', 'PauseRule', 'Pause a rule', Icons.pause_circle_outline),
+  ('rules', 'ResumeRule', 'Resume a rule', Icons.play_circle_outline),
+  ('extras', 'FadeDevice', 'Fade a light over time', Icons.gradient_outlined),
+  ('extras', 'SetDeviceStatePerMode', 'Set device state, per mode',
+      Icons.tune_outlined),
+  ('extras', 'CaptureDeviceState', 'Capture device state',
+      Icons.bookmark_add_outlined),
+  ('extras', 'RestoreDeviceState', 'Restore device state',
+      Icons.restore_outlined),
+  ('extras', 'ActivateScenePerMode', 'Activate a scene, per mode',
+      Icons.auto_awesome_outlined),
+  ('integration', 'PublishMqtt', 'Publish MQTT', Icons.podcasts_outlined),
+  ('integration', 'CallService', 'Call an HTTP service', Icons.http_outlined),
+  ('integration', 'FireEvent', 'Fire a custom event', Icons.bolt_outlined),
+  ('integration', 'PingHost', 'Ping a host', Icons.network_check_outlined),
+];
+
+/// The action variants reachable through the picker's template list. The device
+/// panes cover the rest (`SetDeviceState` and `SetMode`).
+final kActionTemplateTags = [for (final t in _templates) t.$2];
+
+/// Variants the device / scene / mode panes build directly.
+const kActionDeviceTags = ['SetDeviceState', 'SetMode'];
 
 /// facet → category bucket. Null buckets (sensors) never build an entry.
 String? _bucketOf(DeviceFacet f) => switch (f) {
@@ -138,6 +216,19 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
   DeviceCommand? _cmd;
   Object? _value;
 
+  // Template detail state, shared where the control is the same.
+  int _secs = 300;
+  int _repeatCount = 2;
+  String _message = '';
+  String _title = '';
+  String _channel = 'all';
+  String _level = 'Info';
+  String _name = '';
+  String _varValue = '';
+  String _varOp = 'Set';
+  bool _boolOn = true;
+  final _secsCtl = TextEditingController(text: '300');
+
   late final List<_Entry> _entries = _buildEntries();
   bool get _editing => widget.initial != null;
 
@@ -145,6 +236,12 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
   void initState() {
     super.initState();
     if (widget.initial != null) _prefill(widget.initial!);
+  }
+
+  @override
+  void dispose() {
+    _secsCtl.dispose();
+    super.dispose();
   }
 
   /// Reverse of the command builders: from an existing node, pre-select the
@@ -220,6 +317,20 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
     if (s.containsKey('on')) {
       return (s['on'] == true ? byKey('on') : byKey('off'), null);
     }
+
+    // A schema-derived command: one attribute, one value. Match on what each
+    // command declares it writes rather than on a hand-listed key, so editing
+    // keeps working as plugins add attributes.
+    if (s.length == 1) {
+      final attr = s.keys.first;
+      final value = s.values.first;
+      final matches = e.commands.where((c) => c.writes == attr).toList();
+      if (matches.length == 1) return (matches.first, value);
+      // A bool attribute contributes two commands; the value picks which.
+      final exact =
+          _firstOrNull(matches, (c) => c.key == 'attr:$attr:$value');
+      if (exact != null) return (exact, null);
+    }
     return (null, null);
   }
 
@@ -228,6 +339,7 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
   List<_Entry> _buildEntries() {
     final out = <_Entry>[];
     final seen = <String>{};
+    var order = 0;
 
     final speakers = widget.refs.devices
         .where((x) => facetOf(x, x.schema) == DeviceFacet.mediaPlayer)
@@ -250,6 +362,7 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
         icon: facetOf(d, d.schema).icon,
         bucket: bucket,
         room: d.effectiveArea ?? 'No room',
+        order: order++,
         commands: cmds,
         device: d,
         chip: chip,
@@ -267,6 +380,7 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
         icon: Icons.auto_awesome_outlined,
         bucket: 'scene',
         room: 'Scenes',
+        order: order++,
         commands: [
           DeviceCommand(
             key: 'activate',
@@ -288,6 +402,7 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
         icon: Icons.brightness_4_outlined,
         bucket: 'mode',
         room: 'Modes',
+        order: order++,
         commands: [
           DeviceCommand(
             key: 'on',
@@ -297,6 +412,22 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
             build: (_) => setModeNode(m.id),
           ),
         ],
+      ));
+    }
+
+    // Everything the device panes cannot express: flow, waiting, notifications,
+    // variables, other rules, the device extras and the integrations.
+    for (final (bucket, tag, label, icon) in _templates) {
+      out.add(_Entry(
+        label: label,
+        ref: tag,
+        sub: '',
+        icon: icon,
+        bucket: bucket,
+        room: '', // flat — the rail already names the category
+        order: order++,
+        kind: _Kind.template,
+        tag: tag,
       ));
     }
     return out;
@@ -343,6 +474,11 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
   }
 
   int _byName(_Entry a, _Entry b) {
+    // Templates are editorially ordered — commonest first — so they are never
+    // alphabetised.
+    if (a.kind == _Kind.template || b.kind == _Kind.template) {
+      return a.order.compareTo(b.order);
+    }
     if (!_byRoom && a.room != b.room) return a.room.compareTo(b.room);
     return a.label.toLowerCase().compareTo(b.label.toLowerCase());
   }
@@ -366,9 +502,86 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
   void _select(_Entry e) {
     setState(() {
       _sel = e;
+      if (e.kind == _Kind.template) {
+        _cmd = null;
+        _resetTemplate();
+        return;
+      }
       _cmd = e.commands.first;
       _value = _cmd!.param.defaultValue;
     });
+  }
+
+  void _resetTemplate() {
+    _secs = 300;
+    _secsCtl.text = '300';
+    _repeatCount = 2;
+    _message = '';
+    _title = '';
+    _channel = 'all';
+    _level = 'Info';
+    _name = '';
+    _varValue = '';
+    _varOp = 'Set';
+    _boolOn = true;
+  }
+
+  /// The node the footer button would add. Null while nothing usable is chosen —
+  /// which is what disables the button.
+  HcNode? _result() {
+    final e = _sel;
+    if (e == null) return null;
+    if (e.kind == _Kind.device) return _cmd?.build(_value);
+    return _templateNode(e.tag!);
+  }
+
+  HcNode? _templateNode(String tag) {
+    switch (tag) {
+      case 'Delay':
+        return HcNode('Delay', {'duration_secs': _secs, 'cancelable': false});
+      case 'RepeatCount':
+        return HcNode('RepeatCount', {'count': _repeatCount, 'actions': <HcNode>[]});
+      case 'Notify':
+        if (_message.trim().isEmpty) return null;
+        return HcNode('Notify', {
+          'channel': _channel.trim().isEmpty ? 'all' : _channel.trim(),
+          'message': _message.trim(),
+          if (_title.trim().isNotEmpty) 'title': _title.trim(),
+        });
+      case 'LogMessage':
+        if (_message.trim().isEmpty) return null;
+        return HcNode(
+            'LogMessage', {'message': _message.trim(), 'level': _level});
+      case 'Comment':
+        if (_message.trim().isEmpty) return null;
+        return HcNode('Comment', {'text': _message.trim()});
+      case 'SetVariable':
+      case 'SetHubVariable':
+        if (_name.trim().isEmpty) return null;
+        return HcNode(tag, {
+          'name': _name.trim(),
+          'value': _parseValue(_varValue),
+          'op': _varOp,
+        });
+      case 'SetPrivateBoolean':
+        if (_name.trim().isEmpty) return null;
+        return HcNode('SetPrivateBoolean', {
+          'name': _name.trim(),
+          'value': _boolOn,
+        });
+      default:
+        // Everything structural or rarely-touched: a blank node the tree grows
+        // in place with its own fields.
+        final v = kActions[tag];
+        return v == null ? null : HcNode.blank(v);
+    }
+  }
+
+  Object _parseValue(String s) {
+    final v = s.trim();
+    if (v == 'true') return true;
+    if (v == 'false') return false;
+    return num.tryParse(v) ?? v;
   }
 
   void _pickCommand(DeviceCommand c) {
@@ -384,9 +597,10 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
 
   @override
   Widget build(BuildContext context) {
+    final result = _result();
     return PickerPanel(
-      kicker: _editing ? 'EDIT ACTION' : 'ADD ACTION · CHOOSE A DEVICE',
-      title: 'What should this rule control?',
+      kicker: _editing ? 'EDIT ACTION' : 'ADD ACTION · WHAT SHOULD HAPPEN',
+      title: 'What should this rule do?',
       seg: pickerSeg(HcTokens.of(context),
           byRoom: _byRoom,
           onChanged: (v) => setState(() {
@@ -396,13 +610,11 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
       panes: [
         PickerPane(width: 202, child: _rail(context)),
         PickerPane(flex: 3, child: _list(context)),
-        PickerPane(flex: 3, child: _detail(HcTokens.of(context))),
+        PickerPane(flex: 3, child: _detail(context)),
       ],
       footerHint: _footHint(),
       primaryLabel: _editing ? 'Save action' : 'Add action',
-      onPrimary: _cmd == null
-          ? null
-          : () => Navigator.pop(context, _cmd!.build(_value)),
+      onPrimary: result == null ? null : () => Navigator.pop(context, result),
     );
   }
 
@@ -410,7 +622,8 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
     final devs = _entries.where((e) => e.device != null).length;
     final scenes = _entries.where((e) => e.bucket == 'scene').length;
     final modes = _entries.where((e) => e.bucket == 'mode').length;
-    return '$devs controllable devices · $scenes scenes · $modes modes · sensors hidden';
+    return '$devs controllable devices · $scenes scenes · $modes modes · '
+        'flow · waits · notifications · sensors hidden';
   }
 
   // -- pane 1: rail --------------------------------------------------------
@@ -456,7 +669,7 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
     final rows = <Widget>[];
     var lastRoom = '';
     for (final e in pool) {
-      if (!_byRoom && e.room != lastRoom) {
+      if (!_byRoom && e.room.isNotEmpty && e.room != lastRoom) {
         rows.add(pickerGroupLabel(t, e.room));
         lastRoom = e.room;
       }
@@ -466,7 +679,7 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
           sub: e.sub,
           chip: e.chip,
           chipTone: e.chipTone,
-          selected: _sel?.ref == e.ref,
+          selected: _sel?.ref == e.ref && _sel?.bucket == e.bucket,
           onTap: () => _select(e)));
     }
     return PickerDeviceList(
@@ -478,14 +691,17 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
 
   // -- pane 3: action builder ----------------------------------------------
 
-  Widget _detail(HcTokens t) {
+  Widget _detail(BuildContext context) {
+    final t = HcTokens.of(context);
     final e = _sel;
     if (e == null) {
       return Center(
         child: Padding(
           padding: EdgeInsets.all(t.space.lg),
           child: Text(
-            'Pick a device to configure the action. Each type shows only the controls that make sense for it.',
+            'Pick what should happen. Devices, scenes and modes are at the top '
+            'of the rail; flow, waits, notifications, variables and '
+            'integrations are further down.',
             textAlign: TextAlign.center,
             style: TextStyle(
                 fontSize: 12.5, height: 1.5, color: t.surface.onBaseMuted),
@@ -517,7 +733,10 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
                         color: t.surface.onBase)),
-                Text(e.device?.mediaSubtitle ?? e.sub,
+                Text(
+                    e.kind == _Kind.template
+                        ? 'action'
+                        : (e.device?.mediaSubtitle ?? e.sub),
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                         fontSize: 11.5, color: t.surface.onBaseMuted)),
@@ -526,18 +745,310 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
           ),
         ]),
         SizedBox(height: t.space.md),
-        const RailLabel('Command'),
-        SizedBox(height: t.space.sm),
-        _commandGrid(t, e),
-        SizedBox(height: t.space.md),
-        if (_cmd!.param.kind != CmdParamKind.none) ...[
-          RailLabel(_paramLabel(_cmd!)),
+        if (e.kind == _Kind.template)
+          ..._templateControls(t, e.tag!)
+        else ...[
+          const RailLabel('Command'),
           SizedBox(height: t.space.sm),
+          _commandGrid(t, e),
+          SizedBox(height: t.space.md),
+          if (_cmd!.param.kind != CmdParamKind.none) ...[
+            RailLabel(_paramLabel(_cmd!)),
+            SizedBox(height: t.space.sm),
+          ],
+          _paramControl(t, _cmd!),
         ],
-        _paramControl(t, _cmd!),
         SizedBox(height: t.space.md),
         _preview(t, e),
       ],
+    );
+  }
+
+  // -- template forms ------------------------------------------------------
+
+  List<Widget> _templateControls(HcTokens t, String tag) {
+    switch (tag) {
+      case 'Delay':
+        return [
+          const RailLabel('Wait for'),
+          SizedBox(height: t.space.sm),
+          _panel(
+              t,
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Wrap(
+                  spacing: t.space.xs,
+                  runSpacing: t.space.xs,
+                  children: [
+                    for (final (label, s) in _durations)
+                      _Toggle(
+                        label: label,
+                        selected: _secs == s,
+                        onTap: () => setState(() {
+                          _secs = s;
+                          _secsCtl.text = '$s';
+                        }),
+                      ),
+                  ],
+                ),
+                SizedBox(height: t.space.sm),
+                // A controller, not `initialValue`: the presets above write into
+                // this field, and a re-keyed TextFormField would drop the caret
+                // on every keystroke.
+                TextField(
+                  controller: _secsCtl,
+                  keyboardType: TextInputType.number,
+                  decoration: fieldDecoration(t, hint: 'Seconds'),
+                  onChanged: (v) =>
+                      setState(() => _secs = int.tryParse(v.trim()) ?? _secs),
+                ),
+              ])),
+        ];
+      case 'RepeatCount':
+        return [
+          const RailLabel('How many times'),
+          SizedBox(height: t.space.sm),
+          _panel(t, _countStepper(t)),
+          SizedBox(height: t.space.md),
+          _note(t, 'The steps to repeat go inside the block once it is added.'),
+        ];
+      case 'Notify':
+        return [
+          const RailLabel('Message'),
+          SizedBox(height: t.space.sm),
+          TextFormField(
+            initialValue: _message,
+            decoration: fieldDecoration(t, hint: 'e.g. The garage is still open'),
+            onChanged: (v) => setState(() => _message = v),
+          ),
+          SizedBox(height: t.space.md),
+          const RailLabel('Title (optional)'),
+          SizedBox(height: t.space.sm),
+          TextFormField(
+            initialValue: _title,
+            decoration: fieldDecoration(t, hint: 'e.g. Garage'),
+            onChanged: (v) => setState(() => _title = v),
+          ),
+          SizedBox(height: t.space.md),
+          const RailLabel('Channel'),
+          SizedBox(height: t.space.sm),
+          TextFormField(
+            initialValue: _channel,
+            decoration: fieldDecoration(t, hint: '"all" fans out everywhere'),
+            onChanged: (v) => setState(() => _channel = v),
+          ),
+        ];
+      case 'LogMessage':
+        return [
+          const RailLabel('Message'),
+          SizedBox(height: t.space.sm),
+          TextFormField(
+            initialValue: _message,
+            decoration: fieldDecoration(t, hint: 'What to write to the log'),
+            onChanged: (v) => setState(() => _message = v),
+          ),
+          SizedBox(height: t.space.md),
+          const RailLabel('Level'),
+          SizedBox(height: t.space.sm),
+          _dropdown(t, _level, logLevelValues,
+              (v) => setState(() => _level = v ?? _level)),
+        ];
+      case 'Comment':
+        return [
+          const RailLabel('Comment'),
+          SizedBox(height: t.space.sm),
+          TextFormField(
+            initialValue: _message,
+            maxLines: 3,
+            decoration: fieldDecoration(t, hint: 'A note for whoever reads this rule'),
+            onChanged: (v) => setState(() => _message = v),
+          ),
+        ];
+      case 'SetVariable':
+      case 'SetHubVariable':
+        return [
+          const RailLabel('Variable name'),
+          SizedBox(height: t.space.sm),
+          TextFormField(
+            initialValue: _name,
+            decoration: fieldDecoration(t, hint: 'e.g. guests_home'),
+            onChanged: (v) => setState(() => _name = v),
+          ),
+          SizedBox(height: t.space.md),
+          const RailLabel('Operation'),
+          SizedBox(height: t.space.sm),
+          _dropdown(t, _varOp, variableOpValues,
+              (v) => setState(() => _varOp = v ?? _varOp)),
+          SizedBox(height: t.space.md),
+          const RailLabel('Value'),
+          SizedBox(height: t.space.sm),
+          TextFormField(
+            initialValue: _varValue,
+            decoration:
+                fieldDecoration(t, hint: 'true, false, a number, or text'),
+            onChanged: (v) => setState(() => _varValue = v),
+          ),
+        ];
+      case 'SetPrivateBoolean':
+        return [
+          const RailLabel('Flag name'),
+          SizedBox(height: t.space.sm),
+          TextFormField(
+            initialValue: _name,
+            decoration: fieldDecoration(t, hint: 'e.g. vacation'),
+            onChanged: (v) => setState(() => _name = v),
+          ),
+          SizedBox(height: t.space.md),
+          const RailLabel('Set it to'),
+          SizedBox(height: t.space.sm),
+          Row(children: [
+            _toggleBtn(t, 'Set', _boolOn, () => setState(() => _boolOn = true)),
+            SizedBox(width: t.space.xs),
+            _toggleBtn(
+                t, 'Clear', !_boolOn, () => setState(() => _boolOn = false)),
+          ]),
+        ];
+      default:
+        return [_note(t, _templateNote(tag))];
+    }
+  }
+
+  /// What a blank-node template does once it lands in the rule. These are the
+  /// structural and rarely-touched actions, whose fields are edited in the tree
+  /// where there is room for them.
+  String _templateNote(String tag) => switch (tag) {
+        'Conditional' =>
+          'Adds an IF / ELSE block. Write the test, then drop the steps for each '
+              'branch inside it.',
+        'Parallel' =>
+          'Adds a block whose steps all start together instead of one after the '
+              'other.',
+        'RepeatWhile' =>
+          'Adds a loop checked before each pass — the steps inside may never run.',
+        'RepeatUntil' =>
+          'Adds a loop checked after each pass — the steps inside always run at '
+              'least once.',
+        'StopRuleChain' =>
+          'Stops this rule and any rules it would have gone on to trigger.',
+        'ExitRule' => 'Stops this rule here. Later steps are skipped.',
+        'WaitForEvent' =>
+          'Pauses until a device or event you name arrives, with an optional '
+              'timeout.',
+        'WaitForExpression' =>
+          'Pauses until a Rhai expression becomes true, polled on an interval.',
+        'DelayPerMode' =>
+          'Waits a different length of time depending on the hub mode.',
+        'CancelDelays' =>
+          'Cancels waits this rule has pending. Name a key to cancel just one.',
+        'CancelRuleTimers' => "Cancels another rule's pending waits.",
+        'RunScript' =>
+          'Runs a Rhai script — for anything the other actions cannot express.',
+        'RunRuleActions' =>
+          "Runs another rule's actions without checking that rule's own trigger "
+              'or conditions.',
+        'PauseRule' => 'Stops a rule from firing until it is resumed.',
+        'ResumeRule' => 'Lets a paused rule fire again.',
+        'FadeDevice' =>
+          'Ramps a light to a level over a duration instead of jumping to it.',
+        'SetDeviceStatePerMode' =>
+          'Sets a different device state depending on the hub mode.',
+        'CaptureDeviceState' =>
+          'Remembers what some devices are doing now, under a key you choose.',
+        'RestoreDeviceState' =>
+          'Puts the devices back the way a matching capture found them.',
+        'ActivateScenePerMode' =>
+          'Activates a different native scene depending on the hub mode.',
+        'PublishMqtt' => 'Publishes a payload to an MQTT topic.',
+        'CallService' => 'Sends an HTTP request and optionally fires the reply '
+            'back as an event.',
+        'FireEvent' => 'Emits a custom event other rules can trigger on.',
+        'PingHost' =>
+          'Pings a host and branches on whether it answered — steps for '
+              'reachable and unreachable go inside.',
+        _ => 'Added with its defaults; its fields are edited in the rule.',
+      };
+
+  Widget _note(HcTokens t, String text) => _panel(
+      t,
+      Text(text,
+          style: TextStyle(
+              fontSize: 12.5, height: 1.5, color: t.surface.onBaseMuted)));
+
+  Widget _countStepper(HcTokens t) {
+    Widget btn(IconData i, VoidCallback f) => InkWell(
+          onTap: f,
+          borderRadius: BorderRadius.circular(10),
+          child: Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: t.surface.raised,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: t.stroke.hairline),
+            ),
+            child: Icon(i, size: 18, color: t.surface.onBase),
+          ),
+        );
+    return Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+      btn(Icons.remove, () => setState(() => _repeatCount = (_repeatCount - 1).clamp(1, 99))),
+      SizedBox(width: t.space.md),
+      Text('$_repeatCount',
+          style: TextStyle(
+              fontSize: 26, fontWeight: FontWeight.w700, color: t.accent.active)),
+      SizedBox(width: t.space.md),
+      btn(Icons.add, () => setState(() => _repeatCount = (_repeatCount + 1).clamp(1, 99))),
+    ]);
+  }
+
+  Widget _dropdown(HcTokens t, String value, List<String> opts,
+      ValueChanged<String?> onChanged) {
+    final safe = opts.contains(value) ? value : opts.first;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: t.surface.sunken,
+        borderRadius: BorderRadius.circular(9),
+        border: Border.all(color: t.stroke.hairline),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: safe,
+          isExpanded: true,
+          dropdownColor: t.surface.overlay,
+          style: TextStyle(fontSize: 13.5, color: t.surface.onBase),
+          items: [
+            for (final o in opts) DropdownMenuItem(value: o, child: Text(o)),
+          ],
+          onChanged: onChanged,
+        ),
+      ),
+    );
+  }
+
+  Widget _toggleBtn(HcTokens t, String label, bool on, VoidCallback onTap) {
+    final ac = t.accent.active;
+    return Expanded(
+      child: Material(
+        color: on ? ac.withValues(alpha: 0.14) : t.surface.raised,
+        borderRadius: BorderRadius.circular(9),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(9),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 11),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(9),
+              border: Border.all(
+                  color: on ? ac.withValues(alpha: 0.4) : t.stroke.hairline),
+            ),
+            child: Text(label,
+                style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: on ? ac : t.surface.onBaseMuted)),
+          ),
+        ),
+      ),
     );
   }
 
@@ -576,6 +1087,7 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
           c.label.replaceFirst(RegExp('^(Set|Play|Select) '), ''),
         CmdParamKind.color => 'Color',
         CmdParamKind.duration => 'Duration',
+        CmdParamKind.text => c.label.replaceFirst('Set ', ''),
         _ => 'Value',
       };
 
@@ -599,6 +1111,8 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
         return _panel(t, _duration(t, c));
       case CmdParamKind.color:
         return _panel(t, _color(t));
+      case CmdParamKind.text:
+        return _panel(t, _textControl(t, c));
       case CmdParamKind.multi:
         return _panel(t, const SizedBox.shrink());
     }
@@ -696,6 +1210,15 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
           () => setState(() => _value = (v + step).clamp(5.0, 40.0))),
     ]);
   }
+
+  /// A free-text value — a writable string attribute whose plugin publishes no
+  /// catalogue to pick from (Roku's `tv_channel` before the lineup arrives).
+  Widget _textControl(HcTokens t, DeviceCommand c) => TextFormField(
+        key: ValueKey('text:${_sel?.ref}:${c.key}'),
+        initialValue: '${_value ?? ''}',
+        decoration: fieldDecoration(t, hint: c.label.replaceFirst('Set ', '')),
+        onChanged: (v) => setState(() => _value = v),
+      );
 
   Widget _selectControl(HcTokens t, DeviceCommand c) {
     final opts = c.param.options ?? const <String>[];
@@ -815,9 +1338,28 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
               style: TextStyle(
                   fontSize: 13, fontWeight: FontWeight.w600, color: c)),
         );
+    if (e.kind == _Kind.template) return _templateSentence(t, e, word, tok);
     final dev = tok(e.label, t.accent.primary);
     final c = _cmd!;
     final val = _valueLabel(c);
+
+    // A command that carries its own phrasing uses it. Everything derived from
+    // a device schema does, because the per-key switch below only knows the
+    // hand-written commands and would otherwise read "set source Office TV".
+    if (c.sentence != null) {
+      final parts = <Widget>[];
+      for (final piece in _splitTemplate(c.sentence!)) {
+        switch (piece) {
+          case '{device}':
+            parts.add(dev);
+          case '{value}':
+            parts.add(tok(val.isEmpty ? '…' : val, t.accent.active));
+          default:
+            if (piece.trim().isNotEmpty) parts.add(word(piece.trim()));
+        }
+      }
+      return parts;
+    }
     switch (c.key) {
       case 'on':
       case 'lock':
@@ -941,6 +1483,76 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
       default:
         return [tok(c.label.toLowerCase(), t.accent.active), dev];
     }
+  }
+
+  /// The template half of "reads as" — the same tokenised phrasing the sentence
+  /// editor will show once the node is in the rule.
+  List<Widget> _templateSentence(HcTokens t, _Entry e, Widget Function(String) word,
+      Widget Function(String, Color) tok) {
+    final a = t.accent.active;
+    final b = t.accent.primary;
+    String orDots(String s) => s.trim().isEmpty ? '…' : s.trim();
+    switch (e.tag) {
+      case 'Delay':
+        return [tok('wait', a), tok(_secsLabel(_secs), a)];
+      case 'RepeatCount':
+        return [
+          tok('repeat the steps inside', a),
+          tok('$_repeatCount time${_repeatCount == 1 ? '' : 's'}', a),
+        ];
+      case 'Notify':
+        return [
+          tok('notify', a),
+          tok(orDots(_channel.isEmpty ? 'all' : _channel), b),
+          word('with'),
+          tok(orDots(_message), a),
+        ];
+      case 'LogMessage':
+        return [
+          tok('log', a),
+          tok(_level.toLowerCase(), b),
+          tok(orDots(_message), a),
+        ];
+      case 'Comment':
+        return [word('note:'), tok(orDots(_message), a)];
+      case 'SetVariable':
+      case 'SetHubVariable':
+        final scope = e.tag == 'SetHubVariable' ? 'hub variable' : 'variable';
+        return [
+          tok(_varOp.toLowerCase(), a),
+          word('the $scope'),
+          tok(orDots(_name), b),
+          if (_varOp != 'Toggle') ...[word('to'), tok(orDots(_varValue), a)],
+        ];
+      case 'SetPrivateBoolean':
+        return [
+          tok('set the flag', a),
+          tok(orDots(_name), b),
+          word('to'),
+          tok(_boolOn ? 'set' : 'clear', a),
+        ];
+      default:
+        return [tok(e.label.toLowerCase(), a)];
+    }
+  }
+
+  String _secsLabel(int secs) => _durations
+      .firstWhere((d) => d.$2 == secs,
+          orElse: () => ('$secs second${secs == 1 ? '' : 's'}', secs))
+      .$1;
+
+  /// Splits `"set the source of {device} to {value}"` into literal runs and
+  /// placeholders, keeping the placeholders as their own pieces.
+  static List<String> _splitTemplate(String template) {
+    final out = <String>[];
+    var i = 0;
+    for (final m in RegExp(r'\{(device|value)\}').allMatches(template)) {
+      if (m.start > i) out.add(template.substring(i, m.start));
+      out.add(m[0]!);
+      i = m.end;
+    }
+    if (i < template.length) out.add(template.substring(i));
+    return out;
   }
 
   String _valueLabel(DeviceCommand c) {

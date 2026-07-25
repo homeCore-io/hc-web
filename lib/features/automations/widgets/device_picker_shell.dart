@@ -150,9 +150,13 @@ class PickerPanel extends StatelessWidget {
         padding: EdgeInsets.symmetric(
             horizontal: t.space.lg, vertical: t.space.sm + 2),
         child: Row(children: [
-          Text(footerHint,
-              style: TextStyle(fontSize: 11.5, color: t.surface.onBaseMuted)),
-          const Spacer(),
+          // Expanded, not a Spacer: the hint grew long enough (the action
+          // picker lists what it covers) to push the buttons off the panel.
+          Expanded(
+            child: Text(footerHint,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 11.5, color: t.surface.onBaseMuted)),
+          ),
           _FooterBtn(label: 'Cancel', onTap: () => Navigator.pop(context)),
           SizedBox(width: t.space.sm),
           _FooterBtn(label: primaryLabel, primary: true, onTap: onPrimary),

@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../../../core/rules/node.dart';
 import '../../../core/rules/rule.dart';
 import '../../../core/rules/schema.dart';
-import '../../../design/components/hc_dialog.dart';
 import '../../../design/components/hc_sentence.dart';
 import '../../../design/hc_icons.dart';
 import '../../../design/tokens.dart';
@@ -579,28 +578,15 @@ class ActionTree extends StatelessWidget {
               },
             ),
           const SizedBox(height: 8),
-          Builder(
-            builder: (context) => Wrap(
-              spacing: 4,
-              children: [
-                _ControlDeviceButton(
-                  refs: refs,
-                  onAdd: (node) {
-                    actions.add(HcRuleAction(action: node));
-                    onChanged();
-                  },
-                ),
-                AddNodeButton(
-                  label: 'More…',
-                  registry: kActions,
-                  categories: kActionCategories,
-                  onPick: (v) {
-                    actions.add(HcRuleAction(action: HcNode.blank(v)));
-                    onChanged();
-                  },
-                ),
-              ],
-            ),
+          // One entry point, as on the condition side: the multi-pane picker
+          // covers the whole action vocabulary (devices, scenes, modes, flow,
+          // waits, notifications, variables, other rules, integrations).
+          _AddActionButton(
+            refs: refs,
+            onAdd: (node) {
+              actions.add(HcRuleAction(action: node));
+              onChanged();
+            },
           ),
         ],
       );
@@ -634,29 +620,34 @@ class _CheckDeviceButton extends StatelessWidget {
       );
 }
 
-/// The primary "Add action" path: open the multi-pane device picker and drop
-/// the fully-built node it returns straight into the action list.
-class _ControlDeviceButton extends StatelessWidget {
-  const _ControlDeviceButton({required this.refs, required this.onAdd});
+/// The only "Add action" path: open the multi-pane action picker and drop the
+/// fully-built node it returns straight into the list it was opened from.
+class _AddActionButton extends StatelessWidget {
+  const _AddActionButton(
+      {required this.refs, required this.onAdd, this.label = 'Add action'});
 
   final RuleRefs refs;
   final ValueChanged<HcNode> onAdd;
+  final String label;
 
   @override
-  Widget build(BuildContext context) => TextButton.icon(
-        icon: const Icon(HcIcons.plus, size: 14),
-        label: const Text('Control a device', style: TextStyle(fontSize: 13)),
-        style: TextButton.styleFrom(
-          visualDensity: VisualDensity.compact,
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+  Widget build(BuildContext context) => Align(
+        alignment: Alignment.centerLeft,
+        child: TextButton.icon(
+          icon: const Icon(HcIcons.plus, size: 14),
+          label: Text(label, style: const TextStyle(fontSize: 13)),
+          style: TextButton.styleFrom(
+            visualDensity: VisualDensity.compact,
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          ),
+          onPressed: () async {
+            final node = await showDialog<HcNode>(
+              context: context,
+              builder: (_) => DeviceActionPicker(refs: refs),
+            );
+            if (node != null) onAdd(node);
+          },
         ),
-        onPressed: () async {
-          final node = await showDialog<HcNode>(
-            context: context,
-            builder: (_) => DeviceActionPicker(refs: refs),
-          );
-          if (node != null) onAdd(node);
-        },
       );
 }
 
@@ -910,12 +901,11 @@ class _NestedActions extends StatelessWidget {
                 onChanged();
               },
             ),
-          AddNodeButton(
+          _AddActionButton(
+            refs: refs,
             label: 'Add to $title',
-            registry: kActions,
-            categories: kActionCategories,
-            onPick: (v) {
-              node[field] = [...children, HcNode.blank(v)];
+            onAdd: (n) {
+              node[field] = [...children, n];
               onChanged();
             },
           ),
@@ -992,12 +982,11 @@ class _ElseIfChain extends StatelessWidget {
                       onChanged();
                     },
                   ),
-                AddNodeButton(
+                _AddActionButton(
+                  refs: refs,
                   label: 'Add to Else-if',
-                  registry: kActions,
-                  categories: kActionCategories,
-                  onPick: (v) {
-                    branches[i].actions.add(HcNode.blank(v));
+                  onAdd: (n) {
+                    branches[i].actions.add(n);
                     onChanged();
                   },
                 ),
@@ -1020,140 +1009,5 @@ class _ElseIfChain extends StatelessWidget {
         ),
       ],
     );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Palette
-// ---------------------------------------------------------------------------
-
-/// Category-first picker.
-///
-/// A flat dropdown of 34 actions is unusable, so the palette groups by the
-/// category each variant declares and searches across all of them.
-class AddNodeButton extends StatelessWidget {
-  const AddNodeButton({
-    super.key,
-    required this.label,
-    required this.registry,
-    required this.categories,
-    required this.onPick,
-  });
-
-  final String label;
-  final Map<String, HcVariant> registry;
-  final List<String> categories;
-  final ValueChanged<HcVariant> onPick;
-
-  @override
-  Widget build(BuildContext context) => Align(
-        alignment: Alignment.centerLeft,
-        child: TextButton.icon(
-          icon: const Icon(HcIcons.plus, size: 14),
-          label: Text(label, style: const TextStyle(fontSize: 13)),
-          style: TextButton.styleFrom(
-            visualDensity: VisualDensity.compact,
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          ),
-          onPressed: () async {
-            final picked = await showDialog<HcVariant>(
-              context: context,
-              builder: (_) => _Palette(
-                registry: registry,
-                categories: categories,
-              ),
-            );
-            if (picked != null) onPick(picked);
-          },
-        ),
-      );
-}
-
-class _Palette extends StatefulWidget {
-  const _Palette({required this.registry, required this.categories});
-
-  final Map<String, HcVariant> registry;
-  final List<String> categories;
-
-  @override
-  State<_Palette> createState() => _PaletteState();
-}
-
-class _PaletteState extends State<_Palette> {
-  String _query = '';
-
-  @override
-  Widget build(BuildContext context) {
-    final t = HcTokens.of(context);
-    final all = widget.registry.values.toList();
-    final matching = _query.isEmpty
-        ? all
-        : all
-            .where((v) =>
-                v.label.toLowerCase().contains(_query.toLowerCase()) ||
-                v.tag.toLowerCase().contains(_query.toLowerCase()))
-            .toList();
-
-    // The child is a fixed-height Column so the search field stays pinned while
-    // only the list scrolls — HcDialog would otherwise scroll the whole child,
-    // carrying the search box off the top of a long palette.
-    return HcDialog(
-      title: 'Add',
-      width: 520,
-      child: SizedBox(
-        height: 460,
-        child: Column(
-          children: [
-            TextField(
-              autofocus: true,
-              decoration: fieldDecoration(t, hint: 'Search'),
-              onChanged: (v) => setState(() => _query = v),
-            ),
-            const SizedBox(height: 8),
-            Expanded(
-              child: ListView(
-                children: [
-                  for (final category in widget.categories)
-                    ..._section(category, matching),
-                  // Anything whose category isn't in the list still has to be
-                  // reachable, or a new variant could become invisible.
-                  ..._section(
-                    'Other',
-                    matching
-                        .where((v) => !widget.categories.contains(v.category))
-                        .toList(),
-                    matchCategory: false,
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  List<Widget> _section(
-    String category,
-    List<HcVariant> pool, {
-    bool matchCategory = true,
-  }) {
-    final items = matchCategory
-        ? pool.where((v) => v.category == category).toList()
-        : pool;
-    if (items.isEmpty) return const [];
-
-    return [
-      Padding(
-        padding: const EdgeInsets.fromLTRB(4, 12, 4, 4),
-        child: RailLabel(category),
-      ),
-      for (final v in items)
-        PickerRow(
-          title: v.label,
-          subtitle: v.help,
-          onTap: () => Navigator.pop(context, v),
-        ),
-    ];
   }
 }

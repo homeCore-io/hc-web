@@ -6,7 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/devices/presentation.dart';
 import '../../core/models/device_state.dart';
 import '../../core/providers/devices_provider.dart';
-import '../../design/components/hc_attribute_control.dart' show rgbToXy;
+import '../../core/devices/color_space.dart' show rgbToXy;
 import '../../design/hc_icons.dart';
 import '../../design/tokens.dart';
 import 'home_edit_button.dart';

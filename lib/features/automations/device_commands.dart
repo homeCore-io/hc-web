@@ -1,9 +1,9 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 
+import '../../core/devices/color_space.dart';
 import '../../core/devices/presentation.dart';
 import '../../core/models/device_state.dart';
+import '../../core/schema/attribute_policy.dart';
 import '../../core/schema/device_schema.dart';
 import '../../core/rules/node.dart';
 
@@ -22,7 +22,7 @@ import '../../core/rules/node.dart';
 /// and what `rule_phrasing.dart describeState` can read back into a sentence.
 
 /// The control a command's value needs. `none` is a bare verb (lock, play).
-enum CmdParamKind { none, slider, select, color, stepper, duration, multi }
+enum CmdParamKind { none, slider, select, color, stepper, duration, multi, text }
 
 class CmdParam {
   const CmdParam(
@@ -59,12 +59,28 @@ class DeviceCommand {
     required this.icon,
     required this.param,
     required this.build,
+    this.writes,
+    this.sentence,
   });
 
   final String key;
   final String label;
   final IconData icon;
   final CmdParam param;
+
+  /// The state attribute this command writes, when it maps to one.
+  ///
+  /// Two jobs. Today it suppresses the schema-derived control for the same
+  /// attribute, so a Roku does not offer both "Play" and a "Playback" select
+  /// over its writable `state`. Later it is the client half of the descriptor's
+  /// `writes` field — see `claude-notes/plans/device_action_descriptor.md`.
+  final String? writes;
+
+  /// Prose template for the picker's "reads as" preview, with `{device}` and
+  /// `{value}` interpolated. Null means the preview falls back to its per-key
+  /// phrasing — which only knows the hand-written commands, so anything derived
+  /// from a schema carries one of these.
+  final String? sentence;
 
   /// [value] is null for [CmdParamKind.none]; else the control's current value
   /// (a `num` for sliders/steppers, a `String` for selects, a `List<String>`
@@ -74,6 +90,18 @@ class DeviceCommand {
 
 /// The commands that make sense for [d], in display order. Empty for a sensor —
 /// a sensor has nothing to do, so it never reaches the action picker.
+///
+/// Two sources, in order:
+///  1. the **facet** commands below — hand-written, and the only ones that know
+///     the payload subtleties (Hue writes Kelvin but reports mirek; a Lutron
+///     shade opens with `raise`, not `position: 100`);
+///  2. the device's **own schema** — every writable attribute the facet
+///     commands did not already cover, rendered from its declared kind, range,
+///     unit and options.
+///
+/// (2) is what stops a plugin's capabilities from depending on someone editing
+/// this file. hc-roku declares `on`, `state`, `source` and `tv_channel` as
+/// writable; before this, a Roku offered Play and Pause and nothing else.
 List<DeviceCommand> commandsFor(DeviceState d,
     {List<DeviceState> mediaPeers = const []}) {
   final facet = facetOf(d, d.schema);
@@ -83,6 +111,28 @@ List<DeviceCommand> commandsFor(DeviceState d,
   HcNode setState(Map<String, Object?> state) =>
       HcNode('SetDeviceState', {'device_id': ref, 'state': state});
 
+  final base = _facetCommands(d, facet, setState, mediaPeers);
+
+  // A facet with no commands of its own is a sensor or something unrecognised.
+  // It stays out of the action picker even when its schema has writable
+  // attributes: the picker promises that sensors are hidden, and a plugin
+  // marking a diagnostic knob writable should not turn a motion sensor into an
+  // actuator. Phase 4b's explicit `actions[]` is how such a device opts in.
+  if (base.isEmpty) return const [];
+
+  final covered = {
+    for (final c in base)
+      if (c.writes != null) c.writes!,
+  };
+  return [...base, ..._schemaCommands(d, setState, covered)];
+}
+
+List<DeviceCommand> _facetCommands(
+  DeviceState d,
+  DeviceFacet facet,
+  HcNode Function(Map<String, Object?>) setState,
+  List<DeviceState> mediaPeers,
+) {
   switch (facet) {
     case DeviceFacet.mediaPlayer:
       return _mediaCommands(d, setState, mediaPeers);
@@ -94,6 +144,7 @@ List<DeviceCommand> commandsFor(DeviceState d,
           label: 'Activate scene',
           icon: Icons.play_arrow_outlined,
           param: const CmdParam.none(),
+          writes: 'activate',
           build: (_) => setState({'activate': true}),
         ),
       ];
@@ -133,6 +184,7 @@ List<DeviceCommand> commandsFor(DeviceState d,
           label: 'Lock',
           icon: Icons.lock_outline,
           param: const CmdParam.none(),
+          writes: 'locked',
           build: (_) => setState({'locked': true}),
         ),
         DeviceCommand(
@@ -140,6 +192,7 @@ List<DeviceCommand> commandsFor(DeviceState d,
           label: 'Unlock',
           icon: Icons.lock_open_outlined,
           param: const CmdParam.none(),
+          writes: 'locked',
           build: (_) => setState({'locked': false}),
         ),
       ];
@@ -152,6 +205,7 @@ List<DeviceCommand> commandsFor(DeviceState d,
           label: 'Open',
           icon: Icons.keyboard_arrow_up,
           param: const CmdParam.none(),
+          writes: 'raise',
           build: (_) => setState({'raise': true}),
         ),
         DeviceCommand(
@@ -159,6 +213,7 @@ List<DeviceCommand> commandsFor(DeviceState d,
           label: 'Close',
           icon: Icons.keyboard_arrow_down,
           param: const CmdParam.none(),
+          writes: 'lower',
           build: (_) => setState({'lower': true}),
         ),
         DeviceCommand(
@@ -174,6 +229,7 @@ List<DeviceCommand> commandsFor(DeviceState d,
           icon: Icons.blinds_outlined,
           param:
               _sliderFrom(d, 'position', unit: '%', min: 0, max: 100, def: 50),
+          writes: 'position',
           build: (v) => setState({'position': _num(v, 50)}),
         ),
       ];
@@ -186,6 +242,7 @@ List<DeviceCommand> commandsFor(DeviceState d,
           icon: Icons.thermostat_outlined,
           param: _sliderFrom(d, 'setpoint',
               kind: CmdParamKind.stepper, min: 10, max: 32, step: 0.5, def: 21),
+          writes: 'setpoint',
           build: (v) =>
               setState({'action': 'set_setpoint', 'value': _num(v, 21)}),
         ),
@@ -195,6 +252,7 @@ List<DeviceCommand> commandsFor(DeviceState d,
           icon: Icons.tune_outlined,
           param: const CmdParam(CmdParamKind.select,
               options: ['heat', 'cool', 'off'], defaultValue: 'heat'),
+          writes: 'mode',
           build: (v) =>
               setState({'action': 'set_mode', 'value': '${v ?? 'heat'}'}),
         ),
@@ -249,6 +307,7 @@ List<DeviceCommand> _lightCommands(
     icon: Icons.brightness_6_outlined,
     param:
         _sliderFrom(d, 'brightness_pct', unit: '%', min: 0, max: 100, def: 75),
+    writes: 'brightness_pct',
     build: (v) => setState({'on': true, 'brightness_pct': _num(v, 75)}),
   ));
 
@@ -258,9 +317,10 @@ List<DeviceCommand> _lightCommands(
       label: 'Set color',
       icon: Icons.palette_outlined,
       param: const CmdParam(CmdParamKind.color),
+      writes: 'color_xy',
       // Hue and friends take CIE xy; a UI colour → the device's own space.
       build: (v) {
-        final xy = _rgbToXy(v is Color ? v : const Color(0xFFFFB661));
+        final xy = rgbToXy(v is Color ? v : const Color(0xFFFFB661));
         return setState({
           'on': true,
           'color_xy': {'x': xy.$1, 'y': xy.$2},
@@ -275,6 +335,7 @@ List<DeviceCommand> _lightCommands(
       icon: Icons.wb_incandescent_outlined,
       param: _sliderFrom(d, 'color_temp',
           unit: 'K', min: 2200, max: 6500, step: 100, def: 2700),
+      writes: 'color_temp',
       build: (v) => setState({'on': true, 'color_temp': _int(v, 2700)}),
     ));
   }
@@ -289,6 +350,7 @@ List<DeviceCommand> _onOff(HcNode Function(Map<String, Object?>) setState) => [
         label: 'Turn on',
         icon: Icons.power_settings_new,
         param: const CmdParam.none(),
+        writes: 'on',
         build: (_) => setState({'on': true}),
       ),
       DeviceCommand(
@@ -296,9 +358,235 @@ List<DeviceCommand> _onOff(HcNode Function(Map<String, Object?>) setState) => [
         label: 'Turn off',
         icon: Icons.power_settings_new,
         param: const CmdParam.none(),
+        writes: 'on',
         build: (_) => setState({'on': false}),
       ),
     ];
+
+// -- schema-derived ---------------------------------------------------------
+
+/// Commands built from the device's **registered** schema — every writable
+/// attribute the facet commands did not already cover.
+///
+/// This is the half that does not need editing when a plugin grows. The kind
+/// picks the control, `min`/`max`/`step`/`unit` give it an honest range, and
+/// `display_name` names it in the plugin's own words.
+///
+/// ## Registered only — never [heuristicSchemaFor]
+///
+/// It is tempting to fall back to the inferred schema here, since only 16 of
+/// 177 devices register one, and the device sheet already renders controls that
+/// way. It would be wrong, because the two are different claims:
+///
+/// * a registered `writable: true` is the **plugin's promise** that it accepts
+///   an attribute-style write — hc-roku's `run_attributes` implements exactly
+///   that, and its own test asserts every writable attribute has a path;
+/// * an inferred one is a guess from the attribute's name, and
+///   **attribute-style writes are not universal**. `hc-sonos::execute_command`
+///   dispatches on `cmd["action"]` and ends `other => bail!("unknown action")`,
+///   so the `{"muted": true}` the heuristic would happily produce is rejected
+///   outright.
+///
+/// A dead control in a device sheet is discovered in seconds. The same control
+/// in a rule fails at 3am six weeks later, in a rule nobody is watching. Phase
+/// 4b's declared `actions[]` is how a plugin without an attribute path exposes
+/// these properly — see `claude-notes/plans/device_action_descriptor.md`.
+List<DeviceCommand> _schemaCommands(
+  DeviceState d,
+  HcNode Function(Map<String, Object?>) setState,
+  Set<String> covered,
+) {
+  final schema = d.schema;
+  if (schema == null) return const [];
+
+  final out = <DeviceCommand>[];
+  final names = schema.writable.keys.toList()..sort();
+  for (final name in names) {
+    if (covered.contains(name)) continue;
+    out.addAll(_attributeCommands(d, name, schema.writable[name]!, setState));
+  }
+  return out;
+}
+
+List<DeviceCommand> _attributeCommands(
+  DeviceState d,
+  String name,
+  AttributeSchema a,
+  HcNode Function(Map<String, Object?>) setState,
+) {
+  final label = a.displayName ?? _humanize(name);
+  final lower = label.toLowerCase();
+
+  switch (a.kind) {
+    case AttributeKind.bool_:
+      // Two verbs, not a toggle: a rule sets a state, it does not flip one.
+      return [
+        for (final on in [true, false])
+          DeviceCommand(
+            key: 'attr:$name:$on',
+            label: '$label ${on ? 'on' : 'off'}',
+            icon: Icons.power_settings_new,
+            param: const CmdParam.none(),
+            writes: name,
+            sentence: 'turn the $lower of {device} ${on ? 'on' : 'off'}',
+            build: (_) => setState({name: on}),
+          ),
+      ];
+
+    case AttributeKind.enum_:
+      final options = a.options ?? const <String>[];
+      if (options.isEmpty) return const [];
+      return [
+        DeviceCommand(
+          key: 'attr:$name',
+          label: 'Set $lower',
+          icon: Icons.tune_outlined,
+          param: CmdParam(CmdParamKind.select,
+              options: options, defaultValue: options.first),
+          writes: name,
+          sentence: 'set the $lower of {device} to {value}',
+          build: (v) => setState({name: '${v ?? options.first}'}),
+        ),
+      ];
+
+    case AttributeKind.string:
+      // A writable free-form attribute usually has its value space published
+      // alongside it — Roku's `source` is backed by `available_sources`. Use it
+      // when it is there; the descriptor formalises this as `options_from`.
+      final options = _catalogueFor(d, name);
+      return [
+        DeviceCommand(
+          key: 'attr:$name',
+          label: 'Set $lower',
+          icon: Icons.tune_outlined,
+          param: options.isEmpty
+              ? const CmdParam(CmdParamKind.text)
+              : CmdParam(CmdParamKind.select,
+                  options: options, defaultValue: options.first),
+          writes: name,
+          sentence: 'set the $lower of {device} to {value}',
+          build: (v) => setState({name: '${v ?? ''}'}),
+        ),
+      ];
+
+    case AttributeKind.integer:
+    case AttributeKind.float:
+    case AttributeKind.colorTemp:
+      final ranged = a.hasRange;
+      return [
+        DeviceCommand(
+          key: 'attr:$name',
+          label: 'Set $lower',
+          icon: Icons.tune_outlined,
+          param: ranged
+              ? CmdParam(
+                  CmdParamKind.slider,
+                  unit: a.unit,
+                  min: a.min,
+                  max: a.max,
+                  step: a.step,
+                  defaultValue: a.min,
+                )
+              : const CmdParam(CmdParamKind.text),
+          writes: name,
+          sentence: 'set the $lower of {device} to {value}',
+          build: (v) => setState({
+            name: a.kind == AttributeKind.integer ||
+                    a.kind == AttributeKind.colorTemp
+                ? _int(v, (a.min ?? 0).round())
+                : _num(v, a.min ?? 0),
+          }),
+        ),
+      ];
+
+    case AttributeKind.colorXy:
+      return [
+        DeviceCommand(
+          key: 'attr:$name',
+          label: 'Set $lower',
+          icon: Icons.palette_outlined,
+          param: const CmdParam(CmdParamKind.color),
+          writes: name,
+          sentence: 'set the $lower of {device} to {value}',
+          build: (v) {
+            final xy = rgbToXy(v is Color ? v : const Color(0xFFFFB661));
+            return setState({
+              name: {'x': xy.$1, 'y': xy.$2}
+            });
+          },
+        ),
+      ];
+
+    case AttributeKind.colorRgb:
+      return [
+        DeviceCommand(
+          key: 'attr:$name',
+          label: 'Set $lower',
+          icon: Icons.palette_outlined,
+          param: const CmdParam(CmdParamKind.color),
+          writes: name,
+          sentence: 'set the $lower of {device} to {value}',
+          build: (v) {
+            final c = v is Color ? v : const Color(0xFFFFB661);
+            return setState({
+              name: {
+                'r': (c.r * 255).round(),
+                'g': (c.g * 255).round(),
+                'b': (c.b * 255).round(),
+              }
+            });
+          },
+        ),
+      ];
+
+    case AttributeKind.json:
+      // A raw-JSON box is the control the typed picker exists to abolish. The
+      // descriptor's `actions[]` is how a plugin exposes something this shape.
+      return const [];
+  }
+}
+
+/// The published value space for a free-form attribute, by the naming
+/// convention plugins already follow: `source` → `available_sources`,
+/// `tv_channel` → `available_tv_channels`.
+///
+/// Entries may be plain strings or objects; for objects the value is the first
+/// of `value`/`id`/`number` and the label the first of `label`/`name`/`title`.
+List<String> _catalogueFor(DeviceState d, String attribute) {
+  for (final key in [
+    'available_${attribute}s',
+    'available_$attribute',
+    'available_${attribute}es',
+  ]) {
+    final raw = d.state[key];
+    if (raw is! List || raw.isEmpty) continue;
+    final out = <String>[];
+    for (final e in raw) {
+      if (e is String) {
+        out.add(e);
+      } else if (e is Map) {
+        final v = e['value'] ?? e['id'] ?? e['number'];
+        if (v != null) out.add('$v');
+      }
+    }
+    if (out.isNotEmpty) return out;
+  }
+  return const [];
+}
+
+/// `tv_channel` → `TV channel`. Only used when a plugin gave no display name.
+String _humanize(String attribute) {
+  final words = attribute.split('_');
+  return [
+    for (var i = 0; i < words.length; i++)
+      if (words[i].toLowerCase() == 'tv')
+        'TV'
+      else if (i == 0)
+        '${words[i][0].toUpperCase()}${words[i].substring(1)}'
+      else
+        words[i],
+  ].join(' ');
+}
 
 // -- media ------------------------------------------------------------------
 
@@ -322,11 +610,13 @@ List<DeviceCommand> _mediaCommands(
   add(
       has('play'),
       _c('play', 'Play', Icons.play_arrow, const CmdParam.none(),
-          (_) => act({'action': 'play'})));
+          (_) => act({'action': 'play'}),
+          writes: 'state'));
   add(
       has('pause'),
       _c('pause', 'Pause', Icons.pause, const CmdParam.none(),
-          (_) => act({'action': 'pause'})));
+          (_) => act({'action': 'pause'}),
+          writes: 'state'));
 
   // Favourites & playlists are advertised through `ui_enrichments` (+ the
   // catalogue in state), NOT as `supported_actions`: the plugin routes them via
@@ -359,7 +649,8 @@ List<DeviceCommand> _mediaCommands(
           Icons.volume_up_outlined,
           CmdParam(CmdParamKind.slider,
               unit: '%', min: 0, max: 100, defaultValue: d.volumePercent ?? 30),
-          (v) => act({'action': 'set_volume', 'volume': _int(v, 30)})));
+          (v) => act({'action': 'set_volume', 'volume': _int(v, 30)}),
+          writes: 'volume'));
   add(
       has('next'),
       _c('next', 'Next track', Icons.skip_next, const CmdParam.none(),
@@ -376,7 +667,8 @@ List<DeviceCommand> _mediaCommands(
           Icons.shuffle,
           const CmdParam(CmdParamKind.select,
               options: ['on', 'off'], defaultValue: 'on'),
-          (v) => act({'action': 'set_shuffle', 'shuffle': v == 'on'})));
+          (v) => act({'action': 'set_shuffle', 'shuffle': v == 'on'}),
+          writes: 'shuffle'));
 
   // Grouping: join THIS speaker to another speaker's group. `join` takes the
   // coordinator's device id (a UUID), so the value is a peer name resolved back
@@ -396,13 +688,26 @@ List<DeviceCommand> _mediaCommands(
 }
 
 DeviceCommand _c(String key, String label, IconData icon, CmdParam p,
-        HcNode Function(Object?) build) =>
-    DeviceCommand(key: key, label: label, icon: icon, param: p, build: build);
+        HcNode Function(Object?) build,
+        {String? writes}) =>
+    DeviceCommand(
+        key: key,
+        label: label,
+        icon: icon,
+        param: p,
+        writes: writes,
+        build: build);
 
 // -- helpers ----------------------------------------------------------------
 
 /// A slider/stepper whose range comes from the device's own schema when it has
 /// one (the honest range), falling back to sensible defaults otherwise.
+///
+/// This one *does* consult [schemaFor], so a device with no registered schema
+/// still gets the canonical range for a known attribute (`position` 0–100%,
+/// `color_temp` 2000–6500K). Safe where [_schemaCommands] is not: the command
+/// already exists and its payload is hand-verified — the inference supplies
+/// only how the control is drawn, never whether it may be drawn at all.
 CmdParam _sliderFrom(
   DeviceState d,
   String attr, {
@@ -413,13 +718,13 @@ CmdParam _sliderFrom(
   num? step,
   required num def,
 }) {
-  final AttributeSchema? s = d.schema?[attr];
+  final AttributeSchema s = schemaFor(attr, d.state[attr], d.schema);
   return CmdParam(
     kind,
-    unit: s?.unit ?? unit,
-    min: s?.min ?? min,
-    max: s?.max ?? max,
-    step: s?.step ?? step,
+    unit: s.unit ?? unit,
+    min: s.min ?? min,
+    max: s.max ?? max,
+    step: s.step ?? step,
     defaultValue: def,
   );
 }
@@ -432,19 +737,3 @@ num _num(Object? v, num fallback) =>
 
 List<String> _strList(Object? v) =>
     (v as List?)?.whereType<String>().toList() ?? const [];
-
-/// sRGB → CIE 1931 xy, the colour space Hue (and most colour bulbs) accept.
-(double, double) _rgbToXy(Color c) {
-  double lin(double u) =>
-      u <= 0.04045 ? u / 12.92 : math.pow((u + 0.055) / 1.055, 2.4).toDouble();
-  final r = lin(c.r), g = lin(c.g), b = lin(c.b);
-  final X = r * 0.4124 + g * 0.3576 + b * 0.1805;
-  final Y = r * 0.2126 + g * 0.7152 + b * 0.0722;
-  final Z = r * 0.0193 + g * 0.1192 + b * 0.9505;
-  final sum = X + Y + Z;
-  if (sum == 0) return (0.3127, 0.3290); // D65 white
-  return (
-    (X / sum * 10000).round() / 10000,
-    (Y / sum * 10000).round() / 10000,
-  );
-}

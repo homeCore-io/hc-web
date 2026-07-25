@@ -501,6 +501,22 @@ String? describeState(Object? state) {
     };
   }
 
+  // -- a plain single-attribute write --------------------------------------
+  //
+  // What a schema-derived command produces: `{"source": "Netflix"}`,
+  // `{"tv_channel": "14.3"}`. Naming it keeps the accounting rule intact — one
+  // key in, one key spoken — and stops every capability a plugin adds from
+  // arriving in the rule list as raw JSON.
+  if (s.length == 1) {
+    final name = s.keys.first;
+    final value = s.values.first;
+    if (value is String || value is num || value is bool) {
+      final attr = name.replaceAll('_', ' ');
+      if (value is bool) return 'turn the $attr ${value ? 'on' : 'off'}';
+      return 'set the $attr to $value';
+    }
+  }
+
   return null;
 }
 

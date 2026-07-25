@@ -4,6 +4,8 @@ import 'package:hc_web/core/rules/node.dart';
 import 'package:hc_web/core/rules/rule.dart';
 import 'package:hc_web/core/rules/schema.dart';
 import 'package:hc_web/design/skins.dart';
+import 'package:hc_web/features/automations/widgets/device_action_picker.dart';
+import 'package:hc_web/features/automations/widgets/device_picker_shell.dart';
 import 'package:hc_web/features/automations/widgets/node_trees.dart';
 import 'package:hc_web/features/automations/widgets/rule_refs.dart';
 
@@ -245,9 +247,13 @@ void main() {
     });
   });
 
-  group('palette', () {
-    testWidgets('opens grouped by category, and search narrows it',
-        (tester) async {
+  group('action picker', () {
+    testWidgets('reaches a non-device action through the rail', (tester) async {
+      // The picker is a 960px panel; the default 800x600 test surface would
+      // clip it rather than exercise it.
+      await tester.binding.setSurfaceSize(const Size(1400, 900));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
       final actions = <HcRuleAction>[];
       await tester.pumpWidget(_host(ActionTree(
         actions: actions,
@@ -256,30 +262,48 @@ void main() {
       )));
       await tester.pumpAndSettle();
 
-      // The primary "Control a device" path is the multi-pane picker; the
-      // palette of every other action type is now behind "More…".
-      await tester.tap(find.text('More…'));
+      // There is one entry point now — no "More…" palette beside it.
+      expect(find.text('More…'), findsNothing);
+      await tester.tap(find.text('Add action'));
       await tester.pumpAndSettle();
 
-      // The list virtualises, so only the leading categories are built — but a
-      // flat 34-item dropdown would have no headers at all.
-      expect(find.text('DEVICE'), findsOneWidget);
-      expect(find.text('Set device state'), findsOneWidget);
-
-      // Search is how you reach the rest without scrolling.
-      await tester.enterText(find.byType(TextField), 'wait');
+      // Devices, scenes and modes are at the top of the rail; the rest of the
+      // vocabulary is behind the template categories underneath them.
+      await tester.scrollUntilVisible(
+        find.text('Waiting'),
+        80,
+        scrollable: find.descendant(
+            of: find.byType(PickerRail), matching: find.byType(Scrollable)),
+      );
+      await tester.tap(find.text('Waiting'));
       await tester.pumpAndSettle();
-      expect(find.text('Set device state'), findsNothing);
-
-      await tester.tap(find.text('Wait'));
+      await tester.tap(find.text('Wait a while'));
       await tester.pumpAndSettle();
 
-      // Picking seeds the descriptor's defaults, so the node is valid on first
-      // save rather than being rejected for a missing required field.
+      // The footer's primary button shares its label with the button that
+      // opened the dialog, so name the panel it lives in.
+      await tester.tap(find.descendant(
+          of: find.byType(PickerPanel), matching: find.text('Add action')));
+      await tester.pumpAndSettle();
+
       expect(actions, hasLength(1));
       expect(actions.single.action.tag, 'Delay');
-      expect(actions.single.action['duration_secs'], 60);
+      expect(actions.single.action['duration_secs'], 300);
       expect(actions.single.action['cancelable'], false);
+    });
+
+    test('every action variant is reachable from the picker', () {
+      // The device panes build exactly two variants; everything else has to be
+      // listed as a template or it becomes unreachable from the editor now that
+      // the flat palette is gone.
+      final reachable = {...kActionTemplateTags, ...kActionDeviceTags};
+      for (final v in kActions.values) {
+        expect(reachable, contains(v.tag),
+            reason: '${v.tag} has no way into a rule — add it to the action '
+                "picker's template list");
+      }
+      expect(reachable.difference(kActions.keys.toSet()), isEmpty,
+          reason: 'the picker offers a variant the schema does not define');
     });
 
     test('every variant declares a category the palette actually renders', () {

@@ -316,8 +316,24 @@ void _payloadShapes() {
       expect(describeState({'on': true, 'mystery': 42}), isNull);
       expect(describeState({'action': 'set_volume', 'volume': 15, 'x': 1}),
           isNull);
-      expect(describeState({'totally': 'unknown'}), isNull);
       expect(describeState({}), isNull);
+      // Two keys, neither named: still null. The generic reading below is only
+      // reachable when a payload is one scalar attribute, so it can never omit
+      // anything.
+      expect(describeState({'totally': 'unknown', 'other': 2}), isNull);
+    });
+
+    test('a lone attribute write is named, whatever the attribute', () {
+      // Schema-derived commands write one attribute — `{"source": "Netflix"}`
+      // for a Roku, and whatever a plugin declares writable next. Phrasing them
+      // generically is what stops each new plugin capability from arriving in
+      // the rule list as raw JSON. This does NOT weaken the rule above: one key
+      // in, one key spoken.
+      expect(describeState({'source': 'Netflix'}), 'set the source to Netflix');
+      expect(describeState({'tv_channel': '14.3'}), 'set the tv channel to 14.3');
+      expect(describeState({'eco': true}), 'turn the eco on');
+      // Non-scalar values are not readable, so they still fall through.
+      expect(describeState({'color_xy': {'x': 0.3, 'y': 0.3}}), isNull);
     });
 
     test('an unnamed payload is SHOWN, never swallowed', () {

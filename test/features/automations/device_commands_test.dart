@@ -1,5 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hc_web/core/models/device_state.dart';
+import 'package:hc_web/core/schema/attribute_policy.dart';
+import 'package:hc_web/core/schema/device_schema.dart';
 import 'package:hc_web/features/automations/device_commands.dart';
 
 /// A device with just enough to drive `facetOf` and the command builders.
@@ -213,6 +215,183 @@ void main() {
       final scene = activateSceneNode('scene.movie');
       expect(scene.tag, 'SetDeviceState');
       expect((scene['state'] as Map)['activate'], true);
+    });
+  });
+
+  // The half that does not need editing when a plugin grows a capability.
+  group('commands derived from the device schema', () {
+    /// hc-roku's real schema, abridged to its writable half — the case that
+    /// motivated this: a Roku used to offer Play and Pause and nothing else.
+    DeviceSchema rokuSchema() => const DeviceSchema({
+          'on': AttributeSchema(
+              kind: AttributeKind.bool_, displayName: 'Power'),
+          'state': AttributeSchema(
+              kind: AttributeKind.enum_,
+              displayName: 'Playback',
+              options: ['playing', 'paused', 'stopped']),
+          'source':
+              AttributeSchema(kind: AttributeKind.string, displayName: 'Source'),
+          'tv_channel': AttributeSchema(
+              kind: AttributeKind.string, displayName: 'TV channel'),
+          'media_title': AttributeSchema(
+              kind: AttributeKind.string,
+              writable: false,
+              displayName: 'Now playing'),
+        });
+
+    DeviceState roku({Map<String, dynamic> state = const {}}) => DeviceState(
+          id: 'roku-1',
+          name: 'Office TV',
+          pluginId: 'plugin.roku',
+          deviceType: 'media_player',
+          available: true,
+          state: state,
+          schema: rokuSchema(),
+        );
+
+    test('a Roku gains its power, source and channel controls', () {
+      final keys = commandsFor(roku()).map((c) => c.key).toSet();
+      // The media facet still gives it transport…
+      expect(keys, containsAll(['play', 'pause']));
+      // …and the schema gives it everything the facet never knew about.
+      expect(keys, containsAll(['attr:on:true', 'attr:on:false']));
+      expect(keys, contains('attr:source'));
+      expect(keys, contains('attr:tv_channel'));
+    });
+
+    test('a read-only attribute never becomes a control', () {
+      final keys = commandsFor(roku()).map((c) => c.key).toSet();
+      expect(keys, isNot(contains('attr:media_title')));
+    });
+
+    test('an attribute a facet command already writes is not duplicated', () {
+      // Play/pause declare they write `state`, so the writable `state` enum
+      // must not also arrive as a "Playback" select.
+      final keys = commandsFor(roku()).map((c) => c.key).toSet();
+      expect(keys, isNot(contains('attr:state')));
+    });
+
+    test('a derived command writes the attribute, nothing else', () {
+      final d = roku();
+      expect(_state(_cmd(d, 'attr:on:true')), {'on': true});
+      expect(_state(_cmd(d, 'attr:on:false')), {'on': false});
+      expect(_state(_cmd(d, 'attr:source'), 'Netflix'), {'source': 'Netflix'});
+    });
+
+    test('a published catalogue becomes the option list', () {
+      // `source` is a free-form string in the schema because its value space is
+      // the device's own `available_sources` — the convention the descriptor's
+      // `options_from` will formalise.
+      final d = roku(state: {
+        'available_sources': ['Netflix', 'YouTube', 'HDMI 1'],
+      });
+      final c = _cmd(d, 'attr:source');
+      expect(c.param.kind, CmdParamKind.select);
+      expect(c.param.options, ['Netflix', 'YouTube', 'HDMI 1']);
+    });
+
+    test('an object catalogue is unwrapped to its values', () {
+      final d = roku(state: {
+        'available_tv_channels': [
+          {'number': '14.3', 'name': 'PBS'},
+          {'number': '5.1', 'name': 'NBC'},
+        ],
+      });
+      expect(_cmd(d, 'attr:tv_channel').param.options, ['14.3', '5.1']);
+    });
+
+    test('no catalogue leaves a free-text field rather than an empty list', () {
+      final c = _cmd(roku(), 'attr:tv_channel');
+      expect(c.param.kind, CmdParamKind.text);
+    });
+
+    test('a numeric attribute takes its range from the schema', () {
+      final d = DeviceState(
+        id: 'eq',
+        name: 'Speaker',
+        pluginId: 'plugin.test',
+        deviceType: 'media_player',
+        available: true,
+        state: const {},
+        schema: const DeviceSchema({
+          'bass': AttributeSchema(
+              kind: AttributeKind.integer,
+              displayName: 'Bass',
+              min: -10,
+              max: 10,
+              step: 1),
+        }),
+      );
+      final c = _cmd(d, 'attr:bass');
+      expect(c.param.kind, CmdParamKind.slider);
+      expect(c.param.min, -10);
+      expect(c.param.max, 10);
+      expect(_state(c, 4), {'bass': 4});
+    });
+
+    test('every derived command carries phrasing for the preview', () {
+      for (final c in commandsFor(roku()).where((c) => c.key.startsWith('attr:'))) {
+        expect(c.sentence, isNotNull, reason: c.key);
+        expect(c.sentence, contains('{device}'), reason: c.key);
+      }
+    });
+
+    test('a sensor stays out of the picker even with a writable attribute', () {
+      // The picker promises sensors are hidden. A plugin marking a diagnostic
+      // knob writable must not turn a motion sensor into an actuator — that is
+      // what the descriptor's explicit `actions[]` is for.
+      final d = DeviceState(
+        id: 'motion-1',
+        name: 'Hall Motion',
+        pluginId: 'plugin.test',
+        deviceType: 'motion_sensor',
+        available: true,
+        state: const {'motion': false},
+        schema: const DeviceSchema({
+          'sensitivity':
+              AttributeSchema(kind: AttributeKind.integer, min: 1, max: 10),
+        }),
+      );
+      expect(commandsFor(d), isEmpty);
+    });
+
+    test('a device with no schema behaves exactly as before', () {
+      final keys = commandsFor(_d('sw', type: 'switch', state: {'on': true}))
+          .map((c) => c.key)
+          .toList();
+      expect(keys, ['on', 'off']);
+    });
+
+    test('an inferred schema NEVER produces a command', () {
+      // The tempting shortcut, and the reason it is wrong. `heuristicSchemaFor`
+      // calls `muted` a writable bool, so inferring here would give every Sonos
+      // a "Muted on/off" command — but hc-sonos::execute_command dispatches on
+      // cmd["action"] and ends `other => bail!("unknown action")`, so
+      // `{"muted": true}` is rejected outright. A dead control in a device
+      // sheet is found in seconds; the same control in a rule fails at 3am six
+      // weeks later.
+      final sonos = _d('sp', type: 'media_player', state: {
+        'supported_actions': ['play', 'pause', 'set_volume'],
+        'muted': false,
+        'bass': 0,
+        'treble': 0,
+      });
+      // The heuristic really would call it writable — that is the trap.
+      expect(heuristicSchemaFor('muted', false).writable, isTrue);
+      // …and commandsFor must still not offer it.
+      final keys = commandsFor(sonos).map((c) => c.key);
+      expect(keys, isNot(contains('attr:muted:true')));
+      expect(keys.where((k) => k.startsWith('attr:')), isEmpty);
+    });
+
+    test('the inference is still used for a facet slider\'s range', () {
+      // Safe in the other direction: the command already exists and its payload
+      // is hand-verified, so the inference only decides how the control looks.
+      final cover = _d('cv', type: 'cover', state: {'position': 30});
+      final position = _cmd(cover, 'position');
+      expect(position.param.min, 0);
+      expect(position.param.max, 100);
+      expect(position.param.unit, '%');
     });
   });
 }
