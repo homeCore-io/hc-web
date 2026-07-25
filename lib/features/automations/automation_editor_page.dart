@@ -11,6 +11,7 @@ import '../../design/components/hc_sentence.dart';
 import '../../design/tokens.dart';
 import '../../shared/widgets/section_scaffold.dart';
 import 'rule_phrasing.dart';
+import 'widgets/device_trigger_picker.dart';
 import 'widgets/node_trees.dart';
 import 'widgets/rule_refs.dart';
 import 'widgets/sentence_editor.dart';
@@ -240,12 +241,12 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
           tooltip: 'Change the trigger',
           icon: const Icon(Icons.swap_horiz, size: 17),
           onPressed: () async {
-            final picked = await showDialog<HcVariant>(
+            final picked = await showDialog<HcNode>(
               context: context,
-              builder: (_) => _TriggerPalette(current: rule.trigger.tag),
+              builder: (_) => DeviceTriggerPicker(refs: refs),
             );
-            if (picked != null && picked.tag != rule.trigger.tag) {
-              rule.trigger = HcNode.blank(picked);
+            if (picked != null) {
+              rule.trigger = picked;
               _touch();
             }
           },
@@ -885,77 +886,6 @@ class _MetaChip extends StatelessWidget {
   }
 }
 
-class _TriggerPalette extends StatelessWidget {
-  const _TriggerPalette({required this.current});
-
-  final String current;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = HcTokens.of(context);
-    return HcDialog(
-      title: 'Change the trigger',
-      width: 520,
-      actions: [
-        HcButton(label: 'Cancel', onPressed: () => Navigator.pop(context)),
-      ],
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          for (final category in kTriggerCategories) ...[
-            Padding(
-              padding: const EdgeInsets.fromLTRB(2, 12, 2, 6),
-              child: Text(
-                category.toUpperCase(),
-                style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1,
-                    color: t.surface.onBaseMuted),
-              ),
-            ),
-            for (final v
-                in kTriggers.values.where((v) => v.category == category))
-              InkWell(
-                onTap: () => Navigator.pop(context, v),
-                borderRadius: BorderRadius.circular(8),
-                child: Container(
-                  width: double.infinity,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
-                  decoration: BoxDecoration(
-                    color: v.tag == current
-                        ? t.accent.active.withValues(alpha: 0.12)
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(v.label,
-                          style: TextStyle(
-                              fontSize: 13.5,
-                              fontWeight: FontWeight.w600,
-                              color: v.tag == current
-                                  ? t.accent.active
-                                  : t.surface.onBase)),
-                      if (v.help != null) ...[
-                        const SizedBox(height: 2),
-                        Text(v.help!,
-                            style: TextStyle(
-                                fontSize: 11.5, color: t.surface.onBaseMuted)),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
-          ],
-        ],
-      ),
-    );
-  }
-}
 
 /// A titled block on a token surface. Advanced starts collapsed — but the
 /// clauses above it never do: a rule you cannot see all of is one you get wrong.
