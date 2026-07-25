@@ -122,7 +122,13 @@ class _StatusBand extends ConsumerWidget {
 
   Future<void> _lifecycle(WidgetRef ref, String action) async {
     await ref.read(pluginsApiProvider).lifecycle(plugin.pluginId, action);
-    ref.invalidate(pluginsProvider);
+    // A restart returns once core has dispatched it; the process still has to
+    // come back. Keep refetching until it does, or the card sits on "offline".
+    if (action == 'stop') {
+      ref.invalidate(pluginsProvider);
+    } else {
+      await ref.read(pluginsProvider.notifier).settle(plugin.pluginId);
+    }
   }
 
   @override

@@ -44,8 +44,8 @@ class _RegistrySheetState extends ConsumerState<_RegistrySheet> {
       await ref
           .read(pluginsApiProvider)
           .installFromRegistry(p.id, version: version);
-      ref.invalidate(pluginsProvider);
       ref.invalidate(registryPluginsProvider);
+      await ref.read(pluginsProvider.notifier).settle(p.id);
       messenger.showSnackBar(SnackBar(
           content:
               Text('${upgrade ? 'Updated' : 'Installed'} ${p.displayName}')));

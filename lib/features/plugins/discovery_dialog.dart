@@ -137,6 +137,7 @@ class _DiscoveryResultsDialogState
       // The plugin registers devices only at startup, so a restart is what
       // makes the entries we just wrote become live devices.
       await ref.read(pluginsApiProvider).lifecycle(widget.pluginId, 'restart');
+      await ref.read(pluginsProvider.notifier).settle(widget.pluginId);
       // Registration lags the restart ack by a few seconds — wait for the new
       // devices to actually appear before refreshing, or the overview count
       // (from the plugin record) reads the pre-restart state.
