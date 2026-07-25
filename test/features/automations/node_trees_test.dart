@@ -5,6 +5,8 @@ import 'package:hc_web/core/rules/rule.dart';
 import 'package:hc_web/core/rules/schema.dart';
 import 'package:hc_web/design/skins.dart';
 import 'package:hc_web/features/automations/widgets/device_action_picker.dart';
+import 'package:hc_web/features/automations/widgets/device_condition_picker.dart';
+import 'package:hc_web/features/automations/widgets/device_trigger_picker.dart';
 import 'package:hc_web/features/automations/widgets/device_picker_shell.dart';
 import 'package:hc_web/features/automations/widgets/node_trees.dart';
 import 'package:hc_web/features/automations/widgets/rule_refs.dart';
@@ -290,6 +292,30 @@ void main() {
       expect(actions.single.action.tag, 'Delay');
       expect(actions.single.action['duration_secs'], 300);
       expect(actions.single.action['cancelable'], false);
+    });
+
+    test('every trigger and condition variant is reachable too', () {
+      // The regression this locks: replacing the palettes with typed pickers
+      // silently dropped 10 of 18 triggers (ButtonEvent, Cron, Periodic,
+      // CalendarEvent, HubVariableChanged, the battery pair, SystemStarted,
+      // CustomEvent, MqttMessage) and 2 conditions (TimeElapsed,
+      // DeviceLastChange). Existing rules still rendered, so nothing looked
+      // broken — you simply could not author one any more.
+      final triggers = {...kTriggerTemplateTags, ...kTriggerDeviceTags};
+      for (final v in kTriggers.values) {
+        expect(triggers, contains(v.tag),
+            reason: '${v.tag} has no way into a rule — add it to the WHEN '
+                "picker's templates or its device trigger types");
+      }
+      expect(triggers.difference(kTriggers.keys.toSet()), isEmpty,
+          reason: 'the picker offers a trigger the schema does not define');
+
+      final conditions = {...kConditionTemplateTags, ...kConditionDeviceTags};
+      for (final v in kConditions.values) {
+        expect(conditions, contains(v.tag), reason: '${v.tag} is unauthorable');
+      }
+      expect(conditions.difference(kConditions.keys.toSet()), isEmpty,
+          reason: 'the picker offers a condition the schema does not define');
     });
 
     test('every action variant is reachable from the picker', () {

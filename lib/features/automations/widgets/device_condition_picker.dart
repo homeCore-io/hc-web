@@ -93,7 +93,19 @@ const _templates = <(String bucket, String tag, String label, IconData icon)>[
   ('logic', 'Xor', 'Exactly one of these', Icons.account_tree_outlined),
   ('logic', 'Not', 'Not this', Icons.block_outlined),
   ('script', 'ScriptExpression', 'Rhai expression', Icons.code_outlined),
+  // Device-scoped, but they read as a question about time rather than about
+  // the device's current value, so they live with the other time conditions.
+  ('time', 'TimeElapsed', 'Unchanged for a while', Icons.hourglass_bottom_outlined),
+  ('time', 'DeviceLastChange', 'Last changed by…', Icons.history_outlined),
 ];
+
+/// Condition variants reachable through the template list and the device /
+/// mode panes. Asserted against `kConditions` in the tests — dropping the
+/// old palette made two variants unauthorable, and only a test prevents that
+/// happening again.
+final kConditionTemplateTags = [for (final t in _templates) t.$2];
+
+const kConditionDeviceTags = ['DeviceState', 'ModeIs'];
 
 const _ops = [
   ('Eq', 'is'),
@@ -138,6 +150,10 @@ class _DeviceConditionPickerState extends State<DeviceConditionPicker> {
   String _end = '17:00:00';
   String _calId = '';
   String _titleContains = '';
+  String _deviceRef = '';
+  String _elapsedAttr = '';
+  int _elapsedSecs = 300;
+  String _changeKind = 'physical';
 
   late final List<_Entry> _entries = _buildEntries();
 
@@ -328,6 +344,19 @@ class _DeviceConditionPickerState extends State<DeviceConditionPicker> {
         if (_name.trim().isEmpty) return null;
         return HcNode(
             'PrivateBooleanIs', {'name': _name.trim(), 'value': _boolOn});
+      case 'TimeElapsed':
+        if (_deviceRef.isEmpty || _elapsedAttr.isEmpty) return null;
+        return HcNode('TimeElapsed', {
+          'device_id': _deviceRef,
+          'attribute': _elapsedAttr,
+          'duration_secs': _elapsedSecs,
+        });
+      case 'DeviceLastChange':
+        if (_deviceRef.isEmpty) return null;
+        return HcNode('DeviceLastChange', {
+          'device_id': _deviceRef,
+          'kind': _changeKind,
+        });
       default:
         // And / Or / Xor / Not / ScriptExpression — a blank node that the tree
         // grows in place.
@@ -607,6 +636,58 @@ class _DeviceConditionPickerState extends State<DeviceConditionPicker> {
           SizedBox(height: t.space.md),
           ..._onOff(t),
         ];
+      case 'TimeElapsed':
+      case 'DeviceLastChange':
+        // These name a device, so the form has to pick one — the device panes
+        // are for conditions *about* a device's value, and these are not.
+        final devices = widget.refs.devices;
+        final refs = [for (final d in devices) d.ruleReference];
+        final names = {
+          for (final d in devices) d.ruleReference: d.displayName,
+        };
+        if (_deviceRef.isEmpty && refs.isNotEmpty) _deviceRef = refs.first;
+        final attrs = widget.refs.attributesOf(_deviceRef);
+        if (_elapsedAttr.isEmpty && attrs.isNotEmpty) _elapsedAttr = attrs.first;
+        return [
+          const RailLabel('Device'),
+          SizedBox(height: t.space.sm),
+          _dropdown(t, _deviceRef, refs, (v) {
+            setState(() {
+              _deviceRef = v!;
+              _elapsedAttr = '';
+            });
+          }, labelFor: (r) => names[r] ?? r),
+          SizedBox(height: t.space.md),
+          if (tag == 'TimeElapsed') ...[
+            const RailLabel('Attribute'),
+            SizedBox(height: t.space.sm),
+            _dropdown(t, _elapsedAttr, attrs,
+                (v) => setState(() => _elapsedAttr = v!)),
+            SizedBox(height: t.space.md),
+            const RailLabel('Unchanged for (seconds)'),
+            SizedBox(height: t.space.sm),
+            TextFormField(
+              key: ValueKey('elapsed:$_deviceRef'),
+              initialValue: '$_elapsedSecs',
+              keyboardType: TextInputType.number,
+              decoration: fieldDecoration(t, hint: 'e.g. 300'),
+              onChanged: (v) => setState(
+                  () => _elapsedSecs = int.tryParse(v.trim()) ?? _elapsedSecs),
+            ),
+          ] else ...[
+            const RailLabel('Last change came from'),
+            SizedBox(height: t.space.sm),
+            _dropdown(t, _changeKind, changeKindValues,
+                (v) => setState(() => _changeKind = v!)),
+            SizedBox(height: t.space.sm),
+            Text(
+              'Distinguishes a change HomeCore made from one someone made at '
+              'the wall — the usual way to stop a rule reacting to itself.',
+              style: TextStyle(
+                  fontSize: 11, height: 1.4, color: t.surface.onBaseMuted),
+            ),
+          ],
+        ];
       default:
         // And / Or / Xor / Not / ScriptExpression.
         final note = switch (tag) {
@@ -807,6 +888,22 @@ class _DeviceConditionPickerState extends State<DeviceConditionPicker> {
                 tok(_name.isEmpty ? '…' : _name, b),
                 word('is'),
                 tok(_boolOn ? 'set' : 'clear', a),
+              ];
+            case 'TimeElapsed':
+              return [
+                word('the'),
+                tok(_elapsedAttr.replaceAll('_', ' '), a),
+                word('of'),
+                tok(_deviceRef.isEmpty ? '…' : _deviceRef, b),
+                word("hasn't changed for"),
+                tok('$_elapsedSecs seconds', a),
+              ];
+            case 'DeviceLastChange':
+              return [
+                word("the last change to"),
+                tok(_deviceRef.isEmpty ? '…' : _deviceRef, b),
+                word('came from'),
+                tok(_changeKind, a),
               ];
             default:
               return [tok(e.label, a)];

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/devices/presentation.dart';
 import '../../../core/models/device_state.dart';
 import '../../../core/rules/node.dart';
+import '../../../core/rules/schema.dart';
 import '../../../design/tokens.dart';
 import 'device_picker_shell.dart';
 import 'editor_style.dart';
@@ -38,6 +39,9 @@ class _Entry {
     this.tag,
     this.attrs = const [],
     this.numericAttrs = const [],
+    this.buttons = const [],
+    this.hasBattery = false,
+    this.isButtonDevice = false,
     this.device,
     this.chip,
     this.chipTone,
@@ -53,6 +57,18 @@ class _Entry {
   final String? tag;
   final List<String> attrs;
   final List<String> numericAttrs;
+
+  /// Buttons this device is known to have. A keypad or Pico fires
+  /// `ButtonEvent`, and without this the button number is a bare integer box.
+  final List<String> buttons;
+
+  /// Whether it reports a battery — the gate for the battery triggers, which
+  /// are meaningless on a mains-powered device.
+  final bool hasBattery;
+
+  /// Buttons, batteries and thresholds are per-device facts, so the trigger
+  /// types on offer differ per device rather than being one fixed list.
+  final bool isButtonDevice;
   final DeviceState? device;
   final String? chip;
   final PickerTone? chipTone;
@@ -68,8 +84,9 @@ const _cats = [
   PickerCat('media', 'Media players', Icons.speaker_outlined, 'Controls'),
   PickerCat('sensor', 'Sensors', Icons.sensors, 'Read'),
   PickerCat('time', 'Time & sun', Icons.schedule_outlined, 'Schedule'),
-  PickerCat('hub', 'Modes', Icons.brightness_4_outlined, 'Hub'),
+  PickerCat('hub', 'Modes & variables', Icons.brightness_4_outlined, 'Hub'),
   PickerCat('other', 'Webhook & manual', Icons.bolt_outlined, 'Other'),
+  PickerCat('integration', 'Events & MQTT', Icons.hub_outlined, 'Other'),
 ];
 
 const _templates = <(String bucket, String tag, String label, IconData icon)>[
@@ -78,6 +95,29 @@ const _templates = <(String bucket, String tag, String label, IconData icon)>[
   ('hub', 'ModeChanged', 'When a mode turns on / off', Icons.brightness_4_outlined),
   ('other', 'WebhookReceived', 'When a webhook is called', Icons.webhook_outlined),
   ('other', 'ManualTrigger', 'By hand / from another rule', Icons.touch_app_outlined),
+  ('time', 'Cron', 'On a cron schedule', Icons.event_repeat_outlined),
+  ('time', 'Periodic', 'Every N minutes / hours', Icons.timelapse_outlined),
+  ('time', 'CalendarEvent', 'On a calendar event', Icons.event_outlined),
+  ('hub', 'HubVariableChanged', 'When a hub variable changes',
+      Icons.data_object_outlined),
+  ('other', 'SystemStarted', 'When HomeCore starts', Icons.restart_alt_outlined),
+  ('integration', 'CustomEvent', 'On a custom event', Icons.bolt_outlined),
+  ('integration', 'MqttMessage', 'On an MQTT message', Icons.podcasts_outlined),
+];
+
+/// Trigger variants reachable through the template list, and through the
+/// device pane. Asserted against `kTriggers` in the tests: the WHEN picker
+/// replaced a palette that could reach every variant, and losing one to an
+/// oversight is exactly what happened before.
+final kTriggerTemplateTags = [for (final t in _templates) t.$2];
+
+const kTriggerDeviceTags = [
+  'DeviceStateChanged',
+  'DeviceAvailabilityChanged',
+  'NumericThreshold',
+  'ButtonEvent',
+  'DeviceBatteryLow',
+  'DeviceBatteryRecovered',
 ];
 
 const _sunEvents = ['Sunrise', 'Sunset', 'SolarNoon', 'CivilDawn', 'CivilDusk'];
@@ -125,6 +165,17 @@ class _DeviceTriggerPickerState extends State<DeviceTriggerPicker> {
   String _modeId = '';
   bool _modeOn = true;
   String _path = '';
+  String _cron = '0 0 7 * * *';
+  int _everyN = 30;
+  String _unit = 'Minutes';
+  String _calId = '';
+  String _titleContains = '';
+  int _offsetMin = 0;
+  String _varName = '';
+  String _eventType = '';
+  String _topic = '';
+  String _button = '';
+  String _buttonEvent = 'Pushed';
 
   late final List<_Entry> _entries = _buildEntries();
 
@@ -143,7 +194,9 @@ class _DeviceTriggerPickerState extends State<DeviceTriggerPicker> {
         }
         if (e.value is num) numeric.add(e.key);
       }
-      if (attrs.isEmpty) continue;
+      // A Pico that has never been pressed reports nothing at all, and it is
+      // still a perfectly good trigger.
+      if (attrs.isEmpty && facet != DeviceFacet.button) continue;
       attrs.sort();
       numeric.sort();
       final (chip, tone) = _deviceChip(d);
@@ -157,6 +210,9 @@ class _DeviceTriggerPickerState extends State<DeviceTriggerPicker> {
         kind: _Kind.device,
         attrs: attrs,
         numericAttrs: numeric,
+        buttons: _buttonsOf(d),
+        hasBattery: d.state.containsKey('battery'),
+        isButtonDevice: facet == DeviceFacet.button,
         device: d,
         chip: chip,
         chipTone: tone,
@@ -176,6 +232,27 @@ class _DeviceTriggerPickerState extends State<DeviceTriggerPicker> {
     }
     if (widget.refs.modes.isNotEmpty) _modeId = widget.refs.modes.first.id;
     return out;
+  }
+
+  /// The buttons a device is known to have.
+  ///
+  /// `available_buttons` first — the catalogue convention the action
+  /// descriptor established, so this becomes a real list the moment a plugin
+  /// publishes one. Failing that, the `button_N` attributes it has actually
+  /// reported: hc-lutron only publishes a button once it has been pressed, so
+  /// this is partial by nature and the form still allows any number.
+  List<String> _buttonsOf(DeviceState d) {
+    final published = d.state['available_buttons'];
+    if (published is List && published.isNotEmpty) {
+      return [for (final b in published) '$b'];
+    }
+    final seen = <int>{};
+    for (final k in d.state.keys) {
+      final m = RegExp(r'^button_(\d+)\$').firstMatch(k);
+      if (m != null) seen.add(int.parse(m.group(1)!));
+    }
+    final out = seen.toList()..sort();
+    return [for (final n in out) '$n'];
   }
 
   (String?, PickerTone?) _deviceChip(DeviceState d) {
@@ -223,7 +300,7 @@ class _DeviceTriggerPickerState extends State<DeviceTriggerPicker> {
     setState(() {
       _sel = e;
       if (e.kind == _Kind.device) {
-        _ttype = 'changes';
+        _ttype = e.isButtonDevice ? 'button' : 'changes';
         _attr = '';
         _valueText = '';
         _availOn = true;
@@ -264,6 +341,17 @@ class _DeviceTriggerPickerState extends State<DeviceTriggerPicker> {
           'op': _thOp,
           'value': num.tryParse(_valueText.trim()) ?? 0,
         });
+      case 'button':
+        final n = int.tryParse(_button.trim());
+        return HcNode('ButtonEvent', {
+          'device_id': e.ref,
+          if (n != null) 'button_number': n,
+          'event': _buttonEvent,
+        });
+      case 'battery_low':
+        return HcNode('DeviceBatteryLow', {'device_id': e.ref});
+      case 'battery_ok':
+        return HcNode('DeviceBatteryRecovered', {'device_id': e.ref});
     }
     return null;
   }
@@ -284,6 +372,30 @@ class _DeviceTriggerPickerState extends State<DeviceTriggerPicker> {
         return HcNode('WebhookReceived', {'path': _path.trim()});
       case 'ManualTrigger':
         return HcNode('ManualTrigger');
+      case 'SystemStarted':
+        return HcNode('SystemStarted');
+      case 'Cron':
+        if (_cron.trim().isEmpty) return null;
+        return HcNode('Cron', {'expression': _cron.trim()});
+      case 'Periodic':
+        return HcNode('Periodic', {'every_n': _everyN, 'unit': _unit});
+      case 'CalendarEvent':
+        return HcNode('CalendarEvent', {
+          if (_calId.trim().isNotEmpty) 'calendar_id': _calId.trim(),
+          if (_titleContains.trim().isNotEmpty)
+            'title_contains': _titleContains.trim(),
+          if (_offsetMin != 0) 'offset_minutes': _offsetMin,
+        });
+      case 'HubVariableChanged':
+        return HcNode('HubVariableChanged', {
+          if (_varName.trim().isNotEmpty) 'name': _varName.trim(),
+        });
+      case 'CustomEvent':
+        if (_eventType.trim().isEmpty) return null;
+        return HcNode('CustomEvent', {'event_type': _eventType.trim()});
+      case 'MqttMessage':
+        if (_topic.trim().isEmpty) return null;
+        return HcNode('MqttMessage', {'topic_pattern': _topic.trim()});
     }
     return null;
   }
@@ -437,6 +549,15 @@ class _DeviceTriggerPickerState extends State<DeviceTriggerPicker> {
       ('avail', 'Comes online / offline', Icons.wifi_tethering),
       if (e.numericAttrs.isNotEmpty)
         ('threshold', 'Crosses a threshold', Icons.show_chart_outlined),
+      // Offered per device rather than always: a button trigger on a lamp and
+      // a battery trigger on a mains-powered switch are controls that can
+      // never fire.
+      if (e.isButtonDevice)
+        ('button', 'A button is pressed', Icons.radio_button_checked),
+      if (e.hasBattery) ...[
+        ('battery_low', 'Battery runs low', Icons.battery_alert_outlined),
+        ('battery_ok', 'Battery recovers', Icons.battery_full_outlined),
+      ],
     ];
     return [
       const RailLabel('When it…'),
@@ -499,6 +620,48 @@ class _DeviceTriggerPickerState extends State<DeviceTriggerPicker> {
 
   List<Widget> _typeParams(HcTokens t, _Entry e) {
     switch (_ttype) {
+      case 'button':
+        return [
+          const RailLabel('Button'),
+          SizedBox(height: t.space.sm),
+          if (e.buttons.isEmpty)
+            TextFormField(
+              key: ValueKey('btn:${e.ref}'),
+              initialValue: _button,
+              keyboardType: TextInputType.number,
+              decoration: fieldDecoration(t,
+                  hint: 'Button number — blank means any button'),
+              onChanged: (v) => setState(() => _button = v),
+            )
+          else
+            _dropdown(t, _button.isEmpty ? '· any ·' : _button,
+                ['· any ·', ...e.buttons],
+                (v) => setState(() => _button = v == '· any ·' ? '' : v!)),
+          SizedBox(height: t.space.xs),
+          Text(
+            e.buttons.isEmpty
+                ? 'This device has not reported its buttons, so they cannot be '
+                    'listed — enter the number, or leave it blank for any.'
+                : 'Only buttons this device has reported are listed.',
+            style: TextStyle(
+                fontSize: 11, height: 1.4, color: t.surface.onBaseMuted),
+          ),
+          SizedBox(height: t.space.md),
+          const RailLabel('Press type'),
+          SizedBox(height: t.space.sm),
+          _dropdown(t, _buttonEvent, buttonEventValues,
+              (v) => setState(() => _buttonEvent = v!)),
+        ];
+      case 'battery_low':
+      case 'battery_ok':
+        return [
+          _note(
+              t,
+              _ttype == 'battery_low'
+                  ? 'Fires once when this device reports its battery has fallen '
+                      'below the alert threshold.'
+                  : 'Fires when the battery reads healthy again after being low.'),
+        ];
       case 'changes':
         return [
           const RailLabel('Attribute'),
@@ -563,8 +726,135 @@ class _DeviceTriggerPickerState extends State<DeviceTriggerPicker> {
     return const [];
   }
 
+  Widget _note(HcTokens t, String text) => Container(
+        width: double.infinity,
+        padding: EdgeInsets.all(t.space.md),
+        decoration: BoxDecoration(
+          color: t.surface.sunken,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: t.stroke.hairline),
+        ),
+        child: Text(text,
+            style: TextStyle(
+                fontSize: 12.5, height: 1.5, color: t.surface.onBaseMuted)),
+      );
+
   List<Widget> _templateControls(BuildContext context, HcTokens t, String tag) {
     switch (tag) {
+      case 'SystemStarted':
+        return [
+          _note(t,
+              'Fires once each time HomeCore starts — useful for restoring state '
+              'after a restart.'),
+        ];
+      case 'Cron':
+        return [
+          const RailLabel('Cron expression'),
+          SizedBox(height: t.space.sm),
+          TextFormField(
+            initialValue: _cron,
+            style: const TextStyle(fontFamily: 'monospace'),
+            decoration: fieldDecoration(t, hint: 'sec min hour day month wday'),
+            onChanged: (v) => setState(() => _cron = v),
+          ),
+          SizedBox(height: t.space.sm),
+          Text(
+            'Six fields, seconds first. "0 0 7 * * *" is 07:00 every day. Use '
+            'Every N or At a time of day unless you need a schedule they '
+            'cannot express.',
+            style: TextStyle(
+                fontSize: 11, height: 1.4, color: t.surface.onBaseMuted),
+          ),
+        ];
+      case 'Periodic':
+        return [
+          const RailLabel('Every'),
+          SizedBox(height: t.space.sm),
+          Row(children: [
+            SizedBox(
+              width: 96,
+              child: TextFormField(
+                key: const ValueKey('every_n'),
+                initialValue: '$_everyN',
+                keyboardType: TextInputType.number,
+                decoration: fieldDecoration(t),
+                onChanged: (v) =>
+                    setState(() => _everyN = int.tryParse(v.trim()) ?? _everyN),
+              ),
+            ),
+            SizedBox(width: t.space.sm),
+            Expanded(
+              child: _dropdown(t, _unit, periodicUnitValues,
+                  (v) => setState(() => _unit = v!)),
+            ),
+          ]),
+        ];
+      case 'CalendarEvent':
+        return [
+          const RailLabel('Calendar'),
+          SizedBox(height: t.space.sm),
+          TextFormField(
+            initialValue: _calId,
+            decoration: fieldDecoration(t, hint: 'Calendar id (blank = any)'),
+            onChanged: (v) => setState(() => _calId = v),
+          ),
+          SizedBox(height: t.space.md),
+          const RailLabel('Event title contains'),
+          SizedBox(height: t.space.sm),
+          TextFormField(
+            initialValue: _titleContains,
+            decoration: fieldDecoration(t, hint: 'e.g. Trash (blank = any)'),
+            onChanged: (v) => setState(() => _titleContains = v),
+          ),
+          SizedBox(height: t.space.md),
+          const RailLabel('Offset (minutes)'),
+          SizedBox(height: t.space.sm),
+          TextFormField(
+            key: const ValueKey('cal_offset'),
+            initialValue: '$_offsetMin',
+            keyboardType: TextInputType.number,
+            decoration:
+                fieldDecoration(t, hint: 'Negative fires before the event'),
+            onChanged: (v) =>
+                setState(() => _offsetMin = int.tryParse(v.trim()) ?? 0),
+          ),
+        ];
+      case 'HubVariableChanged':
+        return [
+          const RailLabel('Variable name'),
+          SizedBox(height: t.space.sm),
+          TextFormField(
+            initialValue: _varName,
+            decoration:
+                fieldDecoration(t, hint: 'e.g. guests_home (blank = any)'),
+            onChanged: (v) => setState(() => _varName = v),
+          ),
+        ];
+      case 'CustomEvent':
+        return [
+          const RailLabel('Event type'),
+          SizedBox(height: t.space.sm),
+          TextFormField(
+            initialValue: _eventType,
+            decoration: fieldDecoration(t, hint: 'e.g. doorbell_pressed'),
+            onChanged: (v) => setState(() => _eventType = v),
+          ),
+        ];
+      case 'MqttMessage':
+        return [
+          const RailLabel('Topic pattern'),
+          SizedBox(height: t.space.sm),
+          TextFormField(
+            initialValue: _topic,
+            style: const TextStyle(fontFamily: 'monospace'),
+            decoration: fieldDecoration(t, hint: 'e.g. shellies/+/relay/0'),
+            onChanged: (v) => setState(() => _topic = v),
+          ),
+          SizedBox(height: t.space.sm),
+          Text('MQTT wildcards: + for one level, # for the rest.',
+              style: TextStyle(
+                  fontSize: 11, height: 1.4, color: t.surface.onBaseMuted)),
+        ];
       case 'TimeOfDay':
         return [
           const RailLabel('Time'),
@@ -822,6 +1112,25 @@ class _DeviceTriggerPickerState extends State<DeviceTriggerPicker> {
               dev,
               tok(_availOn ? 'comes online' : 'goes offline', a),
             ];
+          case 'button':
+            return [
+              word('when'),
+              tok(_button.isEmpty ? 'any button' : 'button $_button', a),
+              word('on'),
+              dev,
+              tok(
+                  switch (_buttonEvent) {
+                    'Pushed' => 'is pushed',
+                    'Held' => 'is held',
+                    'DoubleTapped' => 'is double-tapped',
+                    _ => 'is released',
+                  },
+                  a),
+            ];
+          case 'battery_low':
+            return [word("when"), dev, tok('runs low on battery', a)];
+          case 'battery_ok':
+            return [word("when"), dev, tok('recovers its battery', a)];
           case 'threshold':
             final verb = _thresholdOps.firstWhere((o) => o.$1 == _thOp).$2;
             return [
@@ -865,6 +1174,41 @@ class _DeviceTriggerPickerState extends State<DeviceTriggerPicker> {
             word('when the webhook'),
             tok(_path.isEmpty ? '…' : _path, a),
             word('is called'),
+          ];
+        case 'Cron':
+          return [word('on the schedule'), tok(_cron.trim().isEmpty ? '…' : _cron.trim(), a)];
+        case 'Periodic':
+          return [
+            word('every'),
+            tok('$_everyN ${_unit.toLowerCase()}', a),
+          ];
+        case 'CalendarEvent':
+          return [
+            word('on a calendar event'),
+            if (_titleContains.trim().isNotEmpty) ...[
+              word('matching'),
+              tok(_titleContains.trim(), a)
+            ],
+            if (_offsetMin != 0)
+              tok('${_offsetMin > 0 ? '+' : ''}$_offsetMin min', a),
+          ];
+        case 'HubVariableChanged':
+          return [
+            word('when the hub variable'),
+            tok(_varName.trim().isEmpty ? 'any' : _varName.trim(), b),
+            word('changes'),
+          ];
+        case 'SystemStarted':
+          return [word('when HomeCore starts')];
+        case 'CustomEvent':
+          return [
+            word('on the event'),
+            tok(_eventType.trim().isEmpty ? '…' : _eventType.trim(), a),
+          ];
+        case 'MqttMessage':
+          return [
+            word('on an MQTT message to'),
+            tok(_topic.trim().isEmpty ? '…' : _topic.trim(), a),
           ];
         default:
           return [word('run by hand, or from another rule')];
