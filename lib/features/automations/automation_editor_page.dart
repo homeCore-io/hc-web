@@ -13,6 +13,7 @@ import '../../shared/widgets/section_scaffold.dart';
 import 'rule_phrasing.dart';
 import 'widgets/device_trigger_picker.dart';
 import 'widgets/node_trees.dart';
+import 'widgets/rule_outline_pane.dart';
 import 'widgets/rule_refs.dart';
 import 'widgets/sentence_editor.dart';
 
@@ -38,6 +39,9 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
   HcRule? _rule;
   bool _dirty = false;
   bool _saving = false;
+
+  /// Comparison pane, off until asked for.
+  bool _showOutline = false;
   String? _saveError;
 
   /// Dry-run outcomes, positionally aligned with the condition list.
@@ -95,6 +99,27 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
       title: 'Automations',
       onBack: _goBack,
       actions: [
+        // The outline pane is a comparison, not a replacement: it is off by
+        // default and shows the same rule beside the tree so the two can be
+        // judged on real rules rather than a mockup.
+        Builder(builder: (ctx) {
+          final tt = HcTokens.of(ctx);
+          final on = _showOutline;
+          return TextButton.icon(
+            onPressed: () => setState(() => _showOutline = !_showOutline),
+            icon: Icon(Icons.account_tree_outlined,
+                size: 15,
+                color: on ? tt.accent.active : tt.surface.onBaseMuted),
+            label: Text('Outline',
+                style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: on ? tt.accent.active : tt.surface.onBaseMuted)),
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            ),
+          );
+        }),
         if (!_isNew)
           Builder(builder: (ctx) {
             final tt = HcTokens.of(ctx);
@@ -113,54 +138,27 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
       child: Column(
         children: [
           Expanded(
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-              children: [
-                // Core sets `error` on a rule whose file failed to parse or
-                // whose devices were deleted. It never executes — say so loudly.
-                if (rule.hasError) _banner(context, rule.error!, isError: true),
-                if (_saveError != null)
-                  _banner(context, _saveError!, isError: true),
-                if (_wouldFire != null) _testBanner(context),
-                _ruleHeader(rule),
-
-                // The clauses read down the page as one sentence about the
-                // house, joined by a rail. There is no card around them: a card
-                // says "this is a form", and a rule is a paragraph.
-                HcClause(
-                  label: 'When',
-                  // The rail node lights when the trigger's device is already in
-                  // the state the rule waits for, so a rule shows you where the
-                  // house actually IS, standing still.
-                  live: _triggerIsLive(rule, refs),
-                  child: _triggerEditor(rule, refs),
-                ),
-                HcClause(
-                  label: 'And if',
-                  child: ConditionTree(
-                    conditions: rule.conditions,
-                    refs: refs,
-                    results: _testResults,
-                    onChanged: _touch,
+            child: LayoutBuilder(builder: (context, box) {
+              // Side by side only where there is room for both to be read;
+              // narrower than this and the outline would squeeze the editor it
+              // is supposed to be compared against.
+              final wide = box.maxWidth >= 1100;
+              final editor = _editorList(context, rule);
+              if (!_showOutline || !wide) return editor;
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(flex: 3, child: editor),
+                  SizedBox(
+                    width: 360,
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(0, 16, 20, 24),
+                      child: RuleOutlinePane(rule: rule, refs: refs),
+                    ),
                   ),
-                ),
-                HcClause(
-                  label: 'Then',
-                  last: true,
-                  child: ActionTree(
-                    actions: rule.actions,
-                    refs: refs,
-                    onChanged: _touch,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                _Section(
-                  title: 'Advanced',
-                  initiallyExpanded: false,
-                  child: _advanced(rule),
-                ),
-              ],
-            ),
+                ],
+              );
+            }),
           ),
           // Save arrives when there is something to save, and leaves when there
           // isn't — an app tells you when you have something to lose.
@@ -412,6 +410,61 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
       );
 
   // -- banners -------------------------------------------------------------
+
+
+  /// The editor itself — the scrolling clause list, unchanged. Extracted so the
+  /// outline pane can sit beside it without either knowing about the other.
+  Widget _editorList(BuildContext context, HcRule rule) {
+    final refs = ref.watch(ruleRefsProvider);
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+              children: [
+                // Core sets `error` on a rule whose file failed to parse or
+                // whose devices were deleted. It never executes — say so loudly.
+                if (rule.hasError) _banner(context, rule.error!, isError: true),
+                if (_saveError != null)
+                  _banner(context, _saveError!, isError: true),
+                if (_wouldFire != null) _testBanner(context),
+                _ruleHeader(rule),
+
+                // The clauses read down the page as one sentence about the
+                // house, joined by a rail. There is no card around them: a card
+                // says "this is a form", and a rule is a paragraph.
+                HcClause(
+                  label: 'When',
+                  // The rail node lights when the trigger's device is already in
+                  // the state the rule waits for, so a rule shows you where the
+                  // house actually IS, standing still.
+                  live: _triggerIsLive(rule, refs),
+                  child: _triggerEditor(rule, refs),
+                ),
+                HcClause(
+                  label: 'And if',
+                  child: ConditionTree(
+                    conditions: rule.conditions,
+                    refs: refs,
+                    results: _testResults,
+                    onChanged: _touch,
+                  ),
+                ),
+                HcClause(
+                  label: 'Then',
+                  last: true,
+                  child: ActionTree(
+                    actions: rule.actions,
+                    refs: refs,
+                    onChanged: _touch,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _Section(
+                  title: 'Advanced',
+                  initiallyExpanded: false,
+                  child: _advanced(rule),
+                ),
+              ],
+    );
+  }
 
   Widget _banner(BuildContext context, String message, {bool isError = false}) {
     final t = HcTokens.of(context);
