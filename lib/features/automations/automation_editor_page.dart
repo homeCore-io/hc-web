@@ -149,10 +149,12 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Expanded(flex: 3, child: editor),
-                  SizedBox(
-                    width: 360,
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.fromLTRB(0, 16, 20, 24),
+                  // Full height, so the pane is a column beside the editor
+                  // rather than a card floating at the top of one.
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(0, 16, 20, 24),
+                    child: SizedBox(
+                      width: 360,
                       child: RuleOutlinePane(rule: rule, refs: refs),
                     ),
                   ),

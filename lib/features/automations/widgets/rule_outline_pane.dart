@@ -44,15 +44,37 @@ class RuleOutlinePane extends StatelessWidget {
       if (row.clause != clause) {
         clause = row.clause;
         children.add(Padding(
-          padding: EdgeInsets.fromLTRB(t.space.xs, t.space.md, 0, t.space.xs),
-          child: RailLabel(switch (clause) {
-            OutlineClause.when => 'When',
-            OutlineClause.ifClause => 'And if',
-            OutlineClause.then => 'Then',
-          }),
+          padding: EdgeInsets.fromLTRB(2, t.space.md, 0, t.space.xs),
+          child: Row(children: [
+            // The clause carries the colour. Nesting colour only appears where
+            // there IS nesting, and most real rules are flat — without this the
+            // pane reads as grey text on a rule that is doing plenty.
+            Container(
+              width: 3,
+              height: 11,
+              margin: const EdgeInsets.only(right: 7),
+              decoration: BoxDecoration(
+                color: _clauseColor(clause),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Text(
+              switch (clause) {
+                OutlineClause.when => 'WHEN',
+                OutlineClause.ifClause => 'AND IF',
+                OutlineClause.then => 'THEN',
+              },
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.1,
+                color: _clauseColor(clause),
+              ),
+            ),
+          ]),
         ));
       }
-      children.add(_row(t, row));
+      children.add(_row(t, row, _clauseColor(row.clause)));
     }
 
     return Container(
@@ -61,10 +83,13 @@ class RuleOutlinePane extends StatelessWidget {
         borderRadius: t.radius.smR,
         border: Border.all(color: t.stroke.hairline),
       ),
-      padding: EdgeInsets.fromLTRB(t.space.sm, t.space.xs, t.space.sm, t.space.md),
+      padding: EdgeInsets.fromLTRB(t.space.sm, t.space.xs, t.space.sm, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // The heading stays put; only the rule scrolls. A long rule otherwise
+          // scrolls its own title away, and the pane loses the one label that
+          // says it is a preview rather than a second editor.
           Padding(
             padding: EdgeInsets.only(top: t.space.xs, bottom: t.space.xs),
             child: Row(children: [
@@ -77,13 +102,29 @@ class RuleOutlinePane extends StatelessWidget {
                   style: TextStyle(fontSize: 10.5, color: t.surface.onBaseMuted)),
             ]),
           ),
-          ...children,
+          Expanded(
+            child: SingleChildScrollView(
+              padding: EdgeInsets.only(bottom: t.space.md),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: children,
+              ),
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _row(HcTokens t, OutlineRow row) {
+  /// One colour per clause — the same three the editor's own rails use, so a
+  /// glance at either pane says which part of the rule you are reading.
+  static Color _clauseColor(OutlineClause c) => switch (c) {
+        OutlineClause.when => _depth[0],
+        OutlineClause.ifClause => _depth[1],
+        OutlineClause.then => _depth[2],
+      };
+
+  Widget _row(HcTokens t, OutlineRow row, Color clause) {
     final muted = t.surface.onBaseMuted;
     final isStructure =
         row.kind == OutlineKind.container || row.kind == OutlineKind.arm;
@@ -110,6 +151,17 @@ class RuleOutlinePane extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 3),
         child: IntrinsicHeight(
           child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            // Every row hangs off its clause's rail, so the three parts of the
+            // rule stay distinguishable even with no nesting anywhere.
+            Container(
+              width: 3,
+              margin: const EdgeInsets.only(right: 6),
+              decoration: BoxDecoration(
+                border: Border(
+                  left: BorderSide(color: clause.withValues(alpha: 0.28)),
+                ),
+              ),
+            ),
             ...guides,
             SizedBox(width: t.space.xs),
             Expanded(
@@ -131,7 +183,7 @@ class RuleOutlinePane extends StatelessWidget {
                         fontWeight: FontWeight.w800,
                         letterSpacing: 0.7,
                         color: isStructure
-                            ? _depth[row.depth % _depth.length]
+                            ? _depth[(row.depth + 1) % _depth.length]
                             : muted,
                       )),
                   if (row.label.isNotEmpty) SizedBox(width: t.space.xs),
