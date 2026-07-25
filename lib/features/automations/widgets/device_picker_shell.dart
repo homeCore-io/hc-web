@@ -35,40 +35,58 @@ Widget pickerHline(HcTokens t, {bool vertical = false}) => Container(
       color: t.stroke.hairline,
     );
 
+/// One vertical pane inside the shell. A fixed [width] (the rail) or a flexible
+/// [flex] share of the rest (the list, the detail form).
+class PickerPane {
+  const PickerPane({required this.child, this.width, this.flex = 1});
+  final Widget child;
+  final double? width;
+  final int flex;
+}
+
 /// The whole panel: `Dialog` → chrome → `Column[header, panes, footer]`.
+///
+/// The number of panes is up to the caller — the device pickers use three
+/// (rail · list · detail), but a picker whose category has no device list is
+/// free to use two (rail · form). Only the *style* — the depth, the header and
+/// footer — is fixed here.
 class PickerPanel extends StatelessWidget {
   const PickerPanel({
     super.key,
     required this.kicker,
     required this.title,
     required this.seg,
-    required this.rail,
-    required this.list,
-    required this.detail,
+    required this.panes,
     required this.footerHint,
     required this.primaryLabel,
     required this.onPrimary,
-    this.railWidth = 202,
     this.width = 960,
+    this.height = 470,
   });
 
   final String kicker;
   final String title;
   final Widget seg;
-  final Widget rail;
-  final Widget list;
-  final Widget detail;
+  final List<PickerPane> panes;
   final String footerHint;
   final String primaryLabel;
 
   /// Null disables the primary button (nothing chosen yet).
   final VoidCallback? onPrimary;
-  final double railWidth;
   final double width;
+  final double height;
 
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
+    final row = <Widget>[];
+    for (var i = 0; i < panes.length; i++) {
+      if (i > 0) row.add(pickerHline(t, vertical: true));
+      final p = panes[i];
+      row.add(p.width != null
+          ? SizedBox(width: p.width, child: p.child)
+          : Expanded(flex: p.flex, child: p.child));
+    }
     return Dialog(
       backgroundColor: Colors.transparent,
       elevation: 0,
@@ -88,17 +106,10 @@ class PickerPanel extends StatelessWidget {
             _header(t),
             pickerHline(t),
             SizedBox(
-              height: 470,
+              height: height,
               child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  SizedBox(width: railWidth, child: rail),
-                  pickerHline(t, vertical: true),
-                  Expanded(flex: 3, child: list),
-                  pickerHline(t, vertical: true),
-                  Expanded(flex: 3, child: detail),
-                ],
-              ),
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: row),
             ),
             pickerHline(t),
             _footer(context, t),

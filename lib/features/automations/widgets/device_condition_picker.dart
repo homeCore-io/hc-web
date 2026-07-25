@@ -3,17 +3,25 @@ import 'package:flutter/material.dart';
 import '../../../core/devices/presentation.dart';
 import '../../../core/models/device_state.dart';
 import '../../../core/rules/node.dart';
+import '../../../core/rules/schema.dart';
 import '../../../design/tokens.dart';
 import 'device_picker_shell.dart';
 import 'editor_style.dart';
 import 'rule_refs.dart';
 
-/// The multi-pane "Check a device" picker for conditions — the condition-side
-/// twin of `DeviceActionPicker`, on the same [PickerPanel] shell.
+/// The multi-pane "Check a device" picker for conditions — on the same
+/// [PickerPanel] shell as the action picker, but covering the whole condition
+/// vocabulary, not just devices.
 ///
-/// You pick a device (sensors **included** here — a condition is where they
-/// belong) or a mode, then an attribute + comparison + value. Returns a
-/// `DeviceState` / `ModeIs` condition node.
+/// Rail categories fall into two kinds:
+///  * **device** categories (lights … sensors, modes) list real things to pick,
+///    then a per-thing form (attribute + comparison, or mode on/off);
+///  * **template** categories (Time, Hub, Logic, Script) list condition *types*
+///    whose detail pane is a small form (between-times, hub variable, …) or,
+///    for the structural ones (All-of / Any-of / expression), a blank node that
+///    grows in the tree.
+///
+/// Returns the built condition `HcNode`.
 class DeviceConditionPicker extends StatefulWidget {
   const DeviceConditionPicker({super.key, required this.refs});
 
@@ -23,6 +31,8 @@ class DeviceConditionPicker extends StatefulWidget {
   State<DeviceConditionPicker> createState() => _DeviceConditionPickerState();
 }
 
+enum _Kind { device, mode, template }
+
 class _Entry {
   _Entry({
     required this.label,
@@ -31,9 +41,10 @@ class _Entry {
     required this.icon,
     required this.bucket,
     required this.room,
-    required this.attrs,
+    required this.kind,
+    this.tag,
+    this.attrs = const [],
     this.device,
-    this.isMode = false,
     this.chip,
     this.chipTone,
   });
@@ -44,9 +55,12 @@ class _Entry {
   final IconData icon;
   final String bucket;
   final String room;
-  final List<String> attrs; // comparable attribute names
+  final _Kind kind;
+
+  /// For template entries: the condition variant tag (`TimeWindow`, `And`, …).
+  final String? tag;
+  final List<String> attrs;
   final DeviceState? device;
-  final bool isMode;
   final String? chip;
   final PickerTone? chipTone;
 }
@@ -61,10 +75,26 @@ const _cats = [
   PickerCat('climate', 'Climate', Icons.hvac_outlined, 'Controls'),
   PickerCat('media', 'Media players', Icons.speaker_outlined, 'Controls'),
   PickerCat('sensor', 'Sensors', Icons.sensors, 'Read'),
+  PickerCat('time', 'Time & calendar', Icons.schedule_outlined, 'Rules'),
   PickerCat('mode', 'Modes', Icons.brightness_4_outlined, 'Hub'),
+  PickerCat('hub', 'Hub & flags', Icons.data_object_outlined, 'Hub'),
+  PickerCat('logic', 'Logic groups', Icons.account_tree_outlined, 'Advanced'),
+  PickerCat('script', 'Expression', Icons.code_outlined, 'Advanced'),
 ];
 
-/// The comparison operators, in menu order, with the words the phrasing uses.
+/// Template entries: condition types with no device to pick.
+const _templates = <(String bucket, String tag, String label, IconData icon)>[
+  ('time', 'TimeWindow', 'Between two times', Icons.schedule_outlined),
+  ('time', 'CalendarActive', 'Calendar event active', Icons.event_outlined),
+  ('hub', 'HubVariable', 'Hub variable is', Icons.data_object_outlined),
+  ('hub', 'PrivateBooleanIs', 'Private flag is', Icons.flag_outlined),
+  ('logic', 'And', 'All of these (AND)', Icons.account_tree_outlined),
+  ('logic', 'Or', 'Any of these (OR)', Icons.account_tree_outlined),
+  ('logic', 'Xor', 'Exactly one of these', Icons.account_tree_outlined),
+  ('logic', 'Not', 'Not this', Icons.block_outlined),
+  ('script', 'ScriptExpression', 'Rhai expression', Icons.code_outlined),
+];
+
 const _ops = [
   ('Eq', 'is'),
   ('Ne', 'is not'),
@@ -87,8 +117,6 @@ String _bucketOf(DeviceFacet f) => switch (f) {
       DeviceFacet.lock => 'lock',
       DeviceFacet.climate => 'climate',
       DeviceFacet.mediaPlayer => 'media',
-      // Everything that mainly reports — doors, motion, leak, temp, humidity… —
-      // is a sensor here, which is exactly what a condition wants.
       _ => 'sensor',
     };
 
@@ -100,11 +128,16 @@ class _DeviceConditionPickerState extends State<DeviceConditionPicker> {
 
   _Entry? _sel;
 
-  // Detail state.
+  // Shared detail state (reused across kinds where the control is the same).
   String _attr = '';
   String _op = 'Eq';
   String _valueText = 'true';
-  bool _modeOn = true;
+  bool _boolOn = true;
+  String _name = ''; // hub variable / private flag name
+  String _start = '09:00:00';
+  String _end = '17:00:00';
+  String _calId = '';
+  String _titleContains = '';
 
   late final List<_Entry> _entries = _buildEntries();
 
@@ -114,7 +147,7 @@ class _DeviceConditionPickerState extends State<DeviceConditionPicker> {
     final out = <_Entry>[];
     for (final d in widget.refs.devices) {
       final facet = facetOf(d, d.schema);
-      if (facet == DeviceFacet.scene) continue; // a scene has nothing to read
+      if (facet == DeviceFacet.scene) continue;
       final attrs = _comparableAttrs(d);
       if (attrs.isEmpty) continue;
       final (chip, tone) = _deviceChip(d);
@@ -125,6 +158,7 @@ class _DeviceConditionPickerState extends State<DeviceConditionPicker> {
         icon: facet.icon,
         bucket: _bucketOf(facet),
         room: d.effectiveArea ?? 'No room',
+        kind: _Kind.device,
         attrs: attrs,
         device: d,
         chip: chip,
@@ -139,15 +173,24 @@ class _DeviceConditionPickerState extends State<DeviceConditionPicker> {
         icon: Icons.brightness_4_outlined,
         bucket: 'mode',
         room: 'Modes',
-        attrs: const [],
-        isMode: true,
+        kind: _Kind.mode,
+      ));
+    }
+    for (final (bucket, tag, label, icon) in _templates) {
+      out.add(_Entry(
+        label: label,
+        ref: tag,
+        sub: '',
+        icon: icon,
+        bucket: bucket,
+        room: '', // flat — no room header for templates
+        kind: _Kind.template,
+        tag: tag,
       ));
     }
     return out;
   }
 
-  /// Attribute names you can actually compare: scalar-valued only (a list like
-  /// `available_favorites` or a map is not a comparison target).
   List<String> _comparableAttrs(DeviceState d) {
     final out = <String>[];
     for (final e in d.state.entries) {
@@ -176,8 +219,8 @@ class _DeviceConditionPickerState extends State<DeviceConditionPicker> {
 
   List<_Entry> get _pool {
     var p = _entries.where((e) {
-      if (_byRoom) return e.room == _room;
-      if (_cat == 'all') return !e.isMode;
+      if (_byRoom) return e.kind == _Kind.device && e.room == _room;
+      if (_cat == 'all') return e.kind == _Kind.device;
       return e.bucket == _cat;
     });
     if (_query.isNotEmpty) {
@@ -195,27 +238,37 @@ class _DeviceConditionPickerState extends State<DeviceConditionPicker> {
 
   List<String> get _rooms {
     final rs = _entries
-        .where((e) => !e.isMode)
+        .where((e) => e.kind == _Kind.device)
         .map((e) => e.room)
         .toSet()
         .toList()
       ..sort();
-    return [...rs, 'Modes'];
+    return rs;
   }
 
   int _count(String cat) => cat == 'all'
-      ? _entries.where((e) => !e.isMode).length
+      ? _entries.where((e) => e.kind == _Kind.device).length
       : _entries.where((e) => e.bucket == cat).length;
 
   void _select(_Entry e) {
     setState(() {
       _sel = e;
-      if (e.isMode) {
-        _modeOn = true;
-      } else {
-        _attr = _defaultAttr(e);
-        _op = 'Eq';
-        _valueText = '${e.device!.state[_attr] ?? 'true'}';
+      switch (e.kind) {
+        case _Kind.mode:
+          _boolOn = true;
+        case _Kind.device:
+          _attr = _defaultAttr(e);
+          _op = 'Eq';
+          _valueText = '${e.device!.state[_attr] ?? 'true'}';
+        case _Kind.template:
+          _op = 'Eq';
+          _valueText = 'true';
+          _boolOn = true;
+          _name = '';
+          _start = '09:00:00';
+          _end = '17:00:00';
+          _calId = '';
+          _titleContains = '';
       }
     });
   }
@@ -238,16 +291,49 @@ class _DeviceConditionPickerState extends State<DeviceConditionPicker> {
   HcNode? _result() {
     final e = _sel;
     if (e == null) return null;
-    if (e.isMode) {
-      return HcNode('ModeIs', {'mode_id': e.ref, 'on': _modeOn});
+    switch (e.kind) {
+      case _Kind.mode:
+        return HcNode('ModeIs', {'mode_id': e.ref, 'on': _boolOn});
+      case _Kind.device:
+        if (_attr.isEmpty) return null;
+        return HcNode('DeviceState', {
+          'device_id': e.ref,
+          'attribute': _attr,
+          'op': _op,
+          'value': _parseValue(_valueText),
+        });
+      case _Kind.template:
+        return _templateNode(e.tag!);
     }
-    if (_attr.isEmpty) return null;
-    return HcNode('DeviceState', {
-      'device_id': e.ref,
-      'attribute': _attr,
-      'op': _op,
-      'value': _parseValue(_valueText),
-    });
+  }
+
+  HcNode? _templateNode(String tag) {
+    switch (tag) {
+      case 'TimeWindow':
+        return HcNode('TimeWindow', {'start': _start, 'end': _end});
+      case 'CalendarActive':
+        return HcNode('CalendarActive', {
+          if (_calId.trim().isNotEmpty) 'calendar_id': _calId.trim(),
+          if (_titleContains.trim().isNotEmpty)
+            'title_contains': _titleContains.trim(),
+        });
+      case 'HubVariable':
+        if (_name.trim().isEmpty) return null;
+        return HcNode('HubVariable', {
+          'name': _name.trim(),
+          'op': _op,
+          'value': _parseValue(_valueText),
+        });
+      case 'PrivateBooleanIs':
+        if (_name.trim().isEmpty) return null;
+        return HcNode(
+            'PrivateBooleanIs', {'name': _name.trim(), 'value': _boolOn});
+      default:
+        // And / Or / Xor / Not / ScriptExpression — a blank node that the tree
+        // grows in place.
+        final v = kConditions[tag];
+        return v == null ? null : HcNode.blank(v);
+    }
   }
 
   Object _parseValue(String s) {
@@ -263,19 +349,21 @@ class _DeviceConditionPickerState extends State<DeviceConditionPicker> {
   Widget build(BuildContext context) {
     final result = _result();
     return PickerPanel(
-      kicker: 'ADD CONDITION · CHOOSE WHAT TO CHECK',
+      kicker: 'ADD CONDITION · WHAT TO CHECK',
       title: 'What has to be true?',
       seg: pickerSeg(HcTokens.of(context),
           byRoom: _byRoom,
           onChanged: (v) => setState(() {
                 _byRoom = v;
-                if (v) _room = _rooms.first;
+                if (v) _room = _rooms.isEmpty ? '' : _rooms.first;
               })),
-      rail: _rail(context),
-      list: _list(context),
-      detail: _detail(HcTokens.of(context)),
-      footerHint: '${_entries.where((e) => !e.isMode).length} devices · '
-          '${_entries.where((e) => e.isMode).length} modes',
+      panes: [
+        PickerPane(width: 202, child: _rail(context)),
+        PickerPane(flex: 3, child: _list(context)),
+        PickerPane(flex: 4, child: _detail(context)),
+      ],
+      footerHint: '${_entries.where((e) => e.kind == _Kind.device).length} '
+          'devices · time · hub · logic · expressions',
       primaryLabel: 'Add condition',
       onPrimary: result == null ? null : () => Navigator.pop(context, result),
     );
@@ -317,7 +405,7 @@ class _DeviceConditionPickerState extends State<DeviceConditionPicker> {
     final rows = <Widget>[];
     var lastRoom = '';
     for (final e in pool) {
-      if (!_byRoom && e.room != lastRoom) {
+      if (!_byRoom && e.room.isNotEmpty && e.room != lastRoom) {
         rows.add(pickerGroupLabel(t, e.room));
         lastRoom = e.room;
       }
@@ -327,7 +415,7 @@ class _DeviceConditionPickerState extends State<DeviceConditionPicker> {
           sub: e.sub,
           chip: e.chip,
           chipTone: e.chipTone,
-          selected: _sel?.ref == e.ref,
+          selected: _sel?.ref == e.ref && _sel?.bucket == e.bucket,
           onTap: () => _select(e)));
     }
     return PickerDeviceList(
@@ -339,14 +427,16 @@ class _DeviceConditionPickerState extends State<DeviceConditionPicker> {
 
   // -- pane 3: the condition builder ---------------------------------------
 
-  Widget _detail(HcTokens t) {
+  Widget _detail(BuildContext context) {
+    final t = HcTokens.of(context);
     final e = _sel;
     if (e == null) {
       return Center(
         child: Padding(
           padding: EdgeInsets.all(t.space.lg),
           child: Text(
-            'Pick a device or mode to check. Sensors live here — a condition is what reads their state.',
+            'Pick something to check. Devices and sensors are on the left; Time, '
+            'Hub, Logic and Expression conditions are further down.',
             textAlign: TextAlign.center,
             style: TextStyle(
                 fontSize: 12.5, height: 1.5, color: t.surface.onBaseMuted),
@@ -354,7 +444,12 @@ class _DeviceConditionPickerState extends State<DeviceConditionPicker> {
         ),
       );
     }
-    final current = e.isMode ? null : e.device!.state[_attr];
+    final title = e.kind == _Kind.template ? e.label : e.label;
+    final sub = switch (e.kind) {
+      _Kind.device => 'currently ${e.device!.state[_attr]}',
+      _Kind.mode => 'hub mode',
+      _Kind.template => 'condition',
+    };
     return ListView(
       padding: EdgeInsets.all(t.space.md),
       children: [
@@ -374,12 +469,12 @@ class _DeviceConditionPickerState extends State<DeviceConditionPicker> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(e.label,
+                Text(title,
                     style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
                         color: t.surface.onBase)),
-                Text(current == null ? e.sub : 'currently $current',
+                Text(sub,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                         fontSize: 11.5, color: t.surface.onBaseMuted)),
@@ -388,21 +483,32 @@ class _DeviceConditionPickerState extends State<DeviceConditionPicker> {
           ),
         ]),
         SizedBox(height: t.space.md),
-        if (e.isMode) ..._modeControls(t) else ..._deviceControls(t, e),
+        ..._controls(context, t, e),
         SizedBox(height: t.space.md),
         _preview(t, e),
       ],
     );
   }
 
-  List<Widget> _modeControls(HcTokens t) => [
+  List<Widget> _controls(BuildContext context, HcTokens t, _Entry e) {
+    switch (e.kind) {
+      case _Kind.mode:
+        return _onOff(t);
+      case _Kind.device:
+        return _deviceControls(t, e);
+      case _Kind.template:
+        return _templateControls(context, t, e.tag!);
+    }
+  }
+
+  List<Widget> _onOff(HcTokens t) => [
         const RailLabel('State'),
         SizedBox(height: t.space.sm),
         Row(children: [
-          _toggleBtn(t, 'Is on', _modeOn, () => setState(() => _modeOn = true)),
+          _toggleBtn(t, 'Is on', _boolOn, () => setState(() => _boolOn = true)),
           SizedBox(width: t.space.xs),
           _toggleBtn(
-              t, 'Is off', !_modeOn, () => setState(() => _modeOn = false)),
+              t, 'Is off', !_boolOn, () => setState(() => _boolOn = false)),
         ]),
       ];
 
@@ -416,22 +522,170 @@ class _DeviceConditionPickerState extends State<DeviceConditionPicker> {
           });
         }),
         SizedBox(height: t.space.md),
+        ..._compareAndValue(t),
+      ];
+
+  List<Widget> _compareAndValue(HcTokens t) => [
         const RailLabel('Comparison'),
         SizedBox(height: t.space.sm),
-        _dropdown(t, _op, [for (final o in _ops) o.$1], (v) {
-          setState(() => _op = v!);
-        }, labelFor: (k) => _ops.firstWhere((o) => o.$1 == k).$2),
+        _dropdown(t, _op, [for (final o in _ops) o.$1],
+            (v) => setState(() => _op = v!),
+            labelFor: (k) => _ops.firstWhere((o) => o.$1 == k).$2),
         SizedBox(height: t.space.md),
         const RailLabel('Value'),
         SizedBox(height: t.space.sm),
         TextFormField(
+          key: ValueKey('value:${_sel?.ref}:$_attr'),
           initialValue: _valueText,
-          key: ValueKey('${e.ref}:$_attr'),
           decoration:
               fieldDecoration(t, hint: 'true, false, a number, or text'),
           onChanged: (v) => setState(() => _valueText = v),
         ),
       ];
+
+  List<Widget> _templateControls(BuildContext context, HcTokens t, String tag) {
+    switch (tag) {
+      case 'TimeWindow':
+        return [
+          const RailLabel('Between'),
+          SizedBox(height: t.space.sm),
+          Row(children: [
+            Expanded(
+                child: _timeBtn(context, t, 'From', _start,
+                    (v) => setState(() => _start = v))),
+            SizedBox(width: t.space.sm),
+            Expanded(
+                child: _timeBtn(context, t, 'Until', _end,
+                    (v) => setState(() => _end = v))),
+          ]),
+          SizedBox(height: t.space.sm),
+          Text(
+            'An overnight window is fine — set From later than Until (e.g. 22:00 to 06:00).',
+            style: TextStyle(
+                fontSize: 11, height: 1.4, color: t.surface.onBaseMuted),
+          ),
+        ];
+      case 'CalendarActive':
+        return [
+          const RailLabel('Calendar'),
+          SizedBox(height: t.space.sm),
+          TextFormField(
+            initialValue: _calId,
+            decoration: fieldDecoration(t, hint: 'Calendar id (blank = any)'),
+            onChanged: (v) => setState(() => _calId = v),
+          ),
+          SizedBox(height: t.space.md),
+          const RailLabel('Event title contains'),
+          SizedBox(height: t.space.sm),
+          TextFormField(
+            initialValue: _titleContains,
+            decoration: fieldDecoration(t, hint: 'e.g. Trash (blank = any)'),
+            onChanged: (v) => setState(() => _titleContains = v),
+          ),
+        ];
+      case 'HubVariable':
+        return [
+          const RailLabel('Variable name'),
+          SizedBox(height: t.space.sm),
+          TextFormField(
+            initialValue: _name,
+            decoration: fieldDecoration(t, hint: 'e.g. guests_home'),
+            onChanged: (v) => setState(() => _name = v),
+          ),
+          SizedBox(height: t.space.md),
+          ..._compareAndValue(t),
+        ];
+      case 'PrivateBooleanIs':
+        return [
+          const RailLabel('Flag name'),
+          SizedBox(height: t.space.sm),
+          TextFormField(
+            initialValue: _name,
+            decoration: fieldDecoration(t, hint: 'e.g. vacation'),
+            onChanged: (v) => setState(() => _name = v),
+          ),
+          SizedBox(height: t.space.md),
+          ..._onOff(t),
+        ];
+      default:
+        // And / Or / Xor / Not / ScriptExpression.
+        final note = switch (tag) {
+          'And' =>
+            'Adds an ALL-of group. Drop the conditions that must all hold inside it.',
+          'Or' =>
+            'Adds an ANY-of group. It passes when at least one inside holds.',
+          'Xor' =>
+            'Adds an exactly-one group — passes when precisely one inside holds.',
+          'Not' =>
+            'Adds a NOT — it inverts the single condition you place inside.',
+          _ =>
+            'Adds a Rhai expression you write in the editor, for anything the forms cannot express.',
+        };
+        return [
+          Container(
+            padding: EdgeInsets.all(t.space.md),
+            decoration: BoxDecoration(
+              color: t.surface.sunken,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: t.stroke.hairline),
+            ),
+            child: Text(note,
+                style: TextStyle(
+                    fontSize: 12.5, height: 1.5, color: t.surface.onBaseMuted)),
+          ),
+        ];
+    }
+  }
+
+  // -- small controls ------------------------------------------------------
+
+  Widget _timeBtn(BuildContext context, HcTokens t, String label, String value,
+      ValueChanged<String> onPick) {
+    final parts = value.split(':');
+    final h = int.tryParse(parts.elementAtOrNull(0) ?? '') ?? 0;
+    final m = int.tryParse(parts.elementAtOrNull(1) ?? '') ?? 0;
+    final hhmm =
+        '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}';
+    return Material(
+      color: t.surface.sunken,
+      borderRadius: BorderRadius.circular(9),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(9),
+        onTap: () async {
+          final picked = await showTimePicker(
+            context: context,
+            initialTime: TimeOfDay(hour: h, minute: m),
+          );
+          if (picked != null) {
+            onPick('${picked.hour.toString().padLeft(2, '0')}:'
+                '${picked.minute.toString().padLeft(2, '0')}:00');
+          }
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(9),
+            border: Border.all(color: t.stroke.hairline),
+          ),
+          child: Row(children: [
+            Text(label.toUpperCase(),
+                style: TextStyle(
+                    fontSize: 9.5,
+                    letterSpacing: 0.8,
+                    fontWeight: FontWeight.w800,
+                    color: t.surface.onBaseMuted)),
+            const Spacer(),
+            Text(hhmm,
+                style: TextStyle(
+                    fontFamily: 'monospace',
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: t.accent.active)),
+          ]),
+        ),
+      ),
+    );
+  }
 
   Widget _dropdown(HcTokens t, String value, List<String> opts,
       ValueChanged<String?> onChanged,
@@ -489,6 +743,8 @@ class _DeviceConditionPickerState extends State<DeviceConditionPicker> {
     );
   }
 
+  // -- live preview --------------------------------------------------------
+
   Widget _preview(HcTokens t, _Entry e) {
     Widget word(String s) =>
         Text(s, style: TextStyle(fontSize: 13.5, color: t.surface.onBaseMuted));
@@ -503,21 +759,61 @@ class _DeviceConditionPickerState extends State<DeviceConditionPicker> {
               style: TextStyle(
                   fontSize: 13, fontWeight: FontWeight.w600, color: c)),
         );
-    final dev = tok(e.label, t.accent.primary);
-    final List<Widget> parts;
-    if (e.isMode) {
-      parts = [dev, word('is'), tok(_modeOn ? 'on' : 'off', t.accent.active)];
-    } else {
-      final verb = _ops.firstWhere((o) => o.$1 == _op).$2;
-      parts = [
-        word('the'),
-        tok(_attr.replaceAll('_', ' '), t.accent.active),
-        word('of'),
-        dev,
-        tok(verb, t.accent.active),
-        tok(_valueText.isEmpty ? '…' : _valueText, t.accent.active),
-      ];
+    final a = t.accent.active;
+    final b = t.accent.primary;
+    String hhmm(String v) => v.split(':').take(2).join(':');
+    final verb = _ops.firstWhere((o) => o.$1 == _op).$2;
+
+    List<Widget> parts() {
+      switch (e.kind) {
+        case _Kind.mode:
+          return [tok(e.label, b), word('is'), tok(_boolOn ? 'on' : 'off', a)];
+        case _Kind.device:
+          return [
+            word('the'),
+            tok(_attr.replaceAll('_', ' '), a),
+            word('of'),
+            tok(e.label, b),
+            tok(verb, a),
+            tok(_valueText.isEmpty ? '…' : _valueText, a),
+          ];
+        case _Kind.template:
+          switch (e.tag) {
+            case 'TimeWindow':
+              return [
+                word('the time is between'),
+                tok(hhmm(_start), a),
+                word('and'),
+                tok(hhmm(_end), a),
+              ];
+            case 'CalendarActive':
+              return [
+                word('a calendar event is active'),
+                if (_titleContains.trim().isNotEmpty) ...[
+                  word('matching'),
+                  tok(_titleContains.trim(), a)
+                ],
+              ];
+            case 'HubVariable':
+              return [
+                word('the hub variable'),
+                tok(_name.isEmpty ? '…' : _name, b),
+                tok(verb, a),
+                tok(_valueText.isEmpty ? '…' : _valueText, a),
+              ];
+            case 'PrivateBooleanIs':
+              return [
+                word('the flag'),
+                tok(_name.isEmpty ? '…' : _name, b),
+                word('is'),
+                tok(_boolOn ? 'set' : 'clear', a),
+              ];
+            default:
+              return [tok(e.label, a)];
+          }
+      }
     }
+
     return Container(
       padding: EdgeInsets.all(t.space.md),
       decoration: BoxDecoration(
@@ -534,7 +830,7 @@ class _DeviceConditionPickerState extends State<DeviceConditionPicker> {
               spacing: 6,
               runSpacing: 6,
               crossAxisAlignment: WrapCrossAlignment.center,
-              children: parts),
+              children: parts()),
         ],
       ),
     );

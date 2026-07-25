@@ -393,9 +393,11 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
                 _byRoom = v;
                 if (v) _room = _rooms.first;
               })),
-      rail: _rail(context),
-      list: _list(context),
-      detail: _detail(HcTokens.of(context)),
+      panes: [
+        PickerPane(width: 202, child: _rail(context)),
+        PickerPane(flex: 3, child: _list(context)),
+        PickerPane(flex: 3, child: _detail(HcTokens.of(context))),
+      ],
       footerHint: _footHint(),
       primaryLabel: _editing ? 'Save action' : 'Add action',
       onPrimary: _cmd == null
