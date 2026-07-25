@@ -305,28 +305,14 @@ class ConditionTree extends StatelessWidget {
           ),
         ],
         const SizedBox(height: 8),
-        Builder(
-          builder: (context) => Wrap(
-            spacing: 4,
-            children: [
-              _CheckDeviceButton(
-                refs: refs,
-                onAdd: (node) {
-                  conditions.add(node);
-                  onChanged();
-                },
-              ),
-              AddNodeButton(
-                label: 'More…',
-                registry: kConditions,
-                categories: kConditionCategories,
-                onPick: (v) {
-                  conditions.add(HcNode.blank(v));
-                  onChanged();
-                },
-              ),
-            ],
-          ),
+        // One entry point: the multi-pane picker now covers the whole condition
+        // vocabulary (devices, modes, time, hub, logic, expression).
+        _CheckDeviceButton(
+          refs: refs,
+          onAdd: (node) {
+            conditions.add(node);
+            onChanged();
+          },
         ),
       ],
     );
@@ -413,12 +399,11 @@ class ConditionNode extends StatelessWidget {
           ? Builder(builder: (context) {
               final child = node['condition'];
               if (child is! HcNode) {
-                return AddNodeButton(
+                return _CheckDeviceButton(
+                  refs: refs,
                   label: 'Set the condition to invert',
-                  registry: kConditions,
-                  categories: kConditionCategories,
-                  onPick: (v) {
-                    node['condition'] = HcNode.blank(v);
+                  onAdd: (n) {
+                    node['condition'] = n;
                     onChanged();
                   },
                 );
@@ -461,12 +446,11 @@ class ConditionNode extends StatelessWidget {
                         onChanged();
                       },
                     ),
-                  AddNodeButton(
+                  _CheckDeviceButton(
+                    refs: refs,
                     label: 'Add to ${variant?.label ?? node.tag}',
-                    registry: kConditions,
-                    categories: kConditionCategories,
-                    onPick: (v) {
-                      node['conditions'] = [...children, HcNode.blank(v)];
+                    onAdd: (n) {
+                      node['conditions'] = [...children, n];
                       onChanged();
                     },
                   ),
@@ -625,15 +609,17 @@ class ActionTree extends StatelessWidget {
 /// The primary "Add condition" path: open the multi-pane condition picker and
 /// drop the built condition node into the list.
 class _CheckDeviceButton extends StatelessWidget {
-  const _CheckDeviceButton({required this.refs, required this.onAdd});
+  const _CheckDeviceButton(
+      {required this.refs, required this.onAdd, this.label = 'Add condition'});
 
   final RuleRefs refs;
   final ValueChanged<HcNode> onAdd;
+  final String label;
 
   @override
   Widget build(BuildContext context) => TextButton.icon(
         icon: const Icon(HcIcons.plus, size: 14),
-        label: const Text('Check a device', style: TextStyle(fontSize: 13)),
+        label: Text(label, style: const TextStyle(fontSize: 13)),
         style: TextButton.styleFrom(
           visualDensity: VisualDensity.compact,
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
