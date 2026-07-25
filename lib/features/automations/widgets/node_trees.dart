@@ -574,6 +574,10 @@ class ActionTree extends StatelessWidget {
                 actions.insert(j, a);
                 onChanged();
               },
+              onReplace: (n) {
+                actions[i].action = n;
+                onChanged();
+              },
             ),
           const SizedBox(height: 8),
           Builder(
@@ -641,6 +645,7 @@ class ActionNode extends StatelessWidget {
     this.enabled,
     this.onToggleEnabled,
     this.onMove,
+    this.onReplace,
     this.ordinal,
   });
 
@@ -654,6 +659,10 @@ class ActionNode extends StatelessWidget {
   final bool? enabled;
   final ValueChanged<bool>? onToggleEnabled;
   final ValueChanged<int>? onMove;
+
+  /// Swaps this action for a freshly-built one. Set for device-control actions
+  /// so the edit pencil can re-open the device builder and replace the node.
+  final ValueChanged<HcNode>? onReplace;
 
   /// Its 1-based position in the list it belongs to. Actions run in sequence, so
   /// where a step sits is real information and gets a number. Conditions are
@@ -688,6 +697,22 @@ class ActionNode extends StatelessWidget {
           icon: off ? HcIcons.eyeSlash : HcIcons.eye,
           tooltip: off ? 'Skipped — click to enable' : 'Disable this step',
           onPressed: () => onToggleEnabled!(off),
+        ),
+      // Device-control actions can be re-opened in the typed builder — the only
+      // way to edit a colour / favourite / grouping payload the inline sentence
+      // can't represent.
+      if (onReplace != null &&
+          (node.tag == 'SetDeviceState' || node.tag == 'SetMode'))
+        _CtlButton(
+          icon: HcIcons.pencil,
+          tooltip: 'Edit in builder',
+          onPressed: () async {
+            final edited = await showDialog<HcNode>(
+              context: context,
+              builder: (_) => DeviceActionPicker(refs: refs, initial: node),
+            );
+            if (edited != null) onReplace!(edited);
+          },
         ),
       _CtlButton(
         icon: HcIcons.trash,

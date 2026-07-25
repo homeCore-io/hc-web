@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/devices/presentation.dart';
 import '../../../core/models/device_state.dart';
+import '../../../core/rules/node.dart';
 import '../../../design/components/hc_dialog.dart';
 import '../../../design/tokens.dart';
 import '../device_commands.dart';
@@ -19,9 +20,14 @@ import 'rule_refs.dart';
 /// Shown with `showDialog<HcNode>`; the command payloads come from
 /// [commandsFor] (see `device_commands.dart`).
 class DeviceActionPicker extends StatefulWidget {
-  const DeviceActionPicker({super.key, required this.refs});
+  const DeviceActionPicker({super.key, required this.refs, this.initial});
 
   final RuleRefs refs;
+
+  /// An existing device-control action to edit. When set, the picker opens with
+  /// its device, command and value pre-selected, so editing a colour / favourite
+  /// / grouping action reuses the typed builder instead of a raw-JSON chip.
+  final HcNode? initial;
 
   @override
   State<DeviceActionPicker> createState() => _DeviceActionPickerState();
@@ -135,6 +141,89 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
   Object? _value;
 
   late final List<_Entry> _entries = _buildEntries();
+  bool get _editing => widget.initial != null;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initial != null) _prefill(widget.initial!);
+  }
+
+  /// Reverse of the command builders: from an existing node, pre-select the
+  /// device, the command it performs, and that command's current value.
+  void _prefill(HcNode node) {
+    final ref = (node.tag == 'SetMode' ? node['mode_id'] : node['device_id'])
+        as String?;
+    if (ref == null) return;
+    final entry = _firstOrNull(_entries, (e) => e.ref == ref);
+    if (entry == null) return;
+    _sel = entry;
+    final (cmd, value) = _matchCommand(entry, node);
+    _cmd = cmd ?? entry.commands.first;
+    _value = value ?? _cmd!.param.defaultValue;
+    if (_cmd!.param.kind == CmdParamKind.color && _value is! Color) {
+      _value = _swatches[2].$2;
+    }
+  }
+
+  (DeviceCommand?, Object?) _matchCommand(_Entry e, HcNode node) {
+    DeviceCommand? byKey(String k) =>
+        _firstOrNull(e.commands, (c) => c.key == k);
+    if (node.tag == 'SetMode') return (byKey('on'), null);
+
+    final s = (node['state'] as Map?)?.cast<String, Object?>() ?? const {};
+    if (s['action'] is String) {
+      switch (s['action'] as String) {
+        case 'play':
+          return (byKey('play'), null);
+        case 'pause':
+          return (byKey('pause'), null);
+        case 'next':
+          return (byKey('next'), null);
+        case 'previous':
+          return (byKey('previous'), null);
+        case 'set_volume':
+          return (byKey('set_volume'), s['volume']);
+        case 'play_favorite':
+          return (byKey('play_favorite'), s['favorite']);
+        case 'play_playlist':
+          return (byKey('play_playlist'), s['playlist']);
+        case 'set_shuffle':
+          return (byKey('set_shuffle'), s['shuffle'] == true ? 'on' : 'off');
+        case 'set_setpoint':
+          return (byKey('set_temp'), s['value']);
+        case 'set_mode':
+          return (byKey('set_mode'), s['value']);
+        case 'join':
+          final peer = _firstOrNull(
+              _entries, (x) => x.device?.id == s['coordinator']);
+          return (byKey('group'), peer?.label);
+      }
+    }
+    if (s.containsKey('brightness_pct')) {
+      return (byKey('brightness'), s['brightness_pct']);
+    }
+    if (s.containsKey('color_xy')) return (byKey('color'), null);
+    if (s.containsKey('color_temp')) return (byKey('white'), s['color_temp']);
+    if (s.containsKey('locked')) {
+      return (s['locked'] == true ? byKey('lock') : byKey('unlock'), null);
+    }
+    if (s.containsKey('raise')) return (byKey('open'), null);
+    if (s.containsKey('lower')) return (byKey('close'), null);
+    if (s.containsKey('stop')) return (byKey('stop'), null);
+    if (s.containsKey('position')) return (byKey('position'), s['position']);
+    if (s.containsKey('activate')) return (byKey('activate'), null);
+    if (s.containsKey('command')) {
+      final c = s['command'];
+      if (c == 'start') return (byKey('start'), s['duration_secs']);
+      if (c == 'restart') return (byKey('restart'), s['duration_secs']);
+      return (byKey('stop'), null);
+    }
+    if (s.containsKey('on')) {
+      return (s['on'] == true ? byKey('on') : byKey('off'), null);
+    }
+    return (null, null);
+  }
 
   // -- entry construction --------------------------------------------------
 
@@ -354,7 +443,7 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('ADD ACTION · CHOOSE A DEVICE',
+                Text(_editing ? 'EDIT ACTION' : 'ADD ACTION · CHOOSE A DEVICE',
                     style: TextStyle(
                         fontSize: 10.5,
                         letterSpacing: 1.4,
@@ -402,7 +491,7 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
           HcButton(label: 'Cancel', onPressed: () => Navigator.pop(context)),
           SizedBox(width: t.space.sm),
           HcButton(
-            label: 'Add action',
+            label: _editing ? 'Save action' : 'Add action',
             kind: HcButtonKind.primary,
             onPressed: _cmd == null
                 ? null
@@ -1228,4 +1317,13 @@ class _Toggle extends StatelessWidget {
       ),
     );
   }
+}
+
+/// The first element matching [test], or null — avoids a `package:collection`
+/// import for one call site.
+T? _firstOrNull<T>(Iterable<T> items, bool Function(T) test) {
+  for (final e in items) {
+    if (test(e)) return e;
+  }
+  return null;
 }
