@@ -3,9 +3,9 @@ import 'package:flutter/material.dart';
 import '../../../core/devices/presentation.dart';
 import '../../../core/models/device_state.dart';
 import '../../../core/rules/node.dart';
-import '../../../design/components/hc_dialog.dart';
 import '../../../design/tokens.dart';
 import '../device_commands.dart';
+import 'device_picker_shell.dart';
 import 'editor_style.dart';
 import 'rule_refs.dart';
 
@@ -58,10 +58,8 @@ class _Entry {
   final List<DeviceCommand> commands;
   final DeviceState? device;
   final String? chip;
-  final SectionTone? chipTone;
+  final PickerTone? chipTone;
 }
-
-enum SectionTone { on, play, ok, off }
 
 class _Cat {
   const _Cat(this.key, this.label, this.icon, this.group);
@@ -195,8 +193,8 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
         case 'set_mode':
           return (byKey('set_mode'), s['value']);
         case 'join':
-          final peer = _firstOrNull(
-              _entries, (x) => x.device?.id == s['coordinator']);
+          final peer =
+              _firstOrNull(_entries, (x) => x.device?.id == s['coordinator']);
           return (byKey('group'), peer?.label);
       }
     }
@@ -304,25 +302,25 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
     return out;
   }
 
-  (String?, SectionTone?) _deviceChip(DeviceState d) {
+  (String?, PickerTone?) _deviceChip(DeviceState d) {
     if (d.isMediaPlayer) {
       return d.playbackState == 'playing'
-          ? ('playing', SectionTone.play)
-          : (d.playbackState, SectionTone.off);
+          ? ('playing', PickerTone.play)
+          : (d.playbackState, PickerTone.off);
     }
     final s = d.state;
-    if (s['locked'] == true) return ('locked', SectionTone.ok);
-    if (s['locked'] == false) return ('unlocked', SectionTone.off);
+    if (s['locked'] == true) return ('locked', PickerTone.ok);
+    if (s['locked'] == false) return ('unlocked', PickerTone.off);
     if (s['on'] == true) {
       final b = s['brightness_pct'];
-      return (b is num ? 'on · ${b.round()}%' : 'on', SectionTone.on);
+      return (b is num ? 'on · ${b.round()}%' : 'on', PickerTone.on);
     }
-    if (s['on'] == false) return ('off', SectionTone.off);
+    if (s['on'] == false) return ('off', PickerTone.off);
     final pos = s['position'];
     if (pos is num) {
       return (
         pos <= 0 ? 'closed' : 'open · ${pos.round()}%',
-        pos <= 0 ? SectionTone.off : SectionTone.on
+        pos <= 0 ? PickerTone.off : PickerTone.on
       );
     }
     return (null, null);
@@ -386,119 +384,25 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
 
   @override
   Widget build(BuildContext context) {
-    final t = HcTokens.of(context);
-    // A custom panel rather than HcDialog: the panes are full-bleed under a
-    // padded header, each on its own surface tone, which is where the depth
-    // comes from — a flat single-surface dialog reads as one grey slab.
-    return Dialog(
-      backgroundColor: Colors.transparent,
-      elevation: 0,
-      insetPadding: EdgeInsets.all(t.space.lg),
-      child: Container(
-        width: 960,
-        decoration: BoxDecoration(
-          color: t.surface.overlay,
-          borderRadius: BorderRadius.circular(t.radius.lg),
-          border: Border.all(color: t.stroke.hairline, width: t.stroke.width),
-          boxShadow: t.elevation.overlay,
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _header(t),
-            _hline(t),
-            SizedBox(
-              height: 470,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  SizedBox(width: 202, child: _rail(t)),
-                  _hline(t, vertical: true),
-                  Expanded(flex: 3, child: _list(t)),
-                  _hline(t, vertical: true),
-                  Expanded(flex: 3, child: _detail(t)),
-                ],
-              ),
-            ),
-            _hline(t),
-            _footer(t),
-          ],
-        ),
-      ),
+    return PickerPanel(
+      kicker: _editing ? 'EDIT ACTION' : 'ADD ACTION · CHOOSE A DEVICE',
+      title: 'What should this rule control?',
+      seg: pickerSeg(HcTokens.of(context),
+          byRoom: _byRoom,
+          onChanged: (v) => setState(() {
+                _byRoom = v;
+                if (v) _room = _rooms.first;
+              })),
+      rail: _rail(context),
+      list: _list(context),
+      detail: _detail(HcTokens.of(context)),
+      footerHint: _footHint(),
+      primaryLabel: _editing ? 'Save action' : 'Add action',
+      onPrimary: _cmd == null
+          ? null
+          : () => Navigator.pop(context, _cmd!.build(_value)),
     );
   }
-
-  Widget _hline(HcTokens t, {bool vertical = false}) => Container(
-        width: vertical ? 1 : null,
-        height: vertical ? null : 1,
-        color: t.stroke.hairline,
-      );
-
-  Widget _header(HcTokens t) => Padding(
-        padding:
-            EdgeInsets.fromLTRB(t.space.lg, t.space.md, t.space.md, t.space.md),
-        child: Row(children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(_editing ? 'EDIT ACTION' : 'ADD ACTION · CHOOSE A DEVICE',
-                    style: TextStyle(
-                        fontSize: 10.5,
-                        letterSpacing: 1.4,
-                        fontWeight: FontWeight.w800,
-                        color: t.accent.active)),
-                const SizedBox(height: 3),
-                Text('What should this rule control?',
-                    style: TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w600,
-                        color: t.surface.onBase)),
-              ],
-            ),
-          ),
-          _seg(t),
-        ]),
-      );
-
-  Widget _seg(HcTokens t) => Container(
-        padding: const EdgeInsets.all(3),
-        decoration: BoxDecoration(
-          color: t.surface.sunken,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: t.stroke.hairline),
-        ),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          _segBtn(
-              t, 'By type', !_byRoom, () => setState(() => _byRoom = false)),
-          _segBtn(t, 'By room', _byRoom, () {
-            setState(() {
-              _byRoom = true;
-              _room = _rooms.first;
-            });
-          }),
-        ]),
-      );
-
-  Widget _footer(HcTokens t) => Padding(
-        padding: EdgeInsets.symmetric(
-            horizontal: t.space.lg, vertical: t.space.sm + 2),
-        child: Row(children: [
-          Text(_footHint(),
-              style: TextStyle(fontSize: 11.5, color: t.surface.onBaseMuted)),
-          const Spacer(),
-          HcButton(label: 'Cancel', onPressed: () => Navigator.pop(context)),
-          SizedBox(width: t.space.sm),
-          HcButton(
-            label: _editing ? 'Save action' : 'Add action',
-            kind: HcButtonKind.primary,
-            onPressed: _cmd == null
-                ? null
-                : () => Navigator.pop(context, _cmd!.build(_value)),
-          ),
-        ]),
-      );
 
   String _footHint() {
     final devs = _entries.where((e) => e.device != null).length;
@@ -509,235 +413,64 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
 
   // -- pane 1: rail --------------------------------------------------------
 
-  Widget _rail(HcTokens t) {
-    final List<Widget> items = [];
+  Widget _rail(BuildContext context) {
+    final t = HcTokens.of(context);
+    final items = <Widget>[];
     if (_byRoom) {
       for (final r in _rooms) {
-        items.add(_railRow(
-            t,
-            r,
-            Icons.meeting_room_outlined,
-            _entries.where((e) => e.room == r).length,
-            _room == r,
-            () => setState(() => _room = r)));
+        items.add(pickerRailRow(t,
+            label: r,
+            icon: Icons.meeting_room_outlined,
+            count: _entries.where((e) => e.room == r).length,
+            selected: _room == r,
+            onTap: () => setState(() => _room = r)));
       }
     } else {
       var lastGroup = '';
       for (final c in _cats) {
         if (c.group != lastGroup) {
-          items.add(Padding(
-            padding: EdgeInsets.fromLTRB(t.space.sm, t.space.md, 0, t.space.xs),
-            child: RailLabel(c.group),
-          ));
+          items.add(pickerGroupLabel(t, c.group));
           lastGroup = c.group;
         }
-        items.add(_railRow(t, c.label, c.icon, _count(c.key), _cat == c.key,
-            () => setState(() => _cat = c.key)));
+        items.add(pickerRailRow(t,
+            label: c.label,
+            icon: c.icon,
+            count: _count(c.key),
+            selected: _cat == c.key,
+            onTap: () => setState(() => _cat = c.key)));
       }
     }
-
-    return Container(
-      color: t.surface.sunken,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(height: t.space.xs),
-          Expanded(child: ListView(padding: EdgeInsets.zero, children: items)),
-          _hline(t),
-          Padding(
-            padding: EdgeInsets.all(t.space.sm),
-            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Icon(Icons.info_outline, size: 13, color: t.surface.onBaseMuted),
-              SizedBox(width: t.space.xs),
-              Expanded(
-                child: Text(
-                  'Sensors are hidden — they belong in conditions, not actions.',
-                  style: TextStyle(
-                      fontSize: 10.5,
-                      height: 1.4,
-                      color: t.surface.onBaseMuted),
-                ),
-              ),
-            ]),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _segBtn(HcTokens t, String label, bool on, VoidCallback onTap) =>
-      Material(
-        color: on ? t.surface.raised : Colors.transparent,
-        borderRadius: BorderRadius.circular(7),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(7),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 6),
-            child: Text(label,
-                style: TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w600,
-                  color: on ? t.surface.onBase : t.surface.onBaseMuted,
-                )),
-          ),
-        ),
-      );
-
-  Widget _railRow(HcTokens t, String label, IconData icon, int count, bool on,
-      VoidCallback onTap) {
-    return Material(
-      color: on ? t.accent.active.withValues(alpha: 0.12) : Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        child: Container(
-          padding: EdgeInsets.symmetric(horizontal: t.space.sm, vertical: 8),
-          decoration: BoxDecoration(
-            border: Border(
-              left: BorderSide(
-                color: on ? t.accent.active : Colors.transparent,
-                width: 2.5,
-              ),
-            ),
-          ),
-          child: Row(children: [
-            Icon(icon,
-                size: 17, color: on ? t.surface.onBase : t.surface.onBaseMuted),
-            SizedBox(width: t.space.sm),
-            Expanded(
-              child: Text(label,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: on ? t.surface.onBase : t.surface.onBaseMuted,
-                  )),
-            ),
-            Text('$count',
-                style: TextStyle(
-                    fontSize: 11.5,
-                    color: on ? t.accent.active : t.surface.onBaseMuted)),
-          ]),
-        ),
-      ),
+    return PickerRail(
+      note: 'Sensors are hidden — they belong in conditions, not actions.',
+      children: items,
     );
   }
 
   // -- pane 2: device list -------------------------------------------------
 
-  Widget _list(HcTokens t) {
+  Widget _list(BuildContext context) {
+    final t = HcTokens.of(context);
     final pool = _pool;
     final rows = <Widget>[];
     var lastRoom = '';
     for (final e in pool) {
       if (!_byRoom && e.room != lastRoom) {
-        rows.add(Padding(
-          padding: EdgeInsets.fromLTRB(t.space.sm, t.space.md, 0, t.space.xs),
-          child: RailLabel(e.room),
-        ));
+        rows.add(pickerGroupLabel(t, e.room));
         lastRoom = e.room;
       }
-      rows.add(_deviceRow(t, e));
+      rows.add(pickerDeviceRow(t,
+          icon: e.icon,
+          label: e.label,
+          sub: e.sub,
+          chip: e.chip,
+          chipTone: e.chipTone,
+          selected: _sel?.ref == e.ref,
+          onTap: () => _select(e)));
     }
-    return DecoratedBox(
-      // A touch darker than the detail pane (which sits on the panel's overlay),
-      // so the list reads as sunk into the shell and the detail as raised out.
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            Color.lerp(t.surface.sunken, t.surface.base, 0.5)!,
-            t.surface.sunken,
-          ],
-        ),
-      ),
-      child: Column(children: [
-        Padding(
-          padding: EdgeInsets.all(t.space.sm),
-          child: TextField(
-            decoration: fieldDecoration(t, hint: 'Search devices…'),
-            onChanged: (v) => setState(() => _query = v),
-          ),
-        ),
-        Expanded(
-          child: pool.isEmpty
-              ? Center(
-                  child: Text('No devices match.',
-                      style: TextStyle(color: t.surface.onBaseMuted)))
-              : ListView(
-                  padding: EdgeInsets.symmetric(horizontal: t.space.xs),
-                  children: rows),
-        ),
-      ]),
-    );
-  }
-
-  Widget _deviceRow(HcTokens t, _Entry e) {
-    final on = _sel?.ref == e.ref;
-    final tone = switch (e.chipTone) {
-      SectionTone.on => t.accent.active,
-      SectionTone.play => t.accent.primary,
-      SectionTone.ok => t.accent.success,
-      _ => t.surface.onBaseMuted,
-    };
-    return Material(
-      color: on ? t.accent.active.withValues(alpha: 0.12) : Colors.transparent,
-      borderRadius: t.radius.smR,
-      child: InkWell(
-        onTap: () => _select(e),
-        borderRadius: t.radius.smR,
-        child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: t.space.sm, vertical: 8),
-          child: Row(children: [
-            Container(
-              width: 34,
-              height: 34,
-              decoration: BoxDecoration(
-                color: t.surface.raised,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: t.stroke.hairline),
-              ),
-              child: Icon(e.icon,
-                  size: 17,
-                  color: on ? t.accent.active : t.surface.onBaseMuted),
-            ),
-            SizedBox(width: t.space.sm),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(e.label,
-                      overflow: TextOverflow.ellipsis,
-                      style:
-                          TextStyle(fontSize: 13.5, color: t.surface.onBase)),
-                  Text(e.sub,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                          fontSize: 11,
-                          fontFamily: 'monospace',
-                          color: t.surface.onBaseMuted)),
-                ],
-              ),
-            ),
-            if (e.chip != null) ...[
-              SizedBox(width: t.space.xs),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: tone.withValues(alpha: 0.10),
-                  borderRadius: BorderRadius.circular(999),
-                  border: Border.all(color: tone.withValues(alpha: 0.28)),
-                ),
-                child: Text(e.chip!,
-                    style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: tone)),
-              ),
-            ],
-          ]),
-        ),
-      ),
+    return PickerDeviceList(
+      onQuery: (v) => setState(() => _query = v),
+      rows: rows,
+      empty: pool.isEmpty,
     );
   }
 

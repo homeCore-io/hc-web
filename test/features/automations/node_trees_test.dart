@@ -256,7 +256,9 @@ void main() {
       )));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Add action'));
+      // The primary "Control a device" path is the multi-pane picker; the
+      // palette of every other action type is now behind "More…".
+      await tester.tap(find.text('More…'));
       await tester.pumpAndSettle();
 
       // The list virtualises, so only the leading categories are built — but a

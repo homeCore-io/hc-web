@@ -8,6 +8,7 @@ import '../../../design/components/hc_sentence.dart';
 import '../../../design/hc_icons.dart';
 import '../../../design/tokens.dart';
 import 'device_action_picker.dart';
+import 'device_condition_picker.dart';
 import 'editor_style.dart';
 import 'field_editors.dart';
 import '../rule_phrasing.dart';
@@ -304,14 +305,28 @@ class ConditionTree extends StatelessWidget {
           ),
         ],
         const SizedBox(height: 8),
-        AddNodeButton(
-          label: 'Add condition',
-          registry: kConditions,
-          categories: kConditionCategories,
-          onPick: (v) {
-            conditions.add(HcNode.blank(v));
-            onChanged();
-          },
+        Builder(
+          builder: (context) => Wrap(
+            spacing: 4,
+            children: [
+              _CheckDeviceButton(
+                refs: refs,
+                onAdd: (node) {
+                  conditions.add(node);
+                  onChanged();
+                },
+              ),
+              AddNodeButton(
+                label: 'More…',
+                registry: kConditions,
+                categories: kConditionCategories,
+                onPick: (v) {
+                  conditions.add(HcNode.blank(v));
+                  onChanged();
+                },
+              ),
+            ],
+          ),
         ),
       ],
     );
@@ -604,6 +619,32 @@ class ActionTree extends StatelessWidget {
             ),
           ),
         ],
+      );
+}
+
+/// The primary "Add condition" path: open the multi-pane condition picker and
+/// drop the built condition node into the list.
+class _CheckDeviceButton extends StatelessWidget {
+  const _CheckDeviceButton({required this.refs, required this.onAdd});
+
+  final RuleRefs refs;
+  final ValueChanged<HcNode> onAdd;
+
+  @override
+  Widget build(BuildContext context) => TextButton.icon(
+        icon: const Icon(HcIcons.plus, size: 14),
+        label: const Text('Check a device', style: TextStyle(fontSize: 13)),
+        style: TextButton.styleFrom(
+          visualDensity: VisualDensity.compact,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        ),
+        onPressed: () async {
+          final node = await showDialog<HcNode>(
+            context: context,
+            builder: (_) => DeviceConditionPicker(refs: refs),
+          );
+          if (node != null) onAdd(node);
+        },
       );
 }
 
