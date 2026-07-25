@@ -519,10 +519,18 @@ String? describeState(Object? state) {
     s.remove('set_led');
     if (s.isNotEmpty) return null;
     final button = led['button'];
-    final on = led['state'] == 1 || led['state'] == true;
-    // Phrased so the preposition that follows still parses:
-    // "set the button 3 LED to on ON the Keypad".
-    return 'set the button $button LED to ${on ? 'on' : 'off'}';
+    // Named for what the LED is doing, not for the number on the wire — and
+    // deliberately not "on"/"off": the sentence appends "on <device>" after
+    // this, and a reading that ends in the word "on" produced "set the button 1
+    // LED to on on Hallway 6 Button". Lit/dark/flashing collides with nothing
+    // and says more.
+    final lit = switch (led['state']) {
+      1 || true => 'lit',
+      2 => 'flashing slowly',
+      3 => 'flashing fast',
+      _ => 'dark',
+    };
+    return 'set the button $button LED $lit';
   }
 
   // -- a core timer --------------------------------------------------------

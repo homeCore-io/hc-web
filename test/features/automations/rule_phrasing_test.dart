@@ -244,8 +244,8 @@ void _payloadShapes() {
         // 7x — a Lutron scene
         '{"activate":true}': 'activate',
         // 17x — a Lutron keypad LED
-        '{"set_led":{"button":3,"state":1}}': 'set the button 3 LED to on',
-        '{"set_led":{"button":6,"state":0}}': 'set the button 6 LED to off',
+        '{"set_led":{"button":3,"state":1}}': 'set the button 3 LED lit',
+        '{"set_led":{"button":6,"state":0}}': 'set the button 6 LED dark',
         // 4x + 2x — core timers
         '{"command":"start","duration_secs":300,"label":"Deck lights off"}':
             'start a 5-minute timer (Deck lights off)',
@@ -297,13 +297,24 @@ void _payloadShapes() {
           sentence({
             'set_led': {'button': 3, 'state': 1},
           }),
-          'set the button 3 LED to on on Bathroom');
+          // Was 'set the button 3 LED to on on Bathroom' — this test asserted the
+          // doubled preposition it was written to catch.
+          'set the button 3 LED lit on Bathroom');
 
       // No sentence anywhere may contain a doubled preposition.
       for (final s in [
         sentence({'on': false}),
         sentence({'action': 'stop'}),
         sentence({'command': 'start', 'duration_secs': 300}),
+        // Found in the wild, on a real Lutron LED-sync rule: the *value* was
+        // the word "on", so the reading ended in it and the appended
+        // preposition doubled — "…LED to on on Hallway 6 Button".
+        sentence({
+          'set_led': {'button': 1, 'state': 1}
+        }),
+        sentence({
+          'set_led': {'button': 3, 'state': 0}
+        }),
       ]) {
         expect(s, isNot(contains(' on on ')), reason: s);
         expect(s, isNot(contains(' to to ')), reason: s);
