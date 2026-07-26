@@ -64,6 +64,12 @@ class ManagePage extends ConsumerWidget {
       ),
       const _Entry(route: '/scenes', icon: HcIcons.scenes, title: 'Scenes'),
       const _Entry(route: '/modes', icon: HcIcons.modes, title: 'Modes'),
+      const _Entry(
+        route: '/helpers',
+        icon: Icons.tune,
+        title: 'Helpers',
+        detail: 'Timers, switches, counters',
+      ),
       const _Entry(route: '/media', icon: HcIcons.media, title: 'Media'),
       const _Entry(route: '/cameras', icon: HcIcons.camera, title: 'Cameras'),
       const _Entry(route: '/events', icon: HcIcons.events, title: 'Events'),
