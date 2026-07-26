@@ -1,7 +1,12 @@
 name: hc_web
 description: HomeCore web dashboard
 publish_to: 'none'
-version: 1.0.0+1
+# Kept in step with the rest of homeCore (core 0.1.x, plugins 0.1.x, and the
+# docker repo's tags), and with the git tag this repo is released from — the
+# release workflow publishes ghcr.io/homecore-io/hc-web:<version> from `v<version>`.
+# It read 1.0.0+1 from `flutter create` and had never been touched, which would
+# have made the first release's image tag disagree with the app it contains.
+version: 0.1.6+1
 
 environment:
   sdk: '>=3.3.0 <4.0.0'
