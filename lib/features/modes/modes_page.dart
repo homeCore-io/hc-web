@@ -6,6 +6,7 @@ import '../../core/providers/modes_provider.dart';
 import '../../design/components/hc_dialog.dart';
 import '../../design/components/hc_surface.dart';
 import '../../design/tokens.dart';
+import 'mode_id.dart';
 import '../../shared/widgets/section_scaffold.dart';
 import '../../shared/widgets/skeleton.dart';
 
@@ -82,9 +83,14 @@ class ModesPage extends ConsumerWidget {
   }
 
   Future<void> _showCreateDialog(BuildContext context, WidgetRef ref) async {
-    final idCtrl = TextEditingController(text: 'mode_');
     final nameCtrl = TextEditingController();
     String kind = 'manual';
+    // Ids already taken, so a clash is refused here rather than by the API
+    // after the dialog has closed.
+    final taken = {
+      for (final m in ref.read(modesProvider).valueOrNull ?? const <ModeState>[])
+        m.id,
+    };
 
     await showDialog<void>(
       context: context,
@@ -107,12 +113,12 @@ class ModesPage extends ConsumerWidget {
                 label: 'Create',
                 kind: HcButtonKind.primary,
                 onPressed: () async {
-                  if (idCtrl.text.isEmpty || nameCtrl.text.isEmpty) return;
+                  final name = nameCtrl.text.trim();
+                  final id = modeIdFor(name);
+                  if (id.isEmpty || taken.contains(id)) return;
                   Navigator.pop(ctx);
                   try {
-                    await ref
-                        .read(modesApiProvider)
-                        .createMode(idCtrl.text, nameCtrl.text, kind);
+                    await ref.read(modesApiProvider).createMode(id, name, kind);
                     ref.invalidate(modesProvider);
                   } catch (e) {
                     if (context.mounted) {
@@ -127,15 +133,34 @@ class ModesPage extends ConsumerWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                // Name only. The id follows from it — asking for both meant
+                // inventing a primary key and then being told off for getting
+                // its prefix wrong.
                 TextField(
-                    controller: idCtrl,
-                    style: TextStyle(color: t.surface.onBase),
-                    decoration: deco('ID (must start with mode_)')),
-                SizedBox(height: t.space.md),
-                TextField(
-                    controller: nameCtrl,
-                    style: TextStyle(color: t.surface.onBase),
-                    decoration: deco('Display name')),
+                  controller: nameCtrl,
+                  autofocus: true,
+                  style: TextStyle(color: t.surface.onBase),
+                  decoration: deco('Name'),
+                  onChanged: (_) => setS(() {}),
+                ),
+                SizedBox(height: t.space.sm),
+                Builder(builder: (_) {
+                  final id = modeIdFor(nameCtrl.text.trim());
+                  final clash = id.isNotEmpty && taken.contains(id);
+                  return Text(
+                    id.isEmpty
+                        ? 'Rules will refer to this mode by an id derived from '
+                            'its name.'
+                        : clash
+                            ? 'A mode with the id $id already exists.'
+                            : 'Rules will refer to it as $id',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontFamily: id.isEmpty ? null : 'monospace',
+                      color: clash ? t.accent.danger : t.surface.onBaseMuted,
+                    ),
+                  );
+                }),
                 SizedBox(height: t.space.md),
                 Row(
                   children: [
@@ -156,7 +181,6 @@ class ModesPage extends ConsumerWidget {
         },
       ),
     );
-    idCtrl.dispose();
     nameCtrl.dispose();
   }
 }
