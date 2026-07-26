@@ -1,3 +1,4 @@
+import '../../core/devices/battery.dart';
 import '../../core/devices/presentation.dart';
 import '../../core/models/device_state.dart';
 
@@ -23,8 +24,6 @@ enum DeviceFilter {
   lowBattery,
   unassigned
 }
-
-const kLowBatteryPct = 25;
 
 class DeviceQuery {
   const DeviceQuery({
@@ -89,8 +88,11 @@ List<DeviceProblem> problemsIn(List<DeviceState> devices) {
       out.add(DeviceProblem(d, 'offline'));
       continue; // an offline device's battery reading is stale; don't double-report
     }
-    if (d.state['battery'] case final num b when b <= kLowBatteryPct) {
-      out.add(DeviceProblem(d, '${b.round()}% battery'));
+    // Not every `battery` is a percentage — see [batteryOf]. Reading them all
+    // as one flagged eight healthy sensors on the live install and ranked the
+    // two flat ones below them.
+    if (batteryOf(d) case final r? when r.low) {
+      out.add(DeviceProblem(d, r.problemReason));
     }
   }
 
@@ -144,10 +146,7 @@ bool _passesFilter(DeviceState d, DeviceFilter f) {
     DeviceFilter.sensors => !facet.isActuator,
     DeviceFilter.media => facet == DeviceFacet.mediaPlayer,
     DeviceFilter.offline => !d.available,
-    DeviceFilter.lowBattery => switch (d.state['battery']) {
-        final num b when b <= kLowBatteryPct => true,
-        _ => false,
-      },
+    DeviceFilter.lowBattery => hasLowBattery(d),
     DeviceFilter.unassigned => (d.effectiveArea ?? '').isEmpty && !d.isSystem,
   };
 }
@@ -180,11 +179,7 @@ int _compare(DeviceState a, DeviceState b, DeviceSort s) => switch (s) {
         }(),
       DeviceSort.name => a.displayName.compareTo(b.displayName),
       DeviceSort.recentlyChanged => b.lastSeen.compareTo(a.lastSeen),
-      DeviceSort.battery => () {
-          double batt(DeviceState d) =>
-              (d.state['battery'] as num?)?.toDouble() ?? 999;
-          return batt(a).compareTo(batt(b));
-        }(),
+      DeviceSort.battery => batterySortKey(a).compareTo(batterySortKey(b)),
     };
 
 /// A heading plus the devices under it.

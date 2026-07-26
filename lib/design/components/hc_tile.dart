@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/devices/battery.dart';
 import '../../core/devices/presentation.dart';
 import '../../core/models/device_state.dart';
 import '../hc_icons.dart';
@@ -416,9 +417,11 @@ String summarise(DeviceState d) {
   if (s['humidity'] case final num h) bits.add('${h.round()}%');
   if (s['position'] case final num p) bits.add('${p.round()}% open');
 
-  // Battery is only worth a mention when it's a problem.
-  if (s['battery'] case final num b when b <= 25) {
-    bits.add('${b.round()}% batt');
+  // Battery is only worth a mention when it's a problem — and whether it is one
+  // depends on how the device counts. A binary sensor's healthy `0` used to
+  // land here as "0% batt" on every tile.
+  if (batteryOf(d) case final batt? when batt.low) {
+    bits.add('${batt.label} batt');
   }
 
   return bits.isEmpty ? '—' : bits.join(' · ');

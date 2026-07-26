@@ -103,6 +103,36 @@ void main() {
           isEmpty);
     });
 
+    test('a healthy sensor that counts differently is not an alert', () {
+      // The live install had eleven of these and three real problems: every
+      // Ecowitt sensor was flagged because `battery: 0` was read as 0%.
+      final ecowitt = [
+        _d('ch3', state: {
+          'battery': 0.0,
+          'battery_kind': 'binary',
+          'battery_low': false
+        }),
+        _d('lightning', state: {
+          'battery': 2.0,
+          'battery_kind': 'level',
+          'battery_low': false
+        }),
+        _d('station', state: {
+          'battery': 3.0,
+          'battery_kind': 'voltage',
+          'battery_low': false
+        }),
+        _d('ch1', state: {
+          'battery': 1.0,
+          'battery_kind': 'binary',
+          'battery_low': true
+        }),
+      ];
+      final p = problemsIn(ecowitt);
+      expect(p.map((x) => x.device.id), ['ch1']);
+      expect(p.single.reason, 'battery low');
+    });
+
     test('devices with no room are surfaced, not hidden', () {
       // 33 of these exist on the real install and are currently invisible.
       expect(unassigned(_house).map((d) => d.id), ['stray']);

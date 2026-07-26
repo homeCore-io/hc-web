@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/text/humanize.dart';
+import '../../core/devices/battery.dart';
 import '../../core/devices/presentation.dart';
 import '../../core/models/device_state.dart';
 import '../../core/providers/collapsed_groups_provider.dart';
@@ -705,19 +706,21 @@ class _Table extends ConsumerWidget {
                     fontFeatures: t.numericFontFeatures,
                   ),
                 )),
-                DataCell(Text(
-                  switch (d.state['battery']) {
-                    final num b => '${b.round()}%',
-                    _ => '—',
-                  },
-                  style: TextStyle(
-                    color: switch (d.state['battery']) {
-                      final num b when b <= kLowBatteryPct => t.accent.danger,
-                      _ => t.surface.onBaseMuted,
-                    },
-                    fontFeatures: t.numericFontFeatures,
-                  ),
-                )),
+                DataCell(Builder(builder: (_) {
+                  // A percentage only when it is one: a binary sensor's `0`
+                  // means OK, and rendering it as "0%" is how the operator
+                  // table used to report healthy sensors as dead.
+                  final batt = batteryOf(d);
+                  return Text(
+                    batt?.label ?? '—',
+                    style: TextStyle(
+                      color: batt?.low == true
+                          ? t.accent.danger
+                          : t.surface.onBaseMuted,
+                      fontFeatures: t.numericFontFeatures,
+                    ),
+                  );
+                })),
                 DataCell(Text(
                   d.pluginId,
                   style: TextStyle(
