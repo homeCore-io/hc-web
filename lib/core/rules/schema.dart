@@ -324,7 +324,8 @@ final Map<String, HcVariant> kTriggers = _index([
     label: 'Mode turned on / off',
     category: 'Hub',
     fields: [
-      HcField('mode_id', HcFieldKind.modeRef, help: 'Empty matches any mode.'),
+      HcField('mode_id', HcFieldKind.modeRef,
+          label: 'Mode', help: 'Empty matches any mode.'),
       HcField('to', HcFieldKind.boolean, label: 'Turned on'),
     ],
   ),
@@ -445,7 +446,7 @@ final Map<String, HcVariant> kConditions = _index([
     label: 'Mode is',
     category: 'Hub',
     fields: [
-      HcField('mode_id', HcFieldKind.modeRef, required: true),
+      HcField('mode_id', HcFieldKind.modeRef, label: 'Mode', required: true),
       HcField('on', HcFieldKind.boolean, required: true, defaultValue: true),
     ],
   ),
@@ -706,7 +707,7 @@ final Map<String, HcVariant> kActions = _index([
     label: 'Set mode',
     category: 'Mode',
     fields: [
-      HcField('mode_id', HcFieldKind.modeRef, required: true),
+      HcField('mode_id', HcFieldKind.modeRef, label: 'Mode', required: true),
       HcField('command', HcFieldKind.modeCommand,
           required: true, defaultValue: 'On'),
     ],

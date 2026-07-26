@@ -275,6 +275,23 @@ class _SentenceNodeState extends State<SentenceNode> {
       return f == null ? '…' : 'set ${f.name.replaceAll('_', ' ')}';
     }
     if (v is List) return v.isEmpty ? '…' : v.join(', ');
+    // A reference is stored as an id and must not be SHOWN as one. A mode chip
+    // read `mode_night` while the dropdown behind it said "Night Mode" — the
+    // same thing named two ways, one of them the storage key.
+    if (v is String) {
+      switch (f?.kind) {
+        case HcFieldKind.modeRef:
+          return widget.refs.modes
+              .firstWhere((m) => m.id == v, orElse: () => (id: v, name: v))
+              .name;
+        case HcFieldKind.sceneRef:
+          return widget.refs.scenes
+              .firstWhere((s) => s.id == v, orElse: () => (id: v, name: v))
+              .name;
+        default:
+          break;
+      }
+    }
     return '$v';
   }
 
