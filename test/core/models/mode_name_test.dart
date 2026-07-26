@@ -9,6 +9,57 @@ ModeState _mode(Map<String, dynamic> json) =>
     ModeState.fromJson(jsonDecode(jsonEncode(json)) as Map<String, dynamic>);
 
 void main() {
+  group('a solar mode reports the phase, not its own state', () {
+    // Live shapes, verbatim: it is daytime, so mode_night is off and mode_day
+    // is on — and BOTH cards should read DAY.
+    ModeState night({required bool on}) => _mode({
+          'config': {
+            'id': 'mode_night',
+            'kind': 'solar',
+            'name': 'Night Mode',
+            'on_event': 'Sunset',
+            'off_event': 'Sunrise',
+          },
+          'state': {
+            'attributes': {'on': on}
+          },
+        });
+    ModeState day({required bool on}) => _mode({
+          'config': {
+            'id': 'mode_day',
+            'kind': 'solar',
+            'name': 'Day Mode',
+            'on_event': 'Sunrise',
+            'off_event': 'Sunset',
+          },
+          'state': {
+            'attributes': {'on': on}
+          },
+        });
+
+    test('at noon both modes say it is day', () {
+      // The bug: the badge was built from `mode.on`, so the Day Mode card —
+      // active precisely because it is daytime — announced NIGHT.
+      expect(night(on: false).isNightNow, isFalse);
+      expect(day(on: true).isNightNow, isFalse);
+    });
+
+    test('at midnight both modes say it is night', () {
+      expect(night(on: true).isNightNow, isTrue);
+      expect(day(on: false).isNightNow, isTrue);
+    });
+
+    test('a manual mode has no solar phase to report', () {
+      final m = _mode({
+        'config': {'id': 'mode_away', 'kind': 'manual', 'name': 'Away'},
+        'state': {
+          'attributes': {'on': true}
+        },
+      });
+      expect(m.isNightNow, isNull);
+    });
+  });
+
   group('a mode is called what the hub calls it', () {
     test('the name on the config is used', () {
       // Both live modes carry one — "Night Mode", "Day Mode" — and nothing

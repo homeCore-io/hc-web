@@ -313,7 +313,7 @@ class _ModeCardState extends ConsumerState<_ModeCard> {
                 ),
               ),
               if (isSolar)
-                _DayNightChip(night: mode.on)
+                _DayNightChip(night: mode.isNightNow ?? mode.on)
               else
                 _Toggle(
                   on: mode.on,
