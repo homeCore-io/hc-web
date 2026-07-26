@@ -27,6 +27,19 @@ const _metadataAttributes = {
 /// switch for it would invite the user to "turn off" a motion sensor.
 const _writableBools = {'on', 'locked', 'muted', 'enabled', 'activate'};
 
+/// The named fan speeds, in order, exactly as hc-lutron accepts them
+/// (`plugins/hc-lutron/src/devices.rs` — the Integration Guide's Maestro Fan
+/// Speed Control bands: 0 / 25 / 50 / 75 / 100). The plugin refuses any other
+/// word rather than guessing at a level, so this list is not a suggestion.
+const kFanSpeeds = ['off', 'low', 'medium', 'medium-high', 'high'];
+
+/// A fan speed said the way a person would read it: `medium-high` → "Medium
+/// high". Used by the tile summary and the row's trailing value.
+String fanSpeedLabel(String speed) {
+  final s = speed.replaceAll('-', ' ');
+  return s.isEmpty ? s : '${s[0].toUpperCase()}${s.substring(1)}';
+}
+
 /// Infers a schema for a device that never registered one.
 ///
 /// This is not a safety net; it is the common case. It reads the attribute's
@@ -58,6 +71,14 @@ AttributeSchema heuristicSchemaFor(String name, Object? value) {
         writable: _writableBools.contains(name),
       ),
     num n => _numeric(name, n),
+    // A fan's speed is a named step, not a percentage — hc-lutron maps these
+    // five onto the Integration Guide's Maestro bands (0/25/50/75/100) and
+    // refuses anything else outright rather than guessing.
+    String _ when name == 'speed' => const AttributeSchema(
+        kind: AttributeKind.enum_,
+        displayName: 'Speed',
+        options: kFanSpeeds,
+      ),
     String _ => const AttributeSchema(
         kind: AttributeKind.string,
         writable: false,

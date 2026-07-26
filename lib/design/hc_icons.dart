@@ -94,6 +94,19 @@ class HcIcons {
         DeviceFacet.climate => on
             ? const IconData(0xe5c6, fontFamily: _fill)
             : const IconData(0xe5c6, fontFamily: _regular),
+        // Deliberately the switch glyph, not a fan.
+        //
+        // Phosphor does ship a `fan` icon, but the two .ttf files bundled here
+        // carry a version-3 `post` table — no glyph names — so its codepoint
+        // cannot be verified from the font, and the family assigns codepoints
+        // alphabetically, which only brackets `fan` to roughly 0xE228–0xE240.
+        // Picking from that range silently renders whatever else lives there
+        // (`faders`, `factory`) with no error. A knowingly-generic glyph beats
+        // a confidently-wrong one; the speed is carried by the row's value in
+        // words. Same compromise, and the same reason, as `cover` above.
+        DeviceFacet.fan => on
+            ? const IconData(0xe676, fontFamily: _fill)
+            : const IconData(0xe676, fontFamily: _regular),
         DeviceFacet.mediaPlayer => on
             ? const IconData(0xea08, fontFamily: _fill)
             : const IconData(0xea08, fontFamily: _regular),

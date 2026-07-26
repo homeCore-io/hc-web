@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/devices/battery.dart';
 import '../../core/devices/presentation.dart';
+import '../../core/schema/attribute_policy.dart';
 import '../../core/models/device_state.dart';
 import '../hc_icons.dart';
 import '../tokens.dart';
@@ -416,6 +417,12 @@ String summarise(DeviceState d) {
   }
   if (s['humidity'] case final num h) bits.add('${h.round()}%');
   if (s['position'] case final num p) bits.add('${p.round()}% open');
+
+  // A fan's speed is the reading. `speed_pct` is deliberately not shown: it is
+  // the same fact in the units the wire protocol happens to use.
+  if (s['speed'] case final String sp when sp.isNotEmpty && sp != 'off') {
+    bits.add(fanSpeedLabel(sp));
+  }
 
   // Battery is only worth a mention when it's a problem — and whether it is one
   // depends on how the device counts. A binary sensor's healthy `0` used to

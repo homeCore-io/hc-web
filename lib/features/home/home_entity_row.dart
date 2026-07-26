@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/devices/presentation.dart';
 import '../../core/models/device_state.dart';
 import '../../core/providers/devices_provider.dart';
+import '../../core/schema/attribute_policy.dart';
 import '../../design/components/hc_tile.dart' show summarise;
 import '../../design/hc_icons.dart';
 import '../../design/tokens.dart';
@@ -132,6 +133,27 @@ class _HomeEntityRowState extends ConsumerState<HomeEntityRow> {
             : '—',
         colour,
         t,
+      );
+    }
+
+    // A fan: the named speed, then the toggle. Not "50%" — the device thinks in
+    // steps, and "Medium" is what is printed on the wall control.
+    if (facet == DeviceFacet.fan) {
+      final speed = device.state['speed'];
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (on && speed is String && speed.isNotEmpty && speed != 'off')
+            Padding(
+              padding: EdgeInsets.only(right: t.space.sm),
+              child: Text(fanSpeedLabel(speed),
+                  style: TextStyle(fontSize: 12, color: t.accent.active)),
+            ),
+          _Toggle(
+            on: on,
+            onChanged: () => notifier.command(device.id, {'on': !on}),
+          ),
+        ],
       );
     }
 

@@ -41,6 +41,7 @@ enum DeviceFacet {
   water,
   vibration,
   climate,
+  fan,
   mediaPlayer,
   scene,
   button,
@@ -71,6 +72,9 @@ enum DeviceFacet {
         DeviceFacet.water => Icons.water_damage_outlined,
         DeviceFacet.vibration => Icons.vibration,
         DeviceFacet.climate => Icons.hvac_outlined,
+        // A pinwheel. Material's only literal fan glyph is `mode_fan_off`,
+        // which reads as "the fan is off" whatever the device is doing.
+        DeviceFacet.fan => Icons.toys_outlined,
         DeviceFacet.mediaPlayer => Icons.speaker_outlined,
         DeviceFacet.scene => Icons.auto_awesome_outlined,
         DeviceFacet.button => Icons.radio_button_checked,
@@ -90,6 +94,7 @@ enum DeviceFacet {
         DeviceFacet.cover ||
         DeviceFacet.lock ||
         DeviceFacet.climate ||
+        DeviceFacet.fan ||
         DeviceFacet.mediaPlayer ||
         DeviceFacet.scene ||
         DeviceFacet.siren ||
@@ -119,6 +124,7 @@ enum DeviceFacet {
         DeviceFacet.lock ||
         DeviceFacet.garage ||
         DeviceFacet.siren ||
+        DeviceFacet.fan ||
         DeviceFacet.timer =>
           TilePresentation.control,
         // Everything else is a sensor: a value to read, not a control. Doors,
@@ -223,6 +229,9 @@ DeviceFacet? _fromToken(String t) => switch (t) {
       'water_sensor' => DeviceFacet.water,
       'vibration_sensor' => DeviceFacet.vibration,
       'climate' || 'thermostat' => DeviceFacet.climate,
+      // hc-lutron publishes `fan` for its Maestro fan-speed controllers; the
+      // other spellings are what integrators tend to type by hand.
+      'fan' || 'fan_control' || 'ceiling_fan' => DeviceFacet.fan,
       'media_player' => DeviceFacet.mediaPlayer,
       'scene' => DeviceFacet.scene,
       'button' || 'keypad' || 'pico_remote' => DeviceFacet.button,
@@ -235,6 +244,10 @@ DeviceFacet? _fromToken(String t) => switch (t) {
 /// Promotes a coarse type using what the device actually exposes.
 DeviceFacet _refine(DeviceFacet base, DeviceState d, DeviceSchema? schema) {
   if (base != DeviceFacet.switch_ && base != DeviceFacet.light) return base;
+  if (base == DeviceFacet.switch_ &&
+      ({...d.state.keys, ...?schema?.attributes.keys}).contains('speed')) {
+    return DeviceFacet.fan;
+  }
 
   final keys = {...d.state.keys, ...?schema?.attributes.keys};
   final hasColor = keys.contains('color_xy') ||
@@ -242,6 +255,13 @@ DeviceFacet _refine(DeviceFacet base, DeviceState d, DeviceSchema? schema) {
       keys.contains('color_temp');
   final hasBrightness =
       keys.contains('brightness') || keys.contains('brightness_pct');
+
+  // A hand-configured fan controller often lands as `switch`. Its speed is the
+  // giveaway, and a fan promoted to `dimmableLight` by `speed_pct` would get a
+  // brightness slider it cannot honour.
+  if (keys.contains('speed') || keys.contains('speed_pct')) {
+    return DeviceFacet.fan;
+  }
 
   if (hasColor) return DeviceFacet.colorLight;
   // A Lutron "switch" that reports a brightness level is a dimmer.
@@ -253,6 +273,13 @@ DeviceFacet _refine(DeviceFacet base, DeviceState d, DeviceSchema? schema) {
 /// whatever it claims to be; one with only a `temperature` is a sensor.
 DeviceFacet _infer(DeviceState d, DeviceSchema? schema) {
   final keys = {...d.state.keys, ...?schema?.attributes.keys};
+
+  // Before brightness and before the bare `on`: a fan reports `speed`, and
+  // read as a switch it loses the only thing that makes it a fan. hc-lutron's
+  // Maestro controllers publish `speed` + `speed_pct` next to `on`.
+  if (keys.contains('speed') || keys.contains('speed_pct')) {
+    return DeviceFacet.fan;
+  }
 
   if (keys.contains('color_xy') ||
       keys.contains('color_rgb') ||
@@ -294,6 +321,10 @@ double? levelOf(DeviceState d) {
     final max = d.state.containsKey('brightness_pct') ? 100.0 : 255.0;
     return (b.toDouble() / max).clamp(0.0, 1.0);
   }
+  // A fan's "how much" is its speed. Without this a fan on high and a fan on
+  // low are the same tile.
+  final speed = d.state['speed_pct'];
+  if (speed is num) return (speed.toDouble() / 100).clamp(0.0, 1.0);
   final pos = d.state['position'];
   if (pos is num) return (pos.toDouble() / 100).clamp(0.0, 1.0);
   final vol = d.state['volume'];

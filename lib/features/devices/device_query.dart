@@ -266,6 +266,7 @@ extension DeviceFacetLabel on DeviceFacet {
         DeviceFacet.vibration =>
           'Safety',
         DeviceFacet.climate => 'Climate',
+        DeviceFacet.fan => 'Fans',
         DeviceFacet.mediaPlayer => 'Media',
         DeviceFacet.scene => 'Scenes',
         DeviceFacet.button => 'Buttons',

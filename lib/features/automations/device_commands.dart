@@ -619,6 +619,26 @@ List<DeviceCommand> _facetCommands(
     case DeviceFacet.siren:
       return _onOff(setState);
 
+    case DeviceFacet.fan:
+      // Speed is a named step, never a percentage. hc-lutron maps the five
+      // words onto the Maestro bands and refuses anything else, so offering a
+      // 0–100 slider would build rules the plugin drops on the floor.
+      return [
+        ..._onOff(setState),
+        DeviceCommand(
+          key: 'speed',
+          label: 'Set speed',
+          icon: Icons.toys_outlined,
+          param: const CmdParam(
+            CmdParamKind.select,
+            options: kFanSpeeds,
+            defaultValue: 'medium',
+          ),
+          writes: 'speed',
+          build: (v) => setState({'speed': '${v ?? 'medium'}'}),
+        ),
+      ];
+
     default:
       // Sensors and anything non-actuating: no actions.
       return const [];
