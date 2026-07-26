@@ -111,6 +111,11 @@ void main() {
 
     testWidgets('retargeting to another device writes the canonical name',
         (tester) async {
+      // The picker is a full panel, not a dropdown, so it needs room. The
+      // shell is still a fixed 960x470 — see the responsive note in the
+      // picker-shell mockup — and overflows the default 800x600 surface.
+      await tester.binding.setSurfaceSize(const Size(1400, 900));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
       // A device the user *does* pick gets the canonical form, which survives the
       // device being replaced. Only untouched references are left alone.
       final node = HcNode('DeviceStateChanged', {
@@ -120,9 +125,15 @@ void main() {
       await tester.pumpWidget(_deviceField(node));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byType(DropdownButtonFormField<String>).first);
+      // The field is no longer a dropdown: it opens the same searchable,
+      // room-grouped shell the "add a node" flows use. The behaviour under
+      // test is unchanged — what a retarget WRITES.
+      await tester.tap(find.text('Bathroom Door Sensor'));
       await tester.pumpAndSettle();
+
       await tester.tap(find.text('Garage Lights').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Use this device'));
       await tester.pumpAndSettle();
 
       expect(node['device_id'], 'garage.lights');

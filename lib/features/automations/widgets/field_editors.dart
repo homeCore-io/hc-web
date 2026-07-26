@@ -2,12 +2,12 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
-import '../../../core/models/device_state.dart';
+import '../../../core/devices/presentation.dart';
 import '../../../core/rules/schema.dart';
 import '../../../core/schema/attribute_policy.dart';
 import '../../../core/schema/device_schema.dart';
-import '../../../design/components/hc_dialog.dart';
 import '../../../design/tokens.dart';
+import 'device_choice_picker.dart';
 import 'editor_style.dart';
 import 'rule_refs.dart';
 
@@ -193,43 +193,87 @@ class FieldEditor extends StatelessWidget {
     final current = value as String?;
     final missing =
         current != null && current.isNotEmpty && !refs.isKnownDevice(current);
-
-    // A device can be referenced two ways — by `device_id`
-    // (`yolink_d88b4c0400064299`) or by `canonical_name`
-    // (`bathroom.bathroom_door_sensor`) — and core accepts either. Existing rules
-    // are written with raw ids, while `refFor` prefers the canonical name, so
-    // keying every item on `refFor` left nothing matching the stored value and
-    // the dropdown rendered blank on *every* rule.
-    //
-    // So the item for the currently-referenced device is keyed on the form this
-    // rule actually stores. That fixes the display, and it means saving a rule
-    // you did not retarget leaves its reference byte-for-byte as it was, rather
-    // than silently rewriting device_id into canonical_name.
-    String valueFor(DeviceState d) =>
-        (current != null && (d.id == current || d.canonicalName == current))
-            ? current
-            : refs.refFor(d);
+    final t = HcTokens.of(context);
+    final device = current == null ? null : refs.deviceFor(current);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        DropdownButtonFormField<String>(
-          initialValue: refs.isKnownDevice(current ?? '') ? current : null,
-          isExpanded: true,
-          decoration: _dec(context, hint: 'Pick a device'),
-          items: [
-            if (!field.required)
-              const DropdownMenuItem(value: null, child: Text('— any —')),
-            for (final d in refs.devices)
-              DropdownMenuItem(
-                value: valueFor(d),
-                child: Text(
-                  d.name?.isNotEmpty ?? false ? d.name! : d.id,
-                  overflow: TextOverflow.ellipsis,
+        RailLabel(_label + (field.required ? '' : ' (optional)')),
+        const SizedBox(height: 6),
+        // Opens the same searchable, room-grouped shell the "add a node" flows
+        // use. It was a DropdownButtonFormField over every device the hub
+        // knows: no search, no rooms, no live state, registration order — a
+        // full-height list of everything on any real house.
+        InkWell(
+          onTap: () async {
+            final picked = await pickDeviceRef(
+              context,
+              refs: refs,
+              current: current,
+              kicker: _label,
+            );
+            if (picked != null) onChanged(picked);
+          },
+          borderRadius: BorderRadius.circular(9),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: t.surface.sunken,
+              borderRadius: BorderRadius.circular(9),
+              border: Border.all(
+                color: missing ? t.accent.danger : t.stroke.hairline,
+              ),
+            ),
+            child: Row(children: [
+              Icon(
+                device == null
+                    ? Icons.help_outline
+                    : facetOf(device, device.schema).icon,
+                size: 17,
+                color: t.surface.onBaseMuted,
+              ),
+              const SizedBox(width: 9),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      current == null || current.isEmpty
+                          ? 'Pick a device'
+                          : refs.labelFor(current),
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: current == null || current.isEmpty
+                            ? t.surface.onBaseMuted
+                            : t.surface.onBase,
+                      ),
+                    ),
+                    // The stored reference stays visible: two devices can share
+                    // a display name, and the rule is written against this.
+                    if (device != null)
+                      Text(
+                        device.canonicalName ?? device.id,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontFamily: 'monospace',
+                          color: t.surface.onBaseMuted,
+                        ),
+                      ),
+                  ],
                 ),
               ),
-          ],
-          onChanged: onChanged,
+              if (!field.required && current != null && current.isNotEmpty)
+                IconButton(
+                  tooltip: 'Any device',
+                  icon: const Icon(Icons.backspace_outlined, size: 15),
+                  onPressed: () => onChanged(null),
+                ),
+              Icon(Icons.unfold_more, size: 16, color: t.surface.onBaseMuted),
+            ]),
+          ),
         ),
         // Core rewrites references to deleted devices as `DELETED:` and
         // disables the rule. Say so plainly instead of showing a blank box.
@@ -240,10 +284,7 @@ class FieldEditor extends StatelessWidget {
               current.startsWith('DELETED:')
                   ? 'This device was deleted — pick a replacement.'
                   : 'Unknown device "$current" — it may be offline or removed.',
-              style: TextStyle(
-                fontSize: 11,
-                color: HcTokens.of(context).accent.danger,
-              ),
+              style: TextStyle(fontSize: 11, color: t.accent.danger),
             ),
           ),
       ],
@@ -294,28 +335,12 @@ class FieldEditor extends StatelessWidget {
     );
   }
 
-  Future<String?> _pickDevice(BuildContext context) {
-    return showDialog<String>(
-      context: context,
-      builder: (ctx) => HcDialog(
+  Future<String?> _pickDevice(BuildContext context) => pickDeviceRef(
+        context,
+        refs: refs,
+        kicker: _label,
         title: 'Add a device',
-        width: 460,
-        child: SizedBox(
-          height: 420,
-          child: ListView(
-            children: [
-              for (final d in refs.devices)
-                PickerRow(
-                  title: d.name?.isNotEmpty ?? false ? d.name! : d.id,
-                  subtitle: refs.refFor(d),
-                  onTap: () => Navigator.pop(ctx, refs.refFor(d)),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+      );
 
   Widget _attributeField(BuildContext context) {
     final known = siblingDeviceRef == null

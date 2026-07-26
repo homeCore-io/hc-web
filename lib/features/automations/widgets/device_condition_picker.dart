@@ -7,6 +7,7 @@ import '../../../core/rules/schema.dart';
 import '../../../core/schema/attribute_policy.dart';
 import '../../../core/schema/device_schema.dart';
 import '../../../design/tokens.dart';
+import 'device_choice_picker.dart';
 import 'device_picker_shell.dart';
 import 'editor_style.dart';
 import 'rule_refs.dart';
@@ -219,19 +220,13 @@ class _DeviceConditionPickerState extends State<DeviceConditionPicker> {
     return out;
   }
 
-  (String?, PickerTone?) _deviceChip(DeviceState d) {
-    final s = d.state;
-    if (s['contact'] == true) return ('closed', PickerTone.ok);
-    if (s['contact'] == false) return ('open', PickerTone.on);
-    if (s['motion'] == true) return ('motion', PickerTone.on);
-    if (s['occupancy'] == true || s['occupied'] == true) {
-      return ('occupied', PickerTone.on);
-    }
-    if (s['locked'] == true) return ('locked', PickerTone.ok);
-    if (s['on'] == true) return ('on', PickerTone.on);
-    if (s['on'] == false) return ('off', PickerTone.off);
-    return (null, null);
-  }
+  /// What a device is doing right now.
+  ///
+  /// Delegates rather than hard-coding a convention: this used to read
+  /// `contact == true` as "closed", which is the usual meaning of a contact
+  /// circuit and the opposite of what hc-yolink and hc-isy publish — both set
+  /// `contact` equal to `open`, so true means the door is OPEN.
+  (String?, PickerTone?) _deviceChip(DeviceState d) => deviceLiveChip(d);
 
   // -- filtering -----------------------------------------------------------
 
