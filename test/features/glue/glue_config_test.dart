@@ -87,11 +87,93 @@ void main() {
     });
   });
 
+  group('a counter carries its step and bounds', () {
+    test('a blank bound is omitted, not sent as zero', () {
+      // The hub leaves min/max unset to mean unbounded. Sending 0 would
+      // silently floor the counter at zero.
+      final c = glueConfigFor(GlueConfig.counter, step: '5');
+      expect(c, {'step': 5});
+      expect(c.containsKey('min'), isFalse);
+      expect(c.containsKey('max'), isFalse);
+    });
+
+    test('bounds are sent when given, including a real zero', () {
+      final c = glueConfigFor(GlueConfig.counter, step: '1', min: '0', max: '10');
+      expect(c, {'step': 1, 'min': 0, 'max': 10});
+    });
+
+    test('a blank step falls back to the hub default', () {
+      expect(glueConfigFor(GlueConfig.counter)['step'], 1);
+    });
+  });
+
+  group('a text helper carries its limit', () {
+    test('no limit sends no key', () {
+      expect(glueConfigFor(GlueConfig.text), isEmpty);
+    });
+
+    test('zero is not a limit — it would hold nothing at all', () {
+      expect(glueConfigFor(GlueConfig.text, maxLength: '0'), isEmpty);
+    });
+
+    test('a real limit is sent', () {
+      expect(glueConfigFor(GlueConfig.text, maxLength: '120'),
+          {'max_length': 120});
+    });
+  });
+
+  group('a datetime carries which halves it holds', () {
+    test('both by default', () {
+      expect(glueConfigFor(GlueConfig.datetime),
+          {'has_date': true, 'has_time': true});
+    });
+
+    test('time only', () {
+      expect(glueConfigFor(GlueConfig.datetime, hasDate: false),
+          {'has_date': false, 'has_time': true});
+    });
+  });
+
+  group('a threshold carries its source and line', () {
+    test('device, reading and value are all sent', () {
+      final c = glueConfigFor(GlueConfig.threshold,
+          sourceDeviceId: 'garage.temp',
+          sourceAttribute: 'temperature',
+          threshold: '18.5');
+      expect(c, {
+        'source_device_id': 'garage.temp',
+        'source_attribute': 'temperature',
+        'threshold': 18.5,
+        'hysteresis': 0,
+      });
+    });
+
+    test('a blank reading falls back to `value`', () {
+      expect(
+          glueConfigFor(GlueConfig.threshold, sourceAttribute: '  ')[
+              'source_attribute'],
+          'value');
+    });
+
+    test('the deadband is sent, because zero is a real setting', () {
+      // Zero means "switch exactly on the line". Omitting the key would leave
+      // whatever was there before, so a blank field has to send it.
+      final c = glueConfigFor(GlueConfig.threshold, hysteresis: '2');
+      expect(c['hysteresis'], 2);
+      expect(glueConfigFor(GlueConfig.threshold)['hysteresis'], 0);
+    });
+
+    test('an unparseable line is zero rather than junk', () {
+      expect(glueConfigFor(GlueConfig.threshold, threshold: 'abc')['threshold'],
+          0);
+    });
+  });
+
   test('a kind that needs nothing sends nothing', () {
     expect(glueConfigFor(GlueConfig.none), isEmpty);
   });
 
-  test('exactly the kinds that need config declare it', () {
+  test('every kind with config to edit declares it', () {
     // A kind that needs setup but does not declare it gets created bare and
     // has to be fixed elsewhere — which is the gap this closes. Timer joined
     // the list because every timer on the hub had duration 0: nothing could
@@ -100,6 +182,15 @@ void main() {
         .where((g) => g.config != GlueConfig.none)
         .map((g) => g.id)
         .toSet();
-    expect(configurable, {'timer', 'number', 'select', 'group'});
+    expect(configurable, {
+      'timer',
+      'counter',
+      'number',
+      'select',
+      'text',
+      'datetime',
+      'group',
+      'threshold',
+    });
   });
 }

@@ -19,6 +19,13 @@ Map<String, Object?> glueConfigFor(
   bool expect = true,
   int durationSecs = 0,
   bool repeat = false,
+  String maxLength = '',
+  bool hasDate = true,
+  bool hasTime = true,
+  String sourceDeviceId = '',
+  String sourceAttribute = 'value',
+  String threshold = '',
+  String hysteresis = '',
 }) {
   switch (kind) {
     case GlueConfig.timer:
@@ -27,6 +34,39 @@ Map<String, Object?> glueConfigFor(
         // that finishes the instant it starts.
         'duration_secs': durationSecs,
         'repeat': repeat,
+      };
+
+    case GlueConfig.counter:
+      // The hub defaults step to 1 and leaves min/max unset, which means
+      // unbounded — so a blank field must send nothing rather than a zero that
+      // would silently floor the counter.
+      return {
+        'step': num.tryParse(step.trim()) ?? 1,
+        if (num.tryParse(min.trim()) case final v?) 'min': v,
+        if (num.tryParse(max.trim()) case final v?) 'max': v,
+      };
+
+    case GlueConfig.text:
+      // Absent means unlimited; zero would mean a text helper that can hold
+      // nothing at all.
+      return {
+        if (int.tryParse(maxLength.trim()) case final v? when v > 0)
+          'max_length': v,
+      };
+
+    case GlueConfig.datetime:
+      return {'has_date': hasDate, 'has_time': hasTime};
+
+    case GlueConfig.threshold:
+      return {
+        'source_device_id': sourceDeviceId,
+        'source_attribute':
+            sourceAttribute.trim().isEmpty ? 'value' : sourceAttribute.trim(),
+        'threshold': num.tryParse(threshold.trim()) ?? 0,
+        // The flap guard. Zero is a legitimate value — it means "switch
+        // exactly on the line" — so a blank field sends it rather than
+        // omitting the key and leaving whatever was there before.
+        'hysteresis': num.tryParse(hysteresis.trim()) ?? 0,
       };
 
     case GlueConfig.number:

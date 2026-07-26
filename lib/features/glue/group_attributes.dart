@@ -129,3 +129,33 @@ GroupAttribute? _describe(RuleRefs refs, List<String> members, String name) {
   final word = name.replaceAll('_', ' ');
   return GroupAttribute(name, word, 'not $word');
 }
+
+
+/// The numeric attributes of one device — what a threshold can watch.
+///
+/// A threshold compares a reading against a line, so a boolean or a string is
+/// not a candidate: `open` crossing 20 is not a question. Asked of a single
+/// device rather than an intersection, because a threshold has one source.
+///
+/// Schema first, live state second: an attribute a plugin declares numeric is
+/// numeric even before the device has reported it.
+List<String> numericAttributes(RuleRefs refs, String deviceRef) {
+  if (deviceRef.isEmpty) return const [];
+  final out = <String>{};
+
+  final schema = refs.schemaFor(deviceRef);
+  for (final e in schema?.attributes.entries ??
+      const <MapEntry<String, AttributeSchema>>[]) {
+    if (e.value.kind == AttributeKind.integer ||
+        e.value.kind == AttributeKind.float ||
+        e.value.kind == AttributeKind.colorTemp) {
+      out.add(e.key);
+    }
+  }
+  for (final e in refs.deviceFor(deviceRef)?.state.entries ??
+      const <MapEntry<String, dynamic>>[]) {
+    if (e.value is num) out.add(e.key);
+  }
+
+  return out.toList()..sort();
+}

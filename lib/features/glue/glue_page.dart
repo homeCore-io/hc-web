@@ -132,6 +132,16 @@ class GluePage extends ConsumerWidget {
     final maxCtrl = TextEditingController(text: '100');
     final stepCtrl = TextEditingController(text: '1');
     final unitCtrl = TextEditingController();
+    // Text: how long a line it accepts.
+    final maxLengthCtrl = TextEditingController();
+    // Date & time: which halves it holds.
+    var hasDate = true;
+    var hasTime = true;
+    // Threshold: which reading, and where the line sits.
+    var sourceRef = '';
+    var sourceAttribute = 'value';
+    final thresholdCtrl = TextEditingController(text: '0');
+    final hysteresisCtrl = TextEditingController(text: '0');
     // Select: the options it can hold.
     final optionCtrl = TextEditingController();
     final options = <String>[];
@@ -180,6 +190,13 @@ class GluePage extends ConsumerWidget {
                     expect: groupExpect,
                     durationSecs: _durationSecs(durationCtrl.text, durationUnit),
                     repeat: repeat,
+                    maxLength: maxLengthCtrl.text,
+                    hasDate: hasDate,
+                    hasTime: hasTime,
+                    sourceDeviceId: sourceRef,
+                    sourceAttribute: sourceAttribute,
+                    threshold: thresholdCtrl.text,
+                    hysteresis: hysteresisCtrl.text,
                   );
                   Navigator.pop(ctx);
                   try {
@@ -252,6 +269,19 @@ class GluePage extends ConsumerWidget {
                     repeat: repeat,
                     onDurationUnit: (v) => durationUnit = v,
                     onRepeat: (v) => repeat = v,
+                    maxLengthCtrl: maxLengthCtrl,
+                    hasDate: hasDate,
+                    hasTime: hasTime,
+                    onHasDate: (v) => hasDate = v,
+                    onHasTime: (v) => hasTime = v,
+                    sourceRef: sourceRef,
+                    sourceAttribute: sourceAttribute,
+                    thresholdCtrl: thresholdCtrl,
+                    hysteresisCtrl: hysteresisCtrl,
+                    onSource: (r, a) {
+                      sourceRef = r;
+                      sourceAttribute = a;
+                    },
                     options: options,
                     members: members,
                     groupAttribute: groupAttribute,
@@ -318,6 +348,16 @@ class GluePage extends ConsumerWidget {
     final maxCtrl = TextEditingController(text: '${attrs['max'] ?? ''}');
     final stepCtrl = TextEditingController(text: '${attrs['step'] ?? ''}');
     final unitCtrl = TextEditingController(text: '${attrs['unit'] ?? ''}');
+    final maxLengthCtrl =
+        TextEditingController(text: '${attrs['max_length'] ?? ''}');
+    var hasDate = attrs['has_date'] as bool? ?? true;
+    var hasTime = attrs['has_time'] as bool? ?? true;
+    var sourceRef = '${attrs['source_device_id'] ?? ''}';
+    var sourceAttribute = '${attrs['source_attribute'] ?? 'value'}';
+    final thresholdCtrl =
+        TextEditingController(text: '${attrs['threshold'] ?? 0}');
+    final hysteresisCtrl =
+        TextEditingController(text: '${attrs['hysteresis'] ?? 0}');
     final optionCtrl = TextEditingController();
     final options = [
       for (final o in (attrs['options'] as List? ?? const [])) '$o',
@@ -366,6 +406,13 @@ class GluePage extends ConsumerWidget {
                           expect: groupExpect,
                           durationSecs: _durationSecs(durationCtrl.text, durationUnit),
                           repeat: repeat,
+                          maxLength: maxLengthCtrl.text,
+                          hasDate: hasDate,
+                          hasTime: hasTime,
+                          sourceDeviceId: sourceRef,
+                          sourceAttribute: sourceAttribute,
+                          threshold: thresholdCtrl.text,
+                          hysteresis: hysteresisCtrl.text,
                         ),
                       );
                     }
@@ -423,6 +470,19 @@ class GluePage extends ConsumerWidget {
                     repeat: repeat,
                     onDurationUnit: (v) => durationUnit = v,
                     onRepeat: (v) => repeat = v,
+                    maxLengthCtrl: maxLengthCtrl,
+                    hasDate: hasDate,
+                    hasTime: hasTime,
+                    onHasDate: (v) => hasDate = v,
+                    onHasTime: (v) => hasTime = v,
+                    sourceRef: sourceRef,
+                    sourceAttribute: sourceAttribute,
+                    thresholdCtrl: thresholdCtrl,
+                    hysteresisCtrl: hysteresisCtrl,
+                    onSource: (r, a) {
+                      sourceRef = r;
+                      sourceAttribute = a;
+                    },
                     options: options,
                     members: members,
                     groupAttribute: groupAttribute,
@@ -457,6 +517,9 @@ class GluePage extends ConsumerWidget {
     stepCtrl.dispose();
     unitCtrl.dispose();
     optionCtrl.dispose();
+    maxLengthCtrl.dispose();
+    thresholdCtrl.dispose();
+    hysteresisCtrl.dispose();
   }
 
   /// Seconds from a value and a unit, however the field was left.
@@ -504,6 +567,16 @@ class GluePage extends ConsumerWidget {
     required bool repeat,
     required ValueChanged<String> onDurationUnit,
     required ValueChanged<bool> onRepeat,
+    required TextEditingController maxLengthCtrl,
+    required bool hasDate,
+    required bool hasTime,
+    required ValueChanged<bool> onHasDate,
+    required ValueChanged<bool> onHasTime,
+    required String sourceRef,
+    required String sourceAttribute,
+    required TextEditingController thresholdCtrl,
+    required TextEditingController hysteresisCtrl,
+    required void Function(String device, String attribute) onSource,
     required List<String> options,
     required List<String> members,
     required String groupAttribute,
@@ -569,6 +642,159 @@ class GluePage extends ConsumerWidget {
                   onTap: () => setS(() => onRepeat(r)),
                 ),
               ),
+          ]),
+        ];
+
+      case GlueConfig.counter:
+        return [
+          Row(children: [
+            Expanded(
+                child: TextField(
+                    controller: stepCtrl,
+                    keyboardType: TextInputType.number,
+                    style: TextStyle(color: t.surface.onBase),
+                    decoration: deco('Step'))),
+            SizedBox(width: t.space.sm),
+            // Blank means unbounded, which is what the hub does when the key
+            // is absent — a zero here would silently floor the counter.
+            Expanded(
+                child: TextField(
+                    controller: minCtrl,
+                    keyboardType: TextInputType.number,
+                    style: TextStyle(color: t.surface.onBase),
+                    decoration: deco('Min (optional)'))),
+            SizedBox(width: t.space.sm),
+            Expanded(
+                child: TextField(
+                    controller: maxCtrl,
+                    keyboardType: TextInputType.number,
+                    style: TextStyle(color: t.surface.onBase),
+                    decoration: deco('Max (optional)'))),
+          ]),
+        ];
+
+      case GlueConfig.text:
+        return [
+          TextField(
+            controller: maxLengthCtrl,
+            keyboardType: TextInputType.number,
+            style: TextStyle(color: t.surface.onBase),
+            decoration: deco('Max length (optional)'),
+          ),
+          const SizedBox(height: 4),
+          Text('Leave empty for no limit.',
+              style: TextStyle(fontSize: 11.5, color: t.surface.onBaseMuted)),
+        ];
+
+      case GlueConfig.datetime:
+        return [
+          const RailLabel('Holds'),
+          const SizedBox(height: 6),
+          Row(children: [
+            for (final o in const [
+              ('Date and time', true, true),
+              ('Date only', true, false),
+              ('Time only', false, true),
+            ])
+              Padding(
+                padding: EdgeInsets.only(right: t.space.xs),
+                child: _TypeChip(
+                  label: o.$1,
+                  selected: hasDate == o.$2 && hasTime == o.$3,
+                  // One choice, not two switches: "neither" is a helper that
+                  // holds nothing, and the pair is really three options.
+                  onTap: () => setS(() {
+                    onHasDate(o.$2);
+                    onHasTime(o.$3);
+                  }),
+                ),
+              ),
+          ]),
+        ];
+
+      case GlueConfig.threshold:
+        final numeric = numericAttributes(ref.read(ruleRefsProvider), sourceRef);
+        return [
+          const RailLabel('Watches'),
+          const SizedBox(height: 6),
+          Row(children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                icon: const Icon(Icons.tune, size: 16),
+                label: Text(
+                  sourceRef.isEmpty
+                      ? 'Pick a device'
+                      : ref.read(ruleRefsProvider).labelFor(sourceRef),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                onPressed: () async {
+                  final picked = await pickDeviceRef(
+                    context,
+                    refs: ref.read(ruleRefsProvider),
+                    current: sourceRef.isEmpty ? null : sourceRef,
+                    kicker: 'Threshold source',
+                  );
+                  if (picked == null) return;
+                  // The attribute belongs to the device it was chosen for.
+                  final attrs =
+                      numericAttributes(ref.read(ruleRefsProvider), picked);
+                  setS(() => onSource(
+                      picked, attrs.isEmpty ? 'value' : attrs.first));
+                },
+              ),
+            ),
+          ]),
+          SizedBox(height: t.space.sm),
+          Row(children: [
+            Expanded(
+              child: numeric.isEmpty
+                  ? TextFormField(
+                      initialValue: sourceAttribute,
+                      style: TextStyle(color: t.surface.onBase),
+                      decoration: deco(sourceRef.isEmpty
+                          ? 'Reading'
+                          : 'Reading (device reports no numbers)'),
+                      onChanged: (v) => onSource(sourceRef, v),
+                    )
+                  : DropdownButtonFormField<String>(
+                      initialValue: numeric.contains(sourceAttribute)
+                          ? sourceAttribute
+                          : null,
+                      isExpanded: true,
+                      style: TextStyle(color: t.surface.onBase),
+                      dropdownColor: t.surface.overlay,
+                      decoration: deco('Reading'),
+                      items: [
+                        for (final a in numeric)
+                          DropdownMenuItem(
+                              value: a, child: Text(humanize(a))),
+                      ],
+                      onChanged: (v) =>
+                          setS(() => onSource(sourceRef, v ?? sourceAttribute)),
+                    ),
+            ),
+            SizedBox(width: t.space.sm),
+            SizedBox(
+              width: 110,
+              child: TextField(
+                controller: thresholdCtrl,
+                keyboardType: TextInputType.number,
+                style: TextStyle(color: t.surface.onBase),
+                decoration: deco('Above'),
+              ),
+            ),
+            SizedBox(width: t.space.sm),
+            // Without a guard a reading sitting on the line toggles the
+            // helper — and every rule watching it — over and over.
+            SizedBox(
+              width: 110,
+              child: TextField(
+                controller: hysteresisCtrl,
+                keyboardType: TextInputType.number,
+                style: TextStyle(color: t.surface.onBase),
+                decoration: deco('± deadband'),
+              ),
+            ),
           ]),
         ];
 
@@ -968,9 +1194,28 @@ class _HelperCard extends ConsumerWidget {
       case 'select':
         final options = (a['options'] as List? ?? const []).map((o) => '$o');
         return options.isEmpty ? 'No options set' : options.join(' · ');
+      case 'counter':
+        final min = a['min'];
+        final max = a['max'];
+        final bounds = (min == null && max == null)
+            ? 'unbounded'
+            : '${min ?? '−∞'} to ${max ?? '∞'}';
+        return 'Steps by ${a['step'] ?? 1}, $bounds';
+      case 'text':
+        final limit = a['max_length'];
+        return limit == null ? 'No length limit' : 'Up to $limit characters';
+      case 'datetime':
+        final date = a['has_date'] as bool? ?? true;
+        final time = a['has_time'] as bool? ?? true;
+        if (date && time) return 'Date and time';
+        return date ? 'Date only' : 'Time only';
       case 'threshold':
-        return 'Above ${a['threshold'] ?? 0} on '
-            '${a['source_attribute'] ?? 'value'}';
+        final source = '${a['source_device_id'] ?? ''}';
+        if (source.isEmpty) return 'No source set';
+        final name = ref.read(ruleRefsProvider).labelFor(source);
+        return 'On when $name '
+            '${humanize('${a['source_attribute'] ?? 'value'}').toLowerCase()} '
+            'is above ${a['threshold'] ?? 0}';
       default:
         return null;
     }

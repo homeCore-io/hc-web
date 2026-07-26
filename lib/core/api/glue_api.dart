@@ -63,17 +63,21 @@ const kGlueTypes = <GlueType>[
   GlueType('timer', 'Timer', 'Counts down, then fires a rule.',
       config: GlueConfig.timer),
   GlueType('switch', 'Switch', 'A flag rules can set and read.'),
-  GlueType('counter', 'Counter', 'Counts things up and down.'),
+  GlueType('counter', 'Counter', 'Counts things up and down.',
+      config: GlueConfig.counter),
   GlueType('number', 'Number', 'Holds a value you can set.',
       config: GlueConfig.number),
   GlueType('select', 'Select', 'One of a fixed set of options.',
       config: GlueConfig.select),
-  GlueType('text', 'Text', 'Holds a line of text.'),
+  GlueType('text', 'Text', 'Holds a line of text.',
+      config: GlueConfig.text),
   GlueType('button', 'Button', 'Fires rules when pressed.'),
-  GlueType('datetime', 'Date & time', 'Holds a date or a time.'),
+  GlueType('datetime', 'Date & time', 'Holds a date or a time.',
+      config: GlueConfig.datetime),
   GlueType('group', 'Group', 'Several devices treated as one.',
       config: GlueConfig.group),
-  GlueType('threshold', 'Threshold', 'True when a reading crosses a line.'),
+  GlueType('threshold', 'Threshold', 'True when a reading crosses a line.',
+      config: GlueConfig.threshold),
   GlueType('schedule', 'Schedule', 'True inside a time window.'),
 ];
 
@@ -84,7 +88,7 @@ const kGlueTypes = <GlueType>[
 /// options can never be set to anything, and a group with no members is a
 /// device that reports on nothing. Creating those bare means editing them
 /// somewhere else immediately, so the dialog asks.
-enum GlueConfig { none, timer, number, select, group }
+enum GlueConfig { none, timer, counter, number, select, text, datetime, group, threshold }
 
 class GlueType {
   const GlueType(this.id, this.label, this.blurb,

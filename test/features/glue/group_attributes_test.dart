@@ -143,6 +143,27 @@ void main() {
     });
   });
 
+  group('a threshold watches a numeric reading', () {
+    test('only numbers are offered', () {
+      // A threshold compares a reading against a line; `open` crossing 20 is
+      // not a question with an answer.
+      final n = numericAttributes(_refs, 'door_a');
+      expect(n, ['battery']);
+      expect(n, isNot(contains('open')));
+    });
+
+    test('a device with no numbers offers none', () {
+      expect(numericAttributes(_refs, 'lamp'), ['brightness']);
+      expect(numericAttributes(_refs, 'odd'), ['open'],
+          reason: '`open` really is a number on this one');
+    });
+
+    test('an unknown or empty device offers nothing', () {
+      expect(numericAttributes(_refs, 'nope'), isEmpty);
+      expect(numericAttributes(_refs, ''), isEmpty);
+    });
+  });
+
   test('no members means nothing to offer', () {
     expect(sharedAttributes(_refs, const []), isEmpty);
   });
