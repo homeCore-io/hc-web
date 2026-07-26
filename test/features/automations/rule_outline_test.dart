@@ -78,7 +78,8 @@ void main() {
       expect(rows.any((r) => r.clause == OutlineClause.then), isTrue);
       // Reading order: no THEN row appears before an IF row.
       final firstThen = rows.indexWhere((r) => r.clause == OutlineClause.then);
-      final lastIf = rows.lastIndexWhere((r) => r.clause == OutlineClause.ifClause);
+      final lastIf =
+          rows.lastIndexWhere((r) => r.clause == OutlineClause.ifClause);
       expect(lastIf, lessThan(firstThen));
     });
 
@@ -107,7 +108,8 @@ void main() {
       final branchArms =
           arms.where((a) => a.keyword != 'Do').map((a) => a.depth).toSet();
       expect(branchArms, hasLength(1),
-          reason: 'Then / Else-if / Else are siblings, not nested in each other');
+          reason:
+              'Then / Else-if / Else are siblings, not nested in each other');
 
       // And an else-if carries its own test, since that is what distinguishes it.
       final elseIf = arms.firstWhere((a) => a.keyword == 'Else if');
@@ -117,10 +119,11 @@ void main() {
     test('steps sit deeper than the arm that holds them', () {
       final rows = rowsOf(nestedRule());
       final thenArm = rows.firstWhere((r) => r.keyword == 'Then');
-      final steps = rows.where((r) =>
-          r.kind == OutlineKind.step && r.depth > thenArm.depth);
+      final steps = rows
+          .where((r) => r.kind == OutlineKind.step && r.depth > thenArm.depth);
       expect(steps, isNotEmpty);
-      expect(steps.first.ordinal, 1, reason: 'actions are ordered, so numbered');
+      expect(steps.first.ordinal, 1,
+          reason: 'actions are ordered, so numbered');
     });
 
     test('a disabled top-level action stays visible and says so', () {
@@ -147,10 +150,14 @@ void main() {
           HcNode.fromJson({
             'Or': {
               'conditions': [
-                {'ModeIs': {'mode_id': 'a', 'on': true}},
+                {
+                  'ModeIs': {'mode_id': 'a', 'on': true}
+                },
                 {
                   'Not': {
-                    'condition': {'ModeIs': {'mode_id': 'b', 'on': true}}
+                    'condition': {
+                      'ModeIs': {'mode_id': 'b', 'on': true}
+                    }
                   }
                 },
               ]
@@ -171,7 +178,8 @@ void main() {
       // A row with neither keyword nor label is an empty line in the outline,
       // which reads as a rendering bug whatever caused it.
       for (final row in rowsOf(nestedRule())) {
-        expect(row.label.isNotEmpty || (row.keyword?.isNotEmpty ?? false), isTrue,
+        expect(
+            row.label.isNotEmpty || (row.keyword?.isNotEmpty ?? false), isTrue,
             reason: 'a ${row.kind} row (${row.tag}) rendered blank');
       }
     });
@@ -203,7 +211,9 @@ void main() {
               'Conditional': {
                 'condition': 'device_state("yolink_d88b")["open"] == true',
                 'then_actions': [
-                  {'LogMessage': {'message': 'x'}}
+                  {
+                    'LogMessage': {'message': 'x'}
+                  }
                 ],
               }
             }, kActions),
@@ -235,8 +245,7 @@ void main() {
           ),
         ],
       );
-      final row =
-          rowsOf(r).firstWhere((x) => x.tag == 'Conditional');
+      final row = rowsOf(r).firstWhere((x) => x.tag == 'Conditional');
       expect(row.label, 'hour() > 8 && any_light_on()');
     });
 

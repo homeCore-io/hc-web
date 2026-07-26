@@ -182,8 +182,7 @@ class _DeviceChoicePickerState extends State<_DeviceChoicePicker> {
     // "you cannot see what you want" problem the flat dropdown had, just with
     // a different shape. Retargeting across categories is the common reason to
     // open this at all.
-    final at =
-        _rows.where((r) => widget.current.contains(r.ref)).firstOrNull;
+    final at = _rows.where((r) => widget.current.contains(r.ref)).firstOrNull;
     if (at != null) _room = at.room;
   }
 
@@ -192,7 +191,9 @@ class _DeviceChoicePickerState extends State<_DeviceChoicePicker> {
         DeviceFacet.dimmableLight ||
         DeviceFacet.colorLight =>
           'light',
-        DeviceFacet.switch_ || DeviceFacet.outlet || DeviceFacet.siren =>
+        DeviceFacet.switch_ ||
+        DeviceFacet.outlet ||
+        DeviceFacet.siren =>
           'switch',
         DeviceFacet.cover || DeviceFacet.garage => 'cover',
         DeviceFacet.lock => 'lock',
@@ -247,9 +248,7 @@ class _DeviceChoicePickerState extends State<_DeviceChoicePicker> {
     if (widget.multi) {
       final n = _added.length;
       if (n == 0) return '${_rows.length} devices · tick to add';
-      return n == 1
-          ? widget.refs.labelFor(_added.first)
-          : '$n selected';
+      return n == 1 ? widget.refs.labelFor(_added.first) : '$n selected';
     }
     return _selected.isEmpty
         ? '${_rows.length} devices'
@@ -279,7 +278,9 @@ class _DeviceChoicePickerState extends State<_DeviceChoicePicker> {
       }),
       footerHint: _footerHint,
       primaryLabel: widget.multi
-          ? (_added.length == 1 ? 'Add 1 device' : 'Add ${_added.length} devices')
+          ? (_added.length == 1
+              ? 'Add 1 device'
+              : 'Add ${_added.length} devices')
           : 'Use this device',
       onPrimary: (widget.multi ? _added.isEmpty : _selected.isEmpty)
           ? null

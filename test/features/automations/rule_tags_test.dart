@@ -60,7 +60,8 @@ void main() {
       // And it carries the accent the list gives a tag group, rather than the
       // grey every setting chip uses.
       final label = tester.widget<Text>(find.text('deck'));
-      final muted = HcTokens.of(tester.element(find.text('deck'))).surface.onBaseMuted;
+      final muted =
+          HcTokens.of(tester.element(find.text('deck'))).surface.onBaseMuted;
       expect(label.style?.color, isNot(muted));
     });
 
@@ -96,7 +97,8 @@ void main() {
       await tester.pumpAndSettle();
 
       // RailLabel uppercases, like every other non-input label in the editor.
-      expect(find.textContaining(RegExp('already in use', caseSensitive: false)),
+      expect(
+          find.textContaining(RegExp('already in use', caseSensitive: false)),
           findsOneWidget);
       await tester.tap(find.widgetWithText(ActionChip, 'vacation'));
       await tester.pumpAndSettle();

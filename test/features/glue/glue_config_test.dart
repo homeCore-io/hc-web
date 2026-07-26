@@ -5,7 +5,8 @@ import 'package:hc_web/features/glue/glue_config.dart';
 void main() {
   group('a timer carries its duration', () {
     test('seconds are what the hub stores', () {
-      final c = glueConfigFor(GlueConfig.timer, durationSecs: 300, repeat: true);
+      final c =
+          glueConfigFor(GlueConfig.timer, durationSecs: 300, repeat: true);
       expect(c, {'duration_secs': 300, 'repeat': true});
     });
 
@@ -45,8 +46,8 @@ void main() {
 
   group('a select carries its options', () {
     test('options are sent in order — the first becomes the value', () {
-      final c = glueConfigFor(GlueConfig.select,
-          options: ['Home', 'Away', 'Guest']);
+      final c =
+          glueConfigFor(GlueConfig.select, options: ['Home', 'Away', 'Guest']);
       expect(c['options'], ['Home', 'Away', 'Guest']);
     });
 
@@ -75,8 +76,8 @@ void main() {
 
     test('a blank attribute falls back to `on`', () {
       // A group reading an empty attribute name reports on nothing.
-      expect(glueConfigFor(GlueConfig.group, attribute: '  ')['attribute'],
-          'on');
+      expect(
+          glueConfigFor(GlueConfig.group, attribute: '  ')['attribute'], 'on');
     });
 
     test('the list is copied, so later edits cannot mutate what was sent', () {
@@ -98,7 +99,8 @@ void main() {
     });
 
     test('bounds are sent when given, including a real zero', () {
-      final c = glueConfigFor(GlueConfig.counter, step: '1', min: '0', max: '10');
+      final c =
+          glueConfigFor(GlueConfig.counter, step: '1', min: '0', max: '10');
       expect(c, {'step': 1, 'min': 0, 'max': 10});
     });
 
@@ -150,8 +152,8 @@ void main() {
 
     test('a blank reading falls back to `value`', () {
       expect(
-          glueConfigFor(GlueConfig.threshold, sourceAttribute: '  ')[
-              'source_attribute'],
+          glueConfigFor(GlueConfig.threshold,
+              sourceAttribute: '  ')['source_attribute'],
           'value');
     });
 

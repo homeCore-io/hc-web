@@ -22,7 +22,16 @@ import '../../core/rules/node.dart';
 /// and what `rule_phrasing.dart describeState` can read back into a sentence.
 
 /// The control a command's value needs. `none` is a bare verb (lock, play).
-enum CmdParamKind { none, slider, select, color, stepper, duration, multi, text }
+enum CmdParamKind {
+  none,
+  slider,
+  select,
+  color,
+  stepper,
+  duration,
+  multi,
+  text
+}
 
 class CmdParam {
   const CmdParam(
@@ -71,7 +80,9 @@ class CmdParam {
 
   String labelFor(String value) {
     final i = options?.indexOf(value) ?? -1;
-    if (i < 0 || optionLabels == null || i >= optionLabels!.length) return value;
+    if (i < 0 || optionLabels == null || i >= optionLabels!.length) {
+      return value;
+    }
     return optionLabels![i];
   }
 }
@@ -1028,8 +1039,7 @@ List<DeviceCommand> _mediaCommands(
 }
 
 DeviceCommand _c(String key, String label, IconData icon, CmdParam p,
-        HcNode Function(Object?) build,
-        {String? writes}) =>
+        HcNode Function(Object?) build, {String? writes}) =>
     DeviceCommand(
         key: key,
         label: label,

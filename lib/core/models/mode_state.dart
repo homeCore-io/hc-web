@@ -1,4 +1,5 @@
 import '../text/humanize.dart';
+
 class ModeState {
   final String id;
 

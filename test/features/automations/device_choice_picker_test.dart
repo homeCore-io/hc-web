@@ -81,8 +81,7 @@ void main() {
     test('an open door beats a later attribute', () {
       // Order matters: a door sensor that also reports `on` should read as a
       // door, because that is what someone is looking for in the list.
-      final (label, _) = deviceLiveChip(
-          _dev('d', {'open': true, 'on': false}));
+      final (label, _) = deviceLiveChip(_dev('d', {'open': true, 'on': false}));
       expect(label, 'open');
     });
   });
@@ -106,8 +105,8 @@ void main() {
           builder: (context) => Scaffold(
             body: Center(
               child: ElevatedButton(
-                onPressed: () async => result = await pickDeviceRefs(context,
-                    refs: refs, current: current),
+                onPressed: () async => result =
+                    await pickDeviceRefs(context, refs: refs, current: current),
                 child: const Text('open'),
               ),
             ),

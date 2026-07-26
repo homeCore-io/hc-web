@@ -372,9 +372,7 @@ class _SentenceNodeState extends State<SentenceNode> {
                       padding: const EdgeInsets.symmetric(vertical: 4),
                       child: Row(mainAxisSize: MainAxisSize.min, children: [
                         Icon(
-                          _advancedOpen
-                              ? Icons.expand_less
-                              : Icons.expand_more,
+                          _advancedOpen ? Icons.expand_less : Icons.expand_more,
                           size: 16,
                           color: t.surface.onBaseMuted,
                         ),
@@ -481,7 +479,6 @@ class NodeBody extends StatelessWidget {
     );
   }
 }
-
 
 /// Test seam for the leading/advanced split.
 ///

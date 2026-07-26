@@ -118,8 +118,10 @@ void main() {
       // installs an older build over a newer one. Inequality is not ordering.
       expect(entry(running: '0.1.5', installed: '0.1.5').wouldInstall('0.1.4'),
           isFalse);
-      expect(entry(running: '0.1.10', installed: '0.1.10').wouldInstall('0.1.9'),
-          isFalse, reason: '0.1.10 is newer than 0.1.9, not older');
+      expect(
+          entry(running: '0.1.10', installed: '0.1.10').wouldInstall('0.1.9'),
+          isFalse,
+          reason: '0.1.10 is newer than 0.1.9, not older');
     });
 
     test('newer than the record but older than what runs is not an update', () {

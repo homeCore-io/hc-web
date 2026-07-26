@@ -188,7 +188,8 @@ class GluePage extends ConsumerWidget {
                     attribute: groupAttribute,
                     mode: groupMode,
                     expect: groupExpect,
-                    durationSecs: _durationSecs(durationCtrl.text, durationUnit),
+                    durationSecs:
+                        _durationSecs(durationCtrl.text, durationUnit),
                     repeat: repeat,
                     maxLength: maxLengthCtrl.text,
                     hasDate: hasDate,
@@ -404,7 +405,8 @@ class GluePage extends ConsumerWidget {
                           attribute: groupAttribute,
                           mode: groupMode,
                           expect: groupExpect,
-                          durationSecs: _durationSecs(durationCtrl.text, durationUnit),
+                          durationSecs:
+                              _durationSecs(durationCtrl.text, durationUnit),
                           repeat: repeat,
                           maxLength: maxLengthCtrl.text,
                           hasDate: hasDate,
@@ -500,8 +502,8 @@ class GluePage extends ConsumerWidget {
                     child: Text(
                       'A ${type?.label.toLowerCase() ?? 'helper'} of this kind '
                       'has nothing to configure beyond its name.',
-                      style: TextStyle(
-                          fontSize: 12, color: t.surface.onBaseMuted),
+                      style:
+                          TextStyle(fontSize: 12, color: t.surface.onBaseMuted),
                     ),
                   ),
               ],
@@ -713,7 +715,8 @@ class GluePage extends ConsumerWidget {
         ];
 
       case GlueConfig.threshold:
-        final numeric = numericAttributes(ref.read(ruleRefsProvider), sourceRef);
+        final numeric =
+            numericAttributes(ref.read(ruleRefsProvider), sourceRef);
         return [
           const RailLabel('Watches'),
           const SizedBox(height: 6),
@@ -738,8 +741,8 @@ class GluePage extends ConsumerWidget {
                   // The attribute belongs to the device it was chosen for.
                   final attrs =
                       numericAttributes(ref.read(ruleRefsProvider), picked);
-                  setS(() => onSource(
-                      picked, attrs.isEmpty ? 'value' : attrs.first));
+                  setS(() =>
+                      onSource(picked, attrs.isEmpty ? 'value' : attrs.first));
                 },
               ),
             ),
@@ -766,8 +769,7 @@ class GluePage extends ConsumerWidget {
                       decoration: deco('Reading'),
                       items: [
                         for (final a in numeric)
-                          DropdownMenuItem(
-                              value: a, child: Text(humanize(a))),
+                          DropdownMenuItem(value: a, child: Text(humanize(a))),
                       ],
                       onChanged: (v) =>
                           setS(() => onSource(sourceRef, v ?? sourceAttribute)),
@@ -865,8 +867,7 @@ class GluePage extends ConsumerWidget {
               padding: const EdgeInsets.only(top: 4),
               child: Text(
                 'The first option becomes the initial value.',
-                style:
-                    TextStyle(fontSize: 11.5, color: t.surface.onBaseMuted),
+                style: TextStyle(fontSize: 11.5, color: t.surface.onBaseMuted),
               ),
             ),
         ];
@@ -971,7 +972,9 @@ class GluePage extends ConsumerWidget {
                   ],
                   onChanged: (v) => setS(() {
                     final picked = GroupState.fromKey(v, shared);
-                    if (picked != null) onState(picked.attribute, picked.expect);
+                    if (picked != null) {
+                      onState(picked.attribute, picked.expect);
+                    }
                   }),
                 );
               }),
@@ -1170,8 +1173,7 @@ class _HelperCard extends ConsumerWidget {
         final all = a['mode'] == 'all';
         // Named from the plugin's own declaration, so it reads "closed" for a
         // door group and "off" for a light group rather than "open = false".
-        final states =
-            sharedAttributes(ref.read(ruleRefsProvider), [
+        final states = sharedAttributes(ref.read(ruleRefsProvider), [
           for (final m in (a['member_ids'] as List? ?? const [])) '$m',
         ]);
         final named = states.where((s) => s.name == attribute).firstOrNull;

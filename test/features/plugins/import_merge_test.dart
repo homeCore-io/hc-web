@@ -15,15 +15,18 @@ void main() {
       // could only append reported "completed" and changed nothing. Buttons
       // never reached a config that had been imported once already.
       final rows = configured();
-      final outcome = mergeImportedRows(rows, [
-        {
-          'integration_id': 51,
-          'name': 'Outside Lights',
-          'kind': 'pico',
-          'all_buttons': [2, 4],
-          'button_names': ['Outside On', 'Outside Off'],
-        },
-      ], 'integration_id');
+      final outcome = mergeImportedRows(
+          rows,
+          [
+            {
+              'integration_id': 51,
+              'name': 'Outside Lights',
+              'kind': 'pico',
+              'all_buttons': [2, 4],
+              'button_names': ['Outside On', 'Outside Off'],
+            },
+          ],
+          'integration_id');
 
       expect(outcome.added, 0);
       expect(outcome.updated, 1);
@@ -37,11 +40,19 @@ void main() {
       // undo that just because the repeater disagrees.
       final rows = configured();
       rows.first['name'] = 'Patio Pico';
-      final outcome = mergeImportedRows(rows, [
-        {'integration_id': 51, 'name': 'Outside Lights', 'all_buttons': [2, 4]},
-      ], 'integration_id');
+      final outcome = mergeImportedRows(
+          rows,
+          [
+            {
+              'integration_id': 51,
+              'name': 'Outside Lights',
+              'all_buttons': [2, 4]
+            },
+          ],
+          'integration_id');
 
-      expect(rows.first['name'], 'Patio Pico', reason: 'the hand edit survives');
+      expect(rows.first['name'], 'Patio Pico',
+          reason: 'the hand edit survives');
       expect(rows.first['all_buttons'], [2, 4], reason: 'the new key lands');
       expect(outcome.updated, 1);
     });
@@ -49,9 +60,16 @@ void main() {
     test('a row with nothing new to say is skipped, not counted as updated',
         () {
       final rows = configured();
-      final outcome = mergeImportedRows(rows, [
-        {'integration_id': 60, 'name': 'Hallway 6 Button', 'kind': 'keypad'},
-      ], 'integration_id');
+      final outcome = mergeImportedRows(
+          rows,
+          [
+            {
+              'integration_id': 60,
+              'name': 'Hallway 6 Button',
+              'kind': 'keypad'
+            },
+          ],
+          'integration_id');
 
       expect(outcome.skipped, 1);
       expect(outcome.updated, 0);
@@ -60,9 +78,12 @@ void main() {
 
     test('genuinely new rows are still appended', () {
       final rows = configured();
-      final outcome = mergeImportedRows(rows, [
-        {'integration_id': 99, 'name': 'New Pico', 'kind': 'pico'},
-      ], 'integration_id');
+      final outcome = mergeImportedRows(
+          rows,
+          [
+            {'integration_id': 99, 'name': 'New Pico', 'kind': 'pico'},
+          ],
+          'integration_id');
 
       expect(outcome.added, 1);
       expect(rows, hasLength(3));
@@ -70,11 +91,17 @@ void main() {
 
     test('mixed batches report each outcome separately', () {
       final rows = configured();
-      final outcome = mergeImportedRows(rows, [
-        {'integration_id': 51, 'all_buttons': [2, 4]}, // enriched
-        {'integration_id': 60, 'name': 'Hallway 6 Button'}, // nothing new
-        {'integration_id': 99, 'name': 'New Pico'}, // added
-      ], 'integration_id');
+      final outcome = mergeImportedRows(
+          rows,
+          [
+            {
+              'integration_id': 51,
+              'all_buttons': [2, 4]
+            }, // enriched
+            {'integration_id': 60, 'name': 'Hallway 6 Button'}, // nothing new
+            {'integration_id': 99, 'name': 'New Pico'}, // added
+          ],
+          'integration_id');
 
       expect(outcome.updated, 1);
       expect(outcome.skipped, 1);
@@ -85,9 +112,12 @@ void main() {
       // A table with no `key_by` has no identity to match on, so the only
       // honest behaviour is to append.
       final rows = configured();
-      final outcome = mergeImportedRows(rows, [
-        {'name': 'Outside Lights'},
-      ], null);
+      final outcome = mergeImportedRows(
+          rows,
+          [
+            {'name': 'Outside Lights'},
+          ],
+          null);
 
       expect(outcome.added, 1);
       expect(rows, hasLength(3));
@@ -95,7 +125,8 @@ void main() {
 
     test('non-map entries are ignored rather than throwing', () {
       final rows = configured();
-      final outcome = mergeImportedRows(rows, ['nonsense', null], 'integration_id');
+      final outcome =
+          mergeImportedRows(rows, ['nonsense', null], 'integration_id');
       expect(outcome.added, 0);
       expect(rows, hasLength(2));
     });

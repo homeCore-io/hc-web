@@ -69,8 +69,7 @@ const kGlueTypes = <GlueType>[
       config: GlueConfig.number),
   GlueType('select', 'Select', 'One of a fixed set of options.',
       config: GlueConfig.select),
-  GlueType('text', 'Text', 'Holds a line of text.',
-      config: GlueConfig.text),
+  GlueType('text', 'Text', 'Holds a line of text.', config: GlueConfig.text),
   GlueType('button', 'Button', 'Fires rules when pressed.'),
   GlueType('datetime', 'Date & time', 'Holds a date or a time.',
       config: GlueConfig.datetime),
@@ -88,7 +87,17 @@ const kGlueTypes = <GlueType>[
 /// options can never be set to anything, and a group with no members is a
 /// device that reports on nothing. Creating those bare means editing them
 /// somewhere else immediately, so the dialog asks.
-enum GlueConfig { none, timer, counter, number, select, text, datetime, group, threshold }
+enum GlueConfig {
+  none,
+  timer,
+  counter,
+  number,
+  select,
+  text,
+  datetime,
+  group,
+  threshold
+}
 
 class GlueType {
   const GlueType(this.id, this.label, this.blurb,

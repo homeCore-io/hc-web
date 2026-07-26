@@ -196,8 +196,8 @@ class _PickerPanelState extends State<PickerPanel> {
   /// The step indicator, shown only when the panel is narrow enough that the
   /// panes have become a sequence.
   Widget _stepBar(HcTokens t, List<int> steps, int step) => Padding(
-        padding: EdgeInsets.symmetric(
-            horizontal: t.space.lg, vertical: t.space.sm),
+        padding:
+            EdgeInsets.symmetric(horizontal: t.space.lg, vertical: t.space.sm),
         child: Row(children: [
           for (var i = 0; i < steps.length; i++) ...[
             if (i > 0)
@@ -227,50 +227,50 @@ class _PickerPanelState extends State<PickerPanel> {
         padding:
             EdgeInsets.fromLTRB(t.space.lg, t.space.md, t.space.md, t.space.md),
         child: Flex(
-          direction: compact ? Axis.vertical : Axis.horizontal,
-          crossAxisAlignment:
-              compact ? CrossAxisAlignment.start : CrossAxisAlignment.center,
-          children: [
-          compact
-              ? Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(widget.kicker,
-                        style: TextStyle(
-                            fontSize: 10.5,
-                            letterSpacing: 1.4,
-                            fontWeight: FontWeight.w800,
-                            color: t.accent.active)),
-                    const SizedBox(height: 3),
-                    Text(widget.title,
-                        style: TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.w600,
-                            color: t.surface.onBase)),
-                    SizedBox(height: t.space.sm),
-                  ],
-                )
-              : Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(widget.kicker,
-                    style: TextStyle(
-                        fontSize: 10.5,
-                        letterSpacing: 1.4,
-                        fontWeight: FontWeight.w800,
-                        color: t.accent.active)),
-                const SizedBox(height: 3),
-                Text(widget.title,
-                    style: TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w600,
-                        color: t.surface.onBase)),
-              ],
-            ),
-          ),
-          widget.seg,
-        ]),
+            direction: compact ? Axis.vertical : Axis.horizontal,
+            crossAxisAlignment:
+                compact ? CrossAxisAlignment.start : CrossAxisAlignment.center,
+            children: [
+              compact
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(widget.kicker,
+                            style: TextStyle(
+                                fontSize: 10.5,
+                                letterSpacing: 1.4,
+                                fontWeight: FontWeight.w800,
+                                color: t.accent.active)),
+                        const SizedBox(height: 3),
+                        Text(widget.title,
+                            style: TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.w600,
+                                color: t.surface.onBase)),
+                        SizedBox(height: t.space.sm),
+                      ],
+                    )
+                  : Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(widget.kicker,
+                              style: TextStyle(
+                                  fontSize: 10.5,
+                                  letterSpacing: 1.4,
+                                  fontWeight: FontWeight.w800,
+                                  color: t.accent.active)),
+                          const SizedBox(height: 3),
+                          Text(widget.title,
+                              style: TextStyle(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w600,
+                                  color: t.surface.onBase)),
+                        ],
+                      ),
+                    ),
+              widget.seg,
+            ]),
       );
 
   Widget _footer(
@@ -282,8 +282,8 @@ class _PickerPanelState extends State<PickerPanel> {
   ) {
     final onLast = steps.isEmpty || step == steps.length - 1;
     return Padding(
-      padding:
-          EdgeInsets.symmetric(horizontal: t.space.lg, vertical: t.space.sm + 2),
+      padding: EdgeInsets.symmetric(
+          horizontal: t.space.lg, vertical: t.space.sm + 2),
       child: Row(children: [
         // The hint is the first thing to go when there is no room: on a phone
         // the buttons matter and a truncated sentence does not.
@@ -302,8 +302,7 @@ class _PickerPanelState extends State<PickerPanel> {
           compact,
           compact && step > 0
               ? _FooterBtn(
-                  label: 'Back',
-                  onTap: () => setState(() => _step = step - 1))
+                  label: 'Back', onTap: () => setState(() => _step = step - 1))
               : _FooterBtn(
                   label: 'Cancel', onTap: () => Navigator.pop(context)),
         ),
@@ -327,7 +326,6 @@ class _PickerPanelState extends State<PickerPanel> {
       ]),
     );
   }
-
 }
 
 class _FooterBtn extends StatelessWidget {

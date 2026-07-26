@@ -26,8 +26,8 @@ class RuleOutlinePane extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
-    final rows = outlineRows(rule,
-        labelFor: refs.labelFor, schemas: refs.schemaFor);
+    final rows =
+        outlineRows(rule, labelFor: refs.labelFor, schemas: refs.schemaFor);
 
     final children = <Widget>[];
     OutlineClause? clause;
@@ -90,7 +90,8 @@ class RuleOutlinePane extends StatelessWidget {
               const RailLabel('Outline'),
               const Spacer(),
               Text('read-only preview',
-                  style: TextStyle(fontSize: 10.5, color: t.surface.onBaseMuted)),
+                  style:
+                      TextStyle(fontSize: 10.5, color: t.surface.onBaseMuted)),
             ]),
           ),
           Expanded(
@@ -173,9 +174,7 @@ class RuleOutlinePane extends StatelessWidget {
                         fontSize: 10,
                         fontWeight: FontWeight.w800,
                         letterSpacing: 0.7,
-                        color: isStructure
-                            ? depthColor(row.depth + 1)
-                            : muted,
+                        color: isStructure ? depthColor(row.depth + 1) : muted,
                       )),
                   if (row.label.isNotEmpty) SizedBox(width: t.space.xs),
                 ],

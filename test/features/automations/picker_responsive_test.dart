@@ -19,9 +19,11 @@ Widget _panel({VoidCallback? onPrimary}) => MaterialApp(
                   width: 202,
                   compactLabel: 'Where',
                   child: Center(child: Text('RAIL'))),
-              PickerPane(compactLabel: 'What', child: Center(child: Text('LIST'))),
               PickerPane(
-                  compactLabel: 'Details', child: Center(child: Text('DETAIL'))),
+                  compactLabel: 'What', child: Center(child: Text('LIST'))),
+              PickerPane(
+                  compactLabel: 'Details',
+                  child: Center(child: Text('DETAIL'))),
             ],
           ),
         ),

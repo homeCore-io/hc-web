@@ -86,7 +86,6 @@ class PluginsNotifier extends AsyncNotifier<List<PluginEntry>> {
     }
     ref.invalidateSelf();
   }
-
 }
 
 final pluginsProvider =

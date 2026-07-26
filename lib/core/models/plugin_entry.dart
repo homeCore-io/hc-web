@@ -150,8 +150,7 @@ class PluginEntry {
         .where((v) => v.isNotEmpty)
         .toList();
     if (have.isEmpty) return false;
-    return have
-        .every((v) => RegistryPlugin.compareVersions(latest, v) > 0);
+    return have.every((v) => RegistryPlugin.compareVersions(latest, v) > 0);
   }
 
   /// A heartbeat within ~90s means the supervisor still hears from the child.

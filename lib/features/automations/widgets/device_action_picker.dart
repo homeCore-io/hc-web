@@ -126,8 +126,12 @@ const _templates = <(String bucket, String tag, String label, IconData icon)>[
   ('wait', 'WaitForExpression', 'Wait for an expression', Icons.code_outlined),
   ('wait', 'DelayPerMode', 'Wait, per mode', Icons.brightness_4_outlined),
   ('wait', 'CancelDelays', 'Cancel pending waits', Icons.cancel_outlined),
-  ('wait', 'CancelRuleTimers', "Cancel a rule's timers",
-      Icons.timer_off_outlined),
+  (
+    'wait',
+    'CancelRuleTimers',
+    "Cancel a rule's timers",
+    Icons.timer_off_outlined
+  ),
   ('notify', 'Notify', 'Send a notification', Icons.notifications_outlined),
   ('notify', 'LogMessage', 'Write to the log', Icons.article_outlined),
   ('notify', 'Comment', 'Leave a comment', Icons.sticky_note_2_outlined),
@@ -135,19 +139,39 @@ const _templates = <(String bucket, String tag, String label, IconData icon)>[
   ('vars', 'SetHubVariable', 'Set a hub variable', Icons.storage_outlined),
   ('vars', 'SetPrivateBoolean', 'Set a private flag', Icons.flag_outlined),
   ('vars', 'RunScript', 'Run a Rhai script', Icons.code_outlined),
-  ('rules', 'RunRuleActions', "Run another rule's actions",
-      Icons.playlist_play_outlined),
+  (
+    'rules',
+    'RunRuleActions',
+    "Run another rule's actions",
+    Icons.playlist_play_outlined
+  ),
   ('rules', 'PauseRule', 'Pause a rule', Icons.pause_circle_outline),
   ('rules', 'ResumeRule', 'Resume a rule', Icons.play_circle_outline),
   ('extras', 'FadeDevice', 'Fade a light over time', Icons.gradient_outlined),
-  ('extras', 'SetDeviceStatePerMode', 'Set device state, per mode',
-      Icons.tune_outlined),
-  ('extras', 'CaptureDeviceState', 'Capture device state',
-      Icons.bookmark_add_outlined),
-  ('extras', 'RestoreDeviceState', 'Restore device state',
-      Icons.restore_outlined),
-  ('extras', 'ActivateScenePerMode', 'Activate a scene, per mode',
-      Icons.auto_awesome_outlined),
+  (
+    'extras',
+    'SetDeviceStatePerMode',
+    'Set device state, per mode',
+    Icons.tune_outlined
+  ),
+  (
+    'extras',
+    'CaptureDeviceState',
+    'Capture device state',
+    Icons.bookmark_add_outlined
+  ),
+  (
+    'extras',
+    'RestoreDeviceState',
+    'Restore device state',
+    Icons.restore_outlined
+  ),
+  (
+    'extras',
+    'ActivateScenePerMode',
+    'Activate a scene, per mode',
+    Icons.auto_awesome_outlined
+  ),
   ('integration', 'PublishMqtt', 'Publish MQTT', Icons.podcasts_outlined),
   ('integration', 'CallService', 'Call an HTTP service', Icons.http_outlined),
   ('integration', 'FireEvent', 'Fire a custom event', Icons.bolt_outlined),
@@ -215,6 +239,7 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
 
   _Entry? _sel;
   DeviceCommand? _cmd;
+
   /// Chosen values, keyed by the payload key each control fills. A
   /// hand-written command has at most one entry; a declared action has one
   /// per parameter — "press {key} {count} times" needs both or it silently
@@ -270,7 +295,9 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
         _resetValues();
         for (final pr in declared.params) {
           final v = state[pr.name];
-          if (v != null) _values[pr.name] = pr.kind == CmdParamKind.select ? '$v' : v;
+          if (v != null) {
+            _values[pr.name] = pr.kind == CmdParamKind.select ? '$v' : v;
+          }
         }
         return;
       }
@@ -355,8 +382,7 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
       final matches = e.commands.where((c) => c.writes == attr).toList();
       if (matches.length == 1) return (matches.first, value);
       // A bool attribute contributes two commands; the value picks which.
-      final exact =
-          _firstOrNull(matches, (c) => c.key == 'attr:$attr:$value');
+      final exact = _firstOrNull(matches, (c) => c.key == 'attr:$attr:$value');
       if (exact != null) return (exact, null);
     }
     return (null, null);
@@ -577,7 +603,8 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
       case 'Delay':
         return HcNode('Delay', {'duration_secs': _secs, 'cancelable': false});
       case 'RepeatCount':
-        return HcNode('RepeatCount', {'count': _repeatCount, 'actions': <HcNode>[]});
+        return HcNode(
+            'RepeatCount', {'count': _repeatCount, 'actions': <HcNode>[]});
       case 'Notify':
         if (_message.trim().isEmpty) return null;
         return HcNode('Notify', {
@@ -653,11 +680,9 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
                 if (v) _room = _rooms.first;
               })),
       panes: [
-        PickerPane(
-            width: 202, compactLabel: 'Where', child: _rail(context)),
+        PickerPane(width: 202, compactLabel: 'Where', child: _rail(context)),
         PickerPane(flex: 3, compactLabel: 'What', child: _list(context)),
-        PickerPane(
-            flex: 3, compactLabel: 'Details', child: _detail(context)),
+        PickerPane(flex: 3, compactLabel: 'Details', child: _detail(context)),
       ],
       footerHint: _footHint(),
       primaryLabel: _editing ? 'Save action' : 'Add action',
@@ -874,7 +899,8 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
           SizedBox(height: t.space.sm),
           TextFormField(
             initialValue: _message,
-            decoration: fieldDecoration(t, hint: 'e.g. The garage is still open'),
+            decoration:
+                fieldDecoration(t, hint: 'e.g. The garage is still open'),
             onChanged: (v) => setState(() => _message = v),
           ),
           SizedBox(height: t.space.md),
@@ -916,7 +942,8 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
           TextFormField(
             initialValue: _message,
             maxLines: 3,
-            decoration: fieldDecoration(t, hint: 'A note for whoever reads this rule'),
+            decoration:
+                fieldDecoration(t, hint: 'A note for whoever reads this rule'),
             onChanged: (v) => setState(() => _message = v),
           ),
         ];
@@ -1046,13 +1073,17 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
           ),
         );
     return Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-      btn(Icons.remove, () => setState(() => _repeatCount = (_repeatCount - 1).clamp(1, 99))),
+      btn(Icons.remove,
+          () => setState(() => _repeatCount = (_repeatCount - 1).clamp(1, 99))),
       SizedBox(width: t.space.md),
       Text('$_repeatCount',
           style: TextStyle(
-              fontSize: 26, fontWeight: FontWeight.w700, color: t.accent.active)),
+              fontSize: 26,
+              fontWeight: FontWeight.w700,
+              color: t.accent.active)),
       SizedBox(width: t.space.md),
-      btn(Icons.add, () => setState(() => _repeatCount = (_repeatCount + 1).clamp(1, 99))),
+      btn(Icons.add,
+          () => setState(() => _repeatCount = (_repeatCount + 1).clamp(1, 99))),
     ]);
   }
 
@@ -1281,7 +1312,8 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
 
   Widget _selectControl(HcTokens t, CmdParam p) {
     final opts = p.options ?? const <String>[];
-    final v = (_values[p.name] as String?) ?? (opts.isEmpty ? null : opts.first);
+    final v =
+        (_values[p.name] as String?) ?? (opts.isEmpty ? null : opts.first);
     if (opts.isEmpty) {
       return Text('None available on this device.',
           style: TextStyle(fontSize: 12.5, color: t.surface.onBaseMuted));
@@ -1416,7 +1448,8 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
           case '{value}':
             parts.add(tok(val.isEmpty ? '…' : val, t.accent.active));
           default:
-            final named = RegExp(r'^\{([a-z_]+)\}$').firstMatch(piece)?.group(1);
+            final named =
+                RegExp(r'^\{([a-z_]+)\}$').firstMatch(piece)?.group(1);
             if (named != null) {
               final p = _firstOrNull(c.params, (x) => x.name == named);
               final text = p == null ? '' : _paramValueLabel(p);
@@ -1555,8 +1588,8 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
 
   /// The template half of "reads as" — the same tokenised phrasing the sentence
   /// editor will show once the node is in the rule.
-  List<Widget> _templateSentence(HcTokens t, _Entry e, Widget Function(String) word,
-      Widget Function(String, Color) tok) {
+  List<Widget> _templateSentence(HcTokens t, _Entry e,
+      Widget Function(String) word, Widget Function(String, Color) tok) {
     final a = t.accent.active;
     final b = t.accent.primary;
     String orDots(String s) => s.trim().isEmpty ? '…' : s.trim();

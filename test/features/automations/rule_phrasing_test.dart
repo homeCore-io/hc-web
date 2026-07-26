@@ -342,10 +342,15 @@ void _payloadShapes() {
       // the rule list as raw JSON. This does NOT weaken the rule above: one key
       // in, one key spoken.
       expect(describeState({'source': 'Netflix'}), 'set the source to Netflix');
-      expect(describeState({'tv_channel': '14.3'}), 'set the tv channel to 14.3');
+      expect(
+          describeState({'tv_channel': '14.3'}), 'set the tv channel to 14.3');
       expect(describeState({'eco': true}), 'turn the eco on');
       // Non-scalar values are not readable, so they still fall through.
-      expect(describeState({'color_xy': {'x': 0.3, 'y': 0.3}}), isNull);
+      expect(
+          describeState({
+            'color_xy': {'x': 0.3, 'y': 0.3}
+          }),
+          isNull);
     });
 
     test('an unnamed payload is SHOWN, never swallowed', () {
@@ -382,7 +387,11 @@ void _payloadShapes() {
                 {'name': 'app', 'kind': 'enum'}
               ],
             },
-            {'id': 'unjoin', 'label': 'Ungroup', 'sentence': 'ungroup {device}'},
+            {
+              'id': 'unjoin',
+              'label': 'Ungroup',
+              'sentence': 'ungroup {device}'
+            },
             {'id': 'nameless', 'label': 'Nameless'},
           ],
         });

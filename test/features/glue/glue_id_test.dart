@@ -6,8 +6,8 @@ void main() {
   group('a helper id follows from its kind and name', () {
     test('the kind is the prefix', () {
       expect(glueIdFor('timer', 'Bathroom'), 'timer_bathroom');
-      expect(glueIdFor('switch', 'Auto Garage Door'),
-          'switch_auto_garage_door');
+      expect(
+          glueIdFor('switch', 'Auto Garage Door'), 'switch_auto_garage_door');
       expect(glueIdFor('counter', 'Coffee Cups'), 'counter_coffee_cups');
     });
 
@@ -15,8 +15,8 @@ void main() {
       // The helpers that exist were hand-named this way: `timer_bathroom`,
       // not `timer_bathroom_timer`.
       expect(glueIdFor('timer', 'Bathroom Timer'), 'timer_bathroom');
-      expect(glueIdFor('timer', 'Deck Lights Off Timer'),
-          'timer_deck_lights_off');
+      expect(
+          glueIdFor('timer', 'Deck Lights Off Timer'), 'timer_deck_lights_off');
     });
 
     test('nothing to slug yields nothing, so Create stays disabled', () {
@@ -49,8 +49,17 @@ void main() {
       // Mirrors GLUE_TYPES in hc-api: a kind missing here is a kind nobody can
       // create, which is the bug this page exists to fix.
       const fromHub = [
-        'switch', 'timer', 'counter', 'number', 'select', 'text',
-        'button', 'datetime', 'group', 'threshold', 'schedule',
+        'switch',
+        'timer',
+        'counter',
+        'number',
+        'select',
+        'text',
+        'button',
+        'datetime',
+        'group',
+        'threshold',
+        'schedule',
       ];
       expect(kGlueTypes.map((g) => g.id).toSet(), fromHub.toSet());
     });

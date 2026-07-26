@@ -187,9 +187,13 @@ void main() {
 
   group('sorting', () {
     test('active first — the handful that are on ARE the story', () {
+      // Name the sort. This used to lean on DeviceQuery's default, which
+      // 4a688af changed to A–Z — so the test went red while the behaviour it
+      // describes still worked, and said "sorting is broken" when it wasn't.
       final g = runQuery(
         _house,
-        const DeviceQuery(group: DeviceGroup.none),
+        const DeviceQuery(
+            group: DeviceGroup.none, sort: DeviceSort.activeFirst),
       );
       final ids = g.single.devices.map((d) => d.id).toList();
       expect(ids.take(2), containsAll(['lamp', 'accent']));

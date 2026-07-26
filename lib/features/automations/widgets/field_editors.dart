@@ -611,7 +611,6 @@ extension<T> on List<T> {
   T? elementAtOrNull(int i) => i >= 0 && i < length ? this[i] : null;
 }
 
-
 /// One of a boolean attribute's two named states.
 ///
 /// A pair of these replaces the JSON box on a value field: the plugin says a

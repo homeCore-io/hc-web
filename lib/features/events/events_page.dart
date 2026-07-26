@@ -105,8 +105,9 @@ Color eventColor(HcTokens t, String type, {bool? available}) {
       }
       for (final base in const ['temperature', 'illuminance']) {
         if (changed.contains(base)) {
-          changed =
-              changed.where((k) => k == base || !k.startsWith('${base}_')).toList();
+          changed = changed
+              .where((k) => k == base || !k.startsWith('${base}_'))
+              .toList();
         }
       }
       final parts = <String>[];
@@ -123,7 +124,10 @@ Color eventColor(HcTokens t, String type, {bool? available}) {
             : '${_attrLabel(k)} $now');
       }
       if (changed.length > 3) parts.add('+${changed.length - 3} more');
-      return (subject: subject(), detail: parts.isEmpty ? null : parts.join(' · '));
+      return (
+        subject: subject(),
+        detail: parts.isEmpty ? null : parts.join(' · ')
+      );
     case 'device_availability_changed':
       return (
         subject: subject(),
@@ -143,12 +147,14 @@ Color eventColor(HcTokens t, String type, {bool? available}) {
       );
     case 'plugin_registered':
       return (
-        subject: humanize((data['plugin_id'] as String?)?.replaceFirst('plugin.', '')),
+        subject: humanize(
+            (data['plugin_id'] as String?)?.replaceFirst('plugin.', '')),
         detail: 'registered'
       );
     case 'plugin_offline':
       return (
-        subject: humanize((data['plugin_id'] as String?)?.replaceFirst('plugin.', '')),
+        subject: humanize(
+            (data['plugin_id'] as String?)?.replaceFirst('plugin.', '')),
         detail: 'went offline'
       );
     case 'system_alert':
@@ -168,7 +174,8 @@ Color eventColor(HcTokens t, String type, {bool? available}) {
 /// these is what keeps "Office Motion — Illuminance 27 lux" from drowning under
 /// nine fields nobody watches.
 bool _noisyAttr(String key) {
-  if (key.contains('.')) return true; // WLED's led.rgbw, presets.count, seg.count…
+  // WLED's led.rgbw, presets.count, seg.count…
+  if (key.contains('.')) return true;
   if (RegExp(r'^cc\d+_').hasMatch(key)) return true;
   if (key.endsWith('_unit') ||
       key.endsWith('_valid') ||
@@ -178,10 +185,29 @@ bool _noisyAttr(String key) {
     return true;
   }
   const noise = {
-    'brand', 'mac', 'kind', 'name', 'enabled', 'arch', 'core_version',
-    'freeheap', 'uptime_secs', 'product', 'firmware', 'ver', 'vid', 'fs',
-    'resource_type', 'battery_state', 'wifi_signal', 'ip', 'device_time',
-    'time', 'rssi', 'ssid', 'signal',
+    'brand',
+    'mac',
+    'kind',
+    'name',
+    'enabled',
+    'arch',
+    'core_version',
+    'freeheap',
+    'uptime_secs',
+    'product',
+    'firmware',
+    'ver',
+    'vid',
+    'fs',
+    'resource_type',
+    'battery_state',
+    'wifi_signal',
+    'ip',
+    'device_time',
+    'time',
+    'rssi',
+    'ssid',
+    'signal',
   };
   return noise.contains(key);
 }
@@ -190,7 +216,9 @@ bool _noisyAttr(String key) {
 /// row reads "Humidity 62.7% → 64.5%", not "Humidity Pct 62.7% → 64.5%".
 String _attrLabel(String key) {
   for (final suf in const ['_pct', '_w', '_kwh', '_lux', '_ppm', '_mirek']) {
-    if (key.endsWith(suf)) return humanize(key.substring(0, key.length - suf.length));
+    if (key.endsWith(suf)) {
+      return humanize(key.substring(0, key.length - suf.length));
+    }
   }
   return humanize(key);
 }
@@ -201,9 +229,8 @@ String _fmtVal(Object? v, String key, Map<dynamic, dynamic> ctx) {
   if (v == null) return '—';
   if (v is bool) return v ? 'on' : 'off';
   if (v is num) {
-    final n = v == v.roundToDouble()
-        ? v.toStringAsFixed(0)
-        : v.toStringAsFixed(1);
+    final n =
+        v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(1);
     if (key.startsWith('temperature')) {
       final u = ctx['temperature_unit'];
       final unit = u is String ? u.toUpperCase().replaceAll('°', '') : '';

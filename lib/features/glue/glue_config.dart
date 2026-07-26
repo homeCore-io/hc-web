@@ -80,7 +80,9 @@ Map<String, Object?> glueConfigFor(
       };
 
     case GlueConfig.select:
-      return {'options': [...options]};
+      return {
+        'options': [...options]
+      };
 
     case GlueConfig.group:
       return {

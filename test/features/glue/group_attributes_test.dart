@@ -105,7 +105,9 @@ void main() {
     });
 
     test('an unnamed boolean still gets a usable label', () {
-      final refs = RuleRefs(devices: [_dev('x', {'foo_bar': true})]);
+      final refs = RuleRefs(devices: [
+        _dev('x', {'foo_bar': true})
+      ]);
       final a = sharedAttributes(refs, ['x']).single;
       expect(a.states.first.label, 'Foo bar');
       expect(a.pair, 'Foo bar / not foo bar');

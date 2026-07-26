@@ -88,7 +88,8 @@ class ModesPage extends ConsumerWidget {
     // Ids already taken, so a clash is refused here rather than by the API
     // after the dialog has closed.
     final taken = {
-      for (final m in ref.read(modesProvider).valueOrNull ?? const <ModeState>[])
+      for (final m
+          in ref.read(modesProvider).valueOrNull ?? const <ModeState>[])
         m.id,
     };
 

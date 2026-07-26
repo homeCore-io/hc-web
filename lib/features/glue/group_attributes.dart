@@ -84,7 +84,8 @@ List<GroupAttribute> sharedAttributes(RuleRefs refs, List<String> members) {
     if (device == null) return out;
 
     final schema = refs.schemaFor(ref);
-    for (final e in schema?.attributes.entries ?? const <MapEntry<String, AttributeSchema>>[]) {
+    for (final e in schema?.attributes.entries ??
+        const <MapEntry<String, AttributeSchema>>[]) {
       if (e.value.kind == AttributeKind.bool_) out.add(e.key);
     }
     for (final e in device.state.entries) {
@@ -129,7 +130,6 @@ GroupAttribute? _describe(RuleRefs refs, List<String> members, String name) {
   final word = name.replaceAll('_', ' ');
   return GroupAttribute(name, word, 'not $word');
 }
-
 
 /// The numeric attributes of one device — what a threshold can watch.
 ///

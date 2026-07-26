@@ -81,7 +81,8 @@ class _Entry {
 const _cats = [
   PickerCat('all', 'All devices', Icons.list_alt_outlined, 'Quick'),
   PickerCat('light', 'Lights', Icons.lightbulb_outline, 'Controls'),
-  PickerCat('switch', 'Switches & Outlets', Icons.toggle_on_outlined, 'Controls'),
+  PickerCat(
+      'switch', 'Switches & Outlets', Icons.toggle_on_outlined, 'Controls'),
   PickerCat('cover', 'Shades & Covers', Icons.blinds_outlined, 'Controls'),
   PickerCat('lock', 'Locks', Icons.lock_outline, 'Controls'),
   PickerCat('climate', 'Climate', Icons.hvac_outlined, 'Controls'),
@@ -96,15 +97,39 @@ const _cats = [
 const _templates = <(String bucket, String tag, String label, IconData icon)>[
   ('time', 'TimeOfDay', 'At a time of day', Icons.schedule_outlined),
   ('time', 'SunEvent', 'At a solar event', Icons.wb_twilight_outlined),
-  ('hub', 'ModeChanged', 'When a mode turns on / off', Icons.brightness_4_outlined),
-  ('other', 'WebhookReceived', 'When a webhook is called', Icons.webhook_outlined),
-  ('other', 'ManualTrigger', 'By hand / from another rule', Icons.touch_app_outlined),
+  (
+    'hub',
+    'ModeChanged',
+    'When a mode turns on / off',
+    Icons.brightness_4_outlined
+  ),
+  (
+    'other',
+    'WebhookReceived',
+    'When a webhook is called',
+    Icons.webhook_outlined
+  ),
+  (
+    'other',
+    'ManualTrigger',
+    'By hand / from another rule',
+    Icons.touch_app_outlined
+  ),
   ('time', 'Cron', 'On a cron schedule', Icons.event_repeat_outlined),
   ('time', 'Periodic', 'Every N minutes / hours', Icons.timelapse_outlined),
   ('time', 'CalendarEvent', 'On a calendar event', Icons.event_outlined),
-  ('hub', 'HubVariableChanged', 'When a hub variable changes',
-      Icons.data_object_outlined),
-  ('other', 'SystemStarted', 'When HomeCore starts', Icons.restart_alt_outlined),
+  (
+    'hub',
+    'HubVariableChanged',
+    'When a hub variable changes',
+    Icons.data_object_outlined
+  ),
+  (
+    'other',
+    'SystemStarted',
+    'When HomeCore starts',
+    Icons.restart_alt_outlined
+  ),
   ('integration', 'CustomEvent', 'On a custom event', Icons.bolt_outlined),
   ('integration', 'MqttMessage', 'On an MQTT message', Icons.podcasts_outlined),
 ];
@@ -138,7 +163,10 @@ String _bucketOf(DeviceFacet f) => switch (f) {
       DeviceFacet.dimmableLight ||
       DeviceFacet.colorLight =>
         'light',
-      DeviceFacet.switch_ || DeviceFacet.outlet || DeviceFacet.siren => 'switch',
+      DeviceFacet.switch_ ||
+      DeviceFacet.outlet ||
+      DeviceFacet.siren =>
+        'switch',
       DeviceFacet.cover || DeviceFacet.garage => 'cover',
       DeviceFacet.lock => 'lock',
       DeviceFacet.climate => 'climate',
@@ -461,11 +489,9 @@ class _DeviceTriggerPickerState extends State<DeviceTriggerPicker> {
                 if (v) _room = _rooms.isEmpty ? '' : _rooms.first;
               })),
       panes: [
-        PickerPane(
-            width: 202, compactLabel: 'Where', child: _rail(context)),
+        PickerPane(width: 202, compactLabel: 'Where', child: _rail(context)),
         PickerPane(flex: 3, compactLabel: 'What', child: _list(context)),
-        PickerPane(
-            flex: 4, compactLabel: 'Details', child: _detail(context)),
+        PickerPane(flex: 4, compactLabel: 'Details', child: _detail(context)),
       ],
       footerHint: '${_entries.where((e) => e.kind == _Kind.device).length} '
           'devices · time · sun · modes · webhook',
@@ -675,7 +701,9 @@ class _DeviceTriggerPickerState extends State<DeviceTriggerPicker> {
               onChanged: (v) => setState(() => _button = v),
             )
           else
-            _dropdown(t, _button.isEmpty ? '· any ·' : _button,
+            _dropdown(
+                t,
+                _button.isEmpty ? '· any ·' : _button,
                 ['· any ·', ...e.buttons],
                 (v) => setState(() => _button = v == '· any ·' ? '' : v!)),
           SizedBox(height: t.space.xs),
@@ -707,8 +735,9 @@ class _DeviceTriggerPickerState extends State<DeviceTriggerPicker> {
         return [
           const RailLabel('Attribute'),
           SizedBox(height: t.space.sm),
-          _dropdown(t, _attr.isEmpty ? '· any ·' : _attr,
-              ['· any ·', ...e.attrs], (v) {
+          _dropdown(
+              t, _attr.isEmpty ? '· any ·' : _attr, ['· any ·', ...e.attrs],
+              (v) {
             setState(() => _attr = v == '· any ·' ? '' : v!);
           }),
         ];
@@ -744,8 +773,7 @@ class _DeviceTriggerPickerState extends State<DeviceTriggerPicker> {
                   t,
                   _sentenceCase(transitions[i].state.transition),
                   _valueText == '${transitions[i].value}',
-                  () => setState(
-                      () => _valueText = '${transitions[i].value}'),
+                  () => setState(() => _valueText = '${transitions[i].value}'),
                 ),
               ],
             ]),
@@ -818,7 +846,8 @@ class _DeviceTriggerPickerState extends State<DeviceTriggerPicker> {
     switch (tag) {
       case 'SystemStarted':
         return [
-          _note(t,
+          _note(
+              t,
               'Fires once each time HomeCore starts — useful for restoring state '
               'after a restart.'),
         ];
@@ -944,8 +973,8 @@ class _DeviceTriggerPickerState extends State<DeviceTriggerPicker> {
             children: [
               for (final d in _weekdays)
                 _dayChip(t, d, _days.contains(d), () {
-                  setState(() =>
-                      _days.contains(d) ? _days.remove(d) : _days.add(d));
+                  setState(
+                      () => _days.contains(d) ? _days.remove(d) : _days.add(d));
                 }),
             ],
           ),
@@ -973,10 +1002,7 @@ class _DeviceTriggerPickerState extends State<DeviceTriggerPicker> {
             Text('No modes defined.',
                 style: TextStyle(color: t.surface.onBaseMuted, fontSize: 12.5))
           else
-            _dropdown(
-                t,
-                _modeId,
-                [for (final m in widget.refs.modes) m.id],
+            _dropdown(t, _modeId, [for (final m in widget.refs.modes) m.id],
                 (v) => setState(() => _modeId = v!),
                 labelFor: (id) => widget.refs.modes
                     .firstWhere((m) => m.id == id,
@@ -1048,7 +1074,8 @@ class _DeviceTriggerPickerState extends State<DeviceTriggerPicker> {
             border: Border.all(color: t.stroke.hairline),
           ),
           child: Row(children: [
-            Icon(Icons.schedule_outlined, size: 16, color: t.surface.onBaseMuted),
+            Icon(Icons.schedule_outlined,
+                size: 16, color: t.surface.onBaseMuted),
             const Spacer(),
             Text(hhmm,
                 style: TextStyle(
@@ -1144,8 +1171,8 @@ class _DeviceTriggerPickerState extends State<DeviceTriggerPicker> {
   }
 
   Widget _preview(HcTokens t, _Entry e) {
-    Widget word(String s) => Text(s,
-        style: TextStyle(fontSize: 13.5, color: t.surface.onBaseMuted));
+    Widget word(String s) =>
+        Text(s, style: TextStyle(fontSize: 13.5, color: t.surface.onBaseMuted));
     Widget tok(String s, Color c) => Container(
           padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 2),
           decoration: BoxDecoration(
@@ -1230,8 +1257,7 @@ class _DeviceTriggerPickerState extends State<DeviceTriggerPicker> {
           return [
             word('at'),
             tok(_sun.toLowerCase(), a),
-            if (_offset != 0)
-              tok('${_offset > 0 ? '+' : ''}$_offset min', a),
+            if (_offset != 0) tok('${_offset > 0 ? '+' : ''}$_offset min', a),
           ];
         case 'ModeChanged':
           final name = widget.refs.modes
@@ -1251,7 +1277,10 @@ class _DeviceTriggerPickerState extends State<DeviceTriggerPicker> {
             word('is called'),
           ];
         case 'Cron':
-          return [word('on the schedule'), tok(_cron.trim().isEmpty ? '…' : _cron.trim(), a)];
+          return [
+            word('on the schedule'),
+            tok(_cron.trim().isEmpty ? '…' : _cron.trim(), a)
+          ];
         case 'Periodic':
           return [
             word('every'),

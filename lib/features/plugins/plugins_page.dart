@@ -36,8 +36,7 @@ class PluginsPage extends ConsumerWidget {
     };
     final upgrades = {
       for (final p in plugins)
-        if (registry[p.pluginId]?.updateFrom(p.installedVersion)
-            case final v?)
+        if (registry[p.pluginId]?.updateFrom(p.installedVersion) case final v?)
           p.pluginId: v,
     };
 

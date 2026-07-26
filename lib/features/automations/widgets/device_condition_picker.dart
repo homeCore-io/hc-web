@@ -99,7 +99,12 @@ const _templates = <(String bucket, String tag, String label, IconData icon)>[
   ('script', 'ScriptExpression', 'Rhai expression', Icons.code_outlined),
   // Device-scoped, but they read as a question about time rather than about
   // the device's current value, so they live with the other time conditions.
-  ('time', 'TimeElapsed', 'Unchanged for a while', Icons.hourglass_bottom_outlined),
+  (
+    'time',
+    'TimeElapsed',
+    'Unchanged for a while',
+    Icons.hourglass_bottom_outlined
+  ),
   ('time', 'DeviceLastChange', 'Last changed by…', Icons.history_outlined),
 ];
 
@@ -387,11 +392,9 @@ class _DeviceConditionPickerState extends State<DeviceConditionPicker> {
                 if (v) _room = _rooms.isEmpty ? '' : _rooms.first;
               })),
       panes: [
-        PickerPane(
-            width: 202, compactLabel: 'Where', child: _rail(context)),
+        PickerPane(width: 202, compactLabel: 'Where', child: _rail(context)),
         PickerPane(flex: 3, compactLabel: 'What', child: _list(context)),
-        PickerPane(
-            flex: 4, compactLabel: 'Details', child: _detail(context)),
+        PickerPane(flex: 4, compactLabel: 'Details', child: _detail(context)),
       ],
       footerHint: '${_entries.where((e) => e.kind == _Kind.device).length} '
           'devices · time · hub · logic · expressions',
@@ -563,13 +566,19 @@ class _DeviceConditionPickerState extends State<DeviceConditionPicker> {
         const RailLabel('Is'),
         SizedBox(height: t.space.sm),
         Row(children: [
-          _toggleBtn(t, _sentenceCase(states[true].label), _valueText == 'true',
+          _toggleBtn(
+              t,
+              _sentenceCase(states[true].label),
+              _valueText == 'true',
               () => setState(() {
                     _op = '==';
                     _valueText = 'true';
                   })),
           SizedBox(width: t.space.xs),
-          _toggleBtn(t, _sentenceCase(states[false].label), _valueText == 'false',
+          _toggleBtn(
+              t,
+              _sentenceCase(states[false].label),
+              _valueText == 'false',
               () => setState(() {
                     _op = '==';
                     _valueText = 'false';
@@ -693,7 +702,9 @@ class _DeviceConditionPickerState extends State<DeviceConditionPicker> {
         };
         if (_deviceRef.isEmpty && refs.isNotEmpty) _deviceRef = refs.first;
         final attrs = widget.refs.attributesOf(_deviceRef);
-        if (_elapsedAttr.isEmpty && attrs.isNotEmpty) _elapsedAttr = attrs.first;
+        if (_elapsedAttr.isEmpty && attrs.isNotEmpty) {
+          _elapsedAttr = attrs.first;
+        }
         return [
           const RailLabel('Device'),
           SizedBox(height: t.space.sm),

@@ -414,58 +414,56 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
 
   // -- banners -------------------------------------------------------------
 
-
   /// The editor itself — the scrolling clause list, unchanged. Extracted so the
   /// outline pane can sit beside it without either knowing about the other.
   Widget _editorList(BuildContext context, HcRule rule) {
     final refs = ref.watch(ruleRefsProvider);
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-              children: [
-                // Core sets `error` on a rule whose file failed to parse or
-                // whose devices were deleted. It never executes — say so loudly.
-                if (rule.hasError) _banner(context, rule.error!, isError: true),
-                if (_saveError != null)
-                  _banner(context, _saveError!, isError: true),
-                if (_wouldFire != null) _testBanner(context),
-                _ruleHeader(rule),
+      children: [
+        // Core sets `error` on a rule whose file failed to parse or
+        // whose devices were deleted. It never executes — say so loudly.
+        if (rule.hasError) _banner(context, rule.error!, isError: true),
+        if (_saveError != null) _banner(context, _saveError!, isError: true),
+        if (_wouldFire != null) _testBanner(context),
+        _ruleHeader(rule),
 
-                // The clauses read down the page as one sentence about the
-                // house, joined by a rail. There is no card around them: a card
-                // says "this is a form", and a rule is a paragraph.
-                HcClause(
-                  label: 'When',
-                  // The rail node lights when the trigger's device is already in
-                  // the state the rule waits for, so a rule shows you where the
-                  // house actually IS, standing still.
-                  live: _triggerIsLive(rule, refs),
-                  child: _triggerEditor(rule, refs),
-                ),
-                HcClause(
-                  label: 'And if',
-                  child: ConditionTree(
-                    conditions: rule.conditions,
-                    refs: refs,
-                    results: _testResults,
-                    onChanged: _touch,
-                  ),
-                ),
-                HcClause(
-                  label: 'Then',
-                  last: true,
-                  child: ActionTree(
-                    actions: rule.actions,
-                    refs: refs,
-                    onChanged: _touch,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                _Section(
-                  title: 'Advanced',
-                  initiallyExpanded: false,
-                  child: _advanced(rule),
-                ),
-              ],
+        // The clauses read down the page as one sentence about the
+        // house, joined by a rail. There is no card around them: a card
+        // says "this is a form", and a rule is a paragraph.
+        HcClause(
+          label: 'When',
+          // The rail node lights when the trigger's device is already in
+          // the state the rule waits for, so a rule shows you where the
+          // house actually IS, standing still.
+          live: _triggerIsLive(rule, refs),
+          child: _triggerEditor(rule, refs),
+        ),
+        HcClause(
+          label: 'And if',
+          child: ConditionTree(
+            conditions: rule.conditions,
+            refs: refs,
+            results: _testResults,
+            onChanged: _touch,
+          ),
+        ),
+        HcClause(
+          label: 'Then',
+          last: true,
+          child: ActionTree(
+            actions: rule.actions,
+            refs: refs,
+            onChanged: _touch,
+          ),
+        ),
+        const SizedBox(height: 8),
+        _Section(
+          title: 'Advanced',
+          initiallyExpanded: false,
+          child: _advanced(rule),
+        ),
+      ],
     );
   }
 
@@ -841,7 +839,8 @@ class _MetaLine extends ConsumerWidget {
               TextField(
                 controller: controller,
                 autofocus: available.isEmpty,
-                decoration: fieldDecoration(t, hint: 'deck, vacation, security'),
+                decoration:
+                    fieldDecoration(t, hint: 'deck, vacation, security'),
                 onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
               ),
             ],
@@ -1055,7 +1054,6 @@ class _MetaChip extends StatelessWidget {
   }
 }
 
-
 /// A titled block on a token surface. Advanced starts collapsed — but the
 /// clauses above it never do: a rule you cannot see all of is one you get wrong.
 class _Section extends StatefulWidget {
@@ -1122,7 +1120,6 @@ class _SectionState extends State<_Section> {
     );
   }
 }
-
 
 /// Test seam for the rule meta line.
 ///

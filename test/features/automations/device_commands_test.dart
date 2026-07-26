@@ -223,14 +223,14 @@ void main() {
     /// hc-roku's real schema, abridged to its writable half — the case that
     /// motivated this: a Roku used to offer Play and Pause and nothing else.
     DeviceSchema rokuSchema() => const DeviceSchema({
-          'on': AttributeSchema(
-              kind: AttributeKind.bool_, displayName: 'Power'),
+          'on':
+              AttributeSchema(kind: AttributeKind.bool_, displayName: 'Power'),
           'state': AttributeSchema(
               kind: AttributeKind.enum_,
               displayName: 'Playback',
               options: ['playing', 'paused', 'stopped']),
-          'source':
-              AttributeSchema(kind: AttributeKind.string, displayName: 'Source'),
+          'source': AttributeSchema(
+              kind: AttributeKind.string, displayName: 'Source'),
           'tv_channel': AttributeSchema(
               kind: AttributeKind.string, displayName: 'TV channel'),
           'media_title': AttributeSchema(
@@ -330,7 +330,8 @@ void main() {
     });
 
     test('every derived command carries phrasing for the preview', () {
-      for (final c in commandsFor(roku()).where((c) => c.key.startsWith('attr:'))) {
+      for (final c
+          in commandsFor(roku()).where((c) => c.key.startsWith('attr:'))) {
         expect(c.sentence, isNotNull, reason: c.key);
         expect(c.sentence, contains('{device}'), reason: c.key);
       }
@@ -503,7 +504,8 @@ void main() {
         }
       ]);
       final beam = _cmd(d, 'act:beam');
-      expect(beam.params, isEmpty, reason: 'an unrenderable kind has no control');
+      expect(beam.params, isEmpty,
+          reason: 'an unrenderable kind has no control');
       // The action itself survives as a bare verb rather than vanishing.
       expect(_stateOf(beam, {}), {'action': 'beam'});
     });
@@ -526,7 +528,11 @@ void main() {
 DeviceSchema _rokuDeclared() => DeviceSchema.fromJson({
       'attributes': {
         'on': {'kind': 'bool', 'writable': true, 'display_name': 'Power'},
-        'source': {'kind': 'string', 'writable': true, 'display_name': 'Source'},
+        'source': {
+          'kind': 'string',
+          'writable': true,
+          'display_name': 'Source'
+        },
         'tv_channel': {'kind': 'string', 'writable': true},
         'media_title': {'kind': 'string', 'writable': false},
       },
@@ -601,4 +607,3 @@ DeviceState _declaring(List<Map<String, Object?>> actions) => DeviceState(
 /// The `state` map a command builds from a filled-in form.
 Map<String, Object?> _stateOf(DeviceCommand c, Map<String, Object?> values) =>
     (c.buildWith(values)['state'] as Map).cast<String, Object?>();
-
