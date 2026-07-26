@@ -4,6 +4,8 @@ import '../../../core/devices/presentation.dart';
 import '../../../core/models/device_state.dart';
 import '../../../core/rules/node.dart';
 import '../../../core/rules/schema.dart';
+import '../../../core/schema/attribute_policy.dart';
+import '../../../core/schema/device_schema.dart';
 import '../../../design/tokens.dart';
 import 'device_picker_shell.dart';
 import 'editor_style.dart';
@@ -541,18 +543,62 @@ class _DeviceConditionPickerState extends State<DeviceConditionPicker> {
         ]),
       ];
 
-  List<Widget> _deviceControls(HcTokens t, _Entry e) => [
-        const RailLabel('Attribute'),
+  List<Widget> _deviceControls(HcTokens t, _Entry e) {
+    final states = _boolStatesOf(e, _attr);
+    return [
+      const RailLabel('Attribute'),
+      SizedBox(height: t.space.sm),
+      _dropdown(t, _attr, e.attrs, (v) {
+        setState(() {
+          _attr = v!;
+          _valueText = '${e.device!.state[_attr] ?? 'true'}';
+        });
+      }),
+      SizedBox(height: t.space.md),
+      // A boolean has exactly two states, and both deserve a name. The
+      // comparison dropdown is dead weight here — "not equal to true" is a long
+      // way round to "is closed" — so a named pair replaces the whole
+      // comparison-and-value pair of controls.
+      if (states != null) ...[
+        const RailLabel('Is'),
         SizedBox(height: t.space.sm),
-        _dropdown(t, _attr, e.attrs, (v) {
-          setState(() {
-            _attr = v!;
-            _valueText = '${e.device!.state[_attr] ?? 'true'}';
-          });
-        }),
-        SizedBox(height: t.space.md),
+        Row(children: [
+          _toggleBtn(t, _sentenceCase(states[true].label), _valueText == 'true',
+              () => setState(() {
+                    _op = '==';
+                    _valueText = 'true';
+                  })),
+          SizedBox(width: t.space.xs),
+          _toggleBtn(t, _sentenceCase(states[false].label), _valueText == 'false',
+              () => setState(() {
+                    _op = '==';
+                    _valueText = 'false';
+                  })),
+        ]),
+      ] else
         ..._compareAndValue(t),
-      ];
+    ];
+  }
+
+  /// The names of a boolean attribute's two states, or null when the attribute
+  /// is not boolean and a comparison is the honest control.
+  BoolStates? _boolStatesOf(_Entry e, String attr) {
+    if (attr.isEmpty) return null;
+    final schema = e.device?.schema?[attr];
+    if (schema?.kind != AttributeKind.bool_ && e.device?.state[attr] is! bool) {
+      return null;
+    }
+    // Never null for a boolean: the lexicon covers the common names and the
+    // mechanical fallback covers the rest, so there are always two rows.
+    return boolStatesFor(attr, schema) ??
+        BoolStates(
+          StateLabel(attr.replaceAll('_', ' ')),
+          StateLabel('not ${attr.replaceAll('_', ' ')}'),
+        );
+  }
+
+  static String _sentenceCase(String s) =>
+      s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
 
   List<Widget> _compareAndValue(HcTokens t) => [
         const RailLabel('Comparison'),

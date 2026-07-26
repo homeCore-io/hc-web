@@ -38,6 +38,63 @@ enum AttributeKind {
   bool get isNumeric => this == integer || this == float || this == colorTemp;
 }
 
+/// One state of a boolean attribute, as the plugin names it.
+///
+/// Two forms because English will not derive one from the other: `open` →
+/// "opens", but `locked` → "locks" and `motion` → "detects motion". A condition
+/// reads [label] ("while the door is open"); a trigger reads [transition]
+/// ("when the door opens").
+class StateLabel {
+  const StateLabel(this.label, {this.verb});
+
+  /// The adjective: `open`, `closed`, `locked`.
+  final String label;
+
+  /// The transition verb, when the plugin gave one.
+  final String? verb;
+
+  /// What a trigger row should say. Never empty — a client that has to invent
+  /// one is back to guessing at plugin semantics.
+  String get transition => verb ?? 'becomes $label';
+
+  static StateLabel? fromJson(Object? json) {
+    if (json is! Map) return null;
+    final label = json['label'];
+    if (label is! String || label.isEmpty) return null;
+    return StateLabel(label, verb: json['verb'] as String?);
+  }
+}
+
+/// What a boolean attribute's two states are called.
+///
+/// **A boolean attribute is two events, not one.** A contact sensor has a single
+/// `open` attribute, so a picker that lists *attributes* offers one row — and
+/// catching the door closing becomes "open, but Not", a logic gate standing in
+/// for a word the device already knows.
+///
+/// The client carries a fallback lexicon for the common attribute names (see
+/// `boolStatesFor`), but a plugin that declares the pair wins over it: the
+/// plugin knows, and `contact` proves the client cannot — on a contact sensor
+/// TRUE means the circuit is closed, i.e. the door is *shut*.
+class BoolStates {
+  const BoolStates(this.whenTrue, this.whenFalse);
+
+  final StateLabel whenTrue;
+  final StateLabel whenFalse;
+
+  StateLabel operator [](bool value) => value ? whenTrue : whenFalse;
+
+  static BoolStates? fromJson(Object? json) {
+    if (json is! Map) return null;
+    final t = StateLabel.fromJson(json['when_true']);
+    final f = StateLabel.fromJson(json['when_false']);
+    // Half a pair is not a pair — one named state and one invented would read
+    // as authoritative while being a guess.
+    if (t == null || f == null) return null;
+    return BoolStates(t, f);
+  }
+}
+
 class AttributeSchema {
   const AttributeSchema({
     required this.kind,
@@ -48,6 +105,7 @@ class AttributeSchema {
     this.max,
     this.step,
     this.options,
+    this.states,
   });
 
   final AttributeKind kind;
@@ -68,6 +126,10 @@ class AttributeSchema {
   /// The fixed value set for [AttributeKind.enum_].
   final List<String>? options;
 
+  /// What this attribute's two states are called, when the plugin said so.
+  /// Only meaningful for [AttributeKind.bool_].
+  final BoolStates? states;
+
   bool get hasRange => min != null && max != null;
 
   static AttributeSchema? fromJson(Map json) {
@@ -82,6 +144,7 @@ class AttributeSchema {
       max: (json['max'] as num?)?.toDouble(),
       step: (json['step'] as num?)?.toDouble(),
       options: (json['options'] as List?)?.cast<String>(),
+      states: BoolStates.fromJson(json['states']),
     );
   }
 }

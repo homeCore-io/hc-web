@@ -4,6 +4,8 @@ import '../../../core/devices/presentation.dart';
 import '../../../core/models/device_state.dart';
 import '../../../core/rules/node.dart';
 import '../../../core/rules/schema.dart';
+import '../../../core/schema/attribute_policy.dart';
+import '../../../core/schema/device_schema.dart';
 import '../../../design/tokens.dart';
 import 'device_picker_shell.dart';
 import 'editor_style.dart';
@@ -325,6 +327,9 @@ class _DeviceTriggerPickerState extends State<DeviceTriggerPicker> {
         });
       case 'changes_to':
         if (_attr.isEmpty) return null;
+        // An empty value used to store `to: ""`, which is a trigger that can
+        // never fire — and it looked complete, because the panel let you add it.
+        if (_valueText.trim().isEmpty) return null;
         return HcNode('DeviceStateChanged', {
           'device_id': e.ref,
           'attribute': _attr,
@@ -399,6 +404,37 @@ class _DeviceTriggerPickerState extends State<DeviceTriggerPicker> {
     }
     return null;
   }
+
+  /// The two rows a boolean attribute is owed, or null when the attribute is
+  /// not boolean and a free value is the honest control.
+  ///
+  /// The schema is asked first and the live reading second: an attribute the
+  /// plugin declared `bool` is boolean even on a device that has not reported
+  /// it yet, which is exactly the case a picker built from observed state alone
+  /// gets wrong.
+  List<({bool value, StateLabel state})>? _boolTransitions(
+      _Entry e, String attr) {
+    if (attr.isEmpty) return null;
+    final schema = e.device?.schema?[attr];
+    if (schema?.kind != AttributeKind.bool_ && e.device?.state[attr] is! bool) {
+      return null;
+    }
+    return boolTransitionsFor(attr, schema);
+  }
+
+  /// A hint made of what this device actually reports, rather than a lecture on
+  /// JSON. "true, false, a number, or text" told the user about the parser.
+  String _valueHint(_Entry e, String attr) {
+    final seen = e.device?.state[attr];
+    final options = e.device?.schema?[attr]?.options;
+    if (options != null && options.isNotEmpty) {
+      return 'e.g. ${options.take(3).join(', ')}';
+    }
+    return seen == null ? 'the value to match' : 'e.g. $seen';
+  }
+
+  static String _sentenceCase(String s) =>
+      s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
 
   Object _parseValue(String s) {
     final v = s.trim();
@@ -672,21 +708,55 @@ class _DeviceTriggerPickerState extends State<DeviceTriggerPicker> {
           }),
         ];
       case 'changes_to':
+        final attr = _attr.isEmpty ? e.attrs.first : _attr;
+        final transitions = _boolTransitions(e, attr);
         return [
           const RailLabel('Attribute'),
           SizedBox(height: t.space.sm),
-          _dropdown(t, _attr.isEmpty ? e.attrs.first : _attr, e.attrs,
-              (v) => setState(() => _attr = v!)),
+          _dropdown(t, attr, e.attrs, (v) {
+            setState(() {
+              _attr = v!;
+              // The value belongs to the attribute it was chosen for. Keeping
+              // it across a change left `true` sitting in a text attribute's
+              // box, producing a trigger that could never fire.
+              _valueText = '';
+            });
+          }),
           SizedBox(height: t.space.md),
-          const RailLabel('Changes to'),
-          SizedBox(height: t.space.sm),
-          TextFormField(
-            key: ValueKey('to:${e.ref}:$_attr'),
-            initialValue: _valueText,
-            decoration:
-                fieldDecoration(t, hint: 'true, false, a number, or text'),
-            onChanged: (v) => setState(() => _valueText = v),
-          ),
+          if (transitions != null) ...[
+            const RailLabel('Fires when it'),
+            SizedBox(height: t.space.sm),
+            // A boolean attribute is TWO events, not one. Offering only the
+            // attribute and a value box made "the door closes" reachable only
+            // by typing `false` or wrapping the trigger in a Not — a logic gate
+            // standing in for a word the device already knows. The pair of
+            // names comes from the plugin when it declares them, and from the
+            // client lexicon when it does not; either way there are two rows.
+            Row(children: [
+              for (var i = 0; i < transitions.length; i++) ...[
+                if (i > 0) SizedBox(width: t.space.xs),
+                _toggle(
+                  t,
+                  _sentenceCase(transitions[i].state.transition),
+                  _valueText == '${transitions[i].value}',
+                  () => setState(
+                      () => _valueText = '${transitions[i].value}'),
+                ),
+              ],
+            ]),
+          ] else ...[
+            const RailLabel('Changes to'),
+            SizedBox(height: t.space.sm),
+            TextFormField(
+              key: ValueKey('to:${e.ref}:$attr'),
+              initialValue: _valueText,
+              decoration: fieldDecoration(
+                t,
+                hint: _valueHint(e, attr),
+              ),
+              onChanged: (v) => setState(() => _valueText = v),
+            ),
+          ],
         ];
       case 'avail':
         return [

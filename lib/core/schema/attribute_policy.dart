@@ -143,3 +143,93 @@ AttributeSchema schemaFor(
   DeviceSchema? deviceSchema,
 ) =>
     deviceSchema?[name] ?? heuristicSchemaFor(name, value);
+
+/// What a boolean attribute's two states are called — the plugin's answer if it
+/// gave one, this lexicon otherwise.
+///
+/// **Why the fallback exists and why it is second.** A boolean attribute is two
+/// events, not one: a contact sensor has a single `open` attribute, so offering
+/// *attributes* offers one row and pushes "closed" into a Not gate. Both rows
+/// need names, and until every plugin declares them, most attributes only have
+/// the names below.
+///
+/// **Why the plugin wins.** `contact` is the proof: on a contact sensor TRUE
+/// means the circuit is *closed*, i.e. the door is shut — the opposite of what
+/// the word suggests. This table encodes the convention; a plugin that says
+/// otherwise about its own device is right and this is wrong.
+///
+/// Returns null for an attribute nobody has named, and the caller falls back to
+/// the mechanical `becomes {name}` / `stops being {name}` — clumsy English, but
+/// still two rows, which is the part that matters.
+BoolStates? boolStatesFor(String attribute, AttributeSchema? schema) {
+  final declared = schema?.states;
+  if (declared != null) return declared;
+
+  return switch (attribute) {
+    'on' => const BoolStates(
+        StateLabel('on', verb: 'turns on'),
+        StateLabel('off', verb: 'turns off'),
+      ),
+    'open' => const BoolStates(
+        StateLabel('open', verb: 'opens'),
+        StateLabel('closed', verb: 'closes'),
+      ),
+    // Inverted on purpose: a CLOSED contact circuit means the door is shut.
+    'contact' => const BoolStates(
+        StateLabel('closed', verb: 'closes'),
+        StateLabel('open', verb: 'opens'),
+      ),
+    'locked' => const BoolStates(
+        StateLabel('locked', verb: 'locks'),
+        StateLabel('unlocked', verb: 'unlocks'),
+      ),
+    'motion' => const BoolStates(
+        StateLabel('detecting motion', verb: 'detects motion'),
+        StateLabel('clear', verb: 'stops detecting motion'),
+      ),
+    'occupancy' || 'occupied' => const BoolStates(
+        StateLabel('occupied', verb: 'becomes occupied'),
+        StateLabel('empty', verb: 'becomes empty'),
+      ),
+    'leak' || 'water_detected' => const BoolStates(
+        StateLabel('wet', verb: 'detects water'),
+        StateLabel('dry', verb: 'dries out'),
+      ),
+    'smoke' => const BoolStates(
+        StateLabel('detecting smoke', verb: 'detects smoke'),
+        StateLabel('clear', verb: 'clears'),
+      ),
+    'vibration' => const BoolStates(
+        StateLabel('vibrating', verb: 'starts vibrating'),
+        StateLabel('still', verb: 'stops vibrating'),
+      ),
+    'available' => const BoolStates(
+        StateLabel('online', verb: 'comes online'),
+        StateLabel('offline', verb: 'goes offline'),
+      ),
+    _ => null,
+  };
+}
+
+/// Both rows a boolean attribute is owed, always in [true, false] order.
+///
+/// The mechanical fallback is deliberate: an attribute nobody has named still
+/// gets two rows. "Stops being tampered" is worse English than "closes" and far
+/// better than making the user reach for a Not gate.
+List<({bool value, StateLabel state})> boolTransitionsFor(
+  String attribute,
+  AttributeSchema? schema,
+) {
+  final named = boolStatesFor(attribute, schema);
+  if (named != null) {
+    return [
+      (value: true, state: named.whenTrue),
+      (value: false, state: named.whenFalse),
+    ];
+  }
+  final word = attribute.replaceAll('_', ' ');
+  return [
+    (value: true, state: StateLabel(word, verb: 'becomes $word')),
+    (value: false, state: StateLabel('not $word', verb: 'stops being $word')),
+  ];
+}
