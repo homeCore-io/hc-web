@@ -18,6 +18,7 @@ import '../../design/hc_icons.dart';
 import '../../design/tokens.dart';
 import '../../shell/hc_sheet.dart';
 import '../automations/rule_phrasing.dart';
+import 'device_actions.dart';
 
 /// A device, laid over the house rather than replacing it.
 ///
@@ -46,8 +47,6 @@ class DevicePanel extends ConsumerStatefulWidget {
 }
 
 class _DevicePanelState extends ConsumerState<DevicePanel> {
-  int _tab = 0;
-
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
@@ -65,6 +64,13 @@ class _DevicePanelState extends ConsumerState<DevicePanel> {
       );
     }
 
+    // Blocks, not tabs.
+    //
+    // Control / Info / History put the same three-tab chrome around every
+    // device, which flattered none of them: a leak sensor wore a tab bar built
+    // for a Sonos, and the tab labelled *Control* held no controls at all for
+    // the ~95% of devices that register no schema. So the panel is now a single
+    // scroll of blocks, and a block that has nothing to say does not render.
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -76,23 +82,97 @@ class _DevicePanelState extends ConsumerState<DevicePanel> {
               icon: HcIcons.offline,
               message: 'This device is offline. Commands will not reach it.',
             ),
+
+          // Verbs. First, because "what can I do with this" is the question the
+          // panel is open to answer.
           Padding(
-            padding: EdgeInsets.fromLTRB(t.space.lg, t.space.xs, t.space.lg, 0),
-            child: _Segmented(
-              index: _tab,
-              labels: const ['Control', 'Info', 'History'],
-              onChanged: (i) => setState(() => _tab = i),
-            ),
+            padding: EdgeInsets.symmetric(horizontal: t.space.lg),
+            child: DeviceActionsBlock(device: device),
           ),
+
+          // Controls — the writable attributes the verbs did not already cover.
+          _Controls(device: device),
           SizedBox(height: t.space.md),
-          switch (_tab) {
-            0 => _Controls(device: device),
-            1 => _InfoTab(device: device),
-            _ => _HistoryTab(device: device),
-          },
+
+          // Readings — trends and what changed lately.
+          _Section(
+            title: 'History',
+            initiallyOpen: false,
+            child: _HistoryTab(device: device),
+          ),
+
+          _Section(
+            title: 'Details',
+            initiallyOpen: false,
+            child: _InfoTab(device: device),
+          ),
           SizedBox(height: t.space.lg),
         ],
       ),
+    );
+  }
+}
+
+/// A collapsible block. Closed by default for the two that are reference rather
+/// than control — the panel opens on what you can *do*.
+class _Section extends StatefulWidget {
+  const _Section({
+    required this.title,
+    required this.child,
+    this.initiallyOpen = true,
+  });
+
+  final String title;
+  final Widget child;
+  final bool initiallyOpen;
+
+  @override
+  State<_Section> createState() => _SectionState();
+}
+
+class _SectionState extends State<_Section> {
+  late bool _open = widget.initiallyOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: t.space.lg),
+          child: Divider(height: 1, color: t.stroke.hairline),
+        ),
+        InkWell(
+          onTap: () => setState(() => _open = !_open),
+          child: Padding(
+            padding: EdgeInsets.symmetric(
+                horizontal: t.space.lg, vertical: t.space.sm + 2),
+            child: Row(
+              children: [
+                Text(
+                  widget.title.toUpperCase(),
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.1,
+                    color: t.surface.onBaseMuted,
+                  ),
+                ),
+                const Spacer(),
+                Icon(
+                    _open
+                        ? Icons.keyboard_arrow_up_rounded
+                        : Icons.keyboard_arrow_down_rounded,
+                    size: 18,
+                    color: t.surface.onBaseMuted),
+              ],
+            ),
+          ),
+        ),
+        if (_open) widget.child,
+        if (_open) SizedBox(height: t.space.md),
+      ],
     );
   }
 }
@@ -211,55 +291,6 @@ class _Header extends ConsumerWidget {
   }
 }
 
-// ── Segmented control ─────────────────────────────────────────────────────────
-
-class _Segmented extends StatelessWidget {
-  const _Segmented(
-      {required this.index, required this.labels, required this.onChanged});
-  final int index;
-  final List<String> labels;
-  final ValueChanged<int> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = HcTokens.of(context);
-    return Container(
-      padding: const EdgeInsets.all(3),
-      decoration: BoxDecoration(
-        color: t.surface.sunken,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: t.stroke.hairline),
-      ),
-      child: Row(
-        children: [
-          for (var i = 0; i < labels.length; i++)
-            Expanded(
-              child: GestureDetector(
-                onTap: () => onChanged(i),
-                behavior: HitTestBehavior.opaque,
-                child: Container(
-                  alignment: Alignment.center,
-                  padding: const EdgeInsets.symmetric(vertical: 7),
-                  decoration: BoxDecoration(
-                    color: index == i ? t.surface.overlay : Colors.transparent,
-                    borderRadius: BorderRadius.circular(7),
-                  ),
-                  child: Text(labels[i],
-                      style: TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w600,
-                          color: index == i
-                              ? t.surface.onBase
-                              : t.surface.onBaseMuted)),
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
 // ── Control tab ───────────────────────────────────────────────────────────────
 
 /// Every writable attribute the device declares, as the control its kind calls
@@ -284,11 +315,17 @@ class _ControlsState extends ConsumerState<_Controls> {
     final schema = _d.schema;
     final hasSchema = schema != null && schema.attributes.isNotEmpty;
 
+    // An attribute an action already supersedes is not shown twice: a Roku
+    // declaring `select_source` (which `writes: source`) would otherwise offer
+    // both a "Source" control and a "Select a source" verb for one thing.
+    final claimed = schema?.attributesClaimedByActions ?? const <String>{};
+
     // The attributes to show — the schema where we have one, else the device's
     // own reported state. `on` already has the header toggle.
     final keys = (hasSchema
             ? schema.attributes.keys.where((k) => k != 'on')
             : _d.state.keys.where((k) => k != 'on'))
+        .where((k) => !claimed.contains(k))
         .toList();
     final present = keys.toSet();
 
