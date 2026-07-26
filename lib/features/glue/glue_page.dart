@@ -14,6 +14,7 @@ import '../automations/widgets/device_choice_picker.dart';
 import '../automations/widgets/editor_style.dart';
 import '../automations/widgets/rule_refs.dart';
 import 'glue_config.dart';
+import 'group_attributes.dart';
 import 'glue_id.dart';
 
 /// Helpers — the devices the hub provides itself.
@@ -399,15 +400,28 @@ class GluePage extends ConsumerWidget {
                 avatar: const Icon(Icons.add, size: 16),
                 label: const Text('Add'),
                 onPressed: () async {
-                  // The same searchable, room-grouped picker every other
-                  // device choice uses.
-                  final picked = await pickDeviceRef(
+                  // Multi-select: four door sensors used to mean four visits
+                  // to the same panel, each starting from the top.
+                  final picked = await pickDeviceRefs(
                     context,
                     refs: ref.read(ruleRefsProvider),
-                    kicker: 'Group member',
+                    current: members,
+                    kicker: 'Group members',
+                    title: 'Which devices?',
                   );
-                  if (picked == null || members.contains(picked)) return;
-                  setS(() => members.add(picked));
+                  if (picked == null || picked.isEmpty) return;
+                  setS(() {
+                    for (final p in picked) {
+                      if (!members.contains(p)) members.add(p);
+                    }
+                    // The attribute is chosen from what the members share, so
+                    // a new member can invalidate it.
+                    final shared =
+                        sharedAttributes(ref.read(ruleRefsProvider), members);
+                    if (shared.isNotEmpty && !shared.contains(groupAttribute)) {
+                      onAttribute(shared.first);
+                    }
+                  });
                 },
               ),
             ],
@@ -415,12 +429,37 @@ class GluePage extends ConsumerWidget {
           SizedBox(height: t.space.md),
           Row(children: [
             Expanded(
-              child: TextFormField(
-                initialValue: groupAttribute,
-                style: TextStyle(color: t.surface.onBase),
-                decoration: deco('Attribute'),
-                onChanged: onAttribute,
-              ),
+              child: Builder(builder: (_) {
+                final shared =
+                    sharedAttributes(ref.read(ruleRefsProvider), members);
+                if (shared.isEmpty) {
+                  // No members yet, or members with nothing in common. Free
+                  // text is the honest control then — we have nothing to
+                  // offer, and refusing to let them type would be worse.
+                  return TextFormField(
+                    initialValue: groupAttribute,
+                    style: TextStyle(color: t.surface.onBase),
+                    decoration: deco(members.isEmpty
+                        ? 'Attribute'
+                        : 'Attribute (members share none)'),
+                    onChanged: onAttribute,
+                  );
+                }
+                return DropdownButtonFormField<String>(
+                  initialValue:
+                      shared.contains(groupAttribute) ? groupAttribute : null,
+                  isExpanded: true,
+                  style: TextStyle(color: t.surface.onBase),
+                  dropdownColor: t.surface.overlay,
+                  decoration: deco('Attribute'),
+                  items: [
+                    for (final a in shared)
+                      DropdownMenuItem(
+                          value: a, child: Text(a.replaceAll('_', ' '))),
+                  ],
+                  onChanged: (v) => setS(() => onAttribute(v ?? groupAttribute)),
+                );
+              }),
             ),
             SizedBox(width: t.space.sm),
             // "Any" and "All" are the whole vocabulary, so they are two chips

@@ -3,6 +3,9 @@ import 'package:hc_web/core/models/device_state.dart';
 import 'package:hc_web/core/schema/device_schema.dart';
 import 'package:hc_web/features/automations/widgets/device_choice_picker.dart';
 import 'package:hc_web/features/automations/widgets/device_picker_shell.dart';
+import 'package:hc_web/features/automations/widgets/rule_refs.dart';
+import 'package:hc_web/design/skins.dart';
+import 'package:flutter/material.dart';
 
 DeviceState _dev(
   String id,
@@ -81,6 +84,69 @@ void main() {
       final (label, _) = deviceLiveChip(
           _dev('d', {'open': true, 'on': false}));
       expect(label, 'open');
+    });
+  });
+
+  group('several devices can be chosen in one visit', () {
+    final refs = RuleRefs(devices: [
+      _dev('door_a', {'open': false}),
+      _dev('door_b', {'open': false}),
+      _dev('door_c', {'open': false}),
+    ]);
+
+    Future<List<String>?> open(WidgetTester tester,
+        {List<String> current = const []}) async {
+      await tester.binding.setSurfaceSize(const Size(1400, 900));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      List<String>? result;
+      await tester.pumpWidget(MaterialApp(
+        theme: hcTheme(HcSkin.midnight),
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: Center(
+              child: ElevatedButton(
+                onPressed: () async => result = await pickDeviceRefs(context,
+                    refs: refs, current: current),
+                child: const Text('open'),
+              ),
+            ),
+          ),
+        ),
+      ));
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      return result;
+    }
+
+    testWidgets('ticking two returns both', (tester) async {
+      // Adding four door sensors to a group meant four visits to the same
+      // panel, each starting from the top of the list.
+      await open(tester);
+      await tester.tap(find.text('door_a').first);
+      await tester.pump();
+      await tester.tap(find.text('door_b').first);
+      await tester.pump();
+
+      expect(find.text('Add 2 devices'), findsOneWidget);
+      await tester.tap(find.text('Add 2 devices'));
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('nothing ticked leaves the primary disabled', (tester) async {
+      await open(tester);
+      expect(find.text('Add 0 devices'), findsOneWidget);
+      expect(find.textContaining('tick to add'), findsOneWidget);
+    });
+
+    testWidgets('what the caller already holds is not offered again',
+        (tester) async {
+      // Unticking here would read as removing it from the group, which this
+      // panel does not do.
+      await open(tester, current: ['door_a']);
+      await tester.tap(find.text('door_a').first);
+      await tester.pump();
+      expect(find.text('Add 0 devices'), findsOneWidget);
     });
   });
 }

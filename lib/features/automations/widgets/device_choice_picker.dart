@@ -85,14 +85,42 @@ Future<String?> pickDeviceRef(
   String? current,
   String kicker = 'Choose a device',
   String title = 'Which device?',
+}) async {
+  final picked = await showDialog<List<String>>(
+    context: context,
+    builder: (_) => _DeviceChoicePicker(
+      refs: refs,
+      current: current == null ? const [] : [current],
+      kicker: kicker,
+      title: title,
+    ),
+  );
+  return picked?.firstOrNull;
+}
+
+/// Choose several devices in one visit.
+///
+/// Adding four door sensors to a group meant opening the picker four times,
+/// each time from the top of the same list. The panel is unchanged — the
+/// selection simply stays behind as you tick, and the footer counts.
+///
+/// [current] is excluded from the result being *re-added*: the caller keeps
+/// what it has and receives only what was chosen this time.
+Future<List<String>?> pickDeviceRefs(
+  BuildContext context, {
+  required RuleRefs refs,
+  List<String> current = const [],
+  String kicker = 'Choose devices',
+  String title = 'Which devices?',
 }) {
-  return showDialog<String>(
+  return showDialog<List<String>>(
     context: context,
     builder: (_) => _DeviceChoicePicker(
       refs: refs,
       current: current,
       kicker: kicker,
       title: title,
+      multi: true,
     ),
   );
 }
@@ -103,12 +131,19 @@ class _DeviceChoicePicker extends StatefulWidget {
     required this.current,
     required this.kicker,
     required this.title,
+    this.multi = false,
   });
 
   final RuleRefs refs;
-  final String? current;
+
+  /// What the caller already holds — pre-selected, so the panel opens saying
+  /// which ones these are.
+  final List<String> current;
   final String kicker;
   final String title;
+
+  /// Selection stays behind as you tick, and the footer counts.
+  final bool multi;
 
   @override
   State<_DeviceChoicePicker> createState() => _DeviceChoicePickerState();
@@ -119,7 +154,7 @@ class _DeviceChoicePickerState extends State<_DeviceChoicePicker> {
   String _cat = 'all';
   String _room = '';
   String _query = '';
-  String? _selected;
+  final _selected = <String>{};
 
   late final List<_Row> _rows = [
     for (final d in widget.refs.devices) _Row(d, _refFor(d)),
@@ -131,22 +166,24 @@ class _DeviceChoicePickerState extends State<_DeviceChoicePicker> {
   /// or a `canonical_name`, and rewriting one into the other on a field the
   /// user did not touch is a silent change to their rule.
   String _refFor(DeviceState d) {
-    final c = widget.current;
-    if (c != null && (d.id == c || d.canonicalName == c)) return c;
+    for (final c in widget.current) {
+      if (d.id == c || d.canonicalName == c) return c;
+    }
     return widget.refs.refFor(d);
   }
 
   @override
   void initState() {
     super.initState();
-    _selected = widget.current;
+    _selected.addAll(widget.current);
     // The current device is pre-SELECTED, but the list is not narrowed to its
     // category. Opening filtered to "Sensors" because the field happens to
     // hold a door sensor hides every light in the house — which is the same
     // "you cannot see what you want" problem the flat dropdown had, just with
     // a different shape. Retargeting across categories is the common reason to
     // open this at all.
-    final at = _rows.where((r) => r.ref == widget.current).firstOrNull;
+    final at =
+        _rows.where((r) => widget.current.contains(r.ref)).firstOrNull;
     if (at != null) _room = at.room;
   }
 
@@ -202,6 +239,23 @@ class _DeviceChoicePickerState extends State<_DeviceChoicePicker> {
     return rs;
   }
 
+  /// What this visit adds — the selection minus what the caller already had.
+  List<String> get _added =>
+      _selected.where((r) => !widget.current.contains(r)).toList();
+
+  String get _footerHint {
+    if (widget.multi) {
+      final n = _added.length;
+      if (n == 0) return '${_rows.length} devices · tick to add';
+      return n == 1
+          ? widget.refs.labelFor(_added.first)
+          : '$n selected';
+    }
+    return _selected.isEmpty
+        ? '${_rows.length} devices'
+        : widget.refs.labelFor(_selected.first);
+  }
+
   int _countFor(String cat) =>
       _rows.where((r) => cat == 'all' || _bucketOf(r.facet) == cat).length;
 
@@ -223,13 +277,14 @@ class _DeviceChoicePickerState extends State<_DeviceChoicePicker> {
           if (v && _room.isEmpty) _room = _rooms.isEmpty ? '' : _rooms.first;
         });
       }),
-      footerHint: _selected == null
-          ? '${_rows.length} devices'
-          : widget.refs.labelFor(_selected!),
-      primaryLabel: 'Use this device',
-      onPrimary: _selected == null
+      footerHint: _footerHint,
+      primaryLabel: widget.multi
+          ? (_added.length == 1 ? 'Add 1 device' : 'Add ${_added.length} devices')
+          : 'Use this device',
+      onPrimary: (widget.multi ? _added.isEmpty : _selected.isEmpty)
           ? null
-          : () => Navigator.pop(context, _selected),
+          : () => Navigator.pop(
+              context, widget.multi ? _added : _selected.toList()),
       panes: [
         PickerPane(width: 220, compactLabel: 'Where', child: _rail(t)),
         PickerPane(
@@ -301,8 +356,21 @@ class _DeviceChoicePickerState extends State<_DeviceChoicePicker> {
         sub: r.sub,
         chip: r.device.available ? chip : 'offline',
         chipTone: r.device.available ? tone : null,
-        selected: _selected == r.ref,
-        onTap: () => setState(() => _selected = r.ref),
+        selected: _selected.contains(r.ref),
+        onTap: () => setState(() {
+          if (!widget.multi) {
+            _selected
+              ..clear()
+              ..add(r.ref);
+            return;
+          }
+          // Already-held devices stay held: unticking one here would read as
+          // removing it from the group, which this panel does not do.
+          if (widget.current.contains(r.ref)) return;
+          _selected.contains(r.ref)
+              ? _selected.remove(r.ref)
+              : _selected.add(r.ref);
+        }),
       ));
     }
     return out;
