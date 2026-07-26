@@ -32,9 +32,11 @@
 # Env:
 #   HOMECORE_URL   homeCore's base URL. Default http://homecore:8080 (the
 #                  service name in docker/compose.yml).
+#   WEB_PORT       Port nginx listens on. Default 80. Only needs changing under
+#                  `network_mode: host`, where there is no port mapping.
 #
 # Ports:
-#   80   App + API proxy
+#   ${WEB_PORT}   App + API proxy (80 by default)
 # =============================================================================
 
 # -----------------------------------------------------------------------------
@@ -130,6 +132,17 @@ FROM nginx:alpine
 
 ENV HOMECORE_URL=http://homecore:8080
 
+# The listen port, as a runtime knob rather than a hardcoded 80.
+#
+# Under `network_mode: host` — which homeCore needs for mDNS/SSDP discovery
+# (Hue, Sonos, WLED, Roku) — there is no port mapping to remap with, so a
+# container hardcoded to 80 either collides with whatever else is on the host's
+# port 80 or has to be the thing that owns it. With this, host-mode compose sets
+# WEB_PORT=3000 and the same image works in both shapes.
+#
+# Bridge mode ignores it: `ports: ["3000:80"]` maps the default just fine.
+ENV WEB_PORT=80
+
 # A template, not a static conf: nginx:alpine's entrypoint runs envsubst over
 # /etc/nginx/templates/*.template at container start, so HOMECORE_URL is a
 # RUNTIME knob. The same image therefore points at any homeCore without a
@@ -147,7 +160,7 @@ map $http_upgrade $connection_upgrade {
 }
 
 server {
-    listen 80;
+    listen ${WEB_PORT};
     root /usr/share/nginx/html;
     index index.html;
 
@@ -221,6 +234,9 @@ NGINX
 
 COPY --from=builder /app/build/web /usr/share/nginx/html
 
+# Documents the default. EXPOSE cannot read a runtime ENV override, so under
+# host networking with WEB_PORT set this is advisory only — which is fine, since
+# host mode publishes nothing through Docker anyway.
 EXPOSE 80
 
 # Inherit nginx:alpine's entrypoint (it is what renders the template).
