@@ -567,8 +567,9 @@ class GluePage extends ConsumerWidget {
                     // a new member can invalidate it.
                     final shared =
                         sharedAttributes(ref.read(ruleRefsProvider), members);
-                    if (shared.isNotEmpty && !shared.contains(groupAttribute)) {
-                      onAttribute(shared.first);
+                    if (shared.isNotEmpty &&
+                        !shared.any((a) => a.name == groupAttribute)) {
+                      onAttribute(shared.first.name);
                     }
                   });
                 },
@@ -589,22 +590,24 @@ class GluePage extends ConsumerWidget {
                     initialValue: groupAttribute,
                     style: TextStyle(color: t.surface.onBase),
                     decoration: deco(members.isEmpty
-                        ? 'Attribute'
-                        : 'Attribute (members share none)'),
+                        ? 'Members are'
+                        : 'Members share no yes/no attribute'),
                     onChanged: onAttribute,
                   );
                 }
                 return DropdownButtonFormField<String>(
-                  initialValue:
-                      shared.contains(groupAttribute) ? groupAttribute : null,
+                  initialValue: shared.any((a) => a.name == groupAttribute)
+                      ? groupAttribute
+                      : null,
                   isExpanded: true,
                   style: TextStyle(color: t.surface.onBase),
                   dropdownColor: t.surface.overlay,
-                  decoration: deco('Attribute'),
+                  decoration: deco('Members are'),
                   items: [
                     for (final a in shared)
-                      DropdownMenuItem(
-                          value: a, child: Text(a.replaceAll('_', ' '))),
+                      // "Open / closed", not `open` — what the group will
+                      // mean, in the words the plugin itself uses.
+                      DropdownMenuItem(value: a.name, child: Text(a.label)),
                   ],
                   onChanged: (v) => setS(() => onAttribute(v ?? groupAttribute)),
                 );

@@ -15,60 +15,100 @@ DeviceState _dev(String id, Map<String, dynamic> state,
       schema: schema,
     );
 
+/// A YoLink door sensor: `contact` declared open-when-true, plus a battery.
+const _doorSchema = DeviceSchema({
+  'open': AttributeSchema(
+    kind: AttributeKind.bool_,
+    states: BoolStates(
+      StateLabel('open', verb: 'opens'),
+      StateLabel('closed', verb: 'closes'),
+    ),
+  ),
+  'contact': AttributeSchema(
+    kind: AttributeKind.bool_,
+    states: BoolStates(
+      StateLabel('open', verb: 'opens'),
+      StateLabel('closed', verb: 'closes'),
+    ),
+  ),
+  'battery': AttributeSchema(kind: AttributeKind.integer),
+});
+
 final _refs = RuleRefs(devices: [
-  _dev('door_a', {'open': false, 'contact': false, 'battery': 90}),
-  _dev('door_b', {'open': true, 'contact': true, 'battery': 80}),
+  _dev('door_a', {'open': false, 'contact': false, 'battery': 90},
+      schema: _doorSchema),
+  _dev('door_b', {'open': true, 'contact': true, 'battery': 80},
+      schema: _doorSchema),
   _dev('lamp', {'on': true, 'brightness': 40}),
-  // Declared but not yet reporting — the case an observed-state-only check
-  // gets wrong.
-  _dev('fresh', const {},
-      schema: const DeviceSchema({
-        'open': AttributeSchema(kind: AttributeKind.bool_),
-        'battery': AttributeSchema(kind: AttributeKind.integer),
-      })),
+  _dev('lock', {'locked': true, 'battery': 55}),
+  // Same attribute name, different type — cannot be aggregated with a door.
+  _dev('odd', {'open': 3}),
 ]);
 
+List<String> _names(List<GroupAttribute> a) => a.map((x) => x.name).toList();
+
 void main() {
-  group('a group reads an attribute its members share', () {
-    test('the intersection, not the union', () {
-      // A group reads ONE attribute on EVERY member, so an attribute only
-      // some of them have cannot answer "are all of these open".
+  group('a group can only aggregate yes/no attributes', () {
+    test('a battery is never offered', () {
+      // "Any on" / "All on" is a yes/no about the members. There is nothing
+      // sensible to ask of a battery percentage, and offering it produced a
+      // group that could be created and could never mean anything.
       final shared = sharedAttributes(_refs, ['door_a', 'door_b']);
-      expect(shared, containsAll(['open', 'contact', 'battery']));
-
-      final mixed = sharedAttributes(_refs, ['door_a', 'lamp']);
-      expect(mixed, isEmpty, reason: 'a door and a lamp share nothing');
+      expect(_names(shared), isNot(contains('battery')));
+      expect(_names(shared), ['contact', 'open']);
     });
 
-    test('booleans come first', () {
-      // A group is a yes/no about its members, so `open` is what someone is
-      // looking for and `battery` is noise near the top.
-      final shared = sharedAttributes(_refs, ['door_a', 'door_b']);
-      expect(shared.first, anyOf('open', 'contact'));
-      expect(shared.last, 'battery');
+    test('brightness is not offered either', () {
+      expect(_names(sharedAttributes(_refs, ['lamp'])), ['on']);
     });
 
-    test('a declared attribute counts even before it is reported', () {
-      // `fresh` publishes nothing yet but declares `open` and `battery`.
-      final shared = sharedAttributes(_refs, ['door_a', 'fresh']);
-      expect(shared, containsAll(['open', 'battery']));
-      expect(shared, isNot(contains('contact')),
-          reason: 'fresh neither reports nor declares it');
+    test('an attribute that is boolean on one member and not another is out',
+        () {
+      // `open` is a bool on the door and a number on `odd`; aggregating them
+      // is not a question with an answer.
+      expect(sharedAttributes(_refs, ['door_a', 'odd']), isEmpty);
     });
 
-    test('no members means nothing to offer', () {
-      expect(sharedAttributes(_refs, const []), isEmpty);
+    test('members with nothing in common offer nothing', () {
+      expect(sharedAttributes(_refs, ['door_a', 'lamp']), isEmpty);
+      expect(sharedAttributes(_refs, ['lamp', 'lock']), isEmpty);
+    });
+  });
+
+  group('the choice says what the group will mean', () {
+    test('a door reads open / closed', () {
+      final a = sharedAttributes(_refs, ['door_a', 'door_b'])
+          .firstWhere((x) => x.name == 'open');
+      expect(a.label, 'Open / closed');
     });
 
-    test('one member offers everything it has', () {
-      expect(sharedAttributes(_refs, ['lamp']),
-          containsAll(['on', 'brightness']));
+    test('a light reads on / off, a lock locked / unlocked', () {
+      expect(sharedAttributes(_refs, ['lamp']).single.label, 'On / off');
+      expect(
+          sharedAttributes(_refs, ['lock']).single.label, 'Locked / unlocked');
     });
 
-    test('an unknown member contributes nothing, so the result is empty', () {
-      // Better empty than confidently offering attributes half the group
-      // does not have.
-      expect(sharedAttributes(_refs, ['door_a', 'nope']), isEmpty);
+    test('the plugin wins over the client lexicon', () {
+      // The lexicon says a true `contact` means CLOSED. This plugin declares
+      // the opposite, and the label has to follow the device, not convention.
+      final a = sharedAttributes(_refs, ['door_a'])
+          .firstWhere((x) => x.name == 'contact');
+      expect(a.whenTrue, 'open');
+      expect(a.label, 'Open / closed');
     });
+
+    test('an unnamed boolean still gets a usable label', () {
+      final refs = RuleRefs(devices: [_dev('x', {'foo_bar': true})]);
+      final a = sharedAttributes(refs, ['x']).single;
+      expect(a.label, 'Foo bar / not foo bar');
+    });
+  });
+
+  test('no members means nothing to offer', () {
+    expect(sharedAttributes(_refs, const []), isEmpty);
+  });
+
+  test('an unknown member empties the intersection', () {
+    expect(sharedAttributes(_refs, ['door_a', 'nope']), isEmpty);
   });
 }

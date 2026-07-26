@@ -1,49 +1,94 @@
+import '../../core/schema/attribute_policy.dart';
 import '../../core/schema/device_schema.dart';
 import '../automations/widgets/rule_refs.dart';
 
-/// The attributes a group could read across its members.
+/// One attribute a group could aggregate, and what its two states are called.
+class GroupAttribute {
+  const GroupAttribute(this.name, this.whenTrue, this.whenFalse);
+
+  /// The raw attribute name — what gets stored.
+  final String name;
+
+  /// What a member IS in each state: `open` / `closed`, `on` / `off`.
+  final String whenTrue;
+  final String whenFalse;
+
+  /// "Open / closed" — what the group will actually mean.
+  String get label =>
+      '${_sentenceCase(whenTrue)} / ${whenFalse.toLowerCase()}';
+
+  static String _sentenceCase(String s) =>
+      s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
+}
+
+/// The attributes a group can aggregate across its members.
 ///
-/// The dialog asked for this as free text with `on` pre-filled, which is a
-/// question you can only answer by already knowing what the members publish —
-/// and getting it wrong makes a group that reports on nothing, silently.
+/// **Booleans only.** A group answers "are ANY of these on" or "are ALL of
+/// them on" — it is a yes/no about its members, so there is nothing sensible
+/// to ask of a battery percentage. Offering `battery` produced a group that
+/// could be created and could never mean anything.
 ///
 /// **Shared, not merged.** A group reads ONE attribute on EVERY member, so an
-/// attribute only some of them have cannot answer "are all of these on". The
-/// intersection is what the group can actually evaluate.
+/// attribute only some of them have cannot answer the question — and one that
+/// is boolean on one member and a number on another cannot either. Both are
+/// checked on every member, not just the first.
 ///
-/// Both halves of a device are consulted: the schema says what a plugin
-/// declares, and the live state says what it is really publishing — a device
-/// mid-interview may have one and not yet the other.
-List<String> sharedAttributes(RuleRefs refs, List<String> members) {
+/// Both halves of a device count: the schema for what a plugin declares, the
+/// live state for what it is really publishing, since a device mid-interview
+/// may have one and not the other.
+List<GroupAttribute> sharedAttributes(RuleRefs refs, List<String> members) {
   if (members.isEmpty) return const [];
 
-  Set<String> attributesOf(String ref) {
-    final out = <String>{...refs.attributesOf(ref)};
+  Set<String> booleansOf(String ref) {
+    final out = <String>{};
+    final device = refs.deviceFor(ref);
+    // An unknown member contributes nothing, which empties the intersection —
+    // better than confidently offering attributes half the group lacks.
+    if (device == null) return out;
+
     final schema = refs.schemaFor(ref);
-    if (schema != null) out.addAll(schema.attributes.keys);
+    for (final e in schema?.attributes.entries ?? const <MapEntry<String, AttributeSchema>>[]) {
+      if (e.value.kind == AttributeKind.bool_) out.add(e.key);
+    }
+    for (final e in device.state.entries) {
+      if (e.value is bool) out.add(e.key);
+    }
     return out;
   }
 
   Set<String>? shared;
   for (final m in members) {
-    final attrs = attributesOf(m);
+    final attrs = booleansOf(m);
     shared = shared == null ? attrs : shared.intersection(attrs);
   }
 
-  final out = (shared ?? const <String>{}).toList();
-  // Booleans first: a group is a yes/no about its members, so `on` and `open`
-  // are what someone is looking for, and `battery` is noise near the top.
-  out.sort((a, b) {
-    final ab = _isBoolean(refs, members.first, a);
-    final bb = _isBoolean(refs, members.first, b);
-    if (ab != bb) return ab ? -1 : 1;
-    return a.compareTo(b);
-  });
-  return out;
+  final names = (shared ?? const <String>{}).toList()..sort();
+  return [
+    for (final name in names)
+      if (_describe(refs, members, name) case final described?) described,
+  ];
 }
 
-bool _isBoolean(RuleRefs refs, String member, String attribute) {
-  final declared = refs.schemaFor(member)?[attribute];
-  if (declared != null) return declared.kind == AttributeKind.bool_;
-  return refs.deviceFor(member)?.state[attribute] is bool;
+/// Name the two states, from the plugin's declaration where it gave one.
+///
+/// Read off the FIRST member that declares it: they are being grouped, so they
+/// are the same kind of thing, and a plugin that says `contact` means open is
+/// authoritative over the client's own lexicon — which encodes the opposite
+/// convention.
+GroupAttribute? _describe(RuleRefs refs, List<String> members, String name) {
+  for (final m in members) {
+    final declared = refs.schemaFor(m)?[name];
+    if (declared?.states != null) {
+      final s = declared!.states!;
+      return GroupAttribute(name, s[true].label, s[false].label);
+    }
+  }
+  final fallback = boolStatesFor(name, null);
+  if (fallback != null) {
+    return GroupAttribute(name, fallback[true].label, fallback[false].label);
+  }
+  // Nobody has named it. Still offerable — it is a boolean every member has —
+  // but say so mechanically rather than inventing words.
+  final word = name.replaceAll('_', ' ');
+  return GroupAttribute(name, word, 'not $word');
 }
