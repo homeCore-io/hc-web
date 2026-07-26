@@ -75,17 +75,23 @@ void main() {
     });
   });
 
-  group('the choice says what the group will mean', () {
-    test('a door reads open / closed', () {
+  group('the choice names the state the group tests for', () {
+    test('a door tests for open, in one word', () {
+      // "Open / closed" named the pair without saying which one counted —
+      // a question the reader was left holding. A group is on when its
+      // members are in the TRUE state; there is no second choice to make.
       final a = sharedAttributes(_refs, ['door_a', 'door_b'])
           .firstWhere((x) => x.name == 'open');
-      expect(a.label, 'Open / closed');
+      expect(a.label, 'Open');
+      expect(a.pair, 'Open / closed', reason: 'both ends still available');
     });
 
-    test('a light reads on / off, a lock locked / unlocked', () {
-      expect(sharedAttributes(_refs, ['lamp']).single.label, 'On / off');
-      expect(
-          sharedAttributes(_refs, ['lock']).single.label, 'Locked / unlocked');
+    test('the same holds for every kind, not just doors', () {
+      // A light group is on when members are ON, a lock group when LOCKED.
+      // The old wording baked "on" into the quantifier — "Any on" — which is
+      // simply wrong for a door.
+      expect(sharedAttributes(_refs, ['lamp']).single.label, 'On');
+      expect(sharedAttributes(_refs, ['lock']).single.label, 'Locked');
     });
 
     test('the plugin wins over the client lexicon', () {
@@ -94,13 +100,14 @@ void main() {
       final a = sharedAttributes(_refs, ['door_a'])
           .firstWhere((x) => x.name == 'contact');
       expect(a.whenTrue, 'open');
-      expect(a.label, 'Open / closed');
+      expect(a.label, 'Open');
     });
 
     test('an unnamed boolean still gets a usable label', () {
       final refs = RuleRefs(devices: [_dev('x', {'foo_bar': true})]);
       final a = sharedAttributes(refs, ['x']).single;
-      expect(a.label, 'Foo bar / not foo bar');
+      expect(a.label, 'Foo bar');
+      expect(a.pair, 'Foo bar / not foo bar');
     });
   });
 

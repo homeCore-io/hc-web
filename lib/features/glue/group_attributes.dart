@@ -13,9 +13,16 @@ class GroupAttribute {
   final String whenTrue;
   final String whenFalse;
 
-  /// "Open / closed" — what the group will actually mean.
-  String get label =>
-      '${_sentenceCase(whenTrue)} / ${whenFalse.toLowerCase()}';
+  /// The state the group TESTS FOR — "open", "on", "locked".
+  ///
+  /// A group is on when any (or all) of its members are in this state; there
+  /// is no second choice to make. Showing both states as "Open / closed" named
+  /// the pair without saying which one counted, which is a question the reader
+  /// is left holding.
+  String get label => _sentenceCase(whenTrue);
+
+  /// Both ends, for anywhere that explains rather than selects.
+  String get pair => '${_sentenceCase(whenTrue)} / ${whenFalse.toLowerCase()}';
 
   static String _sentenceCase(String s) =>
       s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);

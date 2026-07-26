@@ -563,8 +563,8 @@ class GluePage extends ConsumerWidget {
                     for (final p in picked) {
                       if (!members.contains(p)) members.add(p);
                     }
-                    // The attribute is chosen from what the members share, so
-                    // a new member can invalidate it.
+                    // The state is chosen from what the members share, so a
+                    // new member can invalidate it.
                     final shared =
                         sharedAttributes(ref.read(ruleRefsProvider), members);
                     if (shared.isNotEmpty &&
@@ -577,11 +577,30 @@ class GluePage extends ConsumerWidget {
             ],
           ),
           SizedBox(height: t.space.md),
+          // Read as a sentence. "Members are: Open / closed" named the pair
+          // without saying which state counted, and "Any ON" baked in a word
+          // that is wrong for a door — a group of doors is on when they are
+          // OPEN, not "on".
+          const RailLabel('This group is on when'),
+          const SizedBox(height: 6),
           Row(children: [
+            for (final m in const ['any', 'all'])
+              Padding(
+                padding: EdgeInsets.only(right: t.space.xs),
+                child: _TypeChip(
+                  label: m == 'any' ? 'Any' : 'All',
+                  selected: groupMode == m,
+                  onTap: () => setS(() => onMode(m)),
+                ),
+              ),
+            SizedBox(width: t.space.xs),
             Expanded(
               child: Builder(builder: (_) {
                 final shared =
                     sharedAttributes(ref.read(ruleRefsProvider), members);
+                // The verb agrees with the quantifier: "any member is open",
+                // "all members are open".
+                final lead = groupMode == 'any' ? 'member is' : 'members are';
                 if (shared.isEmpty) {
                   // No members yet, or members with nothing in common. Free
                   // text is the honest control then — we have nothing to
@@ -590,8 +609,8 @@ class GluePage extends ConsumerWidget {
                     initialValue: groupAttribute,
                     style: TextStyle(color: t.surface.onBase),
                     decoration: deco(members.isEmpty
-                        ? 'Members are'
-                        : 'Members share no yes/no attribute'),
+                        ? lead
+                        : '$lead … (members share no yes/no state)'),
                     onChanged: onAttribute,
                   );
                 }
@@ -602,29 +621,15 @@ class GluePage extends ConsumerWidget {
                   isExpanded: true,
                   style: TextStyle(color: t.surface.onBase),
                   dropdownColor: t.surface.overlay,
-                  decoration: deco('Members are'),
+                  decoration: deco(lead),
                   items: [
                     for (final a in shared)
-                      // "Open / closed", not `open` — what the group will
-                      // mean, in the words the plugin itself uses.
                       DropdownMenuItem(value: a.name, child: Text(a.label)),
                   ],
                   onChanged: (v) => setS(() => onAttribute(v ?? groupAttribute)),
                 );
               }),
             ),
-            SizedBox(width: t.space.sm),
-            // "Any" and "All" are the whole vocabulary, so they are two chips
-            // rather than a dropdown of two.
-            for (final m in const ['any', 'all'])
-              Padding(
-                padding: EdgeInsets.only(left: t.space.xs),
-                child: _TypeChip(
-                  label: m == 'any' ? 'Any on' : 'All on',
-                  selected: groupMode == m,
-                  onTap: () => setS(() => onMode(m)),
-                ),
-              ),
           ]),
         ];
 
