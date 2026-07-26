@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/glue_api.dart';
 import '../../core/models/device_state.dart';
 import '../../core/providers/glue_provider.dart';
+import '../../core/schema/attribute_policy.dart';
 import '../../core/text/humanize.dart';
 import '../../design/components/hc_dialog.dart';
 import '../../design/components/hc_surface.dart';
@@ -739,30 +740,121 @@ class _HelperCard extends ConsumerWidget {
               onPressed: () => _confirmDelete(context, ref),
             ),
           ]),
-          if (device.state.isNotEmpty) ...[
+          SizedBox(height: t.space.sm),
+          // A summary of what this helper is set up to DO, where that is not
+          // obvious from its readings. A group's configuration is four
+          // attributes — member_ids, attribute, expect, mode — and dumping
+          // them raw wrapped `Member Ids` one letter per line and overflowed
+          // the card by 27 pixels with a device-id array.
+          if (_summary(ref) case final summary?) ...[
+            Text(
+              summary,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 12.5, color: t.surface.onBaseMuted),
+            ),
             SizedBox(height: t.space.sm),
-            // The live reading, so the card says what the helper is doing
-            // rather than only that it exists.
-            for (final e in device.state.entries)
+          ],
+          // Live readings only. Configuration is what the edit dialog is for.
+          for (final e in device.state.entries)
+            if (!_configKeys.contains(e.key))
               Padding(
                 padding: const EdgeInsets.only(top: 2),
                 child: Row(children: [
                   Expanded(
                     child: Text(humanize(e.key),
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                             fontSize: 12, color: t.surface.onBaseMuted)),
                   ),
-                  Text('${e.value}',
+                  const SizedBox(width: 8),
+                  // Constrained and ellipsised: an unbounded value is what
+                  // overflowed the card.
+                  Flexible(
+                    child: Text(
+                      _render(e.value),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.right,
                       style: TextStyle(
                           fontSize: 12,
                           fontFeatures: t.numericFontFeatures,
-                          color: t.surface.onBase)),
+                          color: t.surface.onBase),
+                    ),
+                  ),
                 ]),
               ),
-          ],
         ],
       ),
     );
+  }
+
+  /// Attributes that describe how the helper is CONFIGURED rather than what it
+  /// currently reads. They belong in the edit dialog, not on the card.
+  static const _configKeys = {
+    'attribute',
+    'expect',
+    'mode',
+    'member_ids',
+    'options',
+    'min',
+    'max',
+    'step',
+    'unit',
+    'max_length',
+    'has_date',
+    'has_time',
+    'source_device_id',
+    'source_attribute',
+    'threshold',
+  };
+
+  static String _render(Object? v) {
+    if (v is List) return v.isEmpty ? 'none' : '${v.length}';
+    return '$v';
+  }
+
+  /// What this helper is set up to do, in one line.
+  String? _summary(WidgetRef ref) {
+    final a = device.state;
+    switch (device.deviceType) {
+      case 'group':
+        final members = (a['member_ids'] as List? ?? const []).length;
+        final attribute = '${a['attribute'] ?? 'on'}';
+        final expect = a['expect'] as bool? ?? true;
+        final all = a['mode'] == 'all';
+        // Named from the plugin's own declaration, so it reads "closed" for a
+        // door group and "off" for a light group rather than "open = false".
+        final states =
+            sharedAttributes(ref.read(ruleRefsProvider), [
+          for (final m in (a['member_ids'] as List? ?? const [])) '$m',
+        ]);
+        final named = states.where((s) => s.name == attribute).firstOrNull;
+        // The plugin's own words first. Failing that — the members may not be
+        // loaded yet — the client lexicon still knows a door from a lock, and
+        // "open false" would be a poor thing to show meanwhile.
+        final lexicon = boolStatesFor(attribute, null);
+        final word = named != null
+            ? (expect ? named.whenTrue : named.whenFalse)
+            : lexicon != null
+                ? lexicon[expect].label
+                : '$attribute ${expect ? 'true' : 'false'}';
+        final noun = members == 1 ? 'member' : 'members';
+        return 'On when ${all ? 'all' : 'any'} of $members $noun '
+            '${members == 1 && !all ? 'is' : 'are'} $word';
+      case 'number':
+        final unit = a['unit'] == null ? '' : ' ${a['unit']}';
+        return '${a['min'] ?? 0} to ${a['max'] ?? 100}$unit, '
+            'step ${a['step'] ?? 1}';
+      case 'select':
+        final options = (a['options'] as List? ?? const []).map((o) => '$o');
+        return options.isEmpty ? 'No options set' : options.join(' · ');
+      case 'threshold':
+        return 'Above ${a['threshold'] ?? 0} on '
+            '${a['source_attribute'] ?? 'value'}';
+      default:
+        return null;
+    }
   }
 
   Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {
