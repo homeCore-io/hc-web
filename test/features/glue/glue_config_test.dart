@@ -3,6 +3,20 @@ import 'package:hc_web/core/api/glue_api.dart';
 import 'package:hc_web/features/glue/glue_config.dart';
 
 void main() {
+  group('a timer carries its duration', () {
+    test('seconds are what the hub stores', () {
+      final c = glueConfigFor(GlueConfig.timer, durationSecs: 300, repeat: true);
+      expect(c, {'duration_secs': 300, 'repeat': true});
+    });
+
+    test('a timer with no duration is still sent, not omitted', () {
+      // It finishes the instant it starts — which is exactly the state every
+      // existing timer was in, because nothing could ever set a duration.
+      expect(glueConfigFor(GlueConfig.timer)['duration_secs'], 0);
+      expect(glueConfigFor(GlueConfig.timer)['repeat'], isFalse);
+    });
+  });
+
   group('a number carries its range', () {
     test('the typed range is sent', () {
       final c = glueConfigFor(GlueConfig.number,
@@ -77,13 +91,15 @@ void main() {
     expect(glueConfigFor(GlueConfig.none), isEmpty);
   });
 
-  test('exactly the three kinds that need config declare it', () {
+  test('exactly the kinds that need config declare it', () {
     // A kind that needs setup but does not declare it gets created bare and
-    // has to be fixed elsewhere — which is the gap this closes.
+    // has to be fixed elsewhere — which is the gap this closes. Timer joined
+    // the list because every timer on the hub had duration 0: nothing could
+    // ever set one.
     final configurable = kGlueTypes
         .where((g) => g.config != GlueConfig.none)
         .map((g) => g.id)
         .toSet();
-    expect(configurable, {'number', 'select', 'group'});
+    expect(configurable, {'timer', 'number', 'select', 'group'});
   });
 }

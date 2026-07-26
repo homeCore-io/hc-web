@@ -60,7 +60,8 @@ class GlueApi {
 /// Ordered by how often you reach for one rather than alphabetically: a timer
 /// and a switch are the everyday cases, a threshold and a schedule are not.
 const kGlueTypes = <GlueType>[
-  GlueType('timer', 'Timer', 'Counts down, then fires a rule.'),
+  GlueType('timer', 'Timer', 'Counts down, then fires a rule.',
+      config: GlueConfig.timer),
   GlueType('switch', 'Switch', 'A flag rules can set and read.'),
   GlueType('counter', 'Counter', 'Counts things up and down.'),
   GlueType('number', 'Number', 'Holds a value you can set.',
@@ -83,7 +84,7 @@ const kGlueTypes = <GlueType>[
 /// options can never be set to anything, and a group with no members is a
 /// device that reports on nothing. Creating those bare means editing them
 /// somewhere else immediately, so the dialog asks.
-enum GlueConfig { none, number, select, group }
+enum GlueConfig { none, timer, number, select, group }
 
 class GlueType {
   const GlueType(this.id, this.label, this.blurb,

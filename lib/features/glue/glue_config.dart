@@ -17,8 +17,18 @@ Map<String, Object?> glueConfigFor(
   String attribute = 'on',
   String mode = 'any',
   bool expect = true,
+  int durationSecs = 0,
+  bool repeat = false,
 }) {
   switch (kind) {
+    case GlueConfig.timer:
+      return {
+        // A timer created without one counts down from zero, which is a timer
+        // that finishes the instant it starts.
+        'duration_secs': durationSecs,
+        'repeat': repeat,
+      };
+
     case GlueConfig.number:
       return {
         // Defaults mirror hc-api's create_glue, so leaving a field alone

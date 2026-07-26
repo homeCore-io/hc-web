@@ -122,6 +122,10 @@ class GluePage extends ConsumerWidget {
 
   Future<void> _create(BuildContext context, WidgetRef ref) async {
     final nameCtrl = TextEditingController();
+    // Timer: how long it runs, and whether it restarts itself.
+    final durationCtrl = TextEditingController(text: '5');
+    var durationUnit = 'minutes';
+    var repeat = false;
     // Number: a range and a unit. Defaults match what the hub would apply, so
     // leaving them alone changes nothing.
     final minCtrl = TextEditingController(text: '0');
@@ -174,6 +178,8 @@ class GluePage extends ConsumerWidget {
                     attribute: groupAttribute,
                     mode: groupMode,
                     expect: groupExpect,
+                    durationSecs: _durationSecs(durationCtrl.text, durationUnit),
+                    repeat: repeat,
                   );
                   Navigator.pop(ctx);
                   try {
@@ -241,6 +247,11 @@ class GluePage extends ConsumerWidget {
                     stepCtrl: stepCtrl,
                     unitCtrl: unitCtrl,
                     optionCtrl: optionCtrl,
+                    durationCtrl: durationCtrl,
+                    durationUnit: durationUnit,
+                    repeat: repeat,
+                    onDurationUnit: (v) => durationUnit = v,
+                    onRepeat: (v) => repeat = v,
                     options: options,
                     members: members,
                     groupAttribute: groupAttribute,
@@ -298,6 +309,11 @@ class GluePage extends ConsumerWidget {
 
     // Seeded from what the helper currently holds, so opening the dialog and
     // pressing Save changes nothing.
+    final seconds = (attrs['duration_secs'] as num?)?.toInt() ?? 0;
+    final (seedValue, seedUnit) = _splitDuration(seconds);
+    final durationCtrl = TextEditingController(text: '$seedValue');
+    var durationUnit = seedUnit;
+    var repeat = attrs['repeat'] as bool? ?? false;
     final minCtrl = TextEditingController(text: '${attrs['min'] ?? ''}');
     final maxCtrl = TextEditingController(text: '${attrs['max'] ?? ''}');
     final stepCtrl = TextEditingController(text: '${attrs['step'] ?? ''}');
@@ -348,6 +364,8 @@ class GluePage extends ConsumerWidget {
                           attribute: groupAttribute,
                           mode: groupMode,
                           expect: groupExpect,
+                          durationSecs: _durationSecs(durationCtrl.text, durationUnit),
+                          repeat: repeat,
                         ),
                       );
                     }
@@ -400,6 +418,11 @@ class GluePage extends ConsumerWidget {
                     stepCtrl: stepCtrl,
                     unitCtrl: unitCtrl,
                     optionCtrl: optionCtrl,
+                    durationCtrl: durationCtrl,
+                    durationUnit: durationUnit,
+                    repeat: repeat,
+                    onDurationUnit: (v) => durationUnit = v,
+                    onRepeat: (v) => repeat = v,
                     options: options,
                     members: members,
                     groupAttribute: groupAttribute,
@@ -436,6 +459,29 @@ class GluePage extends ConsumerWidget {
     optionCtrl.dispose();
   }
 
+  /// Seconds from a value and a unit, however the field was left.
+  ///
+  /// A blank or unparseable field is zero, which the dialog shows in the
+  /// running total — a timer that counts down from nothing finishes the
+  /// instant it starts, and that should be visible before Create.
+  static int _durationSecs(String value, String unit) {
+    final n = int.tryParse(value.trim()) ?? 0;
+    return switch (unit) {
+      'hours' => n * 3600,
+      'minutes' => n * 60,
+      _ => n,
+    };
+  }
+
+  /// Seconds back into the largest unit that divides them exactly, so editing
+  /// a five-minute timer shows "5 minutes" rather than "300 seconds".
+  static (int, String) _splitDuration(int seconds) {
+    if (seconds == 0) return (0, 'minutes');
+    if (seconds % 3600 == 0) return (seconds ~/ 3600, 'hours');
+    if (seconds % 60 == 0) return (seconds ~/ 60, 'minutes');
+    return (seconds, 'seconds');
+  }
+
   /// The extra questions a kind needs before it is any use.
   ///
   /// A number without a range is a 0–100 slider whatever it measures; a select
@@ -453,6 +499,11 @@ class GluePage extends ConsumerWidget {
     required TextEditingController stepCtrl,
     required TextEditingController unitCtrl,
     required TextEditingController optionCtrl,
+    required TextEditingController durationCtrl,
+    required String durationUnit,
+    required bool repeat,
+    required ValueChanged<String> onDurationUnit,
+    required ValueChanged<bool> onRepeat,
     required List<String> options,
     required List<String> members,
     required String groupAttribute,
@@ -472,6 +523,55 @@ class GluePage extends ConsumerWidget {
         );
 
     switch (type.config) {
+      case GlueConfig.timer:
+        return [
+          const RailLabel('Counts down for'),
+          const SizedBox(height: 6),
+          Row(children: [
+            SizedBox(
+              width: 90,
+              child: TextField(
+                controller: durationCtrl,
+                keyboardType: TextInputType.number,
+                style: TextStyle(color: t.surface.onBase),
+                decoration: deco(''),
+                onChanged: (_) => setS(() {}),
+              ),
+            ),
+            SizedBox(width: t.space.sm),
+            // Seconds is what the hub stores; nobody thinks in it for a
+            // five-minute timer, and typing 300 is a conversion the UI can do.
+            for (final u in const ['seconds', 'minutes', 'hours'])
+              Padding(
+                padding: EdgeInsets.only(right: t.space.xs),
+                child: _TypeChip(
+                  label: u,
+                  selected: durationUnit == u,
+                  onTap: () => setS(() => onDurationUnit(u)),
+                ),
+              ),
+          ]),
+          SizedBox(height: t.space.xs),
+          Text(
+            '= ${_durationSecs(durationCtrl.text, durationUnit)} seconds',
+            style: TextStyle(fontSize: 11.5, color: t.surface.onBaseMuted),
+          ),
+          SizedBox(height: t.space.md),
+          const RailLabel('When it finishes'),
+          const SizedBox(height: 6),
+          Row(children: [
+            for (final r in const [false, true])
+              Padding(
+                padding: EdgeInsets.only(right: t.space.xs),
+                child: _TypeChip(
+                  label: r ? 'Start again' : 'Stop',
+                  selected: repeat == r,
+                  onTap: () => setS(() => onRepeat(r)),
+                ),
+              ),
+          ]),
+        ];
+
       case GlueConfig.number:
         return [
           Row(children: [
@@ -807,7 +907,17 @@ class _HelperCard extends ConsumerWidget {
     'source_device_id',
     'source_attribute',
     'threshold',
+    'duration_secs',
+    'repeat',
   };
+
+  /// 300 → "5 minutes". The card should not make anyone divide by sixty.
+  static String _humanDuration(int seconds) {
+    String plural(int n, String unit) => '$n $unit${n == 1 ? '' : 's'}';
+    if (seconds % 3600 == 0) return plural(seconds ~/ 3600, 'hour');
+    if (seconds % 60 == 0) return plural(seconds ~/ 60, 'minute');
+    return plural(seconds, 'second');
+  }
 
   static String _render(Object? v) {
     if (v is List) return v.isEmpty ? 'none' : '${v.length}';
@@ -818,6 +928,15 @@ class _HelperCard extends ConsumerWidget {
   String? _summary(WidgetRef ref) {
     final a = device.state;
     switch (device.deviceType) {
+      case 'timer':
+        final secs = (a['duration_secs'] as num?)?.toInt() ?? 0;
+        final repeat = a['repeat'] as bool? ?? false;
+        if (secs == 0) {
+          // Worth saying outright: a timer with no duration finishes the
+          // instant it starts, which looks like a timer that does nothing.
+          return 'No duration set — finishes immediately';
+        }
+        return '${_humanDuration(secs)}${repeat ? ', repeating' : ''}';
       case 'group':
         final members = (a['member_ids'] as List? ?? const []).length;
         final attribute = '${a['attribute'] ?? 'on'}';
