@@ -774,6 +774,7 @@ class _MetaLine extends ConsumerWidget {
         for (final tag in rule.tags)
           _MetaChip(
             label: tag,
+            lit: true,
             icon: Icons.local_offer_outlined,
             onTap: () {
               rule.tags.remove(tag);
@@ -1002,8 +1003,16 @@ class _MetaChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
-    final colour = dot
-        ? (lit ? t.accent.success : t.surface.onBaseMuted)
+    // `lit` used to be read only alongside `dot`, so a chip that set it
+    // without one rendered in the same grey as everything else — which is how
+    // the tag chips ended up invisible among the settings.
+    //
+    // With a dot it means "this state is good" (enabled → green). Without one
+    // it means "this is content, not a setting", and takes the same accent
+    // the automations list gives a tag group heading, so the same tag is the
+    // same colour in both places.
+    final colour = lit
+        ? (dot ? t.accent.success : t.accent.active)
         : t.surface.onBaseMuted;
 
     return InkWell(

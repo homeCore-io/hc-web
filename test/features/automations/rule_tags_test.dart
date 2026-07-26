@@ -5,6 +5,7 @@ import 'package:hc_web/core/providers/automations_provider.dart';
 import 'package:hc_web/core/rules/node.dart';
 import 'package:hc_web/core/rules/rule.dart';
 import 'package:hc_web/design/skins.dart';
+import 'package:hc_web/design/tokens.dart';
 import 'package:hc_web/features/automations/automation_editor_page.dart';
 
 HcRule _rule({List<String> tags = const []}) => HcRule(
@@ -55,6 +56,12 @@ void main() {
       await tester.pumpWidget(_host(_rule(tags: ['deck']), []));
       await tester.pumpAndSettle();
       expect(find.byIcon(Icons.local_offer_outlined), findsOneWidget);
+
+      // And it carries the accent the list gives a tag group, rather than the
+      // grey every setting chip uses.
+      final label = tester.widget<Text>(find.text('deck'));
+      final muted = HcTokens.of(tester.element(find.text('deck'))).surface.onBaseMuted;
+      expect(label.style?.color, isNot(muted));
     });
 
     testWidgets('each tag is its own chip, removable in one tap',
