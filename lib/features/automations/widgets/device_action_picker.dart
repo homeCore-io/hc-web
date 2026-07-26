@@ -4,6 +4,7 @@ import '../../../core/devices/presentation.dart';
 import '../../../core/models/device_state.dart';
 import '../../../core/rules/node.dart';
 import '../../../core/rules/schema.dart';
+import '../../../core/text/humanize.dart';
 import '../../../design/tokens.dart';
 import '../device_commands.dart';
 import 'device_picker_shell.dart';
@@ -388,7 +389,9 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
         sub: d.canonicalName ?? d.id,
         icon: facetOf(d, d.schema).icon,
         bucket: bucket,
-        room: d.effectiveArea ?? 'No room',
+        room: (d.effectiveArea?.isNotEmpty ?? false)
+            ? humanize(d.effectiveArea)
+            : 'No room',
         order: order++,
         commands: cmds,
         device: d,
@@ -650,9 +653,11 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
                 if (v) _room = _rooms.first;
               })),
       panes: [
-        PickerPane(width: 202, child: _rail(context)),
-        PickerPane(flex: 3, child: _list(context)),
-        PickerPane(flex: 3, child: _detail(context)),
+        PickerPane(
+            width: 202, compactLabel: 'Where', child: _rail(context)),
+        PickerPane(flex: 3, compactLabel: 'What', child: _list(context)),
+        PickerPane(
+            flex: 3, compactLabel: 'Details', child: _detail(context)),
       ],
       footerHint: _footHint(),
       primaryLabel: _editing ? 'Save action' : 'Add action',

@@ -38,10 +38,21 @@ Widget pickerHline(HcTokens t, {bool vertical = false}) => Container(
 /// One vertical pane inside the shell. A fixed [width] (the rail) or a flexible
 /// [flex] share of the rest (the list, the detail form).
 class PickerPane {
-  const PickerPane({required this.child, this.width, this.flex = 1});
+  const PickerPane({
+    required this.child,
+    this.width,
+    this.flex = 1,
+    this.compactLabel,
+  });
+
   final Widget child;
   final double? width;
   final int flex;
+
+  /// What this pane is called when the panel is too narrow to show the panes
+  /// side by side and they become steps instead. Null means the pane has no
+  /// step of its own — it is folded into the one before it.
+  final String? compactLabel;
 }
 
 /// The whole panel: `Dialog` → chrome → `Column[header, panes, footer]`.
@@ -50,7 +61,15 @@ class PickerPane {
 /// (rail · list · detail), but a picker whose category has no device list is
 /// free to use two (rail · form). Only the *style* — the depth, the header and
 /// footer — is fixed here.
-class PickerPanel extends StatelessWidget {
+/// Below this width the panes stop fitting side by side.
+///
+/// A phone is ~390 logical pixels; a rail at 220 plus a list at 260 plus a
+/// detail pane does not go into that, and squeezing them produces three
+/// unusable columns rather than one usable one. Above it the panel keeps its
+/// panes and merely takes what room there is.
+const kPickerCompactWidth = 760.0;
+
+class PickerPanel extends StatefulWidget {
   const PickerPanel({
     super.key,
     required this.kicker,
@@ -60,8 +79,8 @@ class PickerPanel extends StatelessWidget {
     required this.footerHint,
     required this.primaryLabel,
     required this.onPrimary,
-    this.width = 960,
-    this.height = 470,
+    this.width = 1160,
+    this.height = 560,
   });
 
   final String kicker;
@@ -73,68 +92,176 @@ class PickerPanel extends StatelessWidget {
 
   /// Null disables the primary button (nothing chosen yet).
   final VoidCallback? onPrimary;
+
+  /// Preferred size. Both are capped by what the viewport actually has — see
+  /// the note in [build]. 1160x560 is the three-pane desktop size; a picker
+  /// with fewer panes should ask for less rather than stretch to fill.
   final double width;
   final double height;
 
   @override
+  State<PickerPanel> createState() => _PickerPanelState();
+}
+
+class _PickerPanelState extends State<PickerPanel> {
+  /// Which pane is showing, when the panel is narrow enough to show one.
+  int _step = 0;
+
+  @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
-    final row = <Widget>[];
-    for (var i = 0; i < panes.length; i++) {
-      if (i > 0) row.add(pickerHline(t, vertical: true));
-      final p = panes[i];
-      row.add(p.width != null
-          ? SizedBox(width: p.width, child: p.child)
-          : Expanded(flex: p.flex, child: p.child));
-    }
     return Dialog(
       backgroundColor: Colors.transparent,
       elevation: 0,
       insetPadding: EdgeInsets.all(t.space.lg),
-      child: Container(
-        width: width,
-        decoration: BoxDecoration(
-          color: t.surface.overlay,
-          borderRadius: BorderRadius.circular(t.radius.lg),
-          border: Border.all(color: t.stroke.hairline, width: t.stroke.width),
-          boxShadow: t.elevation.overlay,
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _header(t),
-            pickerHline(t),
-            SizedBox(
-              height: height,
-              child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: row),
+      // [widget.width] and [widget.height] are a PREFERENCE, not a size. A constant 960x470
+      // overflowed anything shorter than about 620 logical pixels — a laptop
+      // with browser chrome, a tablet in landscape — and an overflowing dialog
+      // clips its own footer, so the primary button becomes unreachable. It
+      // was also cut off horizontally on a narrow window.
+      //
+      // The Dialog's insetPadding gives bounded constraints, so the panel can
+      // simply take the smaller of what it wants and what there is.
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final w = widget.width > constraints.maxWidth
+              ? constraints.maxWidth
+              : widget.width;
+          final compact = constraints.maxWidth < kPickerCompactWidth;
+          // Panes with a compact label are the steps; the rest fold into the
+          // step before them, which is how a rail rides along with its list.
+          final steps = <int>[
+            for (var i = 0; i < widget.panes.length; i++)
+              if (widget.panes[i].compactLabel != null) i,
+          ];
+          final step = steps.isEmpty ? 0 : _step.clamp(0, steps.length - 1);
+          final row = <Widget>[];
+          for (var i = 0; i < widget.panes.length; i++) {
+            final p = widget.panes[i];
+            if (compact && steps.isNotEmpty) {
+              // One step at a time: this pane, plus any unlabelled panes that
+              // belong to it.
+              final owner = steps.lastWhere((x) => x <= i, orElse: () => 0);
+              if (owner != steps[step]) continue;
+            }
+            if (row.isNotEmpty) row.add(pickerHline(t, vertical: true));
+            row.add(p.width != null && !compact
+                ? SizedBox(width: p.width, child: p.child)
+                : Expanded(flex: p.flex, child: p.child));
+          }
+          return Container(
+            width: w,
+            decoration: BoxDecoration(
+              color: t.surface.overlay,
+              borderRadius: BorderRadius.circular(t.radius.lg),
+              border:
+                  Border.all(color: t.stroke.hairline, width: t.stroke.width),
+              boxShadow: t.elevation.overlay,
             ),
-            pickerHline(t),
-            _footer(context, t),
-          ],
-        ),
+            clipBehavior: Clip.antiAlias,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _header(t, compact),
+                if (compact && steps.length > 1) ...[
+                  pickerHline(t),
+                  _stepBar(t, steps, step),
+                ],
+                pickerHline(t),
+                // Flexible, so the header and footer are laid out first and
+                // the widget.panes take what is left — capped at the preferred
+                // widget.height so a tall window does not stretch a short list.
+                Flexible(
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(maxHeight: widget.height),
+                    child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: row),
+                  ),
+                ),
+                pickerHline(t),
+                _footer(context, t, compact, steps, step),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
 
-  Widget _header(HcTokens t) => Padding(
+  /// Share the width between the footer's buttons when the panel is narrow.
+  Widget _wrap(bool compact, Widget child) =>
+      compact ? Expanded(child: child) : child;
+
+  /// The step indicator, shown only when the panel is narrow enough that the
+  /// panes have become a sequence.
+  Widget _stepBar(HcTokens t, List<int> steps, int step) => Padding(
+        padding: EdgeInsets.symmetric(
+            horizontal: t.space.lg, vertical: t.space.sm),
+        child: Row(children: [
+          for (var i = 0; i < steps.length; i++) ...[
+            if (i > 0)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                child: Icon(Icons.chevron_right,
+                    size: 14, color: t.surface.onBaseMuted),
+              ),
+            // Tappable, so a step already passed can be revisited without
+            // walking back through the ones after it.
+            InkWell(
+              onTap: i <= step ? () => setState(() => _step = i) : null,
+              child: Text(
+                widget.panes[steps[i]].compactLabel!,
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: i == step ? FontWeight.w700 : FontWeight.w400,
+                  color: i == step ? t.accent.active : t.surface.onBaseMuted,
+                ),
+              ),
+            ),
+          ],
+        ]),
+      );
+
+  Widget _header(HcTokens t, [bool compact = false]) => Padding(
         padding:
             EdgeInsets.fromLTRB(t.space.lg, t.space.md, t.space.md, t.space.md),
-        child: Row(children: [
-          Expanded(
+        child: Flex(
+          direction: compact ? Axis.vertical : Axis.horizontal,
+          crossAxisAlignment:
+              compact ? CrossAxisAlignment.start : CrossAxisAlignment.center,
+          children: [
+          compact
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(widget.kicker,
+                        style: TextStyle(
+                            fontSize: 10.5,
+                            letterSpacing: 1.4,
+                            fontWeight: FontWeight.w800,
+                            color: t.accent.active)),
+                    const SizedBox(height: 3),
+                    Text(widget.title,
+                        style: TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w600,
+                            color: t.surface.onBase)),
+                    SizedBox(height: t.space.sm),
+                  ],
+                )
+              : Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(kicker,
+                Text(widget.kicker,
                     style: TextStyle(
                         fontSize: 10.5,
                         letterSpacing: 1.4,
                         fontWeight: FontWeight.w800,
                         color: t.accent.active)),
                 const SizedBox(height: 3),
-                Text(title,
+                Text(widget.title,
                     style: TextStyle(
                         fontSize: 17,
                         fontWeight: FontWeight.w600,
@@ -142,26 +269,65 @@ class PickerPanel extends StatelessWidget {
               ],
             ),
           ),
-          seg,
+          widget.seg,
         ]),
       );
 
-  Widget _footer(BuildContext context, HcTokens t) => Padding(
-        padding: EdgeInsets.symmetric(
-            horizontal: t.space.lg, vertical: t.space.sm + 2),
-        child: Row(children: [
-          // Expanded, not a Spacer: the hint grew long enough (the action
-          // picker lists what it covers) to push the buttons off the panel.
+  Widget _footer(
+    BuildContext context,
+    HcTokens t,
+    bool compact,
+    List<int> steps,
+    int step,
+  ) {
+    final onLast = steps.isEmpty || step == steps.length - 1;
+    return Padding(
+      padding:
+          EdgeInsets.symmetric(horizontal: t.space.lg, vertical: t.space.sm + 2),
+      child: Row(children: [
+        // The hint is the first thing to go when there is no room: on a phone
+        // the buttons matter and a truncated sentence does not.
+        if (!compact)
           Expanded(
-            child: Text(footerHint,
+            child: Text(widget.footerHint,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(fontSize: 11.5, color: t.surface.onBaseMuted)),
-          ),
-          _FooterBtn(label: 'Cancel', onTap: () => Navigator.pop(context)),
-          SizedBox(width: t.space.sm),
-          _FooterBtn(label: primaryLabel, primary: true, onTap: onPrimary),
-        ]),
-      );
+          )
+        else
+          const Spacer(),
+        // On a phone the two buttons share the width rather than sitting at
+        // their natural size, which overflowed a 390px screen by a few pixels
+        // and took the footer's own layout with it.
+        _wrap(
+          compact,
+          compact && step > 0
+              ? _FooterBtn(
+                  label: 'Back',
+                  onTap: () => setState(() => _step = step - 1))
+              : _FooterBtn(
+                  label: 'Cancel', onTap: () => Navigator.pop(context)),
+        ),
+        SizedBox(width: t.space.sm),
+        // Mid-sequence the primary advances; only the last step commits, so a
+        // half-finished choice cannot be submitted by the same button that
+        // means "next".
+        _wrap(
+          compact,
+          compact && !onLast
+              ? _FooterBtn(
+                  label: 'Next',
+                  primary: true,
+                  onTap: () => setState(() => _step = step + 1),
+                )
+              : _FooterBtn(
+                  label: widget.primaryLabel,
+                  primary: true,
+                  onTap: widget.onPrimary),
+        ),
+      ]),
+    );
+  }
+
 }
 
 class _FooterBtn extends StatelessWidget {

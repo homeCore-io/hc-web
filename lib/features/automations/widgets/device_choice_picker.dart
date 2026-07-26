@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/devices/presentation.dart';
 import '../../../core/models/device_state.dart';
 import '../../../core/schema/attribute_policy.dart';
+import '../../../core/text/humanize.dart';
 import '../../../design/tokens.dart';
 import 'device_picker_shell.dart';
 import 'rule_refs.dart';
@@ -61,7 +62,9 @@ class _Row {
   _Row(this.device, this.ref)
       : label = device.displayName,
         sub = device.canonicalName ?? device.id,
-        room = device.effectiveArea ?? 'No room',
+        room = (device.effectiveArea?.isNotEmpty ?? false)
+            ? humanize(device.effectiveArea)
+            : 'No room',
         facet = facetOf(device, device.schema);
 
   final DeviceState device;
@@ -208,6 +211,10 @@ class _DeviceChoicePickerState extends State<_DeviceChoicePicker> {
     final pool = _pool;
 
     return PickerPanel(
+      // Two panes, so it asks for less than the three-pane default rather
+      // than stretching a rail and a list across a desktop's full width.
+      width: 880,
+      height: 480,
       kicker: widget.kicker,
       title: widget.title,
       seg: pickerSeg(t, byRoom: _byRoom, onChanged: (v) {
@@ -224,8 +231,9 @@ class _DeviceChoicePickerState extends State<_DeviceChoicePicker> {
           ? null
           : () => Navigator.pop(context, _selected),
       panes: [
-        PickerPane(width: 220, child: _rail(t)),
+        PickerPane(width: 220, compactLabel: 'Where', child: _rail(t)),
         PickerPane(
+          compactLabel: 'Device',
           child: PickerDeviceList(
             onQuery: (q) => setState(() => _query = q),
             rows: _list(t, pool),

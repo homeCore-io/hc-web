@@ -6,6 +6,7 @@ import '../../../core/rules/node.dart';
 import '../../../core/rules/schema.dart';
 import '../../../core/schema/attribute_policy.dart';
 import '../../../core/schema/device_schema.dart';
+import '../../../core/text/humanize.dart';
 import '../../../design/tokens.dart';
 import 'device_choice_picker.dart';
 import 'device_picker_shell.dart';
@@ -176,7 +177,9 @@ class _DeviceConditionPickerState extends State<DeviceConditionPicker> {
         sub: d.canonicalName ?? d.id,
         icon: facet.icon,
         bucket: _bucketOf(facet),
-        room: d.effectiveArea ?? 'No room',
+        room: (d.effectiveArea?.isNotEmpty ?? false)
+            ? humanize(d.effectiveArea)
+            : 'No room',
         kind: _Kind.device,
         attrs: attrs,
         device: d,
@@ -384,9 +387,11 @@ class _DeviceConditionPickerState extends State<DeviceConditionPicker> {
                 if (v) _room = _rooms.isEmpty ? '' : _rooms.first;
               })),
       panes: [
-        PickerPane(width: 202, child: _rail(context)),
-        PickerPane(flex: 3, child: _list(context)),
-        PickerPane(flex: 4, child: _detail(context)),
+        PickerPane(
+            width: 202, compactLabel: 'Where', child: _rail(context)),
+        PickerPane(flex: 3, compactLabel: 'What', child: _list(context)),
+        PickerPane(
+            flex: 4, compactLabel: 'Details', child: _detail(context)),
       ],
       footerHint: '${_entries.where((e) => e.kind == _Kind.device).length} '
           'devices · time · hub · logic · expressions',
