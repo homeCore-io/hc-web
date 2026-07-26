@@ -1,4 +1,5 @@
 import '../text/humanize.dart';
+import 'registry_plugin.dart';
 
 /// A registered plugin, as returned by `GET /plugins` (a `PluginRecord`).
 class PluginEntry {
@@ -130,10 +131,28 @@ class PluginEntry {
   /// downloads what is already executing. What that plugin needs is its record
   /// reconciled, not an artifact.
   ///
-  /// Deliberately equality, not ordering: these versions are opaque strings
-  /// here, and guessing at precedence would be worse than asking for neither.
-  bool wouldInstall(String? latest) =>
-      latest != null && latest != installedVersion && latest != version;
+  /// **Ordering, not merely inequality.** This used to be `latest !=
+  /// installed && latest != running`, on the reasoning that versions are
+  /// opaque strings here and guessing at precedence would be worse than
+  /// asking. That reasoning stopped holding once
+  /// [RegistryPlugin.compareVersions] existed — and inequality alone offered a
+  /// *downgrade* as an update: hc-zwave running 0.1.5 against a registry still
+  /// carrying 0.1.4 showed "Update available — v0.1.4", a button that installs
+  /// an older build. The plugins list never had the bug because it asks
+  /// [RegistryPlugin.updateFrom], which has always compared.
+  ///
+  /// Newer than *both* the record and the running process, because either one
+  /// being ahead means there is nothing to fetch.
+  bool wouldInstall(String? latest) {
+    if (latest == null || latest.isEmpty) return false;
+    final have = [installedVersion, version]
+        .whereType<String>()
+        .where((v) => v.isNotEmpty)
+        .toList();
+    if (have.isEmpty) return false;
+    return have
+        .every((v) => RegistryPlugin.compareVersions(latest, v) > 0);
+  }
 
   /// A heartbeat within ~90s means the supervisor still hears from the child.
   bool get heartbeatHealthy {

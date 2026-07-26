@@ -112,6 +112,22 @@ void main() {
           isTrue);
     });
 
+    test('an OLDER registry version is not an update', () {
+      // hc-zwave ran 0.1.5 while the registry still carried 0.1.4, and the
+      // plugin page offered "Update available — v0.1.4": a button that
+      // installs an older build over a newer one. Inequality is not ordering.
+      expect(entry(running: '0.1.5', installed: '0.1.5').wouldInstall('0.1.4'),
+          isFalse);
+      expect(entry(running: '0.1.10', installed: '0.1.10').wouldInstall('0.1.9'),
+          isFalse, reason: '0.1.10 is newer than 0.1.9, not older');
+    });
+
+    test('newer than the record but older than what runs is not an update', () {
+      // Half-ahead is still not something to fetch.
+      expect(entry(running: '0.1.5', installed: '0.1.3').wouldInstall('0.1.4'),
+          isFalse);
+    });
+
     test('nothing to compare against offers nothing', () {
       expect(entry(running: '0.1.4', installed: '0.1.3').wouldInstall(null),
           isFalse);

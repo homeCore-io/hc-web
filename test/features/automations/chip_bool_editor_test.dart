@@ -6,6 +6,7 @@ import 'package:hc_web/core/schema/device_schema.dart';
 import 'package:hc_web/design/skins.dart';
 import 'package:hc_web/features/automations/widgets/field_editors.dart';
 import 'package:hc_web/features/automations/widgets/rule_refs.dart';
+import 'package:hc_web/features/automations/widgets/sentence_editor.dart';
 
 /// A door sensor whose plugin declared both of `open`'s states — the shape
 /// hc-yolink 0.1.5 actually publishes.
@@ -93,6 +94,32 @@ void main() {
         onChanged: (_) {},
       )));
       expect(find.byType(TextField), findsOneWidget);
+    });
+  });
+
+  group('the chip editor leads with the answer, not the machinery', () {
+    test('attribute and op are demoted; the value leads', () {
+      // A verb chip on a condition owns attribute + op + value. Showing all
+      // three gave equal weight to "Opens / Closes" and to `Op: Eq`, and a new
+      // user reading "Eq" learns nothing they wanted to know.
+      const fields = [
+        HcField('attribute', HcFieldKind.attribute),
+        HcField('op', HcFieldKind.text),
+        HcField('value', HcFieldKind.json),
+      ];
+      final lead = SentenceNodeTestAccess.leading(fields);
+      expect(lead.map((f) => f.name), ['value']);
+    });
+
+    test('a slot made entirely of machinery still shows something', () {
+      // Hiding everything would open an empty sheet, which is worse than
+      // showing the raw fields.
+      const fields = [
+        HcField('attribute', HcFieldKind.attribute),
+        HcField('op', HcFieldKind.text),
+      ];
+      final lead = SentenceNodeTestAccess.leading(fields);
+      expect(lead.map((f) => f.name), ['attribute', 'op']);
     });
   });
 }

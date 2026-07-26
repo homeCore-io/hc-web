@@ -47,6 +47,7 @@ class SentenceNode extends StatefulWidget {
 class _SentenceNodeState extends State<SentenceNode> {
   bool _refining = false;
   bool _hover = false;
+  bool _advancedOpen = false;
 
   @override
   Widget build(BuildContext context) {
@@ -281,8 +282,29 @@ class _SentenceNodeState extends State<SentenceNode> {
   Future<void> _edit(BuildContext context, HcField field) =>
       _editAll(context, [field]);
 
+  /// Which of a verb slot's fields the sheet leads with.
+  ///
+  /// A verb chip usually owns three fields — `attribute`, `op`, `value` — and
+  /// showing all three gave equal weight to the answer and to the machinery.
+  /// "Opens / Closes" is the question; `attribute: open` and `Op: Eq` are how
+  /// it is stored, and a new user reading "Eq" learns nothing they wanted.
+  ///
+  /// So the value leads and the mechanism goes behind a disclosure. It stays
+  /// reachable because retargeting the attribute is a real thing to want — it
+  /// is just not the common thing.
+  static const _mechanism = {'attribute', 'op', 'change_kind'};
+
+  static List<HcField> _leading(List<HcField> fields) {
+    final lead = fields.where((f) => !_mechanism.contains(f.name)).toList();
+    // A slot made ENTIRELY of mechanism has nothing to lead with, and hiding
+    // everything would open an empty sheet.
+    return lead.isEmpty ? fields : lead;
+  }
+
   Future<void> _editAll(BuildContext context, List<HcField> fields) async {
     final t = HcTokens.of(context);
+    final lead = _leading(fields);
+    final advanced = fields.where((f) => !lead.contains(f)).toList();
 
     await showDialog<void>(
       context: context,
@@ -298,8 +320,12 @@ class _SentenceNodeState extends State<SentenceNode> {
           child: StatefulBuilder(
             builder: (context, setInner) => Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                for (final field in fields)
+                for (final field in [
+                  ...lead,
+                  if (_advancedOpen) ...advanced,
+                ])
                   Padding(
                     padding: const EdgeInsets.only(bottom: 12),
                     child: FieldEditor(
@@ -320,13 +346,44 @@ class _SentenceNodeState extends State<SentenceNode> {
                       },
                     ),
                   ),
+                if (advanced.isNotEmpty)
+                  InkWell(
+                    onTap: () => setInner(() {
+                      _advancedOpen = !_advancedOpen;
+                    }),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        Icon(
+                          _advancedOpen
+                              ? Icons.expand_less
+                              : Icons.expand_more,
+                          size: 16,
+                          color: t.surface.onBaseMuted,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          _advancedOpen
+                              ? 'Hide advanced'
+                              : 'Advanced — ${_names(advanced)}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: t.surface.onBaseMuted,
+                          ),
+                        ),
+                      ]),
+                    ),
+                  ),
               ],
             ),
           ),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () {
+              _advancedOpen = false;
+              Navigator.pop(context);
+            },
             child: const Text('Done'),
           ),
         ],
@@ -406,4 +463,14 @@ class NodeBody extends StatelessWidget {
       trailing: trailing,
     );
   }
+}
+
+
+/// Test seam for the leading/advanced split.
+///
+/// The split is a pure decision about a field list, and worth testing without
+/// pumping a dialog and tapping through it.
+abstract final class SentenceNodeTestAccess {
+  static List<HcField> leading(List<HcField> fields) =>
+      _SentenceNodeState._leading(fields);
 }
