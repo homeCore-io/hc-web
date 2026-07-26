@@ -32,6 +32,24 @@ class GlueApi {
     });
   }
 
+  /// Reconfigure an existing helper.
+  ///
+  /// The command surface *operates* a helper — sets a number's value, picks a
+  /// select's option. It cannot change what the helper IS, so before this the
+  /// only way to fix a select's options or a group's members was to delete and
+  /// recreate, which breaks every rule referring to it.
+  Future<void> update(String id, Map<String, Object?> config) async {
+    await client.dio.patch('/glue/$id', data: {'config': config});
+  }
+
+  /// Rename, through the device endpoint that already owns naming.
+  ///
+  /// Not folded into [update]: `PATCH /devices/:id` sets the user's override
+  /// with rules this page has no business reimplementing.
+  Future<void> rename(String id, String name) async {
+    await client.dio.patch('/devices/$id', data: {'name': name});
+  }
+
   Future<void> delete(String id) async {
     await client.dio.delete('/glue/$id');
   }

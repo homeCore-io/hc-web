@@ -274,13 +274,162 @@ class GluePage extends ConsumerWidget {
     optionCtrl.dispose();
   }
 
+  /// Change an existing helper.
+  ///
+  /// Before this the only way to fix a select's options or a group's members
+  /// was to delete and recreate — which breaks every rule referring to it,
+  /// since core rewrites a deleted reference to `DELETED:` and disables the
+  /// rule. Editing keeps the id, so the rules keep working.
+  static Future<void> edit(
+    BuildContext context,
+    WidgetRef ref,
+    DeviceState device,
+  ) async {
+    final type = glueTypeFor(device.deviceType);
+    final nameCtrl = TextEditingController(text: device.displayName);
+    final attrs = device.state;
+
+    // Seeded from what the helper currently holds, so opening the dialog and
+    // pressing Save changes nothing.
+    final minCtrl = TextEditingController(text: '${attrs['min'] ?? ''}');
+    final maxCtrl = TextEditingController(text: '${attrs['max'] ?? ''}');
+    final stepCtrl = TextEditingController(text: '${attrs['step'] ?? ''}');
+    final unitCtrl = TextEditingController(text: '${attrs['unit'] ?? ''}');
+    final optionCtrl = TextEditingController();
+    final options = [
+      for (final o in (attrs['options'] as List? ?? const [])) '$o',
+    ];
+    final members = [
+      for (final m in (attrs['member_ids'] as List? ?? const [])) '$m',
+    ];
+    var groupAttribute = '${attrs['attribute'] ?? 'on'}';
+    var groupMode = '${attrs['mode'] ?? 'any'}';
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) {
+          final t = HcTokens.of(ctx);
+          return HcDialog(
+            title: 'Edit ${device.displayName}',
+            width: 460,
+            actions: [
+              HcButton(label: 'Cancel', onPressed: () => Navigator.pop(ctx)),
+              HcButton(
+                label: 'Save',
+                kind: HcButtonKind.primary,
+                onPressed: () async {
+                  final name = nameCtrl.text.trim();
+                  Navigator.pop(ctx);
+                  final api = ref.read(glueApiProvider);
+                  try {
+                    if (name.isNotEmpty && name != device.displayName) {
+                      await api.rename(device.id, name);
+                    }
+                    if (type != null && type.config != GlueConfig.none) {
+                      await api.update(
+                        device.id,
+                        glueConfigFor(
+                          type.config,
+                          min: minCtrl.text,
+                          max: maxCtrl.text,
+                          step: stepCtrl.text,
+                          unit: unitCtrl.text,
+                          options: options,
+                          members: members,
+                          attribute: groupAttribute,
+                          mode: groupMode,
+                        ),
+                      );
+                    }
+                    ref.invalidate(glueProvider);
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context)
+                          .showSnackBar(SnackBar(content: Text('Failed: $e')));
+                    }
+                  }
+                },
+              ),
+            ],
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TextField(
+                  controller: nameCtrl,
+                  style: TextStyle(color: t.surface.onBase),
+                  decoration: InputDecoration(
+                    labelText: 'Name',
+                    labelStyle: TextStyle(color: t.surface.onBaseMuted),
+                    enabledBorder: OutlineInputBorder(
+                        borderSide: BorderSide(color: t.stroke.hairline)),
+                    focusedBorder: OutlineInputBorder(
+                        borderSide: BorderSide(color: t.accent.active)),
+                  ),
+                ),
+                SizedBox(height: t.space.sm),
+                Text(
+                  // The id never changes: rules refer to it, and renaming the
+                  // key would break them for a cosmetic edit.
+                  device.id,
+                  style: TextStyle(
+                      fontSize: 11.5,
+                      fontFamily: 'monospace',
+                      color: t.surface.onBaseMuted),
+                ),
+                if (type != null && type.config != GlueConfig.none) ...[
+                  SizedBox(height: t.space.md),
+                  ..._configFields(
+                    ctx,
+                    t,
+                    type,
+                    setS,
+                    ref: ref,
+                    minCtrl: minCtrl,
+                    maxCtrl: maxCtrl,
+                    stepCtrl: stepCtrl,
+                    unitCtrl: unitCtrl,
+                    optionCtrl: optionCtrl,
+                    options: options,
+                    members: members,
+                    groupAttribute: groupAttribute,
+                    groupMode: groupMode,
+                    onAttribute: (v) => groupAttribute = v,
+                    onMode: (v) => groupMode = v,
+                  ),
+                ] else
+                  Padding(
+                    padding: EdgeInsets.only(top: t.space.sm),
+                    child: Text(
+                      'A ${type?.label.toLowerCase() ?? 'helper'} of this kind '
+                      'has nothing to configure beyond its name.',
+                      style: TextStyle(
+                          fontSize: 12, color: t.surface.onBaseMuted),
+                    ),
+                  ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+
+    nameCtrl.dispose();
+    minCtrl.dispose();
+    maxCtrl.dispose();
+    stepCtrl.dispose();
+    unitCtrl.dispose();
+    optionCtrl.dispose();
+  }
+
   /// The extra questions a kind needs before it is any use.
   ///
   /// A number without a range is a 0–100 slider whatever it measures; a select
   /// with no options can never be set; a group with no members reports on
   /// nothing. Sending these at creation is the difference between a helper
   /// that works and one that has to be fixed somewhere else immediately.
-  List<Widget> _configFields(
+  static List<Widget> _configFields(
     BuildContext context,
     HcTokens t,
     GlueType type,
@@ -549,6 +698,12 @@ class _HelperCard extends ConsumerWidget {
                           color: t.surface.onBaseMuted)),
                 ],
               ),
+            ),
+            IconButton(
+              tooltip: 'Edit',
+              icon: Icon(Icons.edit_outlined,
+                  size: 17, color: t.surface.onBaseMuted),
+              onPressed: () => GluePage.edit(context, ref, device),
             ),
             IconButton(
               tooltip: 'Delete',
