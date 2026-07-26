@@ -45,18 +45,31 @@ const kGlueTypes = <GlueType>[
   GlueType('timer', 'Timer', 'Counts down, then fires a rule.'),
   GlueType('switch', 'Switch', 'A flag rules can set and read.'),
   GlueType('counter', 'Counter', 'Counts things up and down.'),
-  GlueType('number', 'Number', 'Holds a value you can set.'),
-  GlueType('select', 'Select', 'One of a fixed set of options.'),
+  GlueType('number', 'Number', 'Holds a value you can set.',
+      config: GlueConfig.number),
+  GlueType('select', 'Select', 'One of a fixed set of options.',
+      config: GlueConfig.select),
   GlueType('text', 'Text', 'Holds a line of text.'),
   GlueType('button', 'Button', 'Fires rules when pressed.'),
   GlueType('datetime', 'Date & time', 'Holds a date or a time.'),
-  GlueType('group', 'Group', 'Several devices treated as one.'),
+  GlueType('group', 'Group', 'Several devices treated as one.',
+      config: GlueConfig.group),
   GlueType('threshold', 'Threshold', 'True when a reading crosses a line.'),
   GlueType('schedule', 'Schedule', 'True inside a time window.'),
 ];
 
+/// The extra setup a kind needs before it is any use.
+///
+/// Most kinds are complete with a name. Three are not: a number without a
+/// range is a slider from 0 to 100 whatever it measures, a select with no
+/// options can never be set to anything, and a group with no members is a
+/// device that reports on nothing. Creating those bare means editing them
+/// somewhere else immediately, so the dialog asks.
+enum GlueConfig { none, number, select, group }
+
 class GlueType {
-  const GlueType(this.id, this.label, this.blurb);
+  const GlueType(this.id, this.label, this.blurb,
+      {this.config = GlueConfig.none});
 
   /// The `type` the API expects, and the device_type it writes.
   final String id;
@@ -64,6 +77,9 @@ class GlueType {
 
   /// One line on what it is FOR — the list is otherwise eleven nouns.
   final String blurb;
+
+  /// What else the create dialog has to ask for.
+  final GlueConfig config;
 }
 
 GlueType? glueTypeFor(String? deviceType) {

@@ -10,6 +10,10 @@ import '../../design/components/hc_surface.dart';
 import '../../design/tokens.dart';
 import '../../shared/widgets/section_scaffold.dart';
 import '../../shared/widgets/skeleton.dart';
+import '../automations/widgets/device_choice_picker.dart';
+import '../automations/widgets/editor_style.dart';
+import '../automations/widgets/rule_refs.dart';
+import 'glue_config.dart';
 import 'glue_id.dart';
 
 /// Helpers — the devices the hub provides itself.
@@ -116,6 +120,20 @@ class GluePage extends ConsumerWidget {
 
   Future<void> _create(BuildContext context, WidgetRef ref) async {
     final nameCtrl = TextEditingController();
+    // Number: a range and a unit. Defaults match what the hub would apply, so
+    // leaving them alone changes nothing.
+    final minCtrl = TextEditingController(text: '0');
+    final maxCtrl = TextEditingController(text: '100');
+    final stepCtrl = TextEditingController(text: '1');
+    final unitCtrl = TextEditingController();
+    // Select: the options it can hold.
+    final optionCtrl = TextEditingController();
+    final options = <String>[];
+    // Group: which devices, read on which attribute, combined how.
+    final members = <String>[];
+    var groupAttribute = 'on';
+    var groupMode = 'any';
+
     var type = kGlueTypes.first;
     final taken = {
       for (final d
@@ -142,9 +160,22 @@ class GluePage extends ConsumerWidget {
                 onPressed: () async {
                   if (id.isEmpty || clash) return;
                   final name = nameCtrl.text.trim();
+                  final config = glueConfigFor(
+                    type.config,
+                    min: minCtrl.text,
+                    max: maxCtrl.text,
+                    step: stepCtrl.text,
+                    unit: unitCtrl.text,
+                    options: options,
+                    members: members,
+                    attribute: groupAttribute,
+                    mode: groupMode,
+                  );
                   Navigator.pop(ctx);
                   try {
-                    await ref.read(glueApiProvider).create(type.id, id, name);
+                    await ref
+                        .read(glueApiProvider)
+                        .create(type.id, id, name, config: config);
                     ref.invalidate(glueProvider);
                   } catch (e) {
                     if (context.mounted) {
@@ -193,6 +224,28 @@ class GluePage extends ConsumerWidget {
                   onChanged: (_) => setS(() {}),
                 ),
                 SizedBox(height: t.space.sm),
+                if (type.config != GlueConfig.none) ...[
+                  SizedBox(height: t.space.md),
+                  ..._configFields(
+                    ctx,
+                    t,
+                    type,
+                    setS,
+                    ref: ref,
+                    minCtrl: minCtrl,
+                    maxCtrl: maxCtrl,
+                    stepCtrl: stepCtrl,
+                    unitCtrl: unitCtrl,
+                    optionCtrl: optionCtrl,
+                    options: options,
+                    members: members,
+                    groupAttribute: groupAttribute,
+                    groupMode: groupMode,
+                    onAttribute: (v) => groupAttribute = v,
+                    onMode: (v) => groupMode = v,
+                  ),
+                ],
+                SizedBox(height: t.space.sm),
                 Text(
                   id.isEmpty
                       ? 'Rules will refer to this helper by an id derived from '
@@ -213,6 +266,180 @@ class GluePage extends ConsumerWidget {
       ),
     );
     nameCtrl.dispose();
+    minCtrl.dispose();
+    maxCtrl.dispose();
+    stepCtrl.dispose();
+    unitCtrl.dispose();
+    optionCtrl.dispose();
+  }
+
+  /// The extra questions a kind needs before it is any use.
+  ///
+  /// A number without a range is a 0–100 slider whatever it measures; a select
+  /// with no options can never be set; a group with no members reports on
+  /// nothing. Sending these at creation is the difference between a helper
+  /// that works and one that has to be fixed somewhere else immediately.
+  List<Widget> _configFields(
+    BuildContext context,
+    HcTokens t,
+    GlueType type,
+    void Function(void Function()) setS, {
+    required WidgetRef ref,
+    required TextEditingController minCtrl,
+    required TextEditingController maxCtrl,
+    required TextEditingController stepCtrl,
+    required TextEditingController unitCtrl,
+    required TextEditingController optionCtrl,
+    required List<String> options,
+    required List<String> members,
+    required String groupAttribute,
+    required String groupMode,
+    required ValueChanged<String> onAttribute,
+    required ValueChanged<String> onMode,
+  }) {
+    InputDecoration deco(String label) => InputDecoration(
+          labelText: label,
+          isDense: true,
+          labelStyle: TextStyle(color: t.surface.onBaseMuted),
+          enabledBorder: OutlineInputBorder(
+              borderSide: BorderSide(color: t.stroke.hairline)),
+          focusedBorder: OutlineInputBorder(
+              borderSide: BorderSide(color: t.accent.active)),
+        );
+
+    switch (type.config) {
+      case GlueConfig.number:
+        return [
+          Row(children: [
+            Expanded(
+                child: TextField(
+                    controller: minCtrl,
+                    keyboardType: TextInputType.number,
+                    style: TextStyle(color: t.surface.onBase),
+                    decoration: deco('Min'))),
+            SizedBox(width: t.space.sm),
+            Expanded(
+                child: TextField(
+                    controller: maxCtrl,
+                    keyboardType: TextInputType.number,
+                    style: TextStyle(color: t.surface.onBase),
+                    decoration: deco('Max'))),
+            SizedBox(width: t.space.sm),
+            Expanded(
+                child: TextField(
+                    controller: stepCtrl,
+                    keyboardType: TextInputType.number,
+                    style: TextStyle(color: t.surface.onBase),
+                    decoration: deco('Step'))),
+            SizedBox(width: t.space.sm),
+            Expanded(
+                child: TextField(
+                    controller: unitCtrl,
+                    style: TextStyle(color: t.surface.onBase),
+                    decoration: deco('Unit'))),
+          ]),
+        ];
+
+      case GlueConfig.select:
+        return [
+          const RailLabel('Options'),
+          const SizedBox(height: 6),
+          if (options.isNotEmpty)
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                for (final o in options)
+                  InputChip(
+                    label: Text(o),
+                    onDeleted: () => setS(() => options.remove(o)),
+                  ),
+              ],
+            ),
+          SizedBox(height: t.space.xs),
+          TextField(
+            controller: optionCtrl,
+            style: TextStyle(color: t.surface.onBase),
+            decoration: deco('Add an option, then Enter'),
+            onSubmitted: (v) {
+              final o = v.trim();
+              if (o.isEmpty || options.contains(o)) return;
+              setS(() {
+                options.add(o);
+                optionCtrl.clear();
+              });
+            },
+          ),
+          if (options.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                'The first option becomes the initial value.',
+                style:
+                    TextStyle(fontSize: 11.5, color: t.surface.onBaseMuted),
+              ),
+            ),
+        ];
+
+      case GlueConfig.group:
+        return [
+          const RailLabel('Members'),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              for (final m in members)
+                InputChip(
+                  label: Text(ref.read(ruleRefsProvider).labelFor(m)),
+                  onDeleted: () => setS(() => members.remove(m)),
+                ),
+              ActionChip(
+                avatar: const Icon(Icons.add, size: 16),
+                label: const Text('Add'),
+                onPressed: () async {
+                  // The same searchable, room-grouped picker every other
+                  // device choice uses.
+                  final picked = await pickDeviceRef(
+                    context,
+                    refs: ref.read(ruleRefsProvider),
+                    kicker: 'Group member',
+                  );
+                  if (picked == null || members.contains(picked)) return;
+                  setS(() => members.add(picked));
+                },
+              ),
+            ],
+          ),
+          SizedBox(height: t.space.md),
+          Row(children: [
+            Expanded(
+              child: TextFormField(
+                initialValue: groupAttribute,
+                style: TextStyle(color: t.surface.onBase),
+                decoration: deco('Attribute'),
+                onChanged: onAttribute,
+              ),
+            ),
+            SizedBox(width: t.space.sm),
+            // "Any" and "All" are the whole vocabulary, so they are two chips
+            // rather than a dropdown of two.
+            for (final m in const ['any', 'all'])
+              Padding(
+                padding: EdgeInsets.only(left: t.space.xs),
+                child: _TypeChip(
+                  label: m == 'any' ? 'Any on' : 'All on',
+                  selected: groupMode == m,
+                  onTap: () => setS(() => onMode(m)),
+                ),
+              ),
+          ]),
+        ];
+
+      case GlueConfig.none:
+        return const [];
+    }
   }
 }
 
