@@ -89,14 +89,16 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
 
       // Not shouting at you nine times per rule...
-      expect(find.textContaining('Not from'), findsNothing);
+      expect(find.textContaining(RegExp('Not from', caseSensitive: false)),
+          findsNothing);
       expect(find.textContaining('Change source'), findsNothing);
       expect(find.textContaining('Refine'), findsOneWidget);
 
       // ...but two clicks away, never lost.
       await tester.tap(find.textContaining('Refine'));
       await tester.pump(const Duration(milliseconds: 50));
-      expect(find.textContaining('Not from'), findsWidgets);
+      expect(find.textContaining(RegExp('Not from', caseSensitive: false)),
+          findsWidgets);
     });
 
     testWidgets('a disclosure with nothing to say stays quiet', (tester) async {

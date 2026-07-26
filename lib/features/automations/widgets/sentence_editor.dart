@@ -134,6 +134,7 @@ class _SentenceNodeState extends State<SentenceNode> {
                         value: widget.node[f.name],
                         refs: widget.refs,
                         siblingDeviceRef: widget.node['device_id'] as String?,
+                        siblingAttribute: widget.node['attribute'] as String?,
                         onChanged: (v) {
                           if (v == null && !f.required) {
                             widget.node.fields.remove(f.name);
@@ -306,6 +307,7 @@ class _SentenceNodeState extends State<SentenceNode> {
                       value: widget.node[field.name],
                       refs: widget.refs,
                       siblingDeviceRef: widget.node['device_id'] as String?,
+                      siblingAttribute: widget.node['attribute'] as String?,
                       onChanged: (v) {
                         if (v == null && !field.required) {
                           widget.node.fields.remove(field.name);

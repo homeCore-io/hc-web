@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 
 import '../../../core/models/device_state.dart';
 import '../../../core/rules/schema.dart';
+import '../../../core/schema/attribute_policy.dart';
+import '../../../core/schema/device_schema.dart';
 import '../../../design/components/hc_dialog.dart';
 import '../../../design/tokens.dart';
 import 'editor_style.dart';
@@ -49,6 +51,7 @@ class NodeFields extends StatelessWidget {
               // A device reference elsewhere on this node lets the attribute
               // field suggest that device's actual attributes.
               siblingDeviceRef: _siblingDeviceRef(),
+              siblingAttribute: fields['attribute'] as String?,
               onChanged: (v) {
                 if (v == null && !f.required) {
                   fields.remove(f.name);
@@ -78,6 +81,7 @@ class FieldEditor extends StatelessWidget {
     required this.refs,
     required this.onChanged,
     this.siblingDeviceRef,
+    this.siblingAttribute,
   });
 
   final HcField field;
@@ -85,6 +89,12 @@ class FieldEditor extends StatelessWidget {
   final RuleRefs refs;
   final ValueChanged<Object?> onChanged;
   final String? siblingDeviceRef;
+
+  /// The attribute this node is watching, when another field on it names one.
+  ///
+  /// A value field (`to`, `from`) is only meaningful against an attribute: it
+  /// is what turns an untyped JSON box into "Opens / Closes".
+  final String? siblingAttribute;
 
   String get _label => field.label ?? _humanize(field.name);
 
@@ -103,6 +113,11 @@ class FieldEditor extends StatelessWidget {
       HcFieldKind.integer || HcFieldKind.number => _numberField(context),
       HcFieldKind.time => _timeField(context),
       HcFieldKind.weekdays => _weekdayField(context),
+      // A value field naming a boolean attribute is a choice between that
+      // attribute's two states — not a JSON box that expects you to know the
+      // attribute is a bool and to type `true`. `to` is declared `json`
+      // because it accepts any shape; when we can tell the shape, we should.
+      HcFieldKind.json when _boolStates != null => _boolStateField(context),
       HcFieldKind.json => _jsonField(context),
       HcFieldKind.script => _textField(context, lines: 3, mono: true),
       _ => _textField(context),
@@ -421,6 +436,70 @@ class FieldEditor extends StatelessWidget {
     );
   }
 
+  // -- boolean states ------------------------------------------------------
+
+  /// The two named states of the attribute this value field is about, or null
+  /// when it is not about a boolean one.
+  List<({bool value, StateLabel state})>? get _boolStates {
+    final device = siblingDeviceRef;
+    final attribute = siblingAttribute;
+    if (device == null || attribute == null || attribute.isEmpty) return null;
+    final schema = refs.schemaFor(device)?[attribute];
+    // The schema is asked first and the live reading second: an attribute a
+    // plugin declared `bool` is boolean even on a device that has not reported
+    // it yet, which is the case an observed-value check gets wrong.
+    if (schema?.kind != AttributeKind.bool_ &&
+        refs.deviceFor(device)?.state[attribute] is! bool) {
+      return null;
+    }
+    return boolTransitionsFor(attribute, schema);
+  }
+
+  /// Both directions of a boolean attribute, named by the plugin where it
+  /// declared them and by the client lexicon where it did not.
+  Widget _boolStateField(BuildContext context) {
+    final t = HcTokens.of(context);
+    final rows = _boolStates!;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        RailLabel(_label),
+        const SizedBox(height: 6),
+        Row(children: [
+          for (var i = 0; i < rows.length; i++) ...[
+            if (i > 0) const SizedBox(width: 6),
+            Expanded(
+              child: _StateChoice(
+                label: _sentenceCase(rows[i].state.transition),
+                selected: value == rows[i].value,
+                onTap: () => onChanged(rows[i].value),
+              ),
+            ),
+          ],
+          // Optional means "fires on any change", which is not the same as
+          // either direction and must stay reachable.
+          if (!field.required) ...[
+            const SizedBox(width: 6),
+            IconButton(
+              tooltip: 'Any change',
+              icon: const Icon(Icons.backspace_outlined, size: 16),
+              onPressed: value == null ? null : () => onChanged(null),
+            ),
+          ],
+        ]),
+        if (value == null && !field.required)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text('Fires on any change.',
+                style: TextStyle(fontSize: 11.5, color: t.surface.onBaseMuted)),
+          ),
+      ],
+    );
+  }
+
+  static String _sentenceCase(String s) =>
+      s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
+
   // -- json ----------------------------------------------------------------
 
   Widget _jsonField(BuildContext context) => _JsonField(
@@ -505,4 +584,56 @@ String _humanize(String raw) {
 
 extension<T> on List<T> {
   T? elementAtOrNull(int i) => i >= 0 && i < length ? this[i] : null;
+}
+
+
+/// One of a boolean attribute's two named states.
+///
+/// A pair of these replaces the JSON box on a value field: the plugin says a
+/// door "opens" and "closes", so those are the words, and neither direction
+/// needs a Not gate to reach.
+class _StateChoice extends StatelessWidget {
+  const _StateChoice({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    final accent = t.accent.active;
+    return Material(
+      color: selected ? accent.withValues(alpha: 0.14) : t.surface.raised,
+      borderRadius: BorderRadius.circular(9),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(9),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(9),
+            border: Border.all(
+              color: selected ? accent : t.stroke.hairline,
+              width: selected ? 1.5 : 1,
+            ),
+          ),
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+              color: selected ? t.surface.onBase : t.surface.onBaseMuted,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
