@@ -45,7 +45,16 @@ void main() {
       // because tagging meant hand-editing a RON file.
       await tester.pumpWidget(_host(_rule(), []));
       await tester.pumpAndSettle();
-      expect(find.text('+ tag'), findsOneWidget);
+      expect(find.text('add a tag'), findsOneWidget);
+    });
+
+    testWidgets('a tag chip is marked as a tag, not as another setting',
+        (tester) async {
+      // `deck` sitting after `run in parallel` is indistinguishable from a
+      // setting without one.
+      await tester.pumpWidget(_host(_rule(tags: ['deck']), []));
+      await tester.pumpAndSettle();
+      expect(find.byIcon(Icons.local_offer_outlined), findsOneWidget);
     });
 
     testWidgets('each tag is its own chip, removable in one tap',
@@ -76,7 +85,7 @@ void main() {
       ]));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('+ tag'));
+      await tester.tap(find.text('add a tag'));
       await tester.pumpAndSettle();
 
       // RailLabel uppercases, like every other non-input label in the editor.
@@ -96,7 +105,7 @@ void main() {
       ]));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('+'));
+      await tester.tap(find.text('add'));
       await tester.pumpAndSettle();
 
       expect(find.widgetWithText(ActionChip, 'garage'), findsOneWidget);

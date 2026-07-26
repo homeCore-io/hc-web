@@ -774,14 +774,15 @@ class _MetaLine extends ConsumerWidget {
         for (final tag in rule.tags)
           _MetaChip(
             label: tag,
-            lit: true,
+            icon: Icons.local_offer_outlined,
             onTap: () {
               rule.tags.remove(tag);
               onChanged();
             },
           ),
         _MetaChip(
-          label: rule.tags.isEmpty ? '+ tag' : '+',
+          label: rule.tags.isEmpty ? 'add a tag' : 'add',
+          icon: Icons.add,
           onTap: () => _addTag(context, known),
         ),
       ],
@@ -985,12 +986,18 @@ class _MetaChip extends StatelessWidget {
     required this.onTap,
     this.lit = false,
     this.dot = false,
+    this.icon,
   });
 
   final String label;
   final VoidCallback onTap;
   final bool lit;
   final bool dot;
+
+  /// A leading glyph, for chips whose label alone does not say what kind of
+  /// thing they are. A tag reading `deck` sits next to `run in parallel` and
+  /// is otherwise indistinguishable from a setting.
+  final IconData? icon;
 
   @override
   Widget build(BuildContext context) {
@@ -1018,6 +1025,10 @@ class _MetaChip extends StatelessWidget {
                     BoxDecoration(shape: BoxShape.circle, color: colour),
               ),
               SizedBox(width: t.space.xs),
+            ],
+            if (icon != null) ...[
+              Icon(icon, size: 12, color: colour),
+              const SizedBox(width: 4),
             ],
             Text(
               label,
