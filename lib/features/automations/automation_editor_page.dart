@@ -14,6 +14,7 @@ import 'rule_phrasing.dart';
 import 'widgets/device_trigger_picker.dart';
 import 'widgets/node_trees.dart';
 import 'widgets/rule_outline_pane.dart';
+import 'widgets/editor_style.dart';
 import 'widgets/rule_refs.dart';
 import 'widgets/sentence_editor.dart';
 
@@ -676,7 +677,7 @@ class _SaveBar extends StatelessWidget {
 /// as prose and open an editor when tapped rather than occupying three permanent
 /// labelled boxes. The line states the *effect* — "at most once every 5 min" —
 /// not the field name and its raw value.
-class _MetaLine extends StatelessWidget {
+class _MetaLine extends ConsumerWidget {
   const _MetaLine({required this.rule, required this.onChanged});
 
   final HcRule rule;
@@ -703,8 +704,17 @@ class _MetaLine extends StatelessWidget {
       };
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final t = HcTokens.of(context);
+    // Tags already existed end to end — core stores them, the API filters on
+    // them, and the list groups by them — with nothing anywhere to set one.
+    // Thirty of thirty-four rules sat under "Untagged" because tagging a rule
+    // meant editing its RON file by hand.
+    final known = <String>{
+      for (final r in ref.watch(automationsProvider).valueOrNull ?? const [])
+        ...r.tags,
+    }.toList()
+      ..sort();
 
     return Wrap(
       spacing: t.space.xs,
@@ -758,8 +768,92 @@ class _MetaLine extends StatelessWidget {
           label: _runMode(rule.runMode),
           onTap: () => _editRunMode(context),
         ),
+        _dot(t),
+        // Each tag is its own chip so removing one is a single tap, rather
+        // than editing a comma-separated string and hoping.
+        for (final tag in rule.tags)
+          _MetaChip(
+            label: tag,
+            lit: true,
+            onTap: () {
+              rule.tags.remove(tag);
+              onChanged();
+            },
+          ),
+        _MetaChip(
+          label: rule.tags.isEmpty ? '+ tag' : '+',
+          onTap: () => _addTag(context, known),
+        ),
       ],
     );
+  }
+
+  /// Add a tag, offering the ones already in use.
+  ///
+  /// Offering them is the point: tags only group rules if they are spelled the
+  /// same, and a free text box produces "deck", "Deck" and "decks" within a
+  /// week. Typing a new one is still allowed — that is how the first of any
+  /// tag gets created.
+  Future<void> _addTag(BuildContext context, List<String> known) async {
+    final controller = TextEditingController();
+    final available = known.where((k) => !rule.tags.contains(k)).toList();
+
+    final picked = await showDialog<String>(
+      context: context,
+      builder: (ctx) {
+        final t = HcTokens.of(ctx);
+        return HcDialog(
+          title: 'Add a tag',
+          description: 'Tags group rules on the automations list.',
+          width: 420,
+          actions: [
+            HcButton(label: 'Cancel', onPressed: () => Navigator.pop(ctx)),
+            HcButton(
+              label: 'Add',
+              kind: HcButtonKind.primary,
+              onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+            ),
+          ],
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (available.isNotEmpty) ...[
+                const RailLabel('Already in use'),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    for (final k in available)
+                      ActionChip(
+                        label: Text(k),
+                        onPressed: () => Navigator.pop(ctx, k),
+                      ),
+                  ],
+                ),
+                SizedBox(height: t.space.md),
+              ],
+              const RailLabel('Or a new one'),
+              const SizedBox(height: 6),
+              TextField(
+                controller: controller,
+                autofocus: available.isEmpty,
+                decoration: fieldDecoration(t, hint: 'deck, vacation, security'),
+                onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    controller.dispose();
+
+    final tag = picked?.trim();
+    if (tag == null || tag.isEmpty || rule.tags.contains(tag)) return;
+    rule.tags.add(tag);
+    rule.tags.sort();
+    onChanged();
   }
 
   Widget _dot(HcTokens t) => Text(
@@ -1007,4 +1101,24 @@ class _SectionState extends State<_Section> {
       ),
     );
   }
+}
+
+
+/// Test seam for the rule meta line.
+///
+/// The tag controls live on it, and pumping the whole editor page would drag
+/// in every provider the page touches to test four chips.
+class RuleMetaLineTestAccess extends StatelessWidget {
+  const RuleMetaLineTestAccess({
+    super.key,
+    required this.rule,
+    required this.onChanged,
+  });
+
+  final HcRule rule;
+  final VoidCallback onChanged;
+
+  @override
+  Widget build(BuildContext context) =>
+      _MetaLine(rule: rule, onChanged: onChanged);
 }
