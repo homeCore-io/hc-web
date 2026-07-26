@@ -42,12 +42,21 @@ void main() {
   });
 
   group('a group carries its members', () {
-    test('members, attribute and mode are all sent', () {
+    test('members, attribute, mode and which state counts are all sent', () {
       final c = glueConfigFor(GlueConfig.group,
           members: ['light.a', 'light.b'], attribute: 'on', mode: 'all');
       expect(c['members'], ['light.a', 'light.b']);
       expect(c['attribute'], 'on');
       expect(c['mode'], 'all');
+      expect(c['expect'], isTrue, reason: 'defaults to the true state');
+    });
+
+    test('a group can test the FALSE state', () {
+      // "All deck doors closed" — without this the group could only ask
+      // whether members were ON, and the obvious case was unexpressible.
+      final c = glueConfigFor(GlueConfig.group,
+          members: ['door.a'], attribute: 'open', mode: 'all', expect: false);
+      expect(c['expect'], isFalse);
     });
 
     test('a blank attribute falls back to `on`', () {

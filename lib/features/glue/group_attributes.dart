@@ -13,20 +13,50 @@ class GroupAttribute {
   final String whenTrue;
   final String whenFalse;
 
-  /// The state the group TESTS FOR — "open", "on", "locked".
-  ///
-  /// A group is on when any (or all) of its members are in this state; there
-  /// is no second choice to make. Showing both states as "Open / closed" named
-  /// the pair without saying which one counted, which is a question the reader
-  /// is left holding.
-  String get label => _sentenceCase(whenTrue);
-
   /// Both ends, for anywhere that explains rather than selects.
   String get pair => '${_sentenceCase(whenTrue)} / ${whenFalse.toLowerCase()}';
+
+  /// The two states this attribute can be tested for, in that order.
+  ///
+  /// BOTH, because a group is as often about the off state as the on one:
+  /// "all deck doors closed" is the obvious example, and offering only
+  /// "Open" made it unexpressible.
+  List<GroupState> get states => [
+        GroupState(name, true, _sentenceCase(whenTrue)),
+        GroupState(name, false, _sentenceCase(whenFalse)),
+      ];
 
   static String _sentenceCase(String s) =>
       s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
 }
+
+/// One selectable state: an attribute, and which of its two values counts.
+class GroupState {
+  const GroupState(this.attribute, this.expect, this.label);
+
+  final String attribute;
+
+  /// The value a member must hold to count towards the group.
+  final bool expect;
+
+  /// "Open", "Closed", "On", "Locked" — one word, the state being tested.
+  final String label;
+
+  /// Stable identity for a dropdown, since the attribute alone is ambiguous
+  /// once both of its states are offered.
+  String get key => '$attribute:$expect';
+
+  static GroupState? fromKey(String? key, List<GroupState> from) {
+    for (final s in from) {
+      if (s.key == key) return s;
+    }
+    return null;
+  }
+}
+
+/// Every state a group can be tested on, across its members.
+List<GroupState> sharedStates(RuleRefs refs, List<String> members) =>
+    [for (final a in sharedAttributes(refs, members)) ...a.states];
 
 /// The attributes a group can aggregate across its members.
 ///

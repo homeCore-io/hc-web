@@ -134,6 +134,7 @@ class GluePage extends ConsumerWidget {
     final members = <String>[];
     var groupAttribute = 'on';
     var groupMode = 'any';
+    var groupExpect = true;
 
     var type = kGlueTypes.first;
     final taken = {
@@ -171,6 +172,7 @@ class GluePage extends ConsumerWidget {
                     members: members,
                     attribute: groupAttribute,
                     mode: groupMode,
+                    expect: groupExpect,
                   );
                   Navigator.pop(ctx);
                   try {
@@ -242,7 +244,11 @@ class GluePage extends ConsumerWidget {
                     members: members,
                     groupAttribute: groupAttribute,
                     groupMode: groupMode,
-                    onAttribute: (v) => groupAttribute = v,
+                    groupExpect: groupExpect,
+                    onState: (a, e) {
+                      groupAttribute = a;
+                      groupExpect = e;
+                    },
                     onMode: (v) => groupMode = v,
                   ),
                 ],
@@ -304,6 +310,7 @@ class GluePage extends ConsumerWidget {
     ];
     var groupAttribute = '${attrs['attribute'] ?? 'on'}';
     var groupMode = '${attrs['mode'] ?? 'any'}';
+    var groupExpect = attrs['expect'] as bool? ?? true;
 
     await showDialog<void>(
       context: context,
@@ -339,6 +346,7 @@ class GluePage extends ConsumerWidget {
                           members: members,
                           attribute: groupAttribute,
                           mode: groupMode,
+                          expect: groupExpect,
                         ),
                       );
                     }
@@ -395,7 +403,11 @@ class GluePage extends ConsumerWidget {
                     members: members,
                     groupAttribute: groupAttribute,
                     groupMode: groupMode,
-                    onAttribute: (v) => groupAttribute = v,
+                    groupExpect: groupExpect,
+                    onState: (a, e) {
+                      groupAttribute = a;
+                      groupExpect = e;
+                    },
                     onMode: (v) => groupMode = v,
                   ),
                 ] else
@@ -444,7 +456,8 @@ class GluePage extends ConsumerWidget {
     required List<String> members,
     required String groupAttribute,
     required String groupMode,
-    required ValueChanged<String> onAttribute,
+    required bool groupExpect,
+    required void Function(String attribute, bool expect) onState,
     required ValueChanged<String> onMode,
   }) {
     InputDecoration deco(String label) => InputDecoration(
@@ -566,10 +579,10 @@ class GluePage extends ConsumerWidget {
                     // The state is chosen from what the members share, so a
                     // new member can invalidate it.
                     final shared =
-                        sharedAttributes(ref.read(ruleRefsProvider), members);
+                        sharedStates(ref.read(ruleRefsProvider), members);
                     if (shared.isNotEmpty &&
-                        !shared.any((a) => a.name == groupAttribute)) {
-                      onAttribute(shared.first.name);
+                        !shared.any((s) => s.attribute == groupAttribute)) {
+                      onState(shared.first.attribute, shared.first.expect);
                     }
                   });
                 },
@@ -597,7 +610,7 @@ class GluePage extends ConsumerWidget {
             Expanded(
               child: Builder(builder: (_) {
                 final shared =
-                    sharedAttributes(ref.read(ruleRefsProvider), members);
+                    sharedStates(ref.read(ruleRefsProvider), members);
                 // The verb agrees with the quantifier: "any member is open",
                 // "all members are open".
                 final lead = groupMode == 'any' ? 'member is' : 'members are';
@@ -611,22 +624,28 @@ class GluePage extends ConsumerWidget {
                     decoration: deco(members.isEmpty
                         ? lead
                         : '$lead … (members share no yes/no state)'),
-                    onChanged: onAttribute,
+                    onChanged: (v) => onState(v, groupExpect),
                   );
                 }
+                // Every attribute contributes BOTH of its states: a group is
+                // as often about the off one — "all deck doors closed" — as
+                // the on one.
+                final current = '$groupAttribute:$groupExpect';
                 return DropdownButtonFormField<String>(
-                  initialValue: shared.any((a) => a.name == groupAttribute)
-                      ? groupAttribute
-                      : null,
+                  initialValue:
+                      shared.any((s) => s.key == current) ? current : null,
                   isExpanded: true,
                   style: TextStyle(color: t.surface.onBase),
                   dropdownColor: t.surface.overlay,
                   decoration: deco(lead),
                   items: [
-                    for (final a in shared)
-                      DropdownMenuItem(value: a.name, child: Text(a.label)),
+                    for (final s in shared)
+                      DropdownMenuItem(value: s.key, child: Text(s.label)),
                   ],
-                  onChanged: (v) => setS(() => onAttribute(v ?? groupAttribute)),
+                  onChanged: (v) => setS(() {
+                    final picked = GroupState.fromKey(v, shared);
+                    if (picked != null) onState(picked.attribute, picked.expect);
+                  }),
                 );
               }),
             ),

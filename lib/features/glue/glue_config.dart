@@ -16,6 +16,7 @@ Map<String, Object?> glueConfigFor(
   List<String> members = const [],
   String attribute = 'on',
   String mode = 'any',
+  bool expect = true,
 }) {
   switch (kind) {
     case GlueConfig.number:
@@ -38,6 +39,10 @@ Map<String, Object?> glueConfigFor(
         // created device matching what the dialog showed.
         'attribute': attribute.trim().isEmpty ? 'on' : attribute.trim(),
         'mode': mode,
+        // Which of the attribute's two states counts. Without it a group can
+        // only ask "are any of these ON", so "all deck doors closed" is
+        // unexpressible.
+        'expect': expect,
       };
 
     case GlueConfig.none:

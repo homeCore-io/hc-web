@@ -82,7 +82,7 @@ void main() {
       // members are in the TRUE state; there is no second choice to make.
       final a = sharedAttributes(_refs, ['door_a', 'door_b'])
           .firstWhere((x) => x.name == 'open');
-      expect(a.label, 'Open');
+      expect(a.states.first.label, 'Open');
       expect(a.pair, 'Open / closed', reason: 'both ends still available');
     });
 
@@ -90,8 +90,9 @@ void main() {
       // A light group is on when members are ON, a lock group when LOCKED.
       // The old wording baked "on" into the quantifier — "Any on" — which is
       // simply wrong for a door.
-      expect(sharedAttributes(_refs, ['lamp']).single.label, 'On');
-      expect(sharedAttributes(_refs, ['lock']).single.label, 'Locked');
+      expect(sharedAttributes(_refs, ['lamp']).single.states.first.label, 'On');
+      expect(sharedAttributes(_refs, ['lock']).single.states.first.label,
+          'Locked');
     });
 
     test('the plugin wins over the client lexicon', () {
@@ -100,14 +101,45 @@ void main() {
       final a = sharedAttributes(_refs, ['door_a'])
           .firstWhere((x) => x.name == 'contact');
       expect(a.whenTrue, 'open');
-      expect(a.label, 'Open');
+      expect(a.states.first.label, 'Open');
     });
 
     test('an unnamed boolean still gets a usable label', () {
       final refs = RuleRefs(devices: [_dev('x', {'foo_bar': true})]);
       final a = sharedAttributes(refs, ['x']).single;
-      expect(a.label, 'Foo bar');
+      expect(a.states.first.label, 'Foo bar');
       expect(a.pair, 'Foo bar / not foo bar');
+    });
+  });
+
+  group('both states of every attribute are offered', () {
+    test('a door offers open AND closed', () {
+      // The gap this closes: "All Deck Doors Closed" is an ordinary group and
+      // was unexpressible, because only the true state was on the list.
+      final states = sharedStates(_refs, ['door_a', 'door_b'])
+          .where((s) => s.attribute == 'open')
+          .toList();
+      expect(states.map((s) => s.label), ['Open', 'Closed']);
+      expect(states.map((s) => s.expect), [true, false]);
+    });
+
+    test('the same for a light and a lock', () {
+      expect(sharedStates(_refs, ['lamp']).map((s) => s.label), ['On', 'Off']);
+      expect(sharedStates(_refs, ['lock']).map((s) => s.label),
+          ['Locked', 'Unlocked']);
+    });
+
+    test('a state is identified by attribute AND which value counts', () {
+      // The attribute alone is ambiguous once both of its states are on the
+      // list, so the dropdown cannot key on it.
+      final states = sharedStates(_refs, ['lamp']);
+      expect(states.map((s) => s.key), ['on:true', 'on:false']);
+      expect(GroupState.fromKey('on:false', states)!.expect, isFalse);
+      expect(GroupState.fromKey('nonsense', states), isNull);
+    });
+
+    test('members sharing nothing offer no states', () {
+      expect(sharedStates(_refs, ['door_a', 'lamp']), isEmpty);
     });
   });
 
