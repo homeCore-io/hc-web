@@ -246,8 +246,10 @@ class _ScreenHero extends StatelessWidget {
     final t = HcTokens.of(context);
     final on = device.state['on'] == true;
     final what = _screenOf(device) ?? '—';
-    // Standby is not offline: ECP still answers, so the panel says so rather
-    // than implying the TV has fallen off the network.
+    final tint = appTint(what);
+
+    // Standby is not offline: ECP still answers, so say so rather than implying
+    // the TV has fallen off the network.
     final mode = device.state['power_mode'];
     final sub = on
         ? (device.state['screensaver_active'] == true
@@ -255,46 +257,69 @@ class _ScreenHero extends StatelessWidget {
             : humanize(device.playbackState))
         : 'Standby${mode is String && mode.isNotEmpty ? ' · $mode' : ''}';
 
+    final model = device.state['model_name'];
+    final input = device.state['app_id'] is String &&
+        (device.state['app_id'] as String).startsWith('tvinput.');
+
     return Container(
-      width: double.infinity,
-      padding: EdgeInsets.all(t.space.md),
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: t.surface.sunken,
         borderRadius: t.radius.mdR,
         border: Border.all(color: t.stroke.hairline),
       ),
-      child: Row(
+      child: Stack(
         children: [
-          Container(
-            width: 46,
-            height: 46,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: on
-                  ? t.accent.primary.withValues(alpha: 0.16)
-                  : t.surface.overlay,
-              borderRadius: t.radius.smR,
+          // The channel's own colour, bloomed. A Netflix red and a Disney blue
+          // make the panel *of* what is on screen, the same trick the
+          // now-playing card plays with album art — a TV has no artwork to
+          // borrow, so its identity is the next best thing.
+          Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    (on ? tint : t.accent.offline).withValues(alpha: 0.26),
+                    t.surface.sunken,
+                  ],
+                ),
+              ),
             ),
-            child: Icon(on ? Icons.tv_rounded : Icons.tv_off_rounded,
-                size: 20, color: on ? t.accent.primary : t.surface.onBaseMuted),
           ),
-          SizedBox(width: t.space.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          Padding(
+            padding: EdgeInsets.all(t.space.md),
+            child: Row(
               children: [
-                Text(what,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 19,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -0.3,
-                      color: on ? t.surface.onBase : t.surface.onBaseMuted,
-                    )),
-                Text(sub,
-                    style:
-                        TextStyle(fontSize: 12, color: t.surface.onBaseMuted)),
+                _AppMark(label: what, tint: tint, on: on, input: input),
+                SizedBox(width: t.space.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(what,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 21,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -0.5,
+                            color:
+                                on ? t.surface.onBase : t.surface.onBaseMuted,
+                          )),
+                      const SizedBox(height: 2),
+                      Text(
+                        model is String && model.isNotEmpty
+                            ? '$sub · $model'
+                            : sub,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontSize: 12, color: t.surface.onBaseMuted),
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
@@ -302,6 +327,98 @@ class _ScreenHero extends StatelessWidget {
       ),
     );
   }
+}
+
+/// The square that stands in for a channel's logo.
+///
+/// Roku serves app icons over ECP, but only on the LAN and only by app id —
+/// a browser off-network cannot fetch them and core proxies artwork, not
+/// icons. So rather than a broken image or a generic glyph, the mark is the
+/// channel's initials on its own colour, which is legible at a glance and
+/// never fails to load. An HDMI input gets an input glyph instead: "H1" as
+/// initials would read as a brand.
+class _AppMark extends StatelessWidget {
+  const _AppMark({
+    required this.label,
+    required this.tint,
+    required this.on,
+    required this.input,
+  });
+
+  final String label;
+  final Color tint;
+  final bool on;
+  final bool input;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Container(
+      width: 54,
+      height: 54,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: on ? tint.withValues(alpha: 0.9) : t.surface.overlay,
+        borderRadius: BorderRadius.circular(t.radius.sm + 3),
+      ),
+      child: input || !on
+          ? Icon(on ? Icons.settings_input_hdmi_rounded : Icons.tv_off_rounded,
+              size: 22, color: on ? Colors.white : t.surface.onBaseMuted)
+          : Text(
+              _initials(label),
+              style: const TextStyle(
+                fontSize: 19,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.5,
+                color: Colors.white,
+              ),
+            ),
+    );
+  }
+
+  static String _initials(String s) {
+    final words = s.split(RegExp(r'[\s\-_]+')).where((w) => w.isNotEmpty);
+    if (words.isEmpty) return '?';
+    if (words.length == 1) {
+      final w = words.first;
+      return w.substring(0, w.length >= 2 ? 2 : 1).toUpperCase();
+    }
+    return words.take(2).map((w) => w[0]).join().toUpperCase();
+  }
+}
+
+/// A channel's brand colour where we know it, else one derived from the name.
+///
+/// Deriving rather than defaulting matters: every unknown channel sharing one
+/// grey would undo the point, and a stable hash means the same channel is the
+/// same colour every time you open it.
+Color appTint(String name) {
+  const known = <String, Color>{
+    'netflix': Color(0xFFE50914),
+    'prime video': Color(0xFF00A8E1),
+    'hulu': Color(0xFF1CE783),
+    'youtube': Color(0xFFFF0000),
+    'youtube tv': Color(0xFFFF0000),
+    'disney plus': Color(0xFF113CCF),
+    'max': Color(0xFF7B2BF9),
+    'plex - free movies & tv': Color(0xFFE5A00D),
+    'crunchyroll': Color(0xFFF47521),
+    'spotify': Color(0xFF1DB954),
+    'pandora': Color(0xFF3668FF),
+    'the roku channel': Color(0xFF6633CC),
+    'apple tv': Color(0xFF333333),
+    'peacock': Color(0xFF05AC3F),
+    'paramount+': Color(0xFF0064FF),
+    'home': Color(0xFF6633CC),
+  };
+  final key = name.toLowerCase().trim();
+  if (known[key] case final c?) return c;
+
+  var hash = 0;
+  for (final unit in key.codeUnits) {
+    hash = (hash * 31 + unit) & 0x7fffffff;
+  }
+  return HSLColor.fromAHSL(1, (hash % 360).toDouble(), 0.52, 0.46).toColor();
 }
 
 // ── Fan ──────────────────────────────────────────────────────────────────────

@@ -81,7 +81,9 @@ class DeviceActionsBlock extends ConsumerWidget {
     for (final c in _clusters) {
       if (!c.ids.every(byId.containsKey)) continue;
       clusters.add(c.build(device, byId, t));
-      used.addAll(c.ids);
+      used
+        ..addAll(c.ids)
+        ..addAll(c.absorbs);
     }
 
     final rest = actions.where((a) => !used.contains(a.id)).toList();
@@ -105,9 +107,15 @@ class DeviceActionsBlock extends ConsumerWidget {
 
 /// A set of action ids that together make one familiar control.
 class _Cluster {
-  const _Cluster(this.ids, this.build);
+  const _Cluster(this.ids, this.build, {this.absorbs = const []});
 
+  /// Every one of these must be declared for the cluster to render at all.
   final List<String> ids;
+
+  /// Ids the cluster also renders or supersedes when they happen to be there.
+  /// Without this the transport deck drew `stop` AND left it in the chip row,
+  /// and `play`/`pause` sat beside a play/pause button that already toggles.
+  final List<String> absorbs;
   final Widget Function(
       DeviceState device, Map<String, DeviceActionSpec> byId, HcTokens t) build;
 }
@@ -124,6 +132,7 @@ final _clusters = <_Cluster>[
   _Cluster(
     const ['previous', 'play_pause', 'next'],
     (device, byId, t) => _Transport(device: device, byId: byId),
+    absorbs: const ['stop', 'play', 'pause'],
   ),
   // The D-pad. `select` in the middle, arrows around it — the shape of every
   // remote in the house.

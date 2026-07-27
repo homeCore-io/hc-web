@@ -266,6 +266,7 @@ bool _isIdentity(String k) =>
       'media_error',
       'media_is_live',
       'player_state',
+      'screensaver_name',
       'auto_lock_secs',
     }.contains(k);
 
