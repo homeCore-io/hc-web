@@ -7,30 +7,29 @@ import '../../core/devices/presentation.dart';
 import '../../core/models/device_state.dart';
 import '../../core/providers/devices_provider.dart';
 import '../../core/devices/color_space.dart' show rgbToXy;
-import '../../design/hc_icons.dart';
 import '../../design/tokens.dart';
-import 'home_edit_button.dart';
 
-/// A colour / tunable-white light, as an expressive row that opens a real
-/// control — a colour wheel, brightness, a warm↔cool temperature bar, presets.
+/// The real control for a colour / tunable-white bulb: a colour wheel, a
+/// warm↔cool temperature bar, brightness and presets.
 ///
-/// A colour bulb is the one device a bare toggle most obviously fails: its whole
-/// point is the light it makes. Collapsed it is still a row (lit its real
-/// colour, a swatch, a toggle); tapped, it unfolds the controls in place.
-class HomeColorLight extends ConsumerStatefulWidget {
-  const HomeColorLight({super.key, required this.device});
+/// A colour bulb is the device a bare toggle most obviously fails — its whole
+/// point is the light it makes. This used to unfold *inside* the room card,
+/// which made it the one device on the house that answered somewhere other than
+/// the panel; every other row opens the drawer. It is the panel's hero now, and
+/// the room shows a plain row like everything else.
+class ColorLightControls extends ConsumerStatefulWidget {
+  const ColorLightControls({super.key, required this.device});
 
   final DeviceState device;
 
   @override
-  ConsumerState<HomeColorLight> createState() => _HomeColorLightState();
+  ConsumerState<ColorLightControls> createState() => _ColorLightControlsState();
 }
 
 // Tunable-white range, Kelvin. Warm end first.
 const _kWarm = 2000.0, _kCool = 6500.0;
 
-class _HomeColorLightState extends ConsumerState<HomeColorLight> {
-  bool _open = false;
+class _ColorLightControlsState extends ConsumerState<ColorLightControls> {
   bool _dragging = false;
 
   // Working colour state, seeded from the device and kept live while dragging so
@@ -45,7 +44,7 @@ class _HomeColorLightState extends ConsumerState<HomeColorLight> {
   }
 
   @override
-  void didUpdateWidget(covariant HomeColorLight old) {
+  void didUpdateWidget(covariant ColorLightControls old) {
     super.didUpdateWidget(old);
     if (!_dragging) _seed();
   }
@@ -93,66 +92,7 @@ class _HomeColorLightState extends ConsumerState<HomeColorLight> {
       .command(widget.device.id, {'on': true, 'brightness_pct': _bri.round()});
 
   @override
-  Widget build(BuildContext context) {
-    final t = HcTokens.of(context);
-    final on = widget.device.available && isOn(widget.device);
-    final colour = on ? _color : t.surface.onBaseMuted;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // The row.
-        InkWell(
-          onTap: () => setState(() => _open = !_open),
-          child: Padding(
-            padding: EdgeInsets.symmetric(
-                horizontal: t.space.md, vertical: t.space.sm + 1),
-            child: Row(
-              children: [
-                Icon(HcIcons.forFacet(DeviceFacet.colorLight, on: on),
-                    size: 19, color: colour),
-                SizedBox(width: t.space.md),
-                Expanded(
-                  child: Text(widget.device.displayName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w500,
-                        color: t.surface.onBase,
-                      )),
-                ),
-                if (on) ...[
-                  _Swatch(colour: _color),
-                  SizedBox(width: t.space.sm),
-                  Text('${_bri.round()}%',
-                      style: TextStyle(
-                          fontSize: 12,
-                          color: t.surface.onBaseMuted,
-                          fontFeatures: t.numericFontFeatures)),
-                  SizedBox(width: t.space.sm),
-                ],
-                HomeEditButton(deviceId: widget.device.id),
-                SizedBox(width: t.space.xs),
-                _Toggle(
-                  on: on,
-                  onChanged: () =>
-                      _notifier.command(widget.device.id, {'on': !on}),
-                ),
-              ],
-            ),
-          ),
-        ),
-        // The control.
-        AnimatedSize(
-          duration: t.motion.d(t.motion.base),
-          curve: t.motion.curve,
-          alignment: Alignment.topCenter,
-          child: _open ? _panel(t) : const SizedBox(width: double.infinity),
-        ),
-      ],
-    );
-  }
+  Widget build(BuildContext context) => _panel(HcTokens.of(context));
 
   Widget _panel(HcTokens t) {
     return Container(
@@ -272,23 +212,6 @@ Color _whiteColor(double temp) {
   return temp < 50
       ? Color.lerp(cool, neutral, temp / 50)!
       : Color.lerp(neutral, warm, (temp - 50) / 50)!;
-}
-
-class _Swatch extends StatelessWidget {
-  const _Swatch({required this.colour});
-  final Color colour;
-  @override
-  Widget build(BuildContext context) => Container(
-        width: 14,
-        height: 14,
-        decoration: BoxDecoration(
-          color: colour,
-          shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(color: colour.withValues(alpha: 0.6), blurRadius: 8)
-          ],
-        ),
-      );
 }
 
 class _Segmented extends StatelessWidget {
@@ -568,47 +491,6 @@ class _Presets extends StatelessWidget {
             ),
           ),
       ],
-    );
-  }
-}
-
-/// The compact switch (mirrors home_entity_row's).
-class _Toggle extends StatelessWidget {
-  const _Toggle({required this.on, required this.onChanged});
-  final bool on;
-  final VoidCallback onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = HcTokens.of(context);
-    const h = 22.0;
-    return GestureDetector(
-      onTap: onChanged,
-      child: AnimatedContainer(
-        duration: t.motion.d(t.motion.fast),
-        curve: t.motion.curve,
-        width: h * 1.72,
-        height: h,
-        padding: const EdgeInsets.all(3),
-        decoration: BoxDecoration(
-          color: on ? t.accent.active : t.accent.inactive,
-          borderRadius: BorderRadius.circular(t.radius.pill),
-        ),
-        child: AnimatedAlign(
-          duration: t.motion.d(t.motion.fast),
-          curve: t.motion.emphasized,
-          alignment: on ? Alignment.centerRight : Alignment.centerLeft,
-          child: Container(
-            width: h - 6,
-            height: h - 6,
-            decoration: BoxDecoration(
-              color: t.surface.raised,
-              shape: BoxShape.circle,
-              boxShadow: t.elevation.card,
-            ),
-          ),
-        ),
-      ),
     );
   }
 }

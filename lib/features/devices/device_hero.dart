@@ -9,6 +9,7 @@ import '../../core/schema/attribute_policy.dart';
 import '../../core/text/humanize.dart';
 import '../../design/components/hc_now_playing.dart';
 import '../../design/tokens.dart';
+import 'color_light_controls.dart';
 
 /// The one thing a device is *for*, given the room to be it.
 ///
@@ -28,9 +29,12 @@ class DeviceHero extends ConsumerWidget {
     final notifier = ref.read(devicesProvider.notifier);
 
     return switch (facet) {
+      // A colour bulb gets the real thing: wheel, warm↔cool bar, presets. It
+      // used to unfold inside the room card, which made it the one device that
+      // answered somewhere other than the panel.
+      DeviceFacet.colorLight => ColorLightControls(device: device),
       DeviceFacet.light ||
-      DeviceFacet.dimmableLight ||
-      DeviceFacet.colorLight =>
+      DeviceFacet.dimmableLight =>
         _LightHero(device: device, dimmable: facet != DeviceFacet.light),
       DeviceFacet.fan => _FanHero(device: device),
       DeviceFacet.lock => _LockHero(device: device),

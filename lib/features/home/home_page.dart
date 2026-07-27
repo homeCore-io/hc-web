@@ -21,7 +21,6 @@ import 'home_arrangement.dart';
 import 'room_summary.dart';
 import 'assign_rooms_sheet.dart';
 import 'home_camera_card.dart';
-import 'home_color_light.dart';
 import 'home_entity_row.dart';
 import 'home_rich_cards.dart';
 import 'home_thermostat.dart';
@@ -1328,10 +1327,7 @@ class _Room extends StatelessWidget {
               ],
               for (final d in entities) ...[
                 divider(),
-                if (facetOf(d, d.schema) == DeviceFacet.colorLight)
-                  HomeColorLight(device: d)
-                else
-                  HomeEntityRow(device: d),
+                HomeEntityRow(device: d),
               ],
               if (sensors.isNotEmpty) ...[
                 divider(),

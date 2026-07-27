@@ -268,6 +268,14 @@ bool _isIdentity(String k) =>
       'player_state',
       'screensaver_name',
       'auto_lock_secs',
+      // Hue effect plumbing: which dynamic scene is running and how fast. Not
+      // a reading, and the effects themselves are verbs.
+      'dynamic_speed',
+      'dynamic_status',
+      'supports_gradient',
+      'supports_dimming',
+      'supports_identify',
+      'supports_color_xy',
     }.contains(k);
 
 /// Z-Wave (and similar) command-class dumps — real data, but noise.
