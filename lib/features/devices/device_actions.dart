@@ -23,9 +23,18 @@ import '../../design/tokens.dart';
 /// option sources all come off the wire, so a plugin that adds an action gets a
 /// control without a client release.
 class DeviceActionsBlock extends ConsumerWidget {
-  const DeviceActionsBlock({super.key, required this.device});
+  const DeviceActionsBlock({
+    super.key,
+    required this.device,
+    this.covered = const {},
+  });
 
   final DeviceState device;
+
+  /// Attributes the hero already gives a control for. A light's hero IS its
+  /// brightness — offering "Set brightness…" beside it, and a brightness slider
+  /// below that, is the same knob three times.
+  final Set<String> covered;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -37,7 +46,9 @@ class DeviceActionsBlock extends ConsumerWidget {
     // picker walks (legacy `supported_actions`, then writable schema attributes,
     // then the facet). Reusing it is the point: a capability you can schedule
     // and a capability you can press must not be two different lists.
-    if (actions.isEmpty) return _FallbackVerbs(device: device);
+    if (actions.isEmpty) {
+      return _FallbackVerbs(device: device, covered: covered);
+    }
 
     // Grouped, in first-seen order — the plugin's own ordering is meaningful
     // (Power before Navigation), and sorting alphabetically would scramble it.
@@ -376,9 +387,10 @@ class _KeyState extends State<_Key> {
 /// equivalence is deliberate (see `device_action_descriptor.md`): a rule and a
 /// button press send the same payload, so one builder can serve both.
 class _FallbackVerbs extends ConsumerStatefulWidget {
-  const _FallbackVerbs({required this.device});
+  const _FallbackVerbs({required this.device, this.covered = const {}});
 
   final DeviceState device;
+  final Set<String> covered;
 
   @override
   ConsumerState<_FallbackVerbs> createState() => _FallbackVerbsState();
@@ -429,6 +441,8 @@ class _FallbackVerbsState extends ConsumerState<_FallbackVerbs> {
         // A colour picker is a control, not a verb — it stays in the Controls
         // block where it has room to be one.
         .where((c) => c.param.kind != CmdParamKind.color)
+        // Not what the hero is already a control for.
+        .where((c) => c.writes == null || !widget.covered.contains(c.writes))
         .toList();
     if (cmds.isEmpty) return const SizedBox.shrink();
 

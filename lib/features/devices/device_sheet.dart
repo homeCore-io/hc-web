@@ -97,7 +97,10 @@ class _DevicePanelState extends ConsumerState<DevicePanel> {
           // the panel is open to answer.
           Padding(
             padding: EdgeInsets.symmetric(horizontal: t.space.lg),
-            child: DeviceActionsBlock(device: device),
+            child: DeviceActionsBlock(
+              device: device,
+              covered: heroAttributesOf(device),
+            ),
           ),
 
           // Controls — the writable attributes the verbs did not already cover.
@@ -331,7 +334,11 @@ class _ControlsState extends ConsumerState<_Controls> {
     // An attribute an action already supersedes is not shown twice: a Roku
     // declaring `select_source` (which `writes: source`) would otherwise offer
     // both a "Source" control and a "Select a source" verb for one thing.
-    final claimed = schema?.attributesClaimedByActions ?? const <String>{};
+    final claimed = {
+      ...?schema?.attributesClaimedByActions,
+      // …and whatever the hero is already a control for.
+      ...heroAttributesOf(_d),
+    };
 
     // Controls are things you can SET. Read-only state moved to the Readings
     // block, which knows units and grouping — mixing the two is what made a
