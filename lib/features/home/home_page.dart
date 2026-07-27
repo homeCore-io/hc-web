@@ -504,6 +504,21 @@ class _HouseState extends ConsumerState<_House> {
             child: _HouseHeader(devices: devices, problems: problems.length),
           ),
         ),
+        // The alarm, as a card rather than a count.
+        //
+        // It used to be a dotted-underline number in the stat line, which is a
+        // footnote's weight for the one thing on this page that is asking for
+        // something. Naming each device is also what makes the count checkable
+        // — a wrong "11 need attention" hid behind its own vagueness for
+        // months.
+        if (problems.isNotEmpty)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding:
+                  EdgeInsets.fromLTRB(t.space.lg, 0, t.space.lg, t.space.md),
+              child: _AttentionCard(problems: problems),
+            ),
+          ),
         SliverToBoxAdapter(
           child: Padding(
             padding: EdgeInsets.symmetric(horizontal: t.space.lg),
@@ -735,6 +750,131 @@ class _HouseState extends ConsumerState<_House> {
   }
 }
 
+/// The devices asking for something, named.
+class _AttentionCard extends StatelessWidget {
+  const _AttentionCard({required this.problems});
+
+  final List<DeviceProblem> problems;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    // Capped: a house with a flat battery in every sensor should not push the
+    // rooms off the screen. The sheet behind "N more" has the rest.
+    const cap = 4;
+    final shown = problems.take(cap).toList();
+
+    return Container(
+      padding: EdgeInsets.all(t.space.md),
+      decoration: BoxDecoration(
+        color: t.accent.warn.withValues(alpha: 0.07),
+        borderRadius: t.radius.mdR,
+        border: Border.all(color: t.accent.warn.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(HcIcons.warning, size: 14, color: t.accent.warn),
+              SizedBox(width: t.space.sm),
+              Text(
+                problems.length == 1
+                    ? '1 thing needs you'
+                    : '${problems.length} things need you',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: t.accent.warn,
+                  fontFeatures: t.numericFontFeatures,
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: t.space.sm),
+          Wrap(
+            spacing: t.space.sm,
+            runSpacing: t.space.sm,
+            children: [
+              for (final p in shown)
+                _AttentionChip(
+                  problem: p,
+                  onTap: () => showDeviceSheet(context, p.device.id),
+                ),
+              if (problems.length > cap)
+                _MoreChip(
+                  label: '+${problems.length - cap} more',
+                  onTap: () => _showNeedsAttention(context, [
+                    for (final p in problems) p.device,
+                  ]),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AttentionChip extends StatelessWidget {
+  const _AttentionChip({required this.problem, required this.onTap});
+
+  final DeviceProblem problem;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    final offline = problem.reason == 'offline';
+    final colour = offline ? t.accent.offline : t.accent.warn;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(t.radius.pill),
+      child: Container(
+        padding:
+            EdgeInsets.symmetric(horizontal: t.space.md, vertical: t.space.sm),
+        decoration: BoxDecoration(
+          color: t.surface.raised,
+          borderRadius: BorderRadius.circular(t.radius.pill),
+          border: Border.all(color: t.stroke.hairline),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 6,
+              height: 6,
+              decoration: BoxDecoration(color: colour, shape: BoxShape.circle),
+            ),
+            SizedBox(width: t.space.sm),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 190),
+              child: Text(
+                problem.device.displayName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: t.surface.onBase),
+              ),
+            ),
+            SizedBox(width: t.space.sm),
+            Text(
+              problem.reason,
+              style: TextStyle(
+                  fontSize: 11.5,
+                  color: t.surface.onBaseMuted,
+                  fontFeatures: t.numericFontFeatures),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// One line that says how the house is, before any detail.
 class _HouseHeader extends ConsumerWidget {
   const _HouseHeader({required this.devices, required this.problems});
@@ -777,21 +917,12 @@ class _HouseHeader extends ConsumerWidget {
               _dot(t),
               _Stat(label: '$offline offline', warn: true),
             ],
+            // No longer a link: the attention card directly below names each
+            // device and is the door. Two doors to the same room, one of them a
+            // dotted underline, is worse than one.
             if (problems > 0) ...[
               _dot(t),
-              // A count is only useful if it takes you to the things it counts.
-              // This is the one stat that is a door, not a fact.
-              MouseRegion(
-                cursor: SystemMouseCursors.click,
-                child: GestureDetector(
-                  onTap: () => _showNeedsAttention(context, devices),
-                  child: _Stat(
-                    label: '$problems need attention',
-                    warn: true,
-                    link: true,
-                  ),
-                ),
-              ),
+              _Stat(label: '$problems need attention', warn: true),
             ],
             for (final m in active) ...[
               _dot(t),
@@ -812,15 +943,11 @@ class _Stat extends StatelessWidget {
     required this.label,
     this.lit = false,
     this.warn = false,
-    this.link = false,
   });
 
   final String label;
   final bool lit;
   final bool warn;
-
-  /// A stat you can tap. A dotted underline says so without a button's weight.
-  final bool link;
 
   @override
   Widget build(BuildContext context) {
@@ -837,9 +964,6 @@ class _Stat extends StatelessWidget {
         fontWeight: lit || warn ? FontWeight.w600 : FontWeight.w400,
         color: colour,
         fontFeatures: t.numericFontFeatures,
-        decoration: link ? TextDecoration.underline : null,
-        decorationColor: link ? colour.withValues(alpha: 0.5) : null,
-        decorationStyle: TextDecorationStyle.dotted,
       ),
     );
   }
@@ -1010,12 +1134,22 @@ class _Room extends StatelessWidget {
     final climate = actuators
         .where((d) => facetOf(d, d.schema) == DeviceFacet.climate)
         .toList();
-    // A speaker earns its space only when it is playing — then it blooms into a
-    // now-playing card. Idle, it stays a row (with a play button).
+    // A speaker earns its space only when it has something to SHOW — then it
+    // blooms into a now-playing card. Otherwise it stays a row.
+    //
+    // The condition used to be `playbackState == 'playing'`, which a Roku
+    // breaks: neither the tuner nor an HDMI input goes through
+    // `query/media-player`, so hc-roku reports `playing` for both (its own
+    // comment says as much — the alternative is calling a TV showing a games
+    // console "stopped"). A TV on HDMI therefore bloomed into a now-playing
+    // card with no title, no artwork and no duration — and, because the card
+    // carries no tap target, no way to open the device at all. Office TV was
+    // unopenable while the idle soundbar beside it was fine.
     final playingMedia = actuators
         .where((d) =>
             facetOf(d, d.schema) == DeviceFacet.mediaPlayer &&
-            d.playbackState == 'playing')
+            d.playbackState == 'playing' &&
+            (d.cleanTitle ?? '').isNotEmpty)
         .toList();
     final controls = actuators
         .where((d) =>

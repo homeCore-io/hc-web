@@ -90,7 +90,16 @@ class _SheetFrame extends StatelessWidget {
         color: Colors.transparent,
         child: ConstrainedBox(
           constraints: BoxConstraints(
-            maxWidth: wide ? 460 : double.infinity,
+            // Scales with the window instead of a flat 460.
+            //
+            // 460 was set when the panel was a header and a list of rows. It is
+            // too narrow for what it holds now — a media card, a D-pad, a
+            // wrapped strip of verbs — and it wasted the room a desktop has
+            // anyway. Floor 520 so the blocks are never cramped, ceiling 760 so
+            // it stays a drawer laid over the house rather than a second page.
+            maxWidth: wide
+                ? (MediaQuery.sizeOf(context).width * 0.44).clamp(520.0, 760.0)
+                : double.infinity,
             maxHeight: MediaQuery.sizeOf(context).height * (wide ? 1.0 : 0.88),
             minHeight: wide ? MediaQuery.sizeOf(context).height : 0,
           ),
