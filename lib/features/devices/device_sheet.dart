@@ -19,6 +19,7 @@ import '../../design/tokens.dart';
 import '../../shell/hc_sheet.dart';
 import '../automations/rule_phrasing.dart';
 import 'device_actions.dart';
+import 'device_hero.dart';
 
 /// A device, laid over the house rather than replacing it.
 ///
@@ -83,8 +84,16 @@ class _DevicePanelState extends ConsumerState<DevicePanel> {
               message: 'This device is offline. Commands will not reach it.',
             ),
 
-          // Verbs. First, because "what can I do with this" is the question the
-          // panel is open to answer.
+          // The hero: what this device IS, before what it can be told to do.
+          // Renders nothing for a facet with nothing worth enlarging.
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+                t.space.lg, t.space.xs, t.space.lg, t.space.md),
+            child: DeviceHero(device: device),
+          ),
+
+          // Verbs — "what can I do with this" is the other half of the question
+          // the panel is open to answer.
           Padding(
             padding: EdgeInsets.symmetric(horizontal: t.space.lg),
             child: DeviceActionsBlock(device: device),

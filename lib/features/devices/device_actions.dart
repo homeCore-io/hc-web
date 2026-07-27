@@ -52,18 +52,249 @@ class DeviceActionsBlock extends ConsumerWidget {
         for (final entry in byCategory.entries) ...[
           _BlockLabel(entry.key),
           SizedBox(height: t.space.sm),
-          Wrap(
-            spacing: t.space.sm,
-            runSpacing: t.space.sm,
-            children: [
-              for (final a in entry.value)
-                _ActionChip(device: device, action: a),
-            ],
-          ),
+          _category(device, entry.value, t),
           SizedBox(height: t.space.md),
         ],
       ],
     );
+  }
+
+  /// Some categories are not lists.
+  ///
+  /// hc-roku declares 35 actions and a faithful chip per action is 35 chips —
+  /// technically complete and unusable. Eleven of them are a *directional pad*
+  /// and three are a *volume rocker*: shapes people already know, which a list
+  /// destroys. So a cluster whose members are all present renders as the shape,
+  /// and whatever is left over stays chips.
+  Widget _category(
+      DeviceState device, List<DeviceActionSpec> actions, HcTokens t) {
+    final byId = {for (final a in actions) a.id: a};
+    final used = <String>{};
+
+    final clusters = <Widget>[];
+    for (final c in _clusters) {
+      if (!c.ids.every(byId.containsKey)) continue;
+      clusters.add(c.build(device, byId, t));
+      used.addAll(c.ids);
+    }
+
+    final rest = actions.where((a) => !used.contains(a.id)).toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final c in clusters) ...[c, SizedBox(height: t.space.sm)],
+        if (rest.isNotEmpty)
+          Wrap(
+            spacing: t.space.sm,
+            runSpacing: t.space.sm,
+            children: [
+              for (final a in rest) _ActionChip(device: device, action: a),
+            ],
+          ),
+      ],
+    );
+  }
+}
+
+/// A set of action ids that together make one familiar control.
+class _Cluster {
+  const _Cluster(this.ids, this.build);
+
+  final List<String> ids;
+  final Widget Function(
+      DeviceState device, Map<String, DeviceActionSpec> byId, HcTokens t) build;
+}
+
+final _clusters = <_Cluster>[
+  // The D-pad. `select` in the middle, arrows around it — the shape of every
+  // remote in the house.
+  _Cluster(
+    const ['up', 'down', 'left', 'right', 'select'],
+    (device, byId, t) => _DPad(device: device, byId: byId),
+  ),
+  // The volume rocker. Deliberately NOT a slider: `supports_audio_volume_control`
+  // is false on both Rokus here, so there is no level to read or set — only
+  // three key presses. A slider would invent a value the device does not have.
+  _Cluster(
+    const ['volume_up', 'volume_down', 'mute'],
+    (device, byId, t) => _Rocker(device: device, byId: byId),
+  ),
+];
+
+/// Runs a declared action with no parameters. Shared by the clusters, which are
+/// all built from parameterless keys.
+Future<void> _fire(
+    WidgetRef ref, DeviceState device, DeviceActionSpec a) async {
+  await ref.read(devicesProvider.notifier).command(device.id, {'action': a.id});
+}
+
+class _DPad extends ConsumerWidget {
+  const _DPad({required this.device, required this.byId});
+
+  final DeviceState device;
+  final Map<String, DeviceActionSpec> byId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = HcTokens.of(context);
+
+    Widget key(String id, Widget child, {bool round = false}) {
+      final a = byId[id];
+      if (a == null) return const SizedBox(width: 44, height: 44);
+      return _Key(
+        size: 44,
+        round: round,
+        enabled: device.available,
+        onTap: () => _fire(ref, device, a),
+        tooltip: a.label,
+        child: child,
+      );
+    }
+
+    Widget arrow(String id, IconData icon) =>
+        key(id, Icon(icon, size: 20, color: t.surface.onBase));
+
+    const gap = SizedBox(width: 44, height: 44);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(mainAxisSize: MainAxisSize.min, children: [
+          gap,
+          arrow('up', Icons.keyboard_arrow_up_rounded),
+          gap,
+        ]),
+        SizedBox(height: t.space.xs),
+        Row(mainAxisSize: MainAxisSize.min, children: [
+          arrow('left', Icons.keyboard_arrow_left_rounded),
+          SizedBox(width: t.space.xs),
+          key(
+            'select',
+            Text('OK',
+                style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w800,
+                    color: t.accent.primary)),
+            round: true,
+          ),
+          SizedBox(width: t.space.xs),
+          arrow('right', Icons.keyboard_arrow_right_rounded),
+        ]),
+        SizedBox(height: t.space.xs),
+        Row(mainAxisSize: MainAxisSize.min, children: [
+          gap,
+          arrow('down', Icons.keyboard_arrow_down_rounded),
+          gap,
+        ]),
+      ],
+    );
+  }
+}
+
+class _Rocker extends ConsumerWidget {
+  const _Rocker({required this.device, required this.byId});
+
+  final DeviceState device;
+  final Map<String, DeviceActionSpec> byId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = HcTokens.of(context);
+    final muted = device.state['muted'] == true;
+
+    Widget key(String id, IconData icon, {Color? tint}) {
+      final a = byId[id]!;
+      return _Key(
+        size: 40,
+        enabled: device.available,
+        onTap: () => _fire(ref, device, a),
+        tooltip: a.label,
+        child: Icon(icon, size: 18, color: tint ?? t.surface.onBase),
+      );
+    }
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        key('volume_down', Icons.remove_rounded),
+        SizedBox(width: t.space.xs),
+        key('volume_up', Icons.add_rounded),
+        SizedBox(width: t.space.sm),
+        key('mute', muted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
+            tint: muted ? t.accent.warn : null),
+      ],
+    );
+  }
+}
+
+/// One physical-feeling key. Presses depress; that feedback is most of what
+/// makes a remote feel like a remote rather than a form.
+class _Key extends StatefulWidget {
+  const _Key({
+    required this.size,
+    required this.child,
+    required this.onTap,
+    this.round = false,
+    this.enabled = true,
+    this.tooltip,
+  });
+
+  final double size;
+  final Widget child;
+  final VoidCallback onTap;
+  final bool round;
+  final bool enabled;
+  final String? tooltip;
+
+  @override
+  State<_Key> createState() => _KeyState();
+}
+
+class _KeyState extends State<_Key> {
+  bool _down = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    final radius = widget.round
+        ? BorderRadius.circular(999)
+        : BorderRadius.circular(t.radius.sm + 2);
+
+    final key = GestureDetector(
+      onTapDown: widget.enabled ? (_) => setState(() => _down = true) : null,
+      onTapCancel: () => setState(() => _down = false),
+      onTap: widget.enabled
+          ? () {
+              setState(() => _down = false);
+              widget.onTap();
+            }
+          : null,
+      child: AnimatedScale(
+        scale: _down ? 0.93 : 1,
+        duration: t.motion.d(t.motion.fast),
+        child: Container(
+          width: widget.size,
+          height: widget.size,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: _down
+                ? t.accent.primary.withValues(alpha: 0.16)
+                : t.surface.raised,
+            borderRadius: radius,
+            border: Border.all(
+                color: widget.round
+                    ? t.accent.primary.withValues(alpha: 0.4)
+                    : t.stroke.hairline),
+          ),
+          child:
+              Opacity(opacity: widget.enabled ? 1 : 0.4, child: widget.child),
+        ),
+      ),
+    );
+
+    final tip = widget.tooltip;
+    return tip == null || tip.isEmpty ? key : Tooltip(message: tip, child: key);
   }
 }
 
