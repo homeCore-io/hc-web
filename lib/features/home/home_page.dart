@@ -1224,7 +1224,7 @@ class _Room extends StatelessWidget {
         .where((d) =>
             facetOf(d, d.schema) == DeviceFacet.mediaPlayer &&
             d.playbackState == 'playing' &&
-            (d.cleanTitle ?? '').isNotEmpty)
+            ((d.cleanTitle ?? '').isNotEmpty || d.hasArtwork))
         .toList();
     final controls = actuators
         .where((d) =>

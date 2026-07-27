@@ -157,6 +157,17 @@ class DeviceState {
   /// falls back to the human playback state when there's no presentable title.
   String get mediaSubtitle => cleanTitle ?? playbackState;
 
+  /// Whether the speaker has cover art to show for what it is playing.
+  ///
+  /// A radio stream often reports artwork and **no title at all** — Office-1
+  /// playing an iHeart station publishes `media_image_url` with no
+  /// `media_title` and no `title`. Read on title alone, such a speaker looks
+  /// idle while it is audibly playing, which is exactly what John reported.
+  bool get hasArtwork {
+    final url = state['media_image_url'];
+    return url is String && url.isNotEmpty;
+  }
+
   static bool _looksLikeStreamUrl(String s) =>
       s.contains('://') ||
       s.contains('.m3u8') ||

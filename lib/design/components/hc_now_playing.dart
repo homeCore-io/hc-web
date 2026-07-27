@@ -59,6 +59,9 @@ class HcNowPlaying extends StatelessWidget {
     // URL as its "track" collapses to the idle row instead of rendering a card
     // full of query-string junk.
     final title = device.cleanTitle;
+    // Never invented: when the stream gives no name, the card says what is
+    // true — it is playing — and the artwork and transport carry the rest.
+    final headline = (title == null || title.isEmpty) ? 'Playing' : title;
 
     // An idle speaker collapses to a row.
     //
@@ -67,7 +70,10 @@ class HcNowPlaying extends StatelessWidget {
     // ~290px each of mostly nothing, and the one that WAS playing had no more
     // presence than the four that weren't. A card should be as big as it has
     // something to say.
-    if (title == null || title.isEmpty) {
+    // Artwork counts as "something to show". A radio stream frequently reports
+    // cover art and no title whatsoever, and collapsing that to the idle row
+    // told the user a playing speaker was silent.
+    if ((title == null || title.isEmpty) && !device.hasArtwork) {
       return _IdleSpeaker(
         device: device,
         group: group,
@@ -135,7 +141,7 @@ class HcNowPlaying extends StatelessWidget {
                           SizedBox(height: t.space.sm),
                           Text(
                             // Non-null past the idle early-return above.
-                            title,
+                            headline,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(

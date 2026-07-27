@@ -46,8 +46,13 @@ class DeviceHero extends ConsumerWidget {
       // why hc-roku reports `state: "playing"` for both. Handing that to the
       // now-playing card gets the idle-speaker row, which is not wrong so much
       // as beside the point: the answer is *what is on screen*.
+      // A TV on an input has no title AND no artwork; a titleless radio stream
+      // has artwork, so it keeps the now-playing card rather than being
+      // mistaken for a screen.
       DeviceFacet.mediaPlayer
-          when (device.cleanTitle ?? '').isEmpty && _screenOf(device) != null =>
+          when (device.cleanTitle ?? '').isEmpty &&
+              !device.hasArtwork &&
+              _screenOf(device) != null =>
         _ScreenHero(device: device),
       DeviceFacet.mediaPlayer => HcNowPlaying(
           device: device,

@@ -13,7 +13,8 @@ DeviceState _d(String id, Map<String, dynamic> state) => DeviceState(
 /// The rule the room card uses to decide whether a media device blooms into a
 /// now-playing card or stays a row. Mirrors `_Room` in home_page.dart.
 bool blooms(DeviceState d) =>
-    d.playbackState == 'playing' && (d.cleanTitle ?? '').isNotEmpty;
+    d.playbackState == 'playing' &&
+    ((d.cleanTitle ?? '').isNotEmpty || d.hasArtwork);
 
 void main() {
   group('a media device blooms only when it has something to show', () {
@@ -55,6 +56,41 @@ void main() {
           'media_title': 'The Diplomat',
         })),
         isTrue,
+      );
+    });
+
+    test('a titleless radio stream still blooms — it has artwork', () {
+      // Reported by John and reproduced on Office-1: an iHeart station plays
+      // with `media_image_url` set and NO title of any kind. Judged on title
+      // alone the speaker looked idle while it was audibly playing.
+      expect(
+        blooms(_d('sonos_office_1', {
+          'state': 'playing',
+          'media_image_url':
+              'http://10.0.10.40:1400/getaa?s=1&u=x-sonosapi-stream%3a…',
+        })),
+        isTrue,
+      );
+    });
+
+    test('artwork alone does not bloom a paused speaker', () {
+      expect(
+        blooms(_d('sonos', {
+          'state': 'paused',
+          'media_image_url': 'http://10.0.10.40:1400/getaa?s=1',
+        })),
+        isFalse,
+      );
+    });
+
+    test('a Roku on HDMI has neither title nor artwork, so still no bloom', () {
+      expect(
+        blooms(_d('roku', {
+          'state': 'playing',
+          'source': 'HDMI 1',
+          'app_name': 'HDMI 1',
+        })),
+        isFalse,
       );
     });
 
