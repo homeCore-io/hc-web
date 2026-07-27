@@ -14,9 +14,11 @@ import '../devices/device_sheet.dart';
 import '../../core/providers/areas_provider.dart';
 import '../../core/providers/dashboards_provider.dart';
 import '../../design/components/hc_controls.dart';
+import '../../design/components/hc_sensor_chip.dart';
 import '../../shell/hc_sheet.dart';
 import '../cameras/camera_store.dart';
 import 'home_arrangement.dart';
+import 'room_summary.dart';
 import 'home_camera_card.dart';
 import 'home_color_light.dart';
 import 'home_entity_row.dart';
@@ -988,8 +990,18 @@ class _Room extends StatelessWidget {
             final byOn = (isOn(b) ? 1 : 0).compareTo(isOn(a) ? 1 : 0);
             return byOn != 0 ? byOn : a.displayName.compareTo(b.displayName);
           });
+    // A remote has no state worth a row of its own: a Pico reports only which
+    // button last fired, and a keypad's LEDs mean nothing without the plate.
+    // Eleven of them across the house were eleven lines saying nothing, so they
+    // fold to one — still one tap from where they were.
+    final buttons = devices
+        .where((d) => facetOf(d, d.schema) == DeviceFacet.button)
+        .toList()
+      ..sort((a, b) => a.displayName.compareTo(b.displayName));
     final sensors = devices
-        .where((d) => !facetOf(d, d.schema).isActuator)
+        .where((d) =>
+            !facetOf(d, d.schema).isActuator &&
+            facetOf(d, d.schema) != DeviceFacet.button)
         .toList()
       ..sort((a, b) => a.displayName.compareTo(b.displayName));
 
@@ -1010,7 +1022,10 @@ class _Room extends StatelessWidget {
             facetOf(d, d.schema) != DeviceFacet.climate &&
             !playingMedia.contains(d))
         .toList();
-    final entities = [...controls, ...sensors];
+    // Sensors leave the row list entirely: a reading is not a control, and
+    // giving it the same 44px row made a room of eight sensors scan as a room
+    // of eight things you could operate. They become a chip strip below.
+    final entities = controls;
     final on = controls.where(isOn).length;
 
     Widget divider() =>
@@ -1074,6 +1089,29 @@ class _Room extends StatelessWidget {
                           onPressed: onRename,
                         ),
                       SizedBox(width: t.space.sm),
+                      // The room's own summary, so a COLLAPSED room still
+                      // answers "is this room alright?". A count of what is on
+                      // says nothing about the lock left open or how warm it is
+                      // in there, which are the two things worth folding a room
+                      // away without losing.
+                      if (roomSummary(room.devices) case final extra?) ...[
+                        Text(extra.text,
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: extra.warn
+                                  ? FontWeight.w600
+                                  : FontWeight.w400,
+                              color: extra.warn
+                                  ? t.accent.warn
+                                  : t.surface.onBaseMuted,
+                              fontFeatures: t.numericFontFeatures,
+                            )),
+                        Text(' · ',
+                            style: TextStyle(
+                                fontSize: 11.5,
+                                color: t.surface.onBaseMuted
+                                    .withValues(alpha: 0.5))),
+                      ],
                       if (controls.isNotEmpty)
                         Text.rich(
                           TextSpan(children: [
@@ -1129,6 +1167,28 @@ class _Room extends StatelessWidget {
                 else
                   HomeEntityRow(device: d),
               ],
+              if (sensors.isNotEmpty) ...[
+                divider(),
+                Padding(
+                  padding: EdgeInsets.fromLTRB(
+                      t.space.md, t.space.sm + 2, t.space.md, t.space.md),
+                  child: Wrap(
+                    spacing: t.space.sm,
+                    runSpacing: t.space.sm,
+                    children: [
+                      for (final d in sensors)
+                        HcSensorChip(
+                          device: d,
+                          onTap: () => showDeviceSheet(context, d.id),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+              if (buttons.isNotEmpty) ...[
+                divider(),
+                _RemotesFold(devices: buttons),
+              ],
               if (scenes.isNotEmpty) ...[
                 divider(),
                 Padding(
@@ -1156,6 +1216,66 @@ class _Room extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// The room's remotes, keypads and Picos behind one line.
+///
+/// They are real devices and they belong to the room, but none of them has a
+/// state a row can usefully show — a Pico reports which button last fired and
+/// nothing else. Eleven of them across the house were eleven lines of noise
+/// above the lamps people actually came for.
+class _RemotesFold extends StatefulWidget {
+  const _RemotesFold({required this.devices});
+
+  final List<DeviceState> devices;
+
+  @override
+  State<_RemotesFold> createState() => _RemotesFoldState();
+}
+
+class _RemotesFoldState extends State<_RemotesFold> {
+  bool _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    final n = widget.devices.length;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        InkWell(
+          onTap: () => setState(() => _open = !_open),
+          child: Padding(
+            padding: EdgeInsets.symmetric(
+                horizontal: t.space.md, vertical: t.space.sm + 1),
+            child: Row(
+              children: [
+                AnimatedRotation(
+                  turns: _open ? 0 : -0.25,
+                  duration: t.motion.d(t.motion.fast),
+                  child: Icon(HcIcons.caretDown,
+                      size: 11, color: t.surface.onBaseMuted),
+                ),
+                SizedBox(width: t.space.sm),
+                Text(
+                  n == 1 ? '1 remote or keypad' : '$n remotes & keypads',
+                  style:
+                      TextStyle(fontSize: 12.5, color: t.surface.onBaseMuted),
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (_open)
+          for (final d in widget.devices)
+            Padding(
+              padding: EdgeInsets.only(left: t.space.md),
+              child: HomeEntityRow(device: d),
+            ),
+      ],
     );
   }
 }
