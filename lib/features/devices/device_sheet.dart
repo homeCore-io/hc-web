@@ -21,6 +21,7 @@ import '../automations/rule_phrasing.dart';
 import 'device_actions.dart';
 import 'device_hero.dart';
 import 'device_readings.dart';
+import 'device_scenes.dart';
 
 /// A device, laid over the house rather than replacing it.
 ///
@@ -91,6 +92,14 @@ class _DevicePanelState extends ConsumerState<DevicePanel> {
             padding: EdgeInsets.fromLTRB(
                 t.space.lg, t.space.xs, t.space.lg, t.space.md),
             child: DeviceHero(device: device),
+          ),
+
+          // Scenes, before the generic verbs: for a Hue bulb "Tropical
+          // twilight" is the thing you actually came to press, and a colour
+          // wheel is what you use when none of them is right.
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: t.space.lg),
+            child: DeviceScenesBlock(device: device),
           ),
 
           // Verbs — "what can I do with this" is the other half of the question
