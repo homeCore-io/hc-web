@@ -5,6 +5,7 @@ import '../../core/devices/presentation.dart';
 import '../../core/models/device_state.dart';
 import '../../core/providers/devices_provider.dart';
 import '../../core/providers/modes_provider.dart';
+import '../../core/providers/active_sort_provider.dart';
 import '../../core/providers/room_collapse_provider.dart';
 import '../../core/text/humanize.dart';
 import '../../design/hc_icons.dart';
@@ -444,9 +445,13 @@ class _HouseState extends ConsumerState<_House> {
 
     // Rooms, not "sections". The house already has a structure; inventing a
     // second one in a dashboard document was the original mistake.
+    final activeFirst = ref.watch(activeSortProvider);
     final groups = runQuery(
       devices,
-      const DeviceQuery(group: DeviceGroup.room, sort: DeviceSort.activeFirst),
+      DeviceQuery(
+        group: DeviceGroup.room,
+        sort: activeFirst ? DeviceSort.activeFirst : DeviceSort.name,
+      ),
     );
     final byKey = {for (final g in groups) g.key: g};
     final problems = problemsIn(devices);
@@ -534,6 +539,7 @@ class _HouseState extends ConsumerState<_House> {
 
                 Widget room(String key) => _Room(
                       room: byKey[key]!,
+                      activeFirst: activeFirst,
                       collapsed: _collapsed.contains(key),
                       onToggleCollapse: () => _toggle(key),
                       // The bucket gets the one action that empties it.
@@ -933,6 +939,8 @@ class _HouseHeader extends ConsumerWidget {
               _dot(t),
               _Stat(label: m, lit: true),
             ],
+            _dot(t),
+            const _ActiveSortToggle(),
           ],
         ),
       ],
@@ -941,6 +949,54 @@ class _HouseHeader extends ConsumerWidget {
 
   Widget _dot(HcTokens t) => Text('·',
       style: TextStyle(color: t.surface.onBaseMuted.withValues(alpha: 0.5)));
+}
+
+/// Turns active-first sorting on and off, in the line that describes the house.
+///
+/// It belongs here rather than in a settings page because it is about *this*
+/// view right now: you notice you want it the moment a room re-orders under
+/// your hand, and a preference you have to go looking for is one you will not
+/// find at that moment.
+class _ActiveSortToggle extends ConsumerWidget {
+  const _ActiveSortToggle();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = HcTokens.of(context);
+    final on = ref.watch(activeSortProvider);
+
+    return Tooltip(
+      message: on
+          ? 'On devices lead each room. Rooms re-order as things switch.'
+          : 'Rooms stay in A–Z order.',
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          onTap: () => ref.read(activeSortProvider.notifier).toggle(),
+          behavior: HitTestBehavior.opaque,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                on ? Icons.bolt_rounded : Icons.sort_by_alpha_rounded,
+                size: 13,
+                color: on ? t.accent.active : t.surface.onBaseMuted,
+              ),
+              SizedBox(width: t.space.xs),
+              Text(
+                on ? 'Active first' : 'A–Z',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: on ? FontWeight.w600 : FontWeight.w400,
+                  color: on ? t.accent.active : t.surface.onBaseMuted,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _Stat extends StatelessWidget {
@@ -1082,6 +1138,7 @@ class _NeedsAttentionSheet extends StatelessWidget {
 class _Room extends StatelessWidget {
   const _Room({
     required this.room,
+    required this.activeFirst,
     required this.collapsed,
     required this.onToggleCollapse,
     required this.onActivate,
@@ -1090,6 +1147,11 @@ class _Room extends StatelessWidget {
   });
 
   final DeviceGroupResult room;
+
+  /// Whether the on ones lead. See [activeSortProvider] for why this is a
+  /// choice and not a constant.
+  final bool activeFirst;
+
   final bool collapsed;
   final VoidCallback onToggleCollapse;
   final ValueChanged<DeviceState> onActivate;
@@ -1121,8 +1183,11 @@ class _Room extends StatelessWidget {
     final actuators =
         devices.where((d) => facetOf(d, d.schema).isActuator).toList()
           ..sort((a, b) {
-            final byOn = (isOn(b) ? 1 : 0).compareTo(isOn(a) ? 1 : 0);
-            return byOn != 0 ? byOn : a.displayName.compareTo(b.displayName);
+            if (activeFirst) {
+              final byOn = (isOn(b) ? 1 : 0).compareTo(isOn(a) ? 1 : 0);
+              if (byOn != 0) return byOn;
+            }
+            return a.displayName.compareTo(b.displayName);
           });
     // A remote has no state worth a row of its own: a Pico reports only which
     // button last fired, and a keypad's LEDs mean nothing without the plate.
