@@ -216,11 +216,19 @@ class _Header extends ConsumerWidget {
 
     final room =
         device.effectiveArea != null ? humanize(device.effectiveArea!) : null;
+    final showPower = facet.isActuator && device.available;
+
     final String stateWord;
     final Color stateColor;
     if (!device.available) {
       stateWord = 'Offline';
       stateColor = t.accent.offline;
+    } else if (showPower) {
+      // The power control says On/Off in words a centimetre away; repeating it
+      // here would be the same fact twice.
+      stateWord =
+          device.deviceType != null ? humanize(device.deviceType!) : 'Device';
+      stateColor = t.surface.onBaseMuted;
     } else if (facet.isActuator) {
       stateWord = on ? 'On' : 'Off';
       stateColor = on ? t.accent.active : t.surface.onBaseMuted;
@@ -291,11 +299,11 @@ class _Header extends ConsumerWidget {
               ],
             ),
           ),
-          if (facet.isActuator && device.available)
+          if (showPower)
             Padding(
-              padding: EdgeInsets.only(top: t.space.sm, right: t.space.xs),
-              child: HcToggle(
-                value: on,
+              padding: EdgeInsets.only(top: t.space.xs, right: t.space.xs),
+              child: _PowerButton(
+                on: on,
                 semanticLabel: device.displayName,
                 onChanged: (v) => ref
                     .read(devicesProvider.notifier)
@@ -310,6 +318,85 @@ class _Header extends ConsumerWidget {
               onPressed: () => Navigator.of(context).maybePop(),
             ),
         ],
+      ),
+    );
+  }
+}
+
+/// The panel's power control: a labelled pill, not a bare switch.
+///
+/// A 34×20 [HcToggle] in the top-right corner was the least noticeable thing in
+/// the panel — unlabelled, low-contrast when off, and sitting a few pixels from
+/// the close ✕, which is the one neighbour a power control should not be
+/// confused with. Here the word is part of the control, so its state is legible
+/// without decoding a switch position, and it is big enough to aim at.
+class _PowerButton extends StatelessWidget {
+  const _PowerButton({
+    required this.on,
+    required this.onChanged,
+    this.semanticLabel,
+  });
+
+  final bool on;
+  final ValueChanged<bool> onChanged;
+  final String? semanticLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    final fg = on ? t.accent.onPrimary : t.surface.onBaseMuted;
+
+    return Semantics(
+      toggled: on,
+      button: true,
+      label: semanticLabel,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          onTap: () => onChanged(!on),
+          child: AnimatedContainer(
+            duration: t.motion.d(t.motion.fast),
+            curve: t.motion.curve,
+            height: 36,
+            padding: EdgeInsets.symmetric(horizontal: t.space.md),
+            decoration: BoxDecoration(
+              color: on ? t.accent.active : t.surface.overlay,
+              borderRadius: BorderRadius.circular(t.radius.pill),
+              border: Border.all(
+                color: on ? Colors.transparent : t.stroke.hairline,
+              ),
+              // The same halo the lit tiles wear, so "on" carries at a glance.
+              boxShadow: on && t.glow.enabled
+                  ? [
+                      BoxShadow(
+                        color: t.accent.active.withValues(alpha: 0.32),
+                        blurRadius: 14,
+                        spreadRadius: -3,
+                      ),
+                    ]
+                  : null,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Material's glyph, not the bundled Phosphor face: those two
+                // .ttf files carry no glyph names, so a codepoint picked for
+                // `power` cannot be verified and renders whatever is next door.
+                Icon(Icons.power_settings_new_rounded, size: 16, color: fg),
+                SizedBox(width: t.space.xs),
+                Text(
+                  on ? 'On' : 'Off',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.2,
+                    color: fg,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

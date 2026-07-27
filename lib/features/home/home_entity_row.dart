@@ -225,56 +225,38 @@ class _Toggle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
-    // The primary control on the house deserves to look like one. At 22px it
-    // was the smallest thing in the row and the easiest to miss — smaller than
-    // the text beside it, which is backwards for the one element you are
-    // reaching for. 28 is still a row control, not a switch panel, and the tap
-    // target is padded out to the token minimum regardless.
-    const h = 28.0;
+    // 22, deliberately. It was briefly grown to 28 on a misread of "the toggle
+    // is too small" — that was about the panel header, not this. A room card is
+    // a dense list where the eye is scanning names; the control is found by its
+    // fixed position at the right edge, not by its size, and a taller switch
+    // here just spaces the rows apart for nothing.
+    const h = 22.0;
     const w = h * 1.72;
     return Semantics(
       toggled: on,
       child: GestureDetector(
         onTap: onChanged,
-        behavior: HitTestBehavior.opaque,
-        child: Padding(
-          // Hit area, not visual size: a control this small on a phone needs
-          // slop around it, and the row is tall enough to spend it.
-          padding: EdgeInsets.symmetric(
-              horizontal: t.space.xs, vertical: t.space.xs),
-          child: AnimatedContainer(
+        child: AnimatedContainer(
+          duration: t.motion.d(t.motion.fast),
+          curve: t.motion.curve,
+          width: w,
+          height: h,
+          padding: const EdgeInsets.all(3),
+          decoration: BoxDecoration(
+            color: on ? t.accent.active : t.accent.inactive,
+            borderRadius: BorderRadius.circular(t.radius.pill),
+          ),
+          child: AnimatedAlign(
             duration: t.motion.d(t.motion.fast),
-            curve: t.motion.curve,
-            width: w,
-            height: h,
-            padding: const EdgeInsets.all(3),
-            decoration: BoxDecoration(
-              color: on ? t.accent.active : t.accent.inactive,
-              borderRadius: BorderRadius.circular(t.radius.pill),
-              // Lit devices get a soft halo, so "on" reads across the room and
-              // not only from the fill colour — the same signal the tiles use.
-              boxShadow: on && t.glow.enabled
-                  ? [
-                      BoxShadow(
-                        color: t.accent.active.withValues(alpha: 0.35),
-                        blurRadius: 10,
-                        spreadRadius: -2,
-                      ),
-                    ]
-                  : null,
-            ),
-            child: AnimatedAlign(
-              duration: t.motion.d(t.motion.fast),
-              curve: t.motion.emphasized,
-              alignment: on ? Alignment.centerRight : Alignment.centerLeft,
-              child: Container(
-                width: h - 6,
-                height: h - 6,
-                decoration: BoxDecoration(
-                  color: on ? Colors.white : t.surface.raised,
-                  shape: BoxShape.circle,
-                  boxShadow: t.elevation.card,
-                ),
+            curve: t.motion.emphasized,
+            alignment: on ? Alignment.centerRight : Alignment.centerLeft,
+            child: Container(
+              width: h - 6,
+              height: h - 6,
+              decoration: BoxDecoration(
+                color: t.surface.raised,
+                shape: BoxShape.circle,
+                boxShadow: t.elevation.card,
               ),
             ),
           ),
