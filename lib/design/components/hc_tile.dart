@@ -400,7 +400,11 @@ String summarise(DeviceState d) {
     bits.add(w ? 'WATER' : 'dry');
   }
   if (s['smoke'] case final bool sm) bits.add(sm ? 'SMOKE' : 'clear');
-  if (s['contact'] case final bool c) bits.add(c ? 'closed' : 'open');
+  // `contact` is deliberately NOT read. Every YoLink door sensor publishes it
+  // alongside `open`, and under the electrical convention the two disagree —
+  // this line used to append "open" to a door that had just been described as
+  // "closed", on the same chip. `open` above is unambiguous and covers it. See
+  // device_readings.dart for the full evidence.
   if (s['vibration'] case final bool v) bits.add(v ? 'vibration' : 'still');
 
   if (s['state'] case final String st when d.isMediaPlayer) bits.add(st);

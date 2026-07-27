@@ -47,6 +47,22 @@ import '../models/device_state.dart';
       v ? const Color(0xFFFFB661) : const Color(0xFF8B95A4)
     );
   }
+  if (s['vibration'] case final bool v) {
+    return (
+      'Vibration',
+      v ? 'Vibration' : 'Still',
+      v ? const Color(0xFFFFB661) : const Color(0xFF8B95A4)
+    );
+  }
+  // Green is "safe" here, not "on" — the one reading where the active colour
+  // would be exactly backwards.
+  if (s['locked'] case final bool v) {
+    return (
+      'Lock',
+      v ? 'Locked' : 'Unlocked',
+      v ? const Color(0xFF6FD1A6) : const Color(0xFFFFC978)
+    );
+  }
 
   for (final key in const [
     'temperature',

@@ -33,7 +33,12 @@ class HcSensorChip extends StatelessWidget {
     // number matters or what colour it is. `summarise` is the fallback for a
     // device with no metric worth leading on.
     final metric = offline ? null : primaryMetricOf(device);
-    final reading = offline ? 'Offline' : (metric?.$2 ?? summarise(device));
+    // The fallback is `summarise`, which speaks in lowercase fragments meant to
+    // be joined ("dry · 100%"). As a chip's whole value it needs a capital,
+    // and its em-dash for "nothing reported" needs saying out loud — a bare
+    // dash under a device's name reads as a rendering failure.
+    final reading = offline ? 'Offline' : (metric?.$2 ?? _fallbackFor(device));
+
     final accent = offline
         ? t.accent.offline
         : alert
@@ -95,6 +100,13 @@ class HcSensorChip extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  /// `summarise` said the way a chip needs it.
+  static String _fallbackFor(DeviceState d) {
+    final s = summarise(d);
+    if (s == '—' || s.isEmpty) return 'No reading';
+    return '${s[0].toUpperCase()}${s.substring(1)}';
   }
 
   /// A reading worth colouring red: a detected leak or smoke. `summarise`

@@ -676,6 +676,8 @@ String? primaryMetricKeyOf(DeviceState d) {
   for (final k in const ['leak', 'water_detected', 'smoke', 'open']) {
     if (s[k] is bool) return k;
   }
+  if (s['vibration'] is bool) return 'vibration';
+  if (s['locked'] is bool) return 'locked';
   if (s['occupancy'] is bool) return 'occupancy';
   if (s['occupied'] is bool) return 'occupied';
   if (s['motion'] is bool) return 'motion';

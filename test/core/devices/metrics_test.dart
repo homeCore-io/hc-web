@@ -63,6 +63,19 @@ void main() {
       expect(primaryMetricOf(_d('m', {'motion': true}))?.$2, 'Motion');
     });
 
+    test('a vibration sensor says still, not false', () {
+      expect(primaryMetricOf(_d('v', {'vibration': false}))?.$2, 'Still');
+      expect(primaryMetricOf(_d('v', {'vibration': true}))?.$2, 'Vibration');
+    });
+
+    test('a lock leads with the lock, and green means safe', () {
+      final locked = primaryMetricOf(_d('l', {'locked': true}))!;
+      final open = primaryMetricOf(_d('l', {'locked': false}))!;
+      expect(locked.$2, 'Locked');
+      expect(open.$2, 'Unlocked');
+      expect(locked.$3, isNot(open.$3));
+    });
+
     test('a device with nothing to lead with gets no hero', () {
       // The block must vanish rather than render an empty card.
       expect(primaryMetricOf(_d('z', {'kind': 'hue_bridge'})), isNull);
