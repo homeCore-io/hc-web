@@ -19,6 +19,7 @@ import '../../shell/hc_sheet.dart';
 import '../cameras/camera_store.dart';
 import 'home_arrangement.dart';
 import 'room_summary.dart';
+import 'assign_rooms_sheet.dart';
 import 'home_camera_card.dart';
 import 'home_color_light.dart';
 import 'home_entity_row.dart';
@@ -536,6 +537,11 @@ class _HouseState extends ConsumerState<_House> {
                       room: byKey[key]!,
                       collapsed: _collapsed.contains(key),
                       onToggleCollapse: () => _toggle(key),
+                      // The bucket gets the one action that empties it.
+                      onAssignRooms: byKey[key]!.key == HomeArrangement.kNoRoom
+                          ? () =>
+                              showAssignRoomsSheet(context, byKey[key]!.devices)
+                          : null,
                       // "No room" is a dumping bucket, not an area, so it cannot
                       // be renamed.
                       onRename: byKey[key]!.key == HomeArrangement.kNoRoom
@@ -1081,6 +1087,7 @@ class _Room extends StatelessWidget {
     required this.onToggleCollapse,
     required this.onActivate,
     this.onRename,
+    this.onAssignRooms,
   });
 
   final DeviceGroupResult room;
@@ -1091,6 +1098,10 @@ class _Room extends StatelessWidget {
   /// Rename this room in English. Null for the "No room" bucket, which is not an
   /// area and cannot be renamed.
   final VoidCallback? onRename;
+
+  /// Only the "No room" bucket has this: the action that empties it. A room you
+  /// cannot get devices out of is a list of problems, not a room.
+  final VoidCallback? onAssignRooms;
 
   @override
   Widget build(BuildContext context) {
@@ -1162,6 +1173,11 @@ class _Room extends StatelessWidget {
     final entities = controls;
     final on = controls.where(isOn).length;
 
+    // Not for the "No room" bucket: those devices share no room, so a
+    // temperature or an "occupied" from one of them says nothing about the
+    // others. `onAssignRooms` is the bucket's tell.
+    final summary = onAssignRooms == null ? roomSummary(room.devices) : null;
+
     Widget divider() =>
         Divider(height: 1, thickness: 1, color: t.stroke.hairline);
 
@@ -1222,13 +1238,29 @@ class _Room extends StatelessWidget {
                           icon: const Icon(HcIcons.pencil),
                           onPressed: onRename,
                         ),
+                      if (onAssignRooms != null)
+                        Padding(
+                          padding: EdgeInsets.only(right: t.space.sm),
+                          child: GestureDetector(
+                            onTap: onAssignRooms,
+                            behavior: HitTestBehavior.opaque,
+                            child: Text(
+                              'Assign rooms',
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w600,
+                                color: t.accent.primary,
+                              ),
+                            ),
+                          ),
+                        ),
                       SizedBox(width: t.space.sm),
                       // The room's own summary, so a COLLAPSED room still
                       // answers "is this room alright?". A count of what is on
                       // says nothing about the lock left open or how warm it is
                       // in there, which are the two things worth folding a room
                       // away without losing.
-                      if (roomSummary(room.devices) case final extra?) ...[
+                      if (summary case final extra?) ...[
                         Text(extra.text,
                             style: TextStyle(
                               fontSize: 11.5,
