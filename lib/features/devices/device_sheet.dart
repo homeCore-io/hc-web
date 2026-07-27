@@ -20,6 +20,7 @@ import '../../shell/hc_sheet.dart';
 import '../automations/rule_phrasing.dart';
 import 'device_actions.dart';
 import 'device_hero.dart';
+import 'device_readings.dart';
 
 /// A device, laid over the house rather than replacing it.
 ///
@@ -101,9 +102,12 @@ class _DevicePanelState extends ConsumerState<DevicePanel> {
 
           // Controls — the writable attributes the verbs did not already cover.
           _Controls(device: device),
+
+          // Readings — everything it reports but you cannot set, in units.
+          _Readings(device: device),
           SizedBox(height: t.space.md),
 
-          // Readings — trends and what changed lately.
+          // History — trends and what changed lately.
           _Section(
             title: 'History',
             initiallyOpen: false,
@@ -329,11 +333,17 @@ class _ControlsState extends ConsumerState<_Controls> {
     // both a "Source" control and a "Select a source" verb for one thing.
     final claimed = schema?.attributesClaimedByActions ?? const <String>{};
 
-    // The attributes to show — the schema where we have one, else the device's
-    // own reported state. `on` already has the header toggle.
+    // Controls are things you can SET. Read-only state moved to the Readings
+    // block, which knows units and grouping — mixing the two is what made a
+    // weather station's seventeen unitless rows live under a tab called
+    // *Control*. With no registered schema there is nothing here at all: an
+    // inferred `writable` is a guess, and a slider that does nothing is worse
+    // than no slider.
     final keys = (hasSchema
-            ? schema.attributes.keys.where((k) => k != 'on')
-            : _d.state.keys.where((k) => k != 'on'))
+            ? schema.attributes.entries
+                .where((e) => e.value.writable && e.key != 'on')
+                .map((e) => e.key)
+            : const <String>[])
         .where((k) => !claimed.contains(k))
         .toList();
     final present = keys.toSet();
@@ -349,16 +359,8 @@ class _ControlsState extends ConsumerState<_Controls> {
     final primary = visible.where((k) => !_isAdvancedAttr(k)).toList();
     final advanced = visible.where((k) => _isAdvancedAttr(k)).toList();
 
-    if (primary.isEmpty && advanced.isEmpty) {
-      return Padding(
-        padding: EdgeInsets.symmetric(horizontal: t.space.lg),
-        child: Text(
-            hasSchema
-                ? 'No adjustable settings beyond power.'
-                : 'No adjustable settings.',
-            style: TextStyle(fontSize: 12.5, color: t.surface.onBaseMuted)),
-      );
-    }
+    // Nothing to set is not worth a sentence saying so — the block just goes.
+    if (primary.isEmpty && advanced.isEmpty) return const SizedBox.shrink();
 
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: t.space.lg),
@@ -414,6 +416,33 @@ class _ControlsState extends ConsumerState<_Controls> {
             ? (v) => ref.read(devicesProvider.notifier).command(_d.id, {k: v})
             : null,
       ),
+    );
+  }
+}
+
+/// Readings, with the attributes another block already owns held back.
+///
+/// The hide set is assembled here rather than inside the readings block so the
+/// panel stays the one place that knows which blocks are on screen — otherwise
+/// adding a hero means remembering to teach a second file about it.
+class _Readings extends StatelessWidget {
+  const _Readings({required this.device});
+
+  final DeviceState device;
+
+  @override
+  Widget build(BuildContext context) {
+    final schema = device.schema;
+    return DeviceReadingsBlock(
+      device: device,
+      hide: {
+        ...heroAttributesOf(device),
+        // Whatever the Controls block is rendering as a control.
+        ...?schema?.attributes.entries
+            .where((e) => e.value.writable)
+            .map((e) => e.key),
+        ...?schema?.attributesClaimedByActions,
+      },
     );
   }
 }

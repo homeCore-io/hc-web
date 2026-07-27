@@ -495,6 +495,81 @@ class _SensorHero extends StatelessWidget {
   }
 }
 
+/// The attributes the hero already puts on screen, so the Readings block does
+/// not print the same fact underneath it. Derived here rather than in the panel
+/// because the hero is the thing that knows what it drew.
+Set<String> heroAttributesOf(DeviceState d) {
+  final facet = facetOf(d, d.schema);
+  return switch (facet) {
+    DeviceFacet.light ||
+    DeviceFacet.dimmableLight ||
+    DeviceFacet.colorLight =>
+      const {
+        'on',
+        'brightness',
+        'brightness_pct',
+        'color_temp',
+        'color_temp_mirek',
+        'color_temp_mirek_min',
+        'color_temp_mirek_max',
+        'color_xy',
+        'color_rgb',
+      },
+    DeviceFacet.fan => const {'on', 'speed', 'speed_pct'},
+    DeviceFacet.lock => const {'locked'},
+    DeviceFacet.mediaPlayer => const {
+        'on',
+        'state',
+        'title',
+        'media_title',
+        'media_duration',
+        'media_position',
+        'duration_secs',
+        'position_secs',
+        'volume',
+        'app_name',
+        'app_id',
+        'source',
+        'power_mode',
+        'screensaver_active',
+        'group_coordinator',
+        'group_members',
+      },
+    _ when !facet.isActuator => {
+        'on',
+        // The SDK here predates null-aware set elements, so the null case is
+        // spelled out rather than folded into the literal.
+        ...switch (primaryMetricKeyOf(d)) {
+          final k? => {k},
+          _ => const <String>{},
+        },
+      },
+    _ => const {'on'},
+  };
+}
+
+/// The attribute [primaryMetricOf] chose, or null when it chose nothing.
+String? primaryMetricKeyOf(DeviceState d) {
+  final s = d.state;
+  for (final k in const ['leak', 'water_detected', 'smoke', 'open']) {
+    if (s[k] is bool) return k;
+  }
+  if (s['occupancy'] is bool) return 'occupancy';
+  if (s['occupied'] is bool) return 'occupied';
+  if (s['motion'] is bool) return 'motion';
+  for (final k in const [
+    'temperature',
+    'current_temperature',
+    'humidity',
+    'illuminance_lux',
+    'co2',
+    'power',
+  ]) {
+    if (s[k] is num) return k;
+  }
+  return null;
+}
+
 /// The one reading a sensor leads with: `(label, formatted value, colour)`.
 ///
 /// Booleans first — a leak sensor's answer is "Dry", not a number — then the
