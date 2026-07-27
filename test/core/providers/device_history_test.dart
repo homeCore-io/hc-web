@@ -40,18 +40,20 @@ void main() {
       // at 500 rows, so "today" would be a guess for a chatty sensor.
       final t = trendOf([_e('t', 70.0, '09:12'), _e('t', 73.1, '14:00')])!;
       expect(t.rising, isTrue);
-      expect(t.text, '▲ 3.1 since 09:12');
+      expect(t.text, '3.1 since 09:12');
+      // No arrow glyph: ▲/▼ are not in the app font and render as tofu.
+      expect(t.text.contains('▲'), isFalse);
     });
 
     test('falling says so', () {
       final t = trendOf([_e('t', 74.0, '08:00'), _e('t', 70.0, '14:00')])!;
       expect(t.rising, isFalse);
-      expect(t.text, '▼ 4.0 since 08:00');
+      expect(t.text, '4.0 since 08:00');
     });
 
     test('a big move drops the decimal', () {
       final t = trendOf([_e('t', 100.0, '08:00'), _e('t', 812.0, '14:00')])!;
-      expect(t.text, '▲ 712 since 08:00');
+      expect(t.text, '712 since 08:00');
     });
 
     test('noise is steady, not a rounding artefact', () {

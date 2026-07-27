@@ -648,14 +648,30 @@ class _SensorHero extends ConsumerWidget {
                 if (trend != null)
                   Padding(
                     padding: EdgeInsets.only(top: t.space.md),
-                    child: Text(
-                      trend.text,
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: colour,
-                        fontFeatures: t.numericFontFeatures,
-                      ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // An icon, not a ▲/▼ character: those are absent from
+                        // the app's font and rendered as tofu boxes. "steady"
+                        // has no direction to draw.
+                        if (trend.text != 'steady')
+                          Icon(
+                            trend.rising
+                                ? Icons.arrow_upward_rounded
+                                : Icons.arrow_downward_rounded,
+                            size: 12,
+                            color: colour,
+                          ),
+                        Text(
+                          trend.text,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: colour,
+                            fontFeatures: t.numericFontFeatures,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
               ],

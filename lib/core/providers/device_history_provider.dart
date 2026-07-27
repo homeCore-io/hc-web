@@ -44,8 +44,8 @@ List<HistoryEntry> seriesFor(List<HistoryEntry> all, String attribute) {
   final mm = at.minute.toString().padLeft(2, '0');
   final mag = delta.abs();
   final shown = mag >= 10 ? mag.round().toString() : mag.toStringAsFixed(1);
-  return (
-    text: '${delta > 0 ? '▲' : '▼'} $shown since $hh:$mm',
-    rising: delta > 0,
-  );
+  // No arrow glyph in the text. ▲/▼ are not in the app's font and rendered as
+  // tofu boxes — the direction is carried by [rising], which the caller draws
+  // as an icon from a font we actually ship.
+  return (text: '$shown since $hh:$mm', rising: delta > 0);
 }
