@@ -4,9 +4,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/devices/metrics.dart';
 import '../../core/devices/presentation.dart';
 import '../../core/models/device_state.dart';
+import '../../core/models/history_entry.dart';
+import '../../core/providers/device_history_provider.dart';
 import '../../core/providers/devices_provider.dart';
 import '../../core/schema/attribute_policy.dart';
 import '../../core/text/humanize.dart';
+import '../../design/components/hc_history_chart.dart';
 import '../../design/components/hc_now_playing.dart';
 import '../../design/tokens.dart';
 import 'color_light_controls.dart';
@@ -566,22 +569,35 @@ class _LockHero extends ConsumerWidget {
 /// A weather station reports seventeen values and the old panel gave all of them
 /// the same 12.5px row, so "is it hot out" took as long to answer as "what is
 /// the vapour-pressure deficit".
-class _SensorHero extends StatelessWidget {
+class _SensorHero extends ConsumerWidget {
   const _SensorHero({required this.device});
 
   final DeviceState device;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final t = HcTokens.of(context);
     final primary = primaryMetricOf(device);
     if (primary == null) return const SizedBox.shrink();
 
     final (name, text, colour) = primary;
+    final key = primaryMetricKeyOf(device);
+
+    // The trend rides the same fetch the History block below uses, so the panel
+    // asks the server once. A device with no numeric history — a leak sensor,
+    // anything just installed — simply has no line, and the hero is the reading
+    // on its own rather than an empty chart frame.
+    final series = key == null
+        ? const <HistoryEntry>[]
+        : seriesFor(
+            ref.watch(deviceHistoryProvider(device.id)).valueOrNull ?? const [],
+            key,
+          );
+    final trend = trendOf(series);
 
     return Container(
       width: double.infinity,
-      padding: EdgeInsets.all(t.space.md),
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: t.surface.sunken,
         borderRadius: t.radius.mdR,
@@ -590,27 +606,61 @@ class _SensorHero extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            name.toUpperCase(),
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 1.1,
-              color: t.surface.onBaseMuted,
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+                t.space.md, t.space.md, t.space.md, t.space.xs),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        name.toUpperCase(),
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1.1,
+                          color: t.surface.onBaseMuted,
+                        ),
+                      ),
+                      SizedBox(height: t.space.xs),
+                      Text(
+                        text,
+                        style: TextStyle(
+                          fontSize: 40,
+                          height: 1.05,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -1.6,
+                          color: colour,
+                          fontFeatures: t.numericFontFeatures,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (trend != null)
+                  Padding(
+                    padding: EdgeInsets.only(top: t.space.md),
+                    child: Text(
+                      trend.text,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: colour,
+                        fontFeatures: t.numericFontFeatures,
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
-          SizedBox(height: t.space.xs),
-          Text(
-            text,
-            style: TextStyle(
-              fontSize: 40,
-              height: 1.05,
-              fontWeight: FontWeight.w700,
-              letterSpacing: -1.6,
-              color: colour,
-              fontFeatures: t.numericFontFeatures,
-            ),
-          ),
+          // Bled to the card's edges: the shape of the last few hours is the
+          // point, and a chart inset on all sides reads as a widget rather than
+          // as the reading's own history.
+          if (series.length >= 2)
+            HcHistoryChart(entries: series, height: 64, color: colour),
         ],
       ),
     );

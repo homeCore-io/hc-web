@@ -3,12 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/text/humanize.dart';
-import '../../core/api/history_api.dart';
 import '../../core/devices/presentation.dart';
 import '../../core/models/device_state.dart';
 import '../../core/models/history_entry.dart';
-import '../../core/providers/auth_provider.dart';
 import '../../core/providers/automations_provider.dart';
+import '../../core/providers/device_history_provider.dart';
 import '../../core/providers/devices_provider.dart';
 import '../../design/components/hc_attribute_control.dart';
 import '../../design/components/hc_controls.dart';
@@ -884,7 +883,7 @@ class _HistoryTabState extends ConsumerState<_HistoryTab> {
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
-    final async = ref.watch(_sheetHistoryProvider(widget.device.id));
+    final async = ref.watch(deviceHistoryProvider(widget.device.id));
 
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: t.space.lg),
@@ -1099,12 +1098,6 @@ const _metricPriority = <String>[
   'setpoint',
   'battery',
 ];
-
-final _sheetHistoryProvider =
-    FutureProvider.family.autoDispose<List<HistoryEntry>, String>((ref, id) {
-  final client = ref.watch(homecoreClientProvider);
-  return HistoryApi(client).getHistory(id, limit: 500);
-});
 
 /// Numeric metrics worth charting, best-first — priority metrics ahead of the
 /// rest — and capped so a chatty device doesn't become a wall of charts.
