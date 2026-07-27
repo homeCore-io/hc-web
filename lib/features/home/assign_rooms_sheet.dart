@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/devices/presentation.dart';
+import '../../core/devices/rooms.dart';
 import '../../core/models/device_state.dart';
+import '../../core/providers/areas_provider.dart';
 import '../../core/providers/devices_provider.dart';
 import '../../core/text/humanize.dart';
 import '../devices/device_query.dart';
@@ -50,14 +52,16 @@ class _AssignRoomsState extends ConsumerState<_AssignRooms> {
 
   /// The rooms this house already has. Offering the existing set is what keeps
   /// "Living Room" and "living room" from becoming two areas.
+  ///
+  /// Registered rooms as well as occupied ones: a room created in the Areas
+  /// manager holds nothing yet, and a picker built only from what devices
+  /// report would hide the empty room you made precisely so you could fill it.
   List<String> _rooms() {
-    final all = ref.read(devicesProvider).valueOrNull ?? const <DeviceState>[];
-    final names = <String>{
-      for (final d in all)
-        if ((d.effectiveArea ?? '').isNotEmpty) humanize(d.effectiveArea!),
-      ..._assigned.values,
-    };
-    return names.toList()..sort();
+    return roomOptions(
+      registered: ref.watch(areasProvider).valueOrNull ?? const [],
+      devices: ref.watch(devicesProvider).valueOrNull ?? const <DeviceState>[],
+      extra: _assigned.values,
+    );
   }
 
   Future<void> _assign(DeviceState d, String room) async {
@@ -66,6 +70,9 @@ class _AssignRoomsState extends ConsumerState<_AssignRooms> {
       await ref
           .read(devicesProvider.notifier)
           .updateDevice(d.id, {'area': room});
+      // The room now holds one more device; the cached areas list does not
+      // know that.
+      ref.invalidate(areasProvider);
       if (mounted) setState(() => _assigned[d.id] = room);
     } catch (e) {
       if (mounted) {

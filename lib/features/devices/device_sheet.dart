@@ -4,8 +4,10 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/text/humanize.dart';
 import '../../core/devices/presentation.dart';
+import '../../core/devices/rooms.dart';
 import '../../core/models/device_state.dart';
 import '../../core/models/history_entry.dart';
+import '../../core/providers/areas_provider.dart';
 import '../../core/providers/automations_provider.dart';
 import '../../core/providers/device_history_provider.dart';
 import '../../core/providers/devices_provider.dart';
@@ -605,6 +607,9 @@ class _InfoTabState extends ConsumerState<_InfoTab> {
     setState(() => _busy = true);
     try {
       await ref.read(devicesProvider.notifier).updateDevice(_d.id, body);
+      // Areas carry their membership, so moving a device makes the cached list
+      // wrong — the Areas manager would keep showing the room you just left.
+      if (body.containsKey('area')) ref.invalidate(areasProvider);
       if (mounted) setState(() => _editing = _busy = false);
     } catch (e) {
       if (mounted) {
@@ -772,13 +777,12 @@ class _InfoTabState extends ConsumerState<_InfoTab> {
       );
 
   Widget _editor(HcTokens t) {
-    final areas = (ref.watch(devicesProvider).valueOrNull ?? const [])
-        .map((d) => d.effectiveArea)
-        .whereType<String>()
-        .map(humanize)
-        .toSet()
-        .toList()
-      ..sort();
+    // Declared rooms as well as occupied ones — reading only the devices, which
+    // is what this did, hid every empty room the Areas manager had just made.
+    final areas = roomOptions(
+      registered: ref.watch(areasProvider).valueOrNull ?? const [],
+      devices: ref.watch(devicesProvider).valueOrNull ?? const [],
+    );
 
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: t.space.lg),
