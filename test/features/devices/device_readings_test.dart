@@ -138,6 +138,41 @@ void main() {
       }
     });
 
+    test('a Roku\'s identity and capability flags are not readings', () {
+      // Twenty-odd rows of these filled the Office TV panel. They tell the
+      // client what the device CAN do (the panel gates controls on them) and
+      // what it IS (the Details fold's job) — neither is a reading.
+      for (final k in const [
+        'supports_wake_on_lan',
+        'supports_find_remote',
+        'supports_audio_volume_control',
+        'is_tv',
+        'is_stick',
+        'is_tv_input',
+        'ecp_control_enabled',
+        'friendly_name',
+        'model_name',
+        'model_number',
+        'serial_number',
+        'software_version',
+        'network_type',
+        'app_type',
+        'app_version',
+        'player_state',
+        'media_format',
+        'media_is_live',
+      ]) {
+        expect(isReadingMetadata(k), isTrue, reason: k);
+      }
+    });
+
+    test('the prefixes do not swallow real readings', () {
+      // `is_`/`supports_` are broad rules; check they cannot eat a measurement.
+      for (final k in const ['illuminance', 'power', 'humidity', 'speed']) {
+        expect(isReadingMetadata(k), isFalse, reason: k);
+      }
+    });
+
     test('real readings are not hidden', () {
       for (final k in const ['temperature', 'humidity', 'vpd', 'uvi']) {
         expect(isReadingMetadata(k), isFalse, reason: k);

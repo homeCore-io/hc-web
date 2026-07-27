@@ -49,12 +49,18 @@ class DeviceActionsBlock extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        for (final entry in byCategory.entries) ...[
-          _BlockLabel(entry.key),
-          SizedBox(height: t.space.sm),
-          _category(device, entry.value, t),
-          SizedBox(height: t.space.md),
-        ],
+        for (final entry in byCategory.entries)
+          if (_foldedCategories.contains(entry.key))
+            _FoldedCategory(
+              title: entry.key,
+              child: _category(device, entry.value, t),
+            )
+          else ...[
+            _BlockLabel(entry.key),
+            SizedBox(height: t.space.sm),
+            _category(device, entry.value, t),
+            SizedBox(height: t.space.md),
+          ],
       ],
     );
   }
@@ -106,7 +112,19 @@ class _Cluster {
       DeviceState device, Map<String, DeviceActionSpec> byId, HcTokens t) build;
 }
 
+/// Categories that are reference rather than reach-for. A Roku's `key`,
+/// `key_hold`, `key_down` and `key_up` are the raw ECP escape hatch — four
+/// near-identical rows that push the D-pad off the screen, and nothing you
+/// press by accident. They fold.
+const _foldedCategories = {'Remote'};
+
 final _clusters = <_Cluster>[
+  // Transport, as the deck it is on every remote ever made: back, the big
+  // play/pause, forward. `stop` joins them when declared.
+  _Cluster(
+    const ['previous', 'play_pause', 'next'],
+    (device, byId, t) => _Transport(device: device, byId: byId),
+  ),
   // The D-pad. `select` in the middle, arrows around it — the shape of every
   // remote in the house.
   _Cluster(
@@ -187,6 +205,50 @@ class _DPad extends ConsumerWidget {
           arrow('down', Icons.keyboard_arrow_down_rounded),
           gap,
         ]),
+      ],
+    );
+  }
+}
+
+class _Transport extends ConsumerWidget {
+  const _Transport({required this.device, required this.byId});
+
+  final DeviceState device;
+  final Map<String, DeviceActionSpec> byId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = HcTokens.of(context);
+    final playing = device.playbackState == 'playing';
+
+    Widget key(String id, IconData icon,
+        {double size = 40, bool main = false}) {
+      final a = byId[id];
+      if (a == null) return const SizedBox.shrink();
+      return Padding(
+        padding: EdgeInsets.only(right: t.space.xs),
+        child: _Key(
+          size: size,
+          round: main,
+          enabled: device.available,
+          onTap: () => _fire(ref, device, a),
+          tooltip: a.label,
+          child: Icon(icon,
+              size: main ? 22 : 18,
+              color: main ? t.accent.active : t.surface.onBase),
+        ),
+      );
+    }
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        key('previous', Icons.skip_previous_rounded),
+        key('play_pause',
+            playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
+            size: 48, main: true),
+        key('next', Icons.skip_next_rounded),
+        if (byId.containsKey('stop')) key('stop', Icons.stop_rounded),
       ],
     );
   }
@@ -463,6 +525,52 @@ class _ValueDialogState extends State<_ValueDialog> {
         ),
       ],
       child: control,
+    );
+  }
+}
+
+/// A category that is there when wanted and out of the way otherwise.
+class _FoldedCategory extends StatefulWidget {
+  const _FoldedCategory({required this.title, required this.child});
+
+  final String title;
+  final Widget child;
+
+  @override
+  State<_FoldedCategory> createState() => _FoldedCategoryState();
+}
+
+class _FoldedCategoryState extends State<_FoldedCategory> {
+  bool _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InkWell(
+          onTap: () => setState(() => _open = !_open),
+          borderRadius: t.radius.smR,
+          child: Padding(
+            padding: EdgeInsets.symmetric(vertical: t.space.sm),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _BlockLabel(widget.title),
+                SizedBox(width: t.space.xs),
+                Icon(
+                    _open
+                        ? Icons.keyboard_arrow_up_rounded
+                        : Icons.keyboard_arrow_down_rounded,
+                    size: 16,
+                    color: t.surface.onBaseMuted),
+              ],
+            ),
+          ),
+        ),
+        if (_open) ...[widget.child, SizedBox(height: t.space.md)],
+      ],
     );
   }
 }

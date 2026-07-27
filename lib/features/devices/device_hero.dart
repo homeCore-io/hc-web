@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/devices/metrics.dart';
 import '../../core/devices/presentation.dart';
 import '../../core/models/device_state.dart';
 import '../../core/providers/devices_provider.dart';
@@ -568,83 +569,4 @@ String? primaryMetricKeyOf(DeviceState d) {
     if (s[k] is num) return k;
   }
   return null;
-}
-
-/// The one reading a sensor leads with: `(label, formatted value, colour)`.
-///
-/// Booleans first — a leak sensor's answer is "Dry", not a number — then the
-/// priority metrics in the order the charts already use.
-(String, String, Color)? primaryMetricOf(DeviceState d) {
-  final s = d.state;
-
-  for (final key in const ['leak', 'water_detected', 'smoke']) {
-    if (s[key] case final bool v) {
-      return (
-        humanize(key),
-        v ? 'Detected' : 'Clear',
-        v ? const Color(0xFFFF7B72) : const Color(0xFF6FD1A6),
-      );
-    }
-  }
-  if (s['open'] case final bool v) {
-    return (
-      'Contact',
-      v ? 'Open' : 'Closed',
-      v ? const Color(0xFFFFC978) : const Color(0xFF6FD1A6)
-    );
-  }
-  if ((s['occupancy'] ?? s['occupied']) case final bool v) {
-    return (
-      'Occupancy',
-      v ? 'Occupied' : 'Empty',
-      v ? const Color(0xFFFFB661) : const Color(0xFF8B95A4)
-    );
-  }
-  if (s['motion'] case final bool v) {
-    return (
-      'Motion',
-      v ? 'Motion' : 'Clear',
-      v ? const Color(0xFFFFB661) : const Color(0xFF8B95A4)
-    );
-  }
-
-  for (final key in const [
-    'temperature',
-    'current_temperature',
-    'humidity',
-    'illuminance_lux',
-    'co2',
-    'power',
-  ]) {
-    if (s[key] case final num v) {
-      final unit = switch (key) {
-        'temperature' || 'current_temperature' => () {
-            final u = d.state['temperature_unit'];
-            return '°${u is String && u.isNotEmpty ? u.replaceAll('°', '') : ''}';
-          }(),
-        'humidity' => '%',
-        'illuminance_lux' => ' lux',
-        'co2' => ' ppm',
-        'power' => ' W',
-        _ => '',
-      };
-      final shown = v is int || v == v.roundToDouble()
-          ? v.round().toString()
-          : v.toStringAsFixed(1);
-      return (humanize(key), '$shown$unit', _metricTint(key));
-    }
-  }
-  return null;
-}
-
-Color _metricTint(String attr) {
-  final a = attr.toLowerCase();
-  if (a.contains('temp')) return const Color(0xFFFF8A5B);
-  if (a.contains('humid')) return const Color(0xFF4CC9F0);
-  if (a.contains('illumin') || a.contains('lux')) {
-    return const Color(0xFFFFD166);
-  }
-  if (a.contains('co2')) return const Color(0xFF6FD1A6);
-  if (a.contains('power')) return const Color(0xFFFFB661);
-  return const Color(0xFF7CC4FF);
 }

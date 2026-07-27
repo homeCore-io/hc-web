@@ -144,8 +144,12 @@ class _Row extends StatelessWidget {
         children: [
           Text(name,
               style: TextStyle(fontSize: 12.5, color: t.surface.onBaseMuted)),
-          const Spacer(),
-          Flexible(
+          SizedBox(width: t.space.md),
+          // Expanded, not Spacer + Flexible. Two flexible children split the
+          // free space between them, so the value box hugged its text at a
+          // different x on every row and `textAlign: right` had nothing to
+          // align against — the values came out visibly ragged.
+          Expanded(
             child: Text(
               value,
               maxLines: 1,
@@ -234,8 +238,36 @@ bool isReadingMetadata(String key) {
         'sonos',
         'device_info',
         'media_image_url',
-      }.contains(k);
+      }.contains(k) ||
+      _isIdentity(k);
 }
+
+/// Identity and capability, which a Roku publishes a great deal of.
+///
+/// `Is TV: Yes`, `Supports Wake On Lan: Yes`, `Model Number: 8116X` — twenty-odd
+/// rows of them, none of which is a *reading*. They tell the client what the
+/// device can do (the panel consumes them by gating controls) and what it is
+/// (the Details fold's job). Neither is something you open a panel to check.
+bool _isIdentity(String k) =>
+    k.startsWith('supports_') ||
+    k.startsWith('is_') ||
+    k.endsWith('_enabled') ||
+    const {
+      'friendly_name',
+      'model_name',
+      'model_number',
+      'serial_number',
+      'software_version',
+      'network_type',
+      'app_id',
+      'app_type',
+      'app_version',
+      'media_format',
+      'media_error',
+      'media_is_live',
+      'player_state',
+      'auto_lock_secs',
+    }.contains(k);
 
 /// Z-Wave (and similar) command-class dumps — real data, but noise.
 final _ccAttr = RegExp(r'^cc\d+_');

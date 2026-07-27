@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../core/devices/presentation.dart';
+import '../../core/devices/metrics.dart';
 import '../../core/models/device_state.dart';
 import '../tokens.dart';
 import 'hc_tile.dart' show summarise;
@@ -25,23 +25,30 @@ class HcSensorChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
-    final facet = facetOf(device, device.schema);
     final offline = !device.available;
-    final reading = offline ? 'Offline' : summarise(device);
     final alert = _alerting(device, offline);
 
+    // The reading and its colour come from the same place the device panel's
+    // hero uses, so a chip and the panel it opens never disagree about which
+    // number matters or what colour it is. `summarise` is the fallback for a
+    // device with no metric worth leading on.
+    final metric = offline ? null : primaryMetricOf(device);
+    final reading = offline ? 'Offline' : (metric?.$2 ?? summarise(device));
     final accent = offline
         ? t.accent.offline
         : alert
             ? t.accent.danger
-            : isOn(device)
-                ? t.accent.active
-                : t.surface.onBaseMuted;
+            : (metric?.$3 ?? t.surface.onBase);
 
     return InkWell(
       onTap: onTap,
       borderRadius: t.radius.mdR,
       child: Container(
+        // A floor, not a fixed width: chips that all start at the same size
+        // form tidy rows, and a long name can still grow rather than being cut
+        // to nothing. Without it every chip hugged its own text and the strip
+        // read as rubble.
+        constraints: const BoxConstraints(minWidth: 132),
         padding: EdgeInsets.symmetric(
             horizontal: t.space.sm + 2, vertical: t.space.sm),
         decoration: BoxDecoration(
@@ -55,39 +62,33 @@ class HcSensorChip extends StatelessWidget {
                 : t.stroke.hairline,
           ),
         ),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(facet.icon, size: 16, color: accent),
-            SizedBox(width: t.space.sm),
-            Flexible(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    device.displayName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 11,
-                      height: 1.15,
-                      color: t.surface.onBaseMuted,
-                    ),
-                  ),
-                  Text(
-                    reading,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 13,
-                      height: 1.2,
-                      fontWeight: FontWeight.w600,
-                      color: offline || alert ? accent : t.surface.onBase,
-                      fontFeatures: t.numericFontFeatures,
-                    ),
-                  ),
-                ],
+            Text(
+              device.displayName.toUpperCase(),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 9.5,
+                height: 1.3,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.8,
+                color: t.surface.onBaseMuted,
+              ),
+            ),
+            Text(
+              reading,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 15,
+                height: 1.25,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.2,
+                color: accent,
+                fontFeatures: t.numericFontFeatures,
               ),
             ),
           ],

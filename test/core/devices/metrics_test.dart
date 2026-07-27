@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hc_web/core/models/device_state.dart';
-import 'package:hc_web/features/devices/device_hero.dart';
+import 'package:hc_web/core/devices/metrics.dart';
 
 DeviceState _d(String id, Map<String, dynamic> state, {String? type}) =>
     DeviceState(
