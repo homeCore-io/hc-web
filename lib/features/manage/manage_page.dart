@@ -107,6 +107,12 @@ class ManagePage extends ConsumerWidget {
           title: 'System'),
       const _Entry(
           route: '/admin/logs', icon: Icons.terminal_outlined, title: 'Logs'),
+      const _Entry(
+        route: '/admin/audit',
+        icon: Icons.fact_check_outlined,
+        title: 'Audit',
+        detail: 'Who changed what',
+      ),
     ];
 
     return Scaffold(

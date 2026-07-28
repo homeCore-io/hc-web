@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'core/providers/auth_provider.dart';
 import 'design/skins.dart';
 import 'features/admin/areas_page.dart';
+import 'features/admin/audit_page.dart';
 import 'features/admin/logs_page.dart';
 import 'features/plugins/config_descriptor/config_preview_page.dart';
 import 'features/plugins/plugin_studio_page.dart';
@@ -185,6 +186,7 @@ GoRouter _buildRouter(Ref ref) {
           GoRoute(
               path: '/admin/system', builder: (_, __) => const SystemPage()),
           GoRoute(path: '/admin/logs', builder: (_, __) => const LogsPage()),
+          GoRoute(path: '/admin/audit', builder: (_, __) => const AuditPage()),
         ],
       ),
     ],

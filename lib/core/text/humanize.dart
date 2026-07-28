@@ -21,6 +21,7 @@ const _acronyms = <String, String>{
   'hvac': 'HVAC',
   'usb': 'USB',
   'ip': 'IP',
+  'api': 'API',
   'id': 'ID',
   'ir': 'IR',
   'oh1': 'OH1',
