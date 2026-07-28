@@ -7,39 +7,11 @@ final auditApiProvider = Provider<AuditApi>((ref) {
   return AuditApi(ref.watch(homecoreClientProvider));
 });
 
-/// The audit trail under one set of filters.
-///
-/// Keyed on the filter so switching "denied only" on and off does not refetch
-/// what it already holds, and `autoDispose` so leaving the page drops it —
-/// 250 rows of anything is not worth keeping warm.
-final auditProvider =
-    FutureProvider.family.autoDispose<List<AuditEntry>, AuditQueryKey>(
-  (ref, key) => ref.watch(auditApiProvider).list(key.filter),
-);
-
-/// A value-equal wrapper so the family can key on a filter.
-///
-/// [AuditFilter] is a plain class; without this each rebuild would construct a
-/// new instance, miss the cache and refetch on every frame.
-class AuditQueryKey {
-  const AuditQueryKey(this.filter);
-  final AuditFilter filter;
-
-  String get _id => [
-        filter.actorType,
-        filter.eventType,
-        filter.targetKind,
-        filter.targetId,
-        filter.result,
-        filter.from?.toIso8601String(),
-        filter.to?.toIso8601String(),
-        filter.limit,
-        filter.offset,
-      ].join('|');
-
-  @override
-  bool operator ==(Object other) => other is AuditQueryKey && other._id == _id;
-
-  @override
-  int get hashCode => _id.hashCode;
-}
+// Deliberately no `FutureProvider.family` over the filter.
+//
+// The first version keyed an autoDispose family on the filter, and the page
+// never left its spinner: the key is only as stable as the object that builds
+// it, one field of that filter is a time bound, and a key that differs by a
+// microsecond is a different provider — disposed and restarted before it can
+// finish. A page-owned Future has none of that surface: it is created when a
+// server-side filter actually changes, and at no other time. See AuditPage.

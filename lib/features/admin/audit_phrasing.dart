@@ -38,14 +38,22 @@ IconData auditActorIcon(String actorType) => switch (actorType) {
 
 /// Who this was, said the way a person would say it.
 ///
-/// A failed sign-in carries `attempted_username:<what they typed>` — showing
-/// that raw is both ugly and misleading, because the string is *not* a user of
-/// this house. It reads as "tried: bob".
+/// Core writes the label as `<kind>:<who>` — `user:admin`, and for a refused
+/// sign-in `attempted_username:<what they typed>`. The kind is already carried
+/// by the row's icon, so repeating it in the name is noise; and
+/// `attempted_username:bob` is actively misleading, because that string names
+/// someone who is *not* a user of this house. It reads as "tried: bob".
 String auditActorName(AuditEntry e) {
   const attempted = 'attempted_username:';
   if (e.actorLabel.startsWith(attempted)) {
     final who = e.actorLabel.substring(attempted.length);
     return who.isEmpty ? 'tried: (blank)' : 'tried: $who';
+  }
+  for (final prefix in const ['user:', 'api_key:', 'system:']) {
+    if (e.actorLabel.startsWith(prefix)) {
+      final who = e.actorLabel.substring(prefix.length);
+      if (who.isNotEmpty) return who;
+    }
   }
   if (e.actorLabel.isNotEmpty) return e.actorLabel;
   return humanize(e.actorType);

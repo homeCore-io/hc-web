@@ -114,6 +114,13 @@ void main() {
   });
 
   group('auditActorName', () {
+    test('drops the kind prefix core writes into the label', () {
+      // Every real row is `<kind>:<who>` — `user:admin`. The kind is already
+      // the row's icon, so printing it again is noise.
+      expect(auditActorName(_e(actorLabel: 'user:admin')), 'admin');
+      expect(auditActorName(_e(actorLabel: 'api_key:hc-cli')), 'hc-cli');
+    });
+
     test('a blank attempted username says so rather than trailing off', () {
       expect(auditActorName(_e(actorLabel: 'attempted_username:')),
           'tried: (blank)');

@@ -34,23 +34,41 @@ class _AuditPageState extends ConsumerState<AuditPage> {
   /// narrow the query rather than the page. A class filter cannot — core
   /// matches `event_type` exactly, and `auth` is a prefix of `auth.login`, not
   /// a value — so that one is applied here, over what the query returned.
-  String? _result;
   _Range _range = _Range.week;
   String? _class;
   String _search = '';
 
-  AuditFilter get _filter => AuditFilter(
-        result: _result,
-        from: _range.since(),
-        limit: 500,
-      );
+  /// The query, and the one request it stands for.
+  ///
+  /// The page owns its Future rather than watching a provider family keyed on
+  /// the filter. That family never resolved: one field of the key is a time
+  /// bound, so a key rebuilt during `build` differs by a microsecond, and each
+  /// difference disposed the in-flight request and started another. Here the
+  /// request is created exactly when a *server-side* filter changes — the
+  /// result filter or the range — and at no other time.
+  late AuditFilter _filter = AuditFilter(from: _range.since(), limit: 500);
+  late Future<List<AuditEntry>> _future = _fetch();
+
+  Future<List<AuditEntry>> _fetch() => ref.read(auditApiProvider).list(_filter);
+
+  void _query(AuditFilter next) => setState(() {
+        _filter = next;
+        _future = _fetch();
+      });
 
   @override
   Widget build(BuildContext context) {
-    final rowsAsync = ref.watch(auditProvider(AuditQueryKey(_filter)));
-    final all = rowsAsync.valueOrNull ?? const <AuditEntry>[];
+    return FutureBuilder<List<AuditEntry>>(
+      future: _future,
+      builder: (context, snap) => _body(context, snap),
+    );
+  }
+
+  Widget _body(BuildContext context, AsyncSnapshot<List<AuditEntry>> snap) {
+    final all = snap.data ?? const <AuditEntry>[];
     final shown = _apply(all);
     final denied = all.where((e) => e.denied).length;
+    final loading = snap.connectionState != ConnectionState.done;
 
     return SectionScaffold(
       title: 'Audit',
@@ -67,8 +85,7 @@ class _AuditPageState extends ConsumerState<AuditPage> {
           return IconButton(
             icon: Icon(Icons.refresh, color: t.surface.onBaseMuted),
             tooltip: 'Refresh',
-            onPressed: () =>
-                ref.invalidate(auditProvider(AuditQueryKey(_filter))),
+            onPressed: () => setState(() => _future = _fetch()),
           );
         }),
       ],
@@ -80,21 +97,28 @@ class _AuditPageState extends ConsumerState<AuditPage> {
             _Filters(
               classes: _classesIn(all),
               activeClass: _class,
-              denied: _result == 'denied',
+              denied: _filter.result == 'denied',
               range: _range,
               onClass: (c) => setState(() => _class = c),
-              onDenied: (v) => setState(() => _result = v ? 'denied' : null),
-              onRange: (r) => setState(() => _range = r),
+              onDenied: (v) => _query(AuditFilter(
+                  result: v ? 'denied' : null,
+                  from: _filter.from,
+                  limit: _filter.limit)),
+              onRange: (r) {
+                _range = r;
+                _query(AuditFilter(
+                    result: _filter.result, from: r.since(), limit: 500));
+              },
               onSearch: (q) => setState(() => _search = q),
             ),
             Expanded(
-              child: rowsAsync.when(
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (e, _) => _Error('$e'),
-                data: (_) => shown.isEmpty
-                    ? _Empty(narrowed: all.isNotEmpty)
-                    : _Timeline(entries: shown),
-              ),
+              child: loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : snap.hasError
+                      ? _Error('${snap.error}')
+                      : shown.isEmpty
+                          ? _Empty(narrowed: all.isNotEmpty)
+                          : _Timeline(entries: shown),
             ),
             if (all.length >= _filter.limit)
               Padding(
@@ -148,8 +172,13 @@ enum _Range {
   final String label;
   final Duration? window;
 
-  DateTime? since() =>
-      window == null ? null : DateTime.now().toUtc().subtract(window!);
+  /// Truncated to the minute so the value is stable across rebuilds: a bound
+  /// that moves every microsecond makes every request a different request.
+  DateTime? since() {
+    if (window == null) return null;
+    final t = DateTime.now().toUtc().subtract(window!);
+    return DateTime.utc(t.year, t.month, t.day, t.hour, t.minute);
+  }
 }
 
 // ── filters ─────────────────────────────────────────────────────────────────
