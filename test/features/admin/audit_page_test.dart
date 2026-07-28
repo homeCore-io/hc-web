@@ -48,7 +48,9 @@ AuditEntry _entry({
     );
 
 Widget _host(_FakeAuditApi api) => ProviderScope(
-      overrides: [auditApiProvider.overrideWithValue(api)],
+      overrides: [
+        auditApiProvider.overrideWithValue(api),
+      ],
       child: MaterialApp(
         theme: hcTheme(HcSkin.midnight),
         home: const Scaffold(body: AuditPage()),

@@ -30,45 +30,21 @@ class AuditPage extends ConsumerStatefulWidget {
 }
 
 class _AuditPageState extends ConsumerState<AuditPage> {
-  /// Server-side: core can filter on `result` and a `from` bound, so those
-  /// narrow the query rather than the page. A class filter cannot — core
-  /// matches `event_type` exactly, and `auth` is a prefix of `auth.login`, not
-  /// a value — so that one is applied here, over what the query returned.
-  _Range _range = _Range.week;
+  /// Filters applied *here*, over what the query returned: core matches
+  /// `event_type` exactly, so `auth` — a prefix of `auth.login`, not a value —
+  /// cannot be a query. The result and the time bound are server-side and live
+  /// on the notifier.
   String? _class;
   String _search = '';
-
-  /// The query, and the one request it stands for.
-  ///
-  /// The page owns its Future rather than watching a provider family keyed on
-  /// the filter. That family never resolved: one field of the key is a time
-  /// bound, so a key rebuilt during `build` differs by a microsecond, and each
-  /// difference disposed the in-flight request and started another. Here the
-  /// request is created exactly when a *server-side* filter changes — the
-  /// result filter or the range — and at no other time.
-  late AuditFilter _filter = AuditFilter(from: _range.since(), limit: 500);
-  late Future<List<AuditEntry>> _future = _fetch();
-
-  Future<List<AuditEntry>> _fetch() => ref.read(auditApiProvider).list(_filter);
-
-  void _query(AuditFilter next) => setState(() {
-        _filter = next;
-        _future = _fetch();
-      });
+  _Range _range = _Range.week;
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<List<AuditEntry>>(
-      future: _future,
-      builder: (context, snap) => _body(context, snap),
-    );
-  }
-
-  Widget _body(BuildContext context, AsyncSnapshot<List<AuditEntry>> snap) {
-    final all = snap.data ?? const <AuditEntry>[];
+    final async = ref.watch(auditProvider);
+    final filter = ref.read(auditProvider.notifier).filter;
+    final all = async.valueOrNull ?? const <AuditEntry>[];
     final shown = _apply(all);
     final denied = all.where((e) => e.denied).length;
-    final loading = snap.connectionState != ConnectionState.done;
 
     return SectionScaffold(
       title: 'Audit',
@@ -85,7 +61,7 @@ class _AuditPageState extends ConsumerState<AuditPage> {
           return IconButton(
             icon: Icon(Icons.refresh, color: t.surface.onBaseMuted),
             tooltip: 'Refresh',
-            onPressed: () => setState(() => _future = _fetch()),
+            onPressed: () => ref.read(auditProvider.notifier).reload(),
           );
         }),
       ],
@@ -97,30 +73,35 @@ class _AuditPageState extends ConsumerState<AuditPage> {
             _Filters(
               classes: _classesIn(all),
               activeClass: _class,
-              denied: _filter.result == 'denied',
+              denied: filter.result == 'denied',
               range: _range,
               onClass: (c) => setState(() => _class = c),
-              onDenied: (v) => _query(AuditFilter(
-                  result: v ? 'denied' : null,
-                  from: _filter.from,
-                  limit: _filter.limit)),
+              onDenied: (v) => ref.read(auditProvider.notifier).apply(
+                    AuditFilter(
+                      result: v ? 'denied' : null,
+                      from: filter.from,
+                      limit: filter.limit,
+                    ),
+                  ),
               onRange: (r) {
-                _range = r;
-                _query(AuditFilter(
-                    result: _filter.result, from: r.since(), limit: 500));
+                setState(() => _range = r);
+                ref.read(auditProvider.notifier).apply(
+                      AuditFilter(
+                          result: filter.result, from: r.since(), limit: 500),
+                    );
               },
               onSearch: (q) => setState(() => _search = q),
             ),
             Expanded(
-              child: loading
-                  ? const Center(child: CircularProgressIndicator())
-                  : snap.hasError
-                      ? _Error('${snap.error}')
-                      : shown.isEmpty
-                          ? _Empty(narrowed: all.isNotEmpty)
-                          : _Timeline(entries: shown),
+              child: async.when(
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (e, _) => _Error('$e'),
+                data: (_) => shown.isEmpty
+                    ? _Empty(narrowed: all.isNotEmpty)
+                    : _Timeline(entries: shown),
+              ),
             ),
-            if (all.length >= _filter.limit)
+            if (all.length >= filter.limit)
               Padding(
                 padding:
                     EdgeInsets.fromLTRB(t.space.lg, 0, t.space.lg, t.space.sm),
@@ -128,7 +109,7 @@ class _AuditPageState extends ConsumerState<AuditPage> {
                 // record — the difference matters on a page people use to
                 // decide nothing happened.
                 child: Text(
-                  'Showing the most recent ${_filter.limit}. Narrow the range '
+                  'Showing the most recent ${filter.limit}. Narrow the range '
                   'to see further back.',
                   style: TextStyle(fontSize: 12, color: t.surface.onBaseMuted),
                 ),
