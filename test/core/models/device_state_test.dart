@@ -148,4 +148,40 @@ void main() {
       expect(d.supportsAction('play'), isTrue);
     });
   });
+
+  group('cleanTitle / mediaSubtitle — never surface a stream URL', () {
+    DeviceState media(String? title, {String state = 'paused'}) =>
+        DeviceState.fromJson({
+          'device_id': 'sonos',
+          'plugin_id': 'plugin.sonos',
+          'device_type': 'media_player',
+          'available': true,
+          'attributes': {
+            'state': state,
+            if (title != null) 'title': title,
+          },
+        });
+
+    test('a real track title comes through clean', () {
+      expect(media('Blue Train').cleanTitle, 'Blue Train');
+      expect(media('Blue Train').mediaSubtitle, 'Blue Train');
+    });
+
+    test('a raw hls stream URL is suppressed', () {
+      const url = 'hls.m3u8?rj-ttl=5&rj-tok=AAABn3HDYNcAMqHoG3c7jmCp4Q';
+      expect(media(url).cleanTitle, isNull);
+      // Falls back to the human playback state instead of the URL junk.
+      expect(media(url).mediaSubtitle, 'paused');
+    });
+
+    test('a query-string blob title is suppressed', () {
+      const blob = 'a24943?fbbroadcast=0&devicename=sonos&clientType=sonos';
+      expect(media(blob).cleanTitle, isNull);
+    });
+
+    test('no title at all leaves cleanTitle null', () {
+      expect(media(null).cleanTitle, isNull);
+      expect(media(null).mediaSubtitle, 'paused');
+    });
+  });
 }

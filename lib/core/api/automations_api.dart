@@ -1,5 +1,5 @@
 import 'homecore_client.dart';
-import '../models/rule.dart';
+import '../rules/rule.dart';
 
 class AutomationsApi {
   final HomecoreClient client;
@@ -12,14 +12,23 @@ class AutomationsApi {
         .toList();
   }
 
-  Future<HcRule> createRule(Map<String, dynamic> json) async {
-    final response = await client.dio.post('/automations', data: json);
+  /// Core assigns the UUID on create and overwrites whatever `id` we send.
+  Future<HcRule> createRule(HcRule rule) async {
+    final response = await client.dio.post('/automations', data: rule.toJson());
     return HcRule.fromJson(Map<String, dynamic>.from(response.data as Map));
   }
 
-  Future<HcRule> updateRule(String id, Map<String, dynamic> json) async {
-    final response = await client.dio.put('/automations/$id', data: json);
+  Future<HcRule> updateRule(HcRule rule) async {
+    final response =
+        await client.dio.put('/automations/${rule.id}', data: rule.toJson());
     return HcRule.fromJson(Map<String, dynamic>.from(response.data as Map));
+  }
+
+  /// The RON source core actually stores. Backs the editor's read-only
+  /// "Source" tab, and is the honest answer to "what did I just save?".
+  Future<String> getRuleRon(String id) async {
+    final response = await client.dio.get('/automations/$id/ron');
+    return '${response.data}';
   }
 
   Future<void> patchRule(String id, Map<String, dynamic> patch) async {
@@ -63,8 +72,10 @@ class AutomationsApi {
     return Map<String, dynamic>.from(response.data as Map);
   }
 
-  Future<Map<String, dynamic>> updateGroup(String id, Map<String, dynamic> body) async {
-    final response = await client.dio.patch('/automations/groups/$id', data: body);
+  Future<Map<String, dynamic>> updateGroup(
+      String id, Map<String, dynamic> body) async {
+    final response =
+        await client.dio.patch('/automations/groups/$id', data: body);
     return Map<String, dynamic>.from(response.data as Map);
   }
 
@@ -73,6 +84,7 @@ class AutomationsApi {
   }
 
   Future<void> setGroupEnabled(String id, {required bool enabled}) async {
-    await client.dio.post('/automations/groups/$id/${enabled ? 'enable' : 'disable'}');
+    await client.dio
+        .post('/automations/groups/$id/${enabled ? 'enable' : 'disable'}');
   }
 }

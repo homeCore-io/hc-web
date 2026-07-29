@@ -12,6 +12,7 @@ import '../../core/providers/devices_provider.dart';
 class _DeviceEntry {
   final String deviceId;
   final String displayName;
+
   /// Mutable attribute map for editing
   final Map<String, dynamic> attrs;
 
@@ -65,9 +66,8 @@ class _SceneEditorPageState extends ConsumerState<SceneEditorPage> {
           _entries.add(_DeviceEntry(
             deviceId: e.key,
             displayName: dev.displayName,
-            attrs: Map<String, dynamic>.from(e.value is Map
-                ? (e.value as Map).cast<String, dynamic>()
-                : {}),
+            attrs: Map<String, dynamic>.from(
+                e.value is Map ? (e.value as Map).cast<String, dynamic>() : {}),
           ));
         }
       }
@@ -80,8 +80,7 @@ class _SceneEditorPageState extends ConsumerState<SceneEditorPage> {
     super.dispose();
   }
 
-  bool get _isNew =>
-      widget.sceneId == null || widget.sceneId == 'new';
+  bool get _isNew => widget.sceneId == null || widget.sceneId == 'new';
 
   void _addDevice(DeviceState device) {
     if (_entries.any((e) => e.deviceId == device.id)) return;
@@ -136,8 +135,7 @@ class _SceneEditorPageState extends ConsumerState<SceneEditorPage> {
     // Exclude plugin scenes and already-added devices
     final addableDevices = allDevices
         .where((d) =>
-            d.deviceType != 'scene' &&
-            !_entries.any((e) => e.deviceId == d.id))
+            d.deviceType != 'scene' && !_entries.any((e) => e.deviceId == d.id))
         .toList();
 
     return Scaffold(
@@ -154,8 +152,7 @@ class _SceneEditorPageState extends ConsumerState<SceneEditorPage> {
             )
           else ...[
             TextButton(
-                onPressed: () => context.pop(),
-                child: const Text('Cancel')),
+                onPressed: () => context.pop(), child: const Text('Cancel')),
             const SizedBox(width: 4),
             FilledButton(
               onPressed: _save,
@@ -181,8 +178,7 @@ class _SceneEditorPageState extends ConsumerState<SceneEditorPage> {
                 entries: _entries,
                 addableDevices: addableDevices,
                 selectedId: _selectedDeviceId,
-                onSelectDevice: (id) =>
-                    setState(() => _selectedDeviceId = id),
+                onSelectDevice: (id) => setState(() => _selectedDeviceId = id),
                 onAdd: _addDevice,
                 onRemove: _removeDevice,
                 onAttrChanged: (_) => setState(() {}),
@@ -383,7 +379,8 @@ class _DevicePickerListState extends State<_DevicePickerList> {
   @override
   void initState() {
     super.initState();
-    _searchCtrl.addListener(() => setState(() => _query = _searchCtrl.text.toLowerCase()));
+    _searchCtrl.addListener(
+        () => setState(() => _query = _searchCtrl.text.toLowerCase()));
   }
 
   @override
@@ -399,13 +396,13 @@ class _DevicePickerListState extends State<_DevicePickerList> {
         : widget.devices
             .where((d) =>
                 d.displayName.toLowerCase().contains(_query) ||
-                (d.area ?? '').toLowerCase().contains(_query))
+                (d.effectiveArea ?? '').toLowerCase().contains(_query))
             .toList();
 
     // Group by area
     final Map<String, List<DeviceState>> byArea = {};
     for (final d in filtered) {
-      final area = d.area ?? 'Unassigned';
+      final area = d.effectiveArea ?? 'Unassigned';
       byArea.putIfAbsent(area, () => []).add(d);
     }
     final areas = byArea.keys.toList()..sort();
@@ -432,8 +429,7 @@ class _DevicePickerListState extends State<_DevicePickerList> {
                   children: [
                     for (final area in areas) ...[
                       Padding(
-                        padding:
-                            const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                        padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
                         child: Text(
                           area,
                           style: Theme.of(context)
@@ -441,9 +437,7 @@ class _DevicePickerListState extends State<_DevicePickerList> {
                               .labelSmall
                               ?.copyWith(
                                 fontWeight: FontWeight.w700,
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .outline,
+                                color: Theme.of(context).colorScheme.outline,
                               ),
                         ),
                       ),
@@ -452,11 +446,10 @@ class _DevicePickerListState extends State<_DevicePickerList> {
                           dense: true,
                           leading: const Icon(Icons.devices, size: 18),
                           title: Text(device.displayName,
-                              style:
-                                  Theme.of(context).textTheme.bodySmall),
+                              style: Theme.of(context).textTheme.bodySmall),
                           trailing: IconButton(
-                            icon: const Icon(Icons.add_circle_outline,
-                                size: 18),
+                            icon:
+                                const Icon(Icons.add_circle_outline, size: 18),
                             onPressed: () => widget.onAdd(device),
                             tooltip: 'Add to scene',
                           ),
@@ -535,7 +528,8 @@ class _DeviceStateCardState extends State<_DeviceStateCard> {
             TextButton.icon(
               onPressed: () => _addAttr(context, entry),
               icon: const Icon(Icons.add, size: 14),
-              label: const Text('Add attribute', style: TextStyle(fontSize: 12)),
+              label:
+                  const Text('Add attribute', style: TextStyle(fontSize: 12)),
               style: TextButton.styleFrom(
                   padding: const EdgeInsets.symmetric(horizontal: 4)),
             ),
@@ -557,13 +551,11 @@ class _DeviceStateCardState extends State<_DeviceStateCard> {
           children: [
             TextField(
                 controller: keyCtrl,
-                decoration:
-                    const InputDecoration(labelText: 'Attribute name')),
+                decoration: const InputDecoration(labelText: 'Attribute name')),
             const SizedBox(height: 8),
             TextField(
                 controller: valCtrl,
-                decoration:
-                    const InputDecoration(labelText: 'Value (JSON)')),
+                decoration: const InputDecoration(labelText: 'Value (JSON)')),
           ],
         ),
         actions: [
@@ -621,7 +613,8 @@ class _AttrControl extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (value is bool) {
-      return _BoolControl(label: attrKey, value: value as bool, onChanged: onChanged);
+      return _BoolControl(
+          label: attrKey, value: value as bool, onChanged: onChanged);
     }
     if (attrKey == 'brightness' && value is num) {
       return _SliderControl(
@@ -642,10 +635,12 @@ class _AttrControl extends StatelessWidget {
           onChanged: (v) => onChanged(v.round()));
     }
     if (value is num) {
-      return _NumberControl(label: attrKey, value: value as num, onChanged: onChanged);
+      return _NumberControl(
+          label: attrKey, value: value as num, onChanged: onChanged);
     }
     // Fallback: text field
-    return _TextControl(label: attrKey, value: value.toString(), onChanged: onChanged);
+    return _TextControl(
+        label: attrKey, value: value.toString(), onChanged: onChanged);
   }
 }
 

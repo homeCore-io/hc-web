@@ -1,11 +1,19 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../api/plugins_api.dart';
 import '../models/plugin_entry.dart';
+import '../models/registry_plugin.dart';
 import 'auth_provider.dart';
 import 'events_provider.dart';
 
 final pluginsApiProvider = Provider<PluginsApi>((ref) {
   return PluginsApi(ref.watch(homecoreClientProvider));
+});
+
+/// The remote registry's plugin catalog. Auto-disposes so it re-fetches when the
+/// Add-plugin sheet reopens (and after an install invalidates it).
+final registryPluginsProvider =
+    FutureProvider.autoDispose<List<RegistryPlugin>>((ref) async {
+  return ref.watch(pluginsApiProvider).registryPlugins();
 });
 
 class PluginsNotifier extends AsyncNotifier<List<PluginEntry>> {
@@ -20,13 +28,10 @@ class PluginsNotifier extends AsyncNotifier<List<PluginEntry>> {
         if (event.type == 'plugin_registered') {
           final id = event.data['plugin_id'] as String?;
           if (id == null) return;
-          final updated = current.map((p) {
-            if (p.pluginId != id) return p;
-            return PluginEntry(
-                pluginId: p.pluginId,
-                status: 'active',
-                registeredAt: p.registeredAt);
-          }).toList();
+          final updated = [
+            for (final p in current)
+              p.pluginId == id ? p.copyWith(status: 'active') : p
+          ];
           // If plugin not in list yet, add it.
           if (!updated.any((p) => p.pluginId == id)) {
             updated.add(PluginEntry(
@@ -38,13 +43,10 @@ class PluginsNotifier extends AsyncNotifier<List<PluginEntry>> {
         } else if (event.type == 'plugin_offline') {
           final id = event.data['plugin_id'] as String?;
           if (id == null) return;
-          final updated = current.map((p) {
-            if (p.pluginId != id) return p;
-            return PluginEntry(
-                pluginId: p.pluginId,
-                status: 'offline',
-                registeredAt: p.registeredAt);
-          }).toList();
+          final updated = [
+            for (final p in current)
+              p.pluginId == id ? p.copyWith(status: 'offline') : p
+          ];
           state = AsyncData(updated);
         }
       });
@@ -52,6 +54,37 @@ class PluginsNotifier extends AsyncNotifier<List<PluginEntry>> {
 
     final raw = await ref.read(pluginsApiProvider).listPlugins();
     return raw.map(PluginEntry.fromJson).toList();
+  }
+
+  /// Refetch until the plugin has finished coming back, or we give up.
+  ///
+  /// Install and restart both return the moment core has *dispatched* the
+  /// work: the process still has to start, connect to MQTT and register. A
+  /// single invalidate at that moment refetches the old, still-offline record
+  /// and never looks again — which is why an updated plugin sat there reading
+  /// "offline" until the page was reloaded by hand.
+  ///
+  /// Backs off rather than hammering, stops as soon as [pluginId] reports
+  /// active, and gives up quietly: a plugin that genuinely failed to start
+  /// should read offline, because it is.
+  Future<void> settle(String pluginId) async {
+    const waits = [
+      Duration(milliseconds: 400),
+      Duration(seconds: 1),
+      Duration(seconds: 2),
+      Duration(seconds: 3),
+      Duration(seconds: 5),
+    ];
+    for (final w in waits) {
+      ref.invalidateSelf();
+      await future;
+      final back = state.valueOrNull
+          ?.where((p) => p.pluginId == pluginId)
+          .any((p) => p.isActive);
+      if (back == true) return;
+      await Future<void>.delayed(w);
+    }
+    ref.invalidateSelf();
   }
 }
 

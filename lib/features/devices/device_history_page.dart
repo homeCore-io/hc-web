@@ -41,8 +41,8 @@ class DeviceHistoryPage extends ConsumerWidget {
                 child: Text('No history data for the last 24 hours'));
           }
 
-          final attrs =
-              entries.map((e) => e.attribute).toSet().toList()..sort();
+          final attrs = entries.map((e) => e.attribute).toSet().toList()
+            ..sort();
 
           return DefaultTabController(
             length: attrs.length,
@@ -55,10 +55,10 @@ class DeviceHistoryPage extends ConsumerWidget {
                 Expanded(
                   child: TabBarView(
                     children: attrs.map((attr) {
-                      final attrEntries =
-                          entries.where((e) => e.attribute == attr).toList()
-                            ..sort(
-                                (a, b) => a.recordedAt.compareTo(b.recordedAt));
+                      final attrEntries = entries
+                          .where((e) => e.attribute == attr)
+                          .toList()
+                        ..sort((a, b) => a.recordedAt.compareTo(b.recordedAt));
                       return _AttributeChart(
                           attribute: attr,
                           entries: attrEntries,
@@ -114,15 +114,16 @@ class _AttributeChart extends ConsumerWidget {
 
     // Build chart spots
     final now = DateTime.now();
-    final minX =
-        now.subtract(const Duration(hours: 24)).millisecondsSinceEpoch.toDouble();
+    final minX = now
+        .subtract(const Duration(hours: 24))
+        .millisecondsSinceEpoch
+        .toDouble();
     final maxX = now.millisecondsSinceEpoch.toDouble();
 
     final spots = entries.map((e) {
       final x = e.recordedAt.millisecondsSinceEpoch.toDouble();
-      final y = isBool
-          ? (e.value == true ? 1.0 : 0.0)
-          : (e.value as num).toDouble();
+      final y =
+          isBool ? (e.value == true ? 1.0 : 0.0) : (e.value as num).toDouble();
       return FlSpot(x, y);
     }).toList();
 
@@ -147,12 +148,10 @@ class _AttributeChart extends ConsumerWidget {
                 getTitlesWidget: (val, meta) {
                   if (isBool) {
                     if (val == 1.0) {
-                      return const Text('ON',
-                          style: TextStyle(fontSize: 10));
+                      return const Text('ON', style: TextStyle(fontSize: 10));
                     }
                     if (val == 0.0) {
-                      return const Text('OFF',
-                          style: TextStyle(fontSize: 10));
+                      return const Text('OFF', style: TextStyle(fontSize: 10));
                     }
                     return const SizedBox.shrink();
                   }
@@ -175,10 +174,10 @@ class _AttributeChart extends ConsumerWidget {
                 },
               ),
             ),
-            topTitles: const AxisTitles(
-                sideTitles: SideTitles(showTitles: false)),
-            rightTitles: const AxisTitles(
-                sideTitles: SideTitles(showTitles: false)),
+            topTitles:
+                const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            rightTitles:
+                const AxisTitles(sideTitles: SideTitles(showTitles: false)),
           ),
           gridData: const FlGridData(show: true),
           borderData: FlBorderData(show: true),
@@ -196,5 +195,4 @@ class _AttributeChart extends ConsumerWidget {
       ),
     );
   }
-
 }

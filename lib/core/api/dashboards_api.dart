@@ -76,4 +76,89 @@ class DashboardsApi {
     final response = await client.dio.post('/dashboards/$id/default');
     return _parseDashboard(Map<String, dynamic>.from(response.data as Map));
   }
+
+  // ── Per-user access (ACL) ──
+  //
+  // Kept off the shared DashboardDefinition model on purpose: access is managed
+  // from one place (admin → user), and threading a grant list through the whole
+  // dashboard model + its copyWith/toJson would ripple far beyond this feature.
+
+  /// Every dashboard as an access view: who owns it and who is granted what.
+  /// Reads the same `/dashboards` list the app already serves, plus the `access`
+  /// field the server now includes.
+  Future<List<DashboardAccessInfo>> listAccess() async {
+    final response = await client.dio.get('/dashboards');
+    final items = (response.data as List? ?? const []);
+    return items.whereType<Map>().map((raw) {
+      final m = Map<String, dynamic>.from(raw);
+      final d = m['dashboard'] is Map
+          ? Map<String, dynamic>.from(m['dashboard'] as Map)
+          : m;
+      return DashboardAccessInfo.fromJson(d);
+    }).toList();
+  }
+
+  /// Replace a dashboard's grant list. Owner/admin only (enforced server-side).
+  Future<void> setAccess(String id, List<DashboardGrant> grants) async {
+    await client.dio.put('/dashboards/$id/access',
+        data: {'access': grants.map((g) => g.toJson()).toList()});
+  }
+}
+
+/// How far a grant reaches. Mirrors the backend `GrantLevel`.
+enum DashboardGrantLevel { view, edit }
+
+DashboardGrantLevel? _grantLevelFromWire(String? s) => switch (s) {
+      'view' => DashboardGrantLevel.view,
+      'edit' => DashboardGrantLevel.edit,
+      _ => null,
+    };
+
+class DashboardGrant {
+  DashboardGrant({required this.userId, required this.level});
+  final String userId;
+  final DashboardGrantLevel level;
+
+  Map<String, dynamic> toJson() => {'user_id': userId, 'level': level.name};
+
+  factory DashboardGrant.fromJson(Map<String, dynamic> j) => DashboardGrant(
+        userId: '${j['user_id']}',
+        level: _grantLevelFromWire(j['level'] as String?) ??
+            DashboardGrantLevel.view,
+      );
+}
+
+/// A dashboard reduced to what the access UI needs.
+class DashboardAccessInfo {
+  DashboardAccessInfo({
+    required this.id,
+    required this.name,
+    required this.ownerUserId,
+    required this.grants,
+  });
+  final String id;
+  final String name;
+  final String ownerUserId;
+  final List<DashboardGrant> grants;
+
+  /// This user's level on this dashboard, or null for none. The owner is
+  /// implicit (always full) and never appears in [grants].
+  DashboardGrantLevel? levelFor(String userId) {
+    if (userId == ownerUserId) return DashboardGrantLevel.edit;
+    for (final g in grants) {
+      if (g.userId == userId) return g.level;
+    }
+    return null;
+  }
+
+  factory DashboardAccessInfo.fromJson(Map<String, dynamic> j) =>
+      DashboardAccessInfo(
+        id: '${j['id']}',
+        name: j['name'] as String? ?? 'Dashboard',
+        ownerUserId: '${j['owner_user_id'] ?? ''}',
+        grants: ((j['access'] as List?) ?? const [])
+            .whereType<Map>()
+            .map((m) => DashboardGrant.fromJson(Map<String, dynamic>.from(m)))
+            .toList(),
+      );
 }

@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../core/providers/automations_provider.dart';
+import '../../design/components/hc_dialog.dart';
+import '../../design/hc_icons.dart';
+import '../../design/tokens.dart';
+import '../../shared/widgets/section_scaffold.dart';
 
 final _groupsProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>(
   (ref) => ref.read(automationsApiProvider).listGroups(),
@@ -12,44 +17,49 @@ class AutomationGroupsPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final groupsAsync = ref.watch(_groupsProvider);
+    final t = HcTokens.of(context);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Rule Groups'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: () => ref.invalidate(_groupsProvider),
-          ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showGroupDialog(context, ref, null),
-        tooltip: 'New group',
-        child: const Icon(Icons.add),
-      ),
-      body: groupsAsync.when(
+    return SectionScaffold(
+      title: 'Rule groups',
+      onBack: () =>
+          context.canPop() ? context.pop() : context.go('/automations'),
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.refresh),
+          tooltip: 'Reload',
+          onPressed: () => ref.invalidate(_groupsProvider),
+        ),
+        SectionHeaderAction(
+          icon: HcIcons.plus,
+          label: 'New group',
+          onPressed: () => _showGroupDialog(context, ref, null),
+        ),
+      ],
+      child: groupsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Error: $e')),
         data: (groups) {
           if (groups.isEmpty) {
-            return const Center(
+            return Center(
               child: Text(
-                'No rule groups.\nTap + to create one.',
+                'No rule groups yet.\nCreate one to enable or disable a set of rules at once.',
                 textAlign: TextAlign.center,
+                style: TextStyle(color: t.surface.onBaseMuted, height: 1.5),
               ),
             );
           }
-          return ListView.builder(
-            itemCount: groups.length,
-            itemBuilder: (context, i) => _GroupTile(
-              group: groups[i],
-              onEdit: () => _showGroupDialog(context, ref, groups[i]),
-              onDelete: () => _deleteGroup(context, ref, groups[i]),
-              onEnable: () => _setEnabled(ref, groups[i]['id'] as String, true),
-              onDisable: () =>
-                  _setEnabled(ref, groups[i]['id'] as String, false),
-            ),
+          return ListView(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+            children: [
+              for (final g in groups)
+                _GroupTile(
+                  group: g,
+                  onEdit: () => _showGroupDialog(context, ref, g),
+                  onDelete: () => _deleteGroup(context, ref, g),
+                  onEnable: () => _setEnabled(ref, g['id'] as String, true),
+                  onDisable: () => _setEnabled(ref, g['id'] as String, false),
+                ),
+            ],
           );
         },
       ),
@@ -67,36 +77,32 @@ class AutomationGroupsPage extends ConsumerWidget {
         TextEditingController(text: group?['description'] as String? ?? '');
     final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(group == null ? 'New Group' : 'Edit Group'),
-        content: Column(
+      builder: (ctx) => HcDialog(
+        title: group == null ? 'New group' : 'Edit group',
+        actions: [
+          HcButton(label: 'Cancel', onPressed: () => Navigator.pop(ctx, false)),
+          HcButton(
+            label: 'Save',
+            kind: HcButtonKind.primary,
+            onPressed: () => Navigator.pop(ctx, true),
+          ),
+        ],
+        child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
               controller: nameCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Name',
-                border: OutlineInputBorder(),
-              ),
+              autofocus: true,
+              decoration: const InputDecoration(labelText: 'Name'),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: descCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Description (optional)',
-                border: OutlineInputBorder(),
-              ),
+              decoration:
+                  const InputDecoration(labelText: 'Description (optional)'),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
-          FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Save')),
-        ],
       ),
     );
     if (ok != true) return;
@@ -128,17 +134,19 @@ class AutomationGroupsPage extends ConsumerWidget {
   ) async {
     final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete group?'),
-        content: Text('Delete "${group['name']}"?'),
+      builder: (ctx) => HcDialog(
+        title: 'Delete group?',
+        description:
+            'Delete "${group['name']}"? The rules themselves are kept.',
         actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
-          FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Delete')),
+          HcButton(label: 'Cancel', onPressed: () => Navigator.pop(ctx, false)),
+          HcButton(
+            label: 'Delete',
+            kind: HcButtonKind.danger,
+            onPressed: () => Navigator.pop(ctx, true),
+          ),
         ],
+        child: const SizedBox.shrink(),
       ),
     );
     if (ok == true) {
@@ -181,28 +189,71 @@ class _GroupTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
     final name = group['name'] as String? ?? '?';
     final desc = group['description'] as String?;
     final ruleIds = (group['rule_ids'] as List?)?.length ?? 0;
 
-    return ListTile(
-      leading: const Icon(Icons.group_work_outlined),
-      title: Text(name),
-      subtitle: Text(
-        '${desc != null ? '$desc · ' : ''}$ruleIds rule${ruleIds == 1 ? '' : 's'}',
-        style: Theme.of(context).textTheme.bodySmall,
+    return Container(
+      padding: EdgeInsets.symmetric(vertical: t.space.sm + 2),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: t.stroke.hairline)),
       ),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
+      child: Row(
         children: [
-          TextButton(onPressed: onEnable, child: const Text('Enable all')),
-          TextButton(onPressed: onDisable, child: const Text('Disable all')),
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: t.surface.sunken,
+              borderRadius: BorderRadius.circular(9),
+              border: Border.all(color: t.stroke.hairline),
+            ),
+            child: Icon(Icons.group_work_outlined,
+                size: 16, color: t.surface.onBaseMuted),
+          ),
+          SizedBox(width: t.space.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(name,
+                    style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: t.surface.onBase)),
+                const SizedBox(height: 2),
+                Text(
+                  '${desc != null && desc.isNotEmpty ? '$desc · ' : ''}'
+                  '$ruleIds rule${ruleIds == 1 ? '' : 's'}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style:
+                      TextStyle(fontSize: 12.5, color: t.surface.onBaseMuted),
+                ),
+              ],
+            ),
+          ),
+          TextButton(
+            onPressed: onEnable,
+            style: TextButton.styleFrom(foregroundColor: t.accent.active),
+            child: const Text('Enable all'),
+          ),
+          TextButton(
+            onPressed: onDisable,
+            style: TextButton.styleFrom(foregroundColor: t.surface.onBaseMuted),
+            child: const Text('Disable all'),
+          ),
           IconButton(
-            icon: const Icon(Icons.edit_outlined, size: 18),
+            icon: Icon(Icons.edit_outlined,
+                size: 18, color: t.surface.onBaseMuted),
+            tooltip: 'Edit',
             onPressed: onEdit,
           ),
           IconButton(
-            icon: const Icon(Icons.delete_outline, size: 18),
+            icon: Icon(Icons.delete_outline, size: 18, color: t.accent.danger),
+            tooltip: 'Delete',
             onPressed: onDelete,
           ),
         ],

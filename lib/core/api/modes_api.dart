@@ -14,7 +14,8 @@ class ModesApi {
   }
 
   Future<void> createMode(String id, String name, String kind) async {
-    await client.dio.post('/modes', data: {'id': id, 'name': name, 'kind': kind});
+    await client.dio
+        .post('/modes', data: {'id': id, 'name': name, 'kind': kind});
   }
 
   Future<void> deleteMode(String id) async {

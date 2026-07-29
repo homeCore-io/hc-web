@@ -1,7 +1,12 @@
 name: hc_web
 description: HomeCore web dashboard
 publish_to: 'none'
-version: 1.0.0+1
+# Kept in step with the rest of homeCore (core 0.1.x, plugins 0.1.x, and the
+# docker repo's tags), and with the git tag this repo is released from — the
+# release workflow publishes ghcr.io/homecore-io/hc-web:<version> from `v<version>`.
+# It read 1.0.0+1 from `flutter create` and had never been touched, which would
+# have made the first release's image tag disagree with the app it contains.
+version: 0.1.6+1
 
 environment:
   sdk: '>=3.3.0 <4.0.0'
@@ -19,6 +24,10 @@ dependencies:
   timeago: ^3.6.1
   freezed_annotation: ^2.4.1
   json_annotation: ^4.9.0
+  # EventSource, for streaming plugin actions. Dio's browser adapter buffers the
+  # whole response, so it cannot carry SSE; core accepts `?token=` on that path
+  # precisely because EventSource cannot set an Authorization header.
+  web: ^1.1.0
 
 dev_dependencies:
   flutter_test:
@@ -33,3 +42,16 @@ flutter:
   uses-material-design: true
   assets:
     - assets/images/
+
+  # Phosphor icons, used straight from the fonts. We do NOT depend on
+  # phosphor_flutter: it does not compile on Flutter 3.44, where IconData became
+  # a `final class` and the package declares `PhosphorIconData extends IconData`.
+  # Two families give us the weight axis we picked Phosphor for — outline when a
+  # device is off, solid when it is on. MIT; see assets/fonts/PHOSPHOR-LICENSE.
+  fonts:
+    - family: Phosphor
+      fonts:
+        - asset: assets/fonts/Phosphor.ttf
+    - family: PhosphorFill
+      fonts:
+        - asset: assets/fonts/Phosphor-Fill.ttf

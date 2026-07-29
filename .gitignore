@@ -1,6 +1,15 @@
 # Miscellaneous
 *.class
 *.lock
+# ...but NOT pubspec.lock. The blanket *.lock above (a Rust-template leftover,
+# aimed at Cargo.lock) was silently excluding it, which meant the Dockerfile's
+# `COPY pubspec.yaml pubspec.lock ./` could never succeed from a clean checkout —
+# and nothing ever built the image, so nothing ever said so.
+#
+# hc-web is an application, not a library: the lockfile pins transitive
+# dependency resolution, so an image built from a tag resolves the same packages
+# it resolved on the day it shipped. Same reason the Flutter toolchain is pinned.
+!pubspec.lock
 *.log
 *.pyc
 *.swp
@@ -117,3 +126,10 @@ app.*.symbols
 !**/ios/**/default.perspectivev3
 !/packages/flutter_tools/test/data/dart_dependencies_test/**/.packages
 !/dev/ci/**/Gemfile.lock
+# Cached Flutter SDK tarball (see tool/fetch-flutter-sdk.sh) — big, and reproducible.
+.flutter-sdk/*
+!.flutter-sdk/.keep
+
+# Camera stack: real config (has camera credentials) and env — never commit.
+go2rtc.yaml
+.env

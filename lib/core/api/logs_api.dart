@@ -30,8 +30,7 @@ class LogsApi {
     if (token == null) return;
 
     final wsScheme = Uri.base.scheme == 'https' ? 'wss' : 'ws';
-    var path =
-        '/api/v1/logs/stream?token=$token&level=$_level&history=100';
+    var path = '/api/v1/logs/stream?token=$token&level=$_level&history=100';
     if (_target != null) path += '&target=${Uri.encodeComponent(_target!)}';
     final uri = Uri.parse('$wsScheme://${Uri.base.host}:${Uri.base.port}$path');
 

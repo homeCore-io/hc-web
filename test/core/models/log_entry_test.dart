@@ -33,8 +33,7 @@ void main() {
 
     test('severity ordering is correct', () {
       int sev(String level) => LogEntry.fromJson(
-              {'level': level, 'message': '', 'target': '', 'fields': {}})
-          .severity;
+          {'level': level, 'message': '', 'target': '', 'fields': {}}).severity;
 
       expect(sev('TRACE'), lessThan(sev('DEBUG')));
       expect(sev('DEBUG'), lessThan(sev('INFO')));

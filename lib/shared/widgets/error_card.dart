@@ -20,8 +20,7 @@ class ErrorCard extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(Icons.error_outline,
-                    size: 40,
-                    color: Theme.of(context).colorScheme.error),
+                    size: 40, color: Theme.of(context).colorScheme.error),
                 const SizedBox(height: 12),
                 Text(
                   'Something went wrong',

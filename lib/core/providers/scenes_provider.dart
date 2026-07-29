@@ -16,8 +16,7 @@ final scenesProvider = FutureProvider<List<SceneModel>>((ref) async {
 
 // Tracks when each scene was last activated (scene_id → DateTime).
 // Updated in real-time from the WebSocket event stream.
-class SceneActivatedTimesNotifier
-    extends StateNotifier<Map<String, DateTime>> {
+class SceneActivatedTimesNotifier extends StateNotifier<Map<String, DateTime>> {
   SceneActivatedTimesNotifier(Ref ref) : super(const {}) {
     ref.listen(eventsStreamProvider, (_, next) {
       next.whenData((event) {

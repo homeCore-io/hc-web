@@ -4,7 +4,19 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/api/events_history_api.dart';
 import '../../core/api/history_api.dart';
+import '../../core/text/humanize.dart';
+import '../../core/dashboard/widget_registry.dart';
+import 'camera_card.dart';
+import '../../core/devices/presentation.dart';
+import '../../design/hc_icons.dart';
+import '../../design/components/hc_surface.dart';
+import '../../design/components/hc_tile.dart';
+import '../../design/tokens.dart';
+import '../devices/device_sheet.dart';
+import '../home/home_entity_row.dart';
+import '../home/home_rich_cards.dart';
 import '../../core/models/dashboard.dart';
 import '../../core/models/device_state.dart';
 import '../../core/models/hc_event.dart';
@@ -118,10 +130,12 @@ class _DashboardGridLayout extends StatelessWidget {
           ...layout.placements
         ]..sort((a, b) => a.y != b.y ? a.y.compareTo(b.y) : a.x.compareTo(b.x));
         if (placements.isEmpty) {
-          return const Card(
-            child: Padding(
-              padding: EdgeInsets.all(24),
-              child: Text('This dashboard has no widgets yet.'),
+          final t = HcTokens.of(context);
+          return HcSurface(
+            padding: EdgeInsets.all(t.space.lg),
+            child: Text(
+              'This dashboard has no widgets yet.',
+              style: TextStyle(color: t.surface.onBaseMuted),
             ),
           );
         }
@@ -183,65 +197,64 @@ class _DashboardWidgetCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final sizeHint = dashboardWidgetSizeHint(widgetModel.type);
-    final isCompact = placement.w < sizeHint.recommendedW ||
-        placement.h < sizeHint.recommendedH;
-    final isVeryCompact =
-        placement.w <= sizeHint.minW || placement.h <= sizeHint.minH;
-    final body = switch (widgetModel.type) {
-      DashboardWidgetType.statSummary =>
-        _StatSummaryWidget(widgetModel: widgetModel, compact: isCompact),
-      DashboardWidgetType.deviceGrid => _DeviceGridWidget(
-          widgetModel: widgetModel,
-          compact: isCompact,
-          veryCompact: isVeryCompact),
-      DashboardWidgetType.deviceList =>
-        _DeviceListWidget(widgetModel: widgetModel, compact: isCompact),
-      DashboardWidgetType.deviceTile =>
-        _DeviceTileWidget(widgetModel: widgetModel),
-      DashboardWidgetType.modeChips => const _ModeChipsWidget(),
-      DashboardWidgetType.sceneRow => const _SceneRowWidget(),
-      DashboardWidgetType.eventFeed =>
-        _EventFeedWidget(widgetModel: widgetModel, compact: isCompact),
-      DashboardWidgetType.mediaPlayer => _MediaPlayerDashboardWidget(
-          widgetModel: widgetModel, compact: isCompact),
-      DashboardWidgetType.markdown => _MarkdownWidget(widgetModel: widgetModel),
-      DashboardWidgetType.dashboardLink => _DashboardLinkWidget(
-          current: dashboard,
-          widgetModel: widgetModel,
-          compact: isCompact,
-          veryCompact: isVeryCompact),
-      DashboardWidgetType.cameraVideo =>
-        _CameraVideoWidget(widgetModel: widgetModel),
-      DashboardWidgetType.webEmbed => _WebEmbedWidget(widgetModel: widgetModel),
-      DashboardWidgetType.historyChart =>
-        _HistoryChartWidget(widgetModel: widgetModel, compact: isCompact),
-    };
+    // Dispatch by wire type through the registry. There is no exhaustive switch
+    // any more, so a type this build has never heard of — a newer core's card,
+    // or a plugin's — renders as [UnknownWidget] and keeps its config, rather
+    // than being silently coerced into a markdown card.
+    final descriptor = WidgetRegistry.lookup(widgetModel.type);
+    final sizeHint = descriptor?.sizeHint ?? const WidgetSizeHint();
 
-    return Card(
-      margin: EdgeInsets.zero,
-      clipBehavior: Clip.antiAlias,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(widgetModel.title,
-                style: Theme.of(context).textTheme.titleMedium),
-            if (widgetModel.subtitle != null &&
-                widgetModel.subtitle!.isNotEmpty) ...[
-              const SizedBox(height: 4),
-              Text(widgetModel.subtitle!,
-                  style: Theme.of(context).textTheme.bodySmall),
-            ],
-            const SizedBox(height: 12),
-            Expanded(
-              child: SingleChildScrollView(
-                child: body,
+    final body = descriptor == null
+        ? UnknownWidget(type: widgetModel.type)
+        : descriptor.builder(
+            context,
+            WidgetRenderArgs(
+              id: widgetModel.id,
+              title: widgetModel.title,
+              subtitle: widgetModel.subtitle,
+              config: widgetModel.config,
+              w: placement.w,
+              h: placement.h,
+              sizeHint: sizeHint,
+            ),
+          );
+
+    final t = HcTokens.of(context);
+    return HcSurface(
+      padding: EdgeInsets.all(t.space.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (widgetModel.title.isNotEmpty)
+            Text(
+              widgetModel.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: t.surface.onBase,
               ),
             ),
+          if (widgetModel.subtitle != null &&
+              widgetModel.subtitle!.isNotEmpty) ...[
+            SizedBox(height: t.space.xs),
+            Text(
+              widgetModel.subtitle!,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 11, color: t.surface.onBaseMuted),
+            ),
           ],
-        ),
+          SizedBox(height: t.space.sm),
+          // Fill widgets (e.g. the hero) get the cell's real height so they can
+          // stretch into it; everything else scrolls when it overflows.
+          Expanded(
+            child: (descriptor?.fill ?? false)
+                ? body
+                : SingleChildScrollView(child: body),
+          ),
+        ],
       ),
     );
   }
@@ -250,25 +263,33 @@ class _DashboardWidgetCard extends ConsumerWidget {
 List<DeviceState> _selectDevices(
     List<DeviceState> all, Map<String, dynamic> config) {
   final selectionMode = config['selection_mode'] as String? ?? 'query';
-  var selected = all;
+  // Device grids/lists are for real, physical devices. Never surface the
+  // pseudo-entries — modes/timers/switches (`core.*`, isSystem) and scene
+  // devices (device_type "scene") — or a broad/empty query fills the card with
+  // "Day Mode", "Night Mode", and scene rows that belong in mode_chips /
+  // scene_row instead. Those get their own widgets.
+  final base =
+      all.where((d) => !d.isSystem && d.deviceType != 'scene').toList();
+  var selected = base;
   switch (selectionMode) {
     case 'manual':
       final ids = ((config['device_ids'] as List?) ?? const [])
           .whereType<String>()
           .toSet();
-      selected = all.where((device) => ids.contains(device.id)).toList();
+      selected = base.where((device) => ids.contains(device.id)).toList();
       break;
     case 'area':
       final areaName = config['area_name'] as String?;
       if (areaName != null && areaName.isNotEmpty) {
-        selected = all.where((device) => device.area == areaName).toList();
+        selected =
+            base.where((device) => device.effectiveArea == areaName).toList();
       }
       break;
     case 'query':
     default:
       final query = (config['query'] as String? ?? '').toLowerCase();
       if (query.isNotEmpty) {
-        selected = all.where((device) {
+        selected = base.where((device) {
           return device.displayName.toLowerCase().contains(query) ||
               device.id.toLowerCase().contains(query) ||
               (device.canonicalName?.toLowerCase().contains(query) ?? false) ||
@@ -355,29 +376,24 @@ class _StatSummaryWidget extends ConsumerWidget {
       }
     }
 
+    final t = HcTokens.of(context);
     return Wrap(
-      spacing: 12,
-      runSpacing: 12,
+      spacing: t.space.sm,
+      runSpacing: t.space.sm,
       children: cards
           .map((card) => SizedBox(
                 width: compact ? 120 : 150,
-                child: Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color:
-                        Theme.of(context).colorScheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(card.icon),
-                      const SizedBox(height: 8),
-                      Text('${card.value}',
-                          style: Theme.of(context).textTheme.headlineSmall),
-                      Text(card.label),
-                    ],
-                  ),
+                child: _SystemTile(
+                  icon: card.icon,
+                  label: card.label,
+                  value: '${card.value}',
+                  detail: '',
+                  active: card.value > 0 &&
+                      card.label != 'Offline' &&
+                      card.label != 'Doors Open',
+                  alert:
+                      (card.label == 'Offline' || card.label == 'Doors Open') &&
+                          card.value > 0,
                 ),
               ))
           .toList(),
@@ -418,54 +434,23 @@ class _DeviceGridWidget extends ConsumerWidget {
             crossAxisCount: columns,
             mainAxisSpacing: 12,
             crossAxisSpacing: 12,
-            childAspectRatio: veryCompact ? 1.25 : 1.1,
+            childAspectRatio: veryCompact ? 1.9 : 1.7,
           ),
           itemBuilder: (context, index) {
             final device = devices[index];
-            return InkWell(
-              onTap: () => context.go('/devices/${device.id}'),
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  border: Border.all(
-                    color: Theme.of(context).dividerColor,
-                  ),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(device.isMediaPlayer
-                            ? Icons.speaker
-                            : Icons.devices_other_outlined),
-                        const Spacer(),
-                        Icon(
-                          device.available
-                              ? Icons.circle
-                              : Icons.circle_outlined,
-                          size: 10,
-                          color: device.available ? Colors.green : Colors.red,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Text(device.displayName,
-                        maxLines: veryCompact ? 1 : 2,
-                        overflow: TextOverflow.ellipsis),
-                    const SizedBox(height: 4),
-                    Text(
-                      device.isMediaPlayer
-                          ? device.title ?? device.playbackState
-                          : device.area ?? device.id,
-                      style: Theme.of(context).textTheme.bodySmall,
-                      maxLines: veryCompact ? 1 : 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
+            final notifier = ref.read(devicesProvider.notifier);
+            return HcTile(
+              device: device,
+              onTap: () => showDeviceSheet(context, device.id),
+              // Media players open their sheet for transport controls; a bare
+              // on/off would be wrong for a speaker.
+              onToggle: device.isMediaPlayer
+                  ? null
+                  : () => notifier.command(device.id, {'on': !isOn(device)}),
+              onLevel: device.isMediaPlayer
+                  ? null
+                  : (v) => notifier.command(
+                      device.id, {'brightness_pct': (v * 100).round()}),
             );
           },
         );
@@ -485,25 +470,14 @@ class _DeviceListWidget extends ConsumerWidget {
       ref.watch(devicesProvider).valueOrNull ?? const <DeviceState>[],
       widgetModel.config,
     );
+    final t = HcTokens.of(context);
     return Column(
-      children: devices
-          .map((device) => ListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                visualDensity:
-                    compact ? VisualDensity.compact : VisualDensity.standard,
-                title: Text(device.displayName),
-                subtitle: Text(device.isMediaPlayer
-                    ? (device.title ?? device.playbackState)
-                    : (device.area ?? device.id)),
-                trailing: Icon(
-                  device.available ? Icons.circle : Icons.circle_outlined,
-                  size: 10,
-                  color: device.available ? Colors.green : Colors.red,
-                ),
-                onTap: () => context.go('/devices/${device.id}'),
-              ))
-          .toList(),
+      children: [
+        for (var i = 0; i < devices.length; i++) ...[
+          if (i > 0) Divider(height: 1, thickness: 1, color: t.stroke.hairline),
+          HomeEntityRow(device: devices[i]),
+        ],
+      ],
     );
   }
 }
@@ -523,16 +497,17 @@ class _DeviceTileWidget extends ConsumerWidget {
       return const _PlaceholderWidget(
           message: 'No device selected for this tile.');
     }
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      title: Text(device.displayName),
-      subtitle: Text(device.title ?? device.area ?? device.id),
-      trailing: Icon(
-        device.available ? Icons.circle : Icons.circle_outlined,
-        size: 10,
-        color: device.available ? Colors.green : Colors.red,
-      ),
-      onTap: () => context.go('/devices/${device.id}'),
+    final notifier = ref.read(devicesProvider.notifier);
+    return HcTile(
+      device: device,
+      onTap: () => showDeviceSheet(context, device.id),
+      onToggle: device.isMediaPlayer
+          ? null
+          : () => notifier.command(device.id, {'on': !isOn(device)}),
+      onLevel: device.isMediaPlayer
+          ? null
+          : (v) => notifier
+              .command(device.id, {'brightness_pct': (v * 100).round()}),
     );
   }
 }
@@ -543,16 +518,17 @@ class _ModeChipsWidget extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final modes = ref.watch(modesProvider).valueOrNull ?? const <ModeState>[];
+    final t = HcTokens.of(context);
     return Wrap(
-      spacing: 8,
-      runSpacing: 8,
+      spacing: t.space.sm,
+      runSpacing: t.space.sm,
       children: modes
-          .map((mode) => FilterChip(
-                label: Text(mode.displayName),
+          .map((mode) => _TokenChip(
+                label: mode.displayName,
                 selected: mode.on,
-                onSelected: mode.kind == 'manual'
-                    ? (value) =>
-                        ref.read(modesApiProvider).setModeOn(mode.id, value)
+                onTap: mode.kind == 'manual'
+                    ? () =>
+                        ref.read(modesApiProvider).setModeOn(mode.id, !mode.on)
                     : null,
               ))
           .toList(),
@@ -567,16 +543,76 @@ class _SceneRowWidget extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final scenes =
         ref.watch(scenesProvider).valueOrNull ?? const <SceneModel>[];
+    final t = HcTokens.of(context);
     return Wrap(
-      spacing: 8,
-      runSpacing: 8,
+      spacing: t.space.sm,
+      runSpacing: t.space.sm,
       children: scenes
-          .map((scene) => FilledButton.tonal(
-                onPressed: () =>
+          .map((scene) => _TokenChip(
+                label: scene.name,
+                icon: HcIcons.play,
+                onTap: () =>
                     ref.read(scenesApiProvider).activateScene(scene.id),
-                child: Text(scene.name),
               ))
           .toList(),
+    );
+  }
+}
+
+/// A tokenised pill — the shared shape for modes and scenes. Amber when active,
+/// a quiet sunken pill otherwise; presses ripple within the pill.
+class _TokenChip extends StatelessWidget {
+  const _TokenChip({
+    required this.label,
+    this.selected = false,
+    this.icon,
+    this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final IconData? icon;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    final fg = selected ? t.accent.active : t.surface.onBase;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(t.radius.pill),
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: t.motion.d(t.motion.fast),
+          padding: EdgeInsets.symmetric(
+              horizontal: t.space.md, vertical: t.space.sm - 1),
+          decoration: BoxDecoration(
+            color: selected
+                ? t.accent.active.withValues(alpha: 0.14)
+                : t.surface.sunken,
+            borderRadius: BorderRadius.circular(t.radius.pill),
+            border: Border.all(
+              color: selected
+                  ? t.accent.active.withValues(alpha: 0.6)
+                  : t.stroke.hairline,
+              width: t.stroke.width,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (icon != null) ...[
+                Icon(icon, size: 13, color: fg),
+                SizedBox(width: t.space.xs),
+              ],
+              Text(label,
+                  style: TextStyle(
+                      fontSize: 12.5, fontWeight: FontWeight.w600, color: fg)),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -597,21 +633,44 @@ class _EventFeedWidgetState extends ConsumerState<_EventFeedWidget> {
   final List<HcEvent> _events = [];
   ProviderSubscription<AsyncValue<HcEvent>>? _sub;
 
+  int get _limit => widget.widgetModel.config['limit'] as int? ?? 12;
+
   @override
   void initState() {
     super.initState();
+    // Seed with recent history so the log isn't empty until something happens —
+    // the stream only carries events that arrive AFTER we subscribe.
+    _loadHistory();
     _sub =
         ref.listenManual<AsyncValue<HcEvent>>(eventsStreamProvider, (_, next) {
       next.whenData((event) {
-        final limit = widget.widgetModel.config['limit'] as int? ?? 10;
         setState(() {
           _events.insert(0, event);
-          if (_events.length > limit) {
-            _events.removeRange(limit, _events.length);
+          if (_events.length > _limit) {
+            _events.removeRange(_limit, _events.length);
           }
         });
       });
     });
+  }
+
+  Future<void> _loadHistory() async {
+    try {
+      final api = EventsHistoryApi(ref.read(homecoreClientProvider));
+      final entries = await api.listEvents(limit: _limit);
+      if (!mounted) return;
+      setState(() {
+        _events
+          ..clear()
+          ..addAll(entries.map((e) => HcEvent.fromJson({
+                ...e.event,
+                'type': e.eventType,
+                if (e.deviceId != null) 'device_id': e.deviceId,
+              })));
+      });
+    } catch (_) {
+      // Best-effort; the live stream will still fill in.
+    }
   }
 
   @override
@@ -634,7 +693,6 @@ class _EventFeedWidgetState extends ConsumerState<_EventFeedWidget> {
             .whereType<String>()
             .toSet();
     final areaFilter = widget.widgetModel.config['area_name'] as String? ?? '';
-    final groupBy = widget.widgetModel.config['group_by'] as String? ?? 'none';
     final filtered = _events.where((event) {
       if (allowedTypes.isNotEmpty && !allowedTypes.contains(event.type)) {
         return false;
@@ -646,380 +704,197 @@ class _EventFeedWidgetState extends ConsumerState<_EventFeedWidget> {
       }
       if (areaFilter.isNotEmpty) {
         final deviceId = event.deviceId;
-        if (deviceId == null || deviceById[deviceId]?.area != areaFilter) {
+        if (deviceId == null ||
+            deviceById[deviceId]?.effectiveArea != areaFilter) {
           return false;
         }
       }
       return true;
     }).toList();
 
+    final t = HcTokens.of(context);
     if (filtered.isEmpty) {
-      return const Text('No recent events yet.');
+      return Row(
+        children: [
+          Icon(Icons.history_toggle_off,
+              size: 15, color: t.surface.onBaseMuted),
+          SizedBox(width: t.space.sm),
+          Text('No events yet — activity will stream in here.',
+              style: TextStyle(color: t.surface.onBaseMuted, fontSize: 12.5)),
+        ],
+      );
     }
-    final maxItems =
-        widget.compact && filtered.length > 5 ? 5 : filtered.length;
-    final shown = filtered.take(maxItems).toList();
-    String groupLabel(HcEvent event) {
-      switch (groupBy) {
-        case 'type':
-          return event.type;
-        case 'device':
-          return event.deviceId == null
-              ? 'Other'
-              : (deviceById[event.deviceId!]?.displayName ?? event.deviceId!);
-        case 'area':
-          return event.deviceId == null
-              ? 'Other'
-              : (deviceById[event.deviceId!]?.area ?? 'Unassigned');
-        default:
-          return '';
-      }
-    }
+    final shown =
+        (widget.compact && filtered.length > 6 ? filtered.take(6) : filtered)
+            .toList();
 
-    final children = <Widget>[];
-    String? currentGroup;
-    for (final event in shown) {
-      final label = groupLabel(event);
-      if (groupBy != 'none' && label != currentGroup) {
-        currentGroup = label;
-        children.add(Padding(
-          padding: const EdgeInsets.only(top: 8, bottom: 4),
-          child: Text(
-            label,
-            style: Theme.of(context).textTheme.labelMedium,
-          ),
-        ));
-      }
-      children.add(ListTile(
-        dense: true,
-        contentPadding: EdgeInsets.zero,
-        visualDensity:
-            widget.compact ? VisualDensity.compact : VisualDensity.standard,
-        title: Text(event.type),
-        subtitle: Text(
-          event.deviceId == null
-              ? event.data['rule_id']?.toString() ??
-                  event.data['scene_id']?.toString() ??
-                  ''
-              : [
-                  deviceById[event.deviceId!]?.displayName ?? event.deviceId!,
-                  if ((deviceById[event.deviceId!]?.area ?? '').isNotEmpty)
-                    deviceById[event.deviceId!]?.area,
-                ].whereType<String>().join(' • '),
-        ),
-      ));
-    }
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: children,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var i = 0; i < shown.length; i++) ...[
+          if (i > 0) Divider(height: 1, thickness: 1, color: t.stroke.hairline),
+          _logRow(t, shown[i], deviceById),
+        ],
+      ],
     );
+  }
+
+  // One line of the log: a monospaced clock, a category dot, the event and its
+  // subject, and how long ago it happened — the shape of a real event viewer.
+  Widget _logRow(HcTokens t, HcEvent e, Map<String, DeviceState> deviceById) {
+    final color = _eventColor(e.type, t);
+    final ts = e.timestamp.toLocal();
+    final clock = '${_pad(ts.hour)}:${_pad(ts.minute)}:${_pad(ts.second)}';
+    final detail = _eventDetail(e, deviceById);
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: t.space.xs + 1),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 56,
+            child: Text(clock,
+                style: TextStyle(
+                    fontSize: 11.5,
+                    color: t.surface.onBaseMuted,
+                    fontFeatures: t.numericFontFeatures)),
+          ),
+          Padding(
+            padding: EdgeInsets.only(top: 5, right: t.space.sm),
+            child: Container(
+                width: 7,
+                height: 7,
+                decoration:
+                    BoxDecoration(color: color, shape: BoxShape.circle)),
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(humanize(e.type),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: t.surface.onBase)),
+                if (detail.isNotEmpty)
+                  Text(detail,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontSize: 11, color: t.surface.onBaseMuted)),
+              ],
+            ),
+          ),
+          SizedBox(width: t.space.sm),
+          Text(_relTime(e.timestamp),
+              style: TextStyle(
+                  fontSize: 10.5,
+                  color: t.surface.onBaseMuted,
+                  fontFeatures: t.numericFontFeatures)),
+        ],
+      ),
+    );
+  }
+
+  static String _pad(int n) => n.toString().padLeft(2, '0');
+
+  Color _eventColor(String type, HcTokens t) {
+    if (type.contains('alert') ||
+        type.contains('error') ||
+        type.contains('offline')) {
+      return t.accent.danger;
+    }
+    if (type.contains('rule')) return t.accent.active;
+    if (type.contains('scene') || type.contains('mode')) {
+      return const Color(0xFF9B8CFF);
+    }
+    if (type.contains('availab') || type.contains('plugin')) {
+      return t.accent.warn;
+    }
+    if (type.contains('state')) return const Color(0xFF5AA9E6);
+    return t.surface.onBaseMuted;
+  }
+
+  String _eventDetail(HcEvent e, Map<String, DeviceState> deviceById) {
+    final d = e.data;
+    final devName = e.deviceId == null
+        ? null
+        : (deviceById[e.deviceId!]?.displayName ?? e.deviceId);
+    if (e.available != null && devName != null) {
+      return '$devName → ${e.available! ? 'online' : 'offline'}';
+    }
+    final cur = e.current;
+    if (cur != null && devName != null) {
+      final bits = <String>[];
+      if (cur.containsKey('on')) bits.add(cur['on'] == true ? 'on' : 'off');
+      if (cur['state'] is String) bits.add(cur['state'] as String);
+      if (cur['brightness_pct'] != null) bits.add('${cur['brightness_pct']}%');
+      return bits.isEmpty ? devName : '$devName → ${bits.join(', ')}';
+    }
+    if (d['plugin_id'] != null) {
+      final st = d['status'];
+      return '${d['plugin_id']}${st != null ? ' → $st' : ''}';
+    }
+    if (d['rule_name'] != null || d['rule_id'] != null) {
+      return (d['rule_name'] ?? d['rule_id']).toString();
+    }
+    if (d['scene_name'] != null || d['scene_id'] != null) {
+      return (d['scene_name'] ?? d['scene_id']).toString();
+    }
+    return devName ?? '';
+  }
+
+  String _relTime(DateTime ts) {
+    final diff = DateTime.now().difference(ts);
+    if (diff.inSeconds < 45) return 'now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m';
+    if (diff.inHours < 24) return '${diff.inHours}h';
+    return '${diff.inDays}d';
   }
 }
 
 class _MediaPlayerDashboardWidget extends ConsumerWidget {
   final DashboardWidgetModel widgetModel;
-  final bool compact;
-  const _MediaPlayerDashboardWidget({
-    required this.widgetModel,
-    required this.compact,
-  });
+  const _MediaPlayerDashboardWidget({required this.widgetModel});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final devices = _selectDevices(
+    // Filter to media players BEFORE applying the count limit, so `limit` counts
+    // *players* rather than arbitrary devices that happen to sort first. Passing
+    // the raw config to `_selectDevices` limited the full device list up front —
+    // a non-media device (e.g. a Hue bridge) ate a slot and pushed a real
+    // speaker out, so 4 speakers rendered as 3. The old code also capped at 2 in
+    // "compact" mode, hiding half the house; the card scrolls, so show them all.
+    final limit = widgetModel.config['limit'] as int?;
+    final unlimited = {...widgetModel.config}..remove('limit');
+    var devices = _selectDevices(
       ref.watch(devicesProvider).valueOrNull ?? const <DeviceState>[],
-      widgetModel.config,
+      unlimited,
     ).where((device) => device.isMediaPlayer).toList();
+    if (limit != null && devices.length > limit) {
+      devices = devices.take(limit).toList();
+    }
 
     if (devices.isEmpty) {
       return const _PlaceholderWidget(
           message: 'No media players match this widget.');
     }
 
-    final maxItems = compact && devices.length > 2 ? 2 : devices.length;
+    final t = HcTokens.of(context);
+    final shown = devices;
+    // Reuse HcNowPlaying (via HomeMediaCard) — the same rich card the Home and
+    // Media views use: album-art bloom, transport, volume. The old bespoke
+    // Material card is gone.
     return Column(
-      children: devices
-          .take(maxItems)
-          .map((device) => _MediaPlayerDashboardCard(
-                device: device,
-                compact: compact,
-              ))
-          .toList(),
-    );
-  }
-}
-
-class _MediaPlayerDashboardCard extends ConsumerStatefulWidget {
-  final DeviceState device;
-  final bool compact;
-
-  const _MediaPlayerDashboardCard({
-    required this.device,
-    required this.compact,
-  });
-
-  @override
-  ConsumerState<_MediaPlayerDashboardCard> createState() =>
-      _MediaPlayerDashboardCardState();
-}
-
-class _MediaPlayerDashboardCardState
-    extends ConsumerState<_MediaPlayerDashboardCard> {
-  bool _busy = false;
-  double? _volumeDraft;
-
-  Future<void> _send(Map<String, dynamic> body) async {
-    setState(() => _busy = true);
-    try {
-      await ref.read(devicesApiProvider).setDeviceState(widget.device.id, body);
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final device = widget.device;
-    final sonos = device.sonos;
-    final isPlaying = device.playbackState == 'playing' ||
-        device.playbackState == 'buffering';
-    final progress = (device.durationSecs != null && device.durationSecs! > 0)
-        ? ((device.positionSecs ?? 0) / device.durationSecs!).clamp(0.0, 1.0)
-        : null;
-    final volume =
-        (_volumeDraft ?? device.volumePercent?.toDouble())?.clamp(0, 100);
-    final favorites =
-        ((sonos['favorites'] ?? device.state['available_favorites']) as List? ??
-                const [])
-            .whereType<String>()
-            .toList();
-    final playlists =
-        ((sonos['playlists'] ?? device.state['available_playlists']) as List? ??
-                const [])
-            .whereType<String>()
-            .toList();
-    final groupMembers =
-        ((sonos['group_members'] ?? device.state['group_members']) as List? ??
-                const [])
-            .whereType<String>()
-            .toList();
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: InkWell(
-                    onTap: () => context.go('/devices/${device.id}'),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(device.displayName,
-                            style: Theme.of(context).textTheme.titleSmall),
-                        Text(
-                          [
-                            if (device.title != null &&
-                                device.title!.isNotEmpty)
-                              device.title,
-                            if (device.artist != null &&
-                                device.artist!.isNotEmpty)
-                              device.artist,
-                            if ((device.title == null ||
-                                    device.title!.isEmpty) &&
-                                device.playbackState.isNotEmpty)
-                              device.playbackState,
-                          ].whereType<String>().join(' • '),
-                          maxLines: widget.compact ? 1 : 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                if (_busy)
-                  const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                else
-                  Chip(
-                    visualDensity: VisualDensity.compact,
-                    label: Text(device.playbackState),
-                  ),
-              ],
-            ),
-            if (progress != null) ...[
-              const SizedBox(height: 8),
-              LinearProgressIndicator(value: progress),
-              const SizedBox(height: 4),
-              Text(
-                '${_formatDuration(device.positionSecs)} / ${_formatDuration(device.durationSecs)}',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ],
-            if (!widget.compact &&
-                (device.source != null ||
-                    device.album != null ||
-                    groupMembers.isNotEmpty ||
-                    device.uiEnrichments.isNotEmpty)) ...[
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  if (device.source != null && device.source!.isNotEmpty)
-                    Chip(label: Text(device.source!)),
-                  if (device.album != null && device.album!.isNotEmpty)
-                    Chip(label: Text(device.album!)),
-                  ...device.uiEnrichments.take(3).map((item) => Chip(
-                        visualDensity: VisualDensity.compact,
-                        label: Text(item),
-                      )),
-                ],
-              ),
-              if (groupMembers.isNotEmpty) ...[
-                const SizedBox(height: 6),
-                Text(
-                  'Group: ${groupMembers.join(', ')}',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
-            ],
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                if (device.supportsAction('previous'))
-                  IconButton(
-                    tooltip: 'Previous',
-                    onPressed:
-                        _busy ? null : () => _send({'action': 'previous'}),
-                    icon: const Icon(Icons.skip_previous),
-                  ),
-                if (device.supportsAction('play') && !isPlaying)
-                  FilledButton.tonalIcon(
-                    onPressed: _busy ? null : () => _send({'action': 'play'}),
-                    icon: const Icon(Icons.play_arrow),
-                    label: const Text('Play'),
-                  ),
-                if (device.supportsAction('pause') && isPlaying)
-                  FilledButton.tonalIcon(
-                    onPressed: _busy ? null : () => _send({'action': 'pause'}),
-                    icon: const Icon(Icons.pause),
-                    label: const Text('Pause'),
-                  ),
-                if (device.supportsAction('stop'))
-                  OutlinedButton.icon(
-                    onPressed: _busy ? null : () => _send({'action': 'stop'}),
-                    icon: const Icon(Icons.stop),
-                    label: const Text('Stop'),
-                  ),
-                if (device.supportsAction('next'))
-                  IconButton(
-                    tooltip: 'Next',
-                    onPressed: _busy ? null : () => _send({'action': 'next'}),
-                    icon: const Icon(Icons.skip_next),
-                  ),
-              ],
-            ),
-            if (volume != null &&
-                (device.supportsAction('set_volume') ||
-                    device.supportsAction('set_mute'))) ...[
-              const SizedBox(height: 4),
-              Row(
-                children: [
-                  if (device.supportsAction('set_mute'))
-                    IconButton(
-                      tooltip: device.muted == true ? 'Unmute' : 'Mute',
-                      onPressed: _busy
-                          ? null
-                          : () => _send({
-                                'action': 'set_mute',
-                                'muted': !(device.muted ?? false),
-                              }),
-                      icon: Icon(
-                        device.muted == true
-                            ? Icons.volume_off
-                            : Icons.volume_up,
-                      ),
-                    ),
-                  Expanded(
-                    child: Slider(
-                      value: volume.toDouble(),
-                      min: 0,
-                      max: 100,
-                      divisions: 20,
-                      label: '${volume.round()}%',
-                      onChanged: device.supportsAction('set_volume') && !_busy
-                          ? (value) => setState(() => _volumeDraft = value)
-                          : null,
-                      onChangeEnd: device.supportsAction('set_volume') && !_busy
-                          ? (value) {
-                              setState(() => _volumeDraft = null);
-                              _send({
-                                'action': 'set_volume',
-                                'volume': value.round(),
-                              });
-                            }
-                          : null,
-                    ),
-                  ),
-                  Text('${volume.round()}%'),
-                ],
-              ),
-            ],
-            if (!widget.compact && favorites.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: favorites
-                    .take(3)
-                    .map((favorite) => ActionChip(
-                          label: Text(favorite),
-                          onPressed: _busy
-                              ? null
-                              : () => _send({
-                                    'action': 'play_media',
-                                    'media_type': 'favorite',
-                                    'name': favorite,
-                                  }),
-                        ))
-                    .toList(),
-              ),
-            ],
-            if (!widget.compact && playlists.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: playlists
-                    .take(2)
-                    .map((playlist) => ActionChip(
-                          label: Text(playlist),
-                          onPressed: _busy
-                              ? null
-                              : () => _send({
-                                    'action': 'play_media',
-                                    'media_type': 'playlist',
-                                    'name': playlist,
-                                  }),
-                        ))
-                    .toList(),
-              ),
-            ],
-          ],
-        ),
-      ),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var i = 0; i < shown.length; i++) ...[
+          if (i > 0) SizedBox(height: t.space.md),
+          HomeMediaCard(device: shown[i]),
+        ],
+      ],
     );
   }
 }
@@ -1030,14 +905,95 @@ class _MarkdownWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final markdown = widgetModel.config['markdown'] as String? ?? '';
-    return SelectableText(
-        markdown.isEmpty ? 'No markdown content configured.' : markdown);
+    final t = HcTokens.of(context);
+    final markdown = (widgetModel.config['markdown'] as String? ?? '').trim();
+    if (markdown.isEmpty) {
+      return Text('No markdown content configured.',
+          style: TextStyle(color: t.surface.onBaseMuted));
+    }
+    return DefaultTextStyle.merge(
+      style: TextStyle(color: t.surface.onBase, height: 1.4, fontSize: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: _renderMarkdown(markdown, t),
+      ),
+    );
+  }
+
+  // A deliberately small renderer for dashboard notes: headings, bullets, bold,
+  // and paragraphs. Not a full CommonMark implementation — just the subset a
+  // note actually uses, so a note stops showing literal '##' and '**'.
+  static List<Widget> _renderMarkdown(String source, HcTokens t) {
+    final out = <Widget>[];
+    for (final raw in source.split('\n')) {
+      final line = raw.trimRight();
+      if (line.trim().isEmpty) {
+        out.add(SizedBox(height: t.space.sm));
+        continue;
+      }
+      if (line.startsWith('### ')) {
+        out.add(_line(line.substring(4), t,
+            size: 14, weight: FontWeight.w700, top: t.space.sm));
+      } else if (line.startsWith('## ')) {
+        out.add(_line(line.substring(3), t,
+            size: 16, weight: FontWeight.w700, top: t.space.sm));
+      } else if (line.startsWith('# ')) {
+        out.add(_line(line.substring(2), t,
+            size: 19, weight: FontWeight.w700, top: t.space.sm));
+      } else if (line.startsWith('- ') || line.startsWith('* ')) {
+        out.add(Padding(
+          padding: const EdgeInsets.symmetric(vertical: 1),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('•  ', style: TextStyle(color: t.surface.onBaseMuted)),
+              Expanded(child: _rich(line.substring(2), t)),
+            ],
+          ),
+        ));
+      } else {
+        out.add(Padding(
+          padding: const EdgeInsets.symmetric(vertical: 1),
+          child: _rich(line, t),
+        ));
+      }
+    }
+    return out;
+  }
+
+  static Widget _line(String text, HcTokens t,
+      {required double size, required FontWeight weight, double top = 0}) {
+    return Padding(
+      padding: EdgeInsets.only(top: top, bottom: 2),
+      child: _rich(text, t,
+          base: TextStyle(
+              fontSize: size, fontWeight: weight, color: t.surface.onBase)),
+    );
+  }
+
+  // Inline **bold** parsing; everything else renders as plain text.
+  static Widget _rich(String text, HcTokens t, {TextStyle? base}) {
+    final spans = <TextSpan>[];
+    final re = RegExp(r'\*\*(.+?)\*\*');
+    var index = 0;
+    for (final m in re.allMatches(text)) {
+      if (m.start > index) {
+        spans.add(TextSpan(text: text.substring(index, m.start)));
+      }
+      spans.add(TextSpan(
+          text: m.group(1),
+          style: const TextStyle(fontWeight: FontWeight.w700)));
+      index = m.end;
+    }
+    if (index < text.length) spans.add(TextSpan(text: text.substring(index)));
+    return Text.rich(TextSpan(style: base, children: spans));
   }
 }
 
 class _DashboardLinkWidget extends ConsumerWidget {
-  final DashboardDefinition current;
+  /// Null when rendered through the registry, which does not carry the enclosing
+  /// dashboard. Used only to omit a self-link, so its absence is harmless.
+  final DashboardDefinition? current;
   final DashboardWidgetModel widgetModel;
   final bool compact;
   final bool veryCompact;
@@ -1056,7 +1012,7 @@ class _DashboardLinkWidget extends ConsumerWidget {
         ((widgetModel.config['dashboard_ids'] as List?) ?? const [])
             .whereType<String>()
             .toSet();
-    var others = dashboards.where((dashboard) => dashboard.id != current.id);
+    var others = dashboards.where((dashboard) => dashboard.id != current?.id);
     if (configuredIds.isNotEmpty) {
       others =
           others.where((dashboard) => configuredIds.contains(dashboard.id));
@@ -1081,9 +1037,9 @@ class _DashboardLinkWidget extends ConsumerWidget {
               icon: const Icon(Icons.add),
               label: Text(compact ? 'New' : 'New Dashboard'),
             ),
-            if (!veryCompact)
+            if (!veryCompact && current != null)
               OutlinedButton.icon(
-                onPressed: () => context.go('/dashboards/${current.id}/edit'),
+                onPressed: () => context.go('/dashboards/${current!.id}/edit'),
                 icon: const Icon(Icons.edit_outlined),
                 label: Text(compact ? 'Edit' : 'Edit This Dashboard'),
               ),
@@ -1461,32 +1417,633 @@ class _HistoryChartContent extends ConsumerWidget {
   }
 }
 
-String _formatDuration(int? secs) {
-  if (secs == null || secs < 0) return '--:--';
-  final duration = Duration(seconds: secs);
-  final hours = duration.inHours;
-  final minutes = duration.inMinutes.remainder(60);
-  final seconds = duration.inSeconds.remainder(60);
-  if (hours > 0) {
-    return '$hours:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
-  }
-  return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
-}
-
 class _PlaceholderWidget extends StatelessWidget {
   final String message;
   const _PlaceholderWidget({required this.message});
 
   @override
   Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(t.space.md),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(12),
+        color: t.surface.sunken,
+        borderRadius: t.radius.mdR,
+        border: Border.all(color: t.stroke.hairline, width: t.stroke.width),
       ),
-      child: Text(message),
+      child: Text(message, style: TextStyle(color: t.surface.onBaseMuted)),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Built-in cards
+// ---------------------------------------------------------------------------
+
+/// Registers the cards this app ships with.
+///
+/// They go through exactly the same registry a plugin's card would, so there is
+/// no privileged path: if a built-in can do it, a contributed card can too.
+/// Called once from `main()`.
+void registerBuiltinDashboardWidgets() {
+  WidgetRegistry.registerAll([
+    WidgetDescriptor(
+      type: 'house_status_hero',
+      title: 'House status',
+      description: 'System tiles derived from the live device map.',
+      icon: Icons.home_outlined,
+      sizeHint: const WidgetSizeHint(
+          minW: 4, minH: 2, recommendedW: 12, recommendedH: 3),
+      fill: true,
+      // Core accepts any object (or null) here.
+      builder: (context, a) => _HouseStatusHeroWidget(config: a.config),
+    ),
+    WidgetDescriptor(
+      type: 'stat_summary',
+      title: 'Stat summary',
+      icon: Icons.numbers_outlined,
+      sizeHint: const WidgetSizeHint(
+          minW: 3, minH: 2, recommendedW: 6, recommendedH: 2),
+      configFields: const [
+        WidgetConfigField('metrics', WidgetConfigKind.stringList,
+            required: true, help: 'At least one metric.'),
+      ],
+      validate: (c) => (c['metrics'] as List?)?.isNotEmpty == true
+          ? null
+          : 'Pick at least one metric.',
+      builder: (context, a) => _StatSummaryWidget(
+        widgetModel: _modelOf(a, 'stat_summary'),
+        compact: a.isCompact,
+      ),
+    ),
+    WidgetDescriptor(
+      type: 'device_grid',
+      title: 'Device grid',
+      icon: Icons.grid_view_outlined,
+      sizeHint: const WidgetSizeHint(
+          minW: 4, minH: 2, recommendedW: 8, recommendedH: 2),
+      configFields: _selectionFields,
+      validate: _validateSelection,
+      builder: (context, a) => _DeviceGridWidget(
+        widgetModel: _modelOf(a, 'device_grid'),
+        compact: a.isCompact,
+        veryCompact: a.isVeryCompact,
+      ),
+    ),
+    WidgetDescriptor(
+      type: 'device_list',
+      title: 'Device list',
+      icon: Icons.list_alt_outlined,
+      sizeHint: const WidgetSizeHint(
+          minW: 3, minH: 2, recommendedW: 6, recommendedH: 2),
+      configFields: _selectionFields,
+      validate: _validateSelection,
+      builder: (context, a) => _DeviceListWidget(
+        widgetModel: _modelOf(a, 'device_list'),
+        compact: a.isCompact,
+      ),
+    ),
+    WidgetDescriptor(
+      type: 'device_tile',
+      title: 'Device tile',
+      icon: Icons.crop_square_outlined,
+      sizeHint: const WidgetSizeHint(
+          minW: 2, minH: 1, recommendedW: 3, recommendedH: 1),
+      configFields: _selectionFields,
+      validate: _validateSelection,
+      builder: (context, a) =>
+          _DeviceTileWidget(widgetModel: _modelOf(a, 'device_tile')),
+    ),
+    WidgetDescriptor(
+      type: 'media_player',
+      title: 'Media player',
+      icon: Icons.speaker_outlined,
+      sizeHint: const WidgetSizeHint(
+          minW: 4, minH: 2, recommendedW: 6, recommendedH: 2),
+      configFields: _selectionFields,
+      validate: _validateSelection,
+      builder: (context, a) => _MediaPlayerDashboardWidget(
+        widgetModel: _modelOf(a, 'media_player'),
+      ),
+    ),
+    WidgetDescriptor(
+      type: 'mode_chips',
+      title: 'Modes',
+      icon: Icons.tune_outlined,
+      sizeHint: const WidgetSizeHint(
+          minW: 3, minH: 1, recommendedW: 6, recommendedH: 1),
+      builder: (context, a) => const _ModeChipsWidget(),
+    ),
+    WidgetDescriptor(
+      type: 'scene_row',
+      title: 'Scenes',
+      icon: Icons.movie_outlined,
+      sizeHint: const WidgetSizeHint(
+          minW: 3, minH: 1, recommendedW: 6, recommendedH: 1),
+      builder: (context, a) => const _SceneRowWidget(),
+    ),
+    WidgetDescriptor(
+      type: 'event_feed',
+      title: 'Event feed',
+      icon: Icons.event_note_outlined,
+      sizeHint: const WidgetSizeHint(
+          minW: 4, minH: 2, recommendedW: 5, recommendedH: 2),
+      configFields: const [
+        WidgetConfigField('limit', WidgetConfigKind.integer),
+        WidgetConfigField('group_by', WidgetConfigKind.choice,
+            options: ['none', 'type', 'device', 'area']),
+        WidgetConfigField('area_name', WidgetConfigKind.areaName),
+      ],
+      builder: (context, a) => _EventFeedWidget(
+        widgetModel: _modelOf(a, 'event_feed'),
+        compact: a.isCompact,
+      ),
+    ),
+    WidgetDescriptor(
+      type: 'history_chart',
+      title: 'History chart',
+      icon: Icons.show_chart_outlined,
+      sizeHint: const WidgetSizeHint(
+          minW: 4, minH: 2, recommendedW: 8, recommendedH: 2),
+      configFields: const [
+        WidgetConfigField('device_id', WidgetConfigKind.deviceRef,
+            required: true),
+        WidgetConfigField('attribute', WidgetConfigKind.attribute,
+            required: true),
+        WidgetConfigField('timeframe_hours', WidgetConfigKind.integer),
+      ],
+      // Core requires both; a chart missing either 400s the whole dashboard.
+      validate: (c) => (c['device_id'] as String?)?.isNotEmpty == true &&
+              (c['attribute'] as String?)?.isNotEmpty == true
+          ? null
+          : 'Pick a device and an attribute.',
+      builder: (context, a) => _HistoryChartWidget(
+        widgetModel: _modelOf(a, 'history_chart'),
+        compact: a.isCompact,
+      ),
+    ),
+    WidgetDescriptor(
+      type: 'markdown',
+      title: 'Markdown',
+      icon: Icons.notes_outlined,
+      sizeHint: const WidgetSizeHint(
+          minW: 3, minH: 1, recommendedW: 6, recommendedH: 2),
+      configFields: const [
+        WidgetConfigField('markdown', WidgetConfigKind.markdown,
+            required: true),
+      ],
+      validate: (c) => (c['markdown'] as String?)?.isNotEmpty == true
+          ? null
+          : 'Write something.',
+      builder: (context, a) =>
+          _MarkdownWidget(widgetModel: _modelOf(a, 'markdown')),
+    ),
+    WidgetDescriptor(
+      type: 'camera_video',
+      title: 'Camera',
+      icon: Icons.videocam_outlined,
+      sizeHint: const WidgetSizeHint(
+          minW: 4, minH: 2, recommendedW: 6, recommendedH: 3),
+      configFields: const [
+        WidgetConfigField('source_type', WidgetConfigKind.choice,
+            required: true,
+            options: ['image_refresh', 'mjpeg', 'hls', 'webrtc']),
+        WidgetConfigField('url', WidgetConfigKind.url, required: true),
+        WidgetConfigField('refresh_secs', WidgetConfigKind.integer),
+      ],
+      validate: (c) => (c['url'] as String?)?.isNotEmpty == true &&
+              (c['source_type'] as String?)?.isNotEmpty == true
+          ? null
+          : 'A camera needs a source type and a URL.',
+      // Display only — the NVR (go2rtc) owns motion and recording, so the
+      // frontend is a wall of live streams and nothing more.
+      builder: (context, a) => CameraCard(
+        name: a.title,
+        url: '${a.config['url'] ?? ''}',
+        sourceType: '${a.config['source_type'] ?? 'image_refresh'}',
+        refreshSecs: a.config['refresh_secs'] as int?,
+      ),
+    ),
+    WidgetDescriptor(
+      type: 'web_embed',
+      title: 'Web embed',
+      icon: Icons.public_outlined,
+      sizeHint: const WidgetSizeHint(
+          minW: 4, minH: 2, recommendedW: 6, recommendedH: 3),
+      configFields: const [
+        WidgetConfigField('url', WidgetConfigKind.url, required: true),
+        WidgetConfigField('sandbox_profile', WidgetConfigKind.choice, options: [
+          'readonly_embed',
+          'trusted_internal',
+          'strict_isolated',
+        ]),
+      ],
+      validate: (c) =>
+          (c['url'] as String?)?.isNotEmpty == true ? null : 'A URL is needed.',
+      builder: (context, a) =>
+          _WebEmbedWidget(widgetModel: _modelOf(a, 'web_embed')),
+    ),
+    WidgetDescriptor(
+      type: 'dashboard_link',
+      title: 'Dashboard links',
+      icon: Icons.link_outlined,
+      sizeHint: const WidgetSizeHint(
+          minW: 4, minH: 1, recommendedW: 6, recommendedH: 2),
+      configFields: const [
+        WidgetConfigField('dashboard_ids', WidgetConfigKind.stringList),
+      ],
+      builder: (context, a) => _DashboardLinkWidget(
+        current: null,
+        widgetModel: _modelOf(a, 'dashboard_link'),
+        compact: a.isCompact,
+        veryCompact: a.isVeryCompact,
+      ),
+    ),
+  ]);
+}
+
+/// The selection contract shared by the device-oriented cards. Core rejects any
+/// of them whose `selection_mode` is missing or unknown.
+const _selectionFields = [
+  WidgetConfigField('selection_mode', WidgetConfigKind.choice,
+      required: true,
+      defaultValue: 'manual',
+      options: ['manual', 'area', 'query']),
+  WidgetConfigField('device_ids', WidgetConfigKind.deviceRefs),
+  WidgetConfigField('area_name', WidgetConfigKind.areaName),
+  WidgetConfigField('query', WidgetConfigKind.text),
+  WidgetConfigField('limit', WidgetConfigKind.integer),
+  WidgetConfigField('show_offline', WidgetConfigKind.boolean),
+];
+
+String? _validateSelection(Map<String, dynamic> c) {
+  final mode = c['selection_mode'] as String?;
+  if (mode == null || !const ['manual', 'area', 'query'].contains(mode)) {
+    return 'Choose how devices are selected.';
+  }
+  // Core requires area_name specifically when the mode is `area`.
+  if (mode == 'area' && (c['area_name'] as String?)?.isNotEmpty != true) {
+    return 'Pick an area.';
+  }
+  // NOTE: manual mode with an empty device_ids is intentionally allowed — core
+  // accepts it, and this check must mirror core exactly (see widget_registry
+  // _test "client-side validation mirrors core"). The empty-card case is
+  // avoided instead by defaulting new grids/lists to query mode.
+  return null;
+}
+
+/// Bridges the registry's args back to the model the existing card bodies take.
+DashboardWidgetModel _modelOf(WidgetRenderArgs a, String type) =>
+    DashboardWidgetModel(
+      id: a.id,
+      type: type,
+      title: a.title,
+      subtitle: a.subtitle,
+      refreshPolicy: DashboardRefreshPolicy.live,
+      config: a.config,
+    );
+
+/// The "House Status" hero.
+///
+/// Core has shipped `house_status_hero` on the default dashboard for a while,
+/// but this client never implemented it — the closed enum quietly rendered it as
+/// a *markdown* card instead. This is the card it was always supposed to be:
+/// a handful of whole-house tiles derived from the live device map, so a wall
+/// panel answers "is everything alright?" from across the room.
+///
+/// Every tile is computed from device *facets*, never from `device_type`, which
+/// plugins get wrong often enough that it cannot be trusted here.
+class _HouseStatusHeroWidget extends ConsumerWidget {
+  const _HouseStatusHeroWidget({required this.config});
+
+  final Map<String, dynamic> config;
+
+  static const _defaultSystems = [
+    'lighting',
+    'climate',
+    'security',
+    'battery',
+    'media',
+    'activity',
+  ];
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = HcTokens.of(context);
+    final devices = ref.watch(devicesProvider).valueOrNull ?? const [];
+
+    final systems = ((config['systems'] as List?) ?? _defaultSystems)
+        .map((s) => '$s')
+        .toList();
+
+    final tiles = [
+      for (final s in systems)
+        if (_tileFor(s, devices, t) case final tile?) tile,
+    ];
+
+    if (tiles.isEmpty) {
+      return const Center(child: Text('No systems to show.'));
+    }
+
+    // Keep the hero to a SINGLE row so it can never grow past its box and clip
+    // the bottom of the tiles. When every tile fits, stretch them across evenly
+    // into the band's full height; when too narrow, scroll horizontally rather
+    // than wrapping into rows the card's height can't show.
+    return LayoutBuilder(
+      builder: (context, box) {
+        const minTileW = 132.0;
+        final gap = t.space.md;
+        final even = (box.maxWidth - gap * (tiles.length - 1)) / tiles.length;
+        final h = box.maxHeight.isFinite ? box.maxHeight : null;
+
+        if (even >= minTileW) {
+          return SizedBox(
+            height: h,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (var i = 0; i < tiles.length; i++) ...[
+                  if (i > 0) SizedBox(width: gap),
+                  Expanded(child: tiles[i]),
+                ],
+              ],
+            ),
+          );
+        }
+        return SizedBox(
+          height: h,
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (var i = 0; i < tiles.length; i++) ...[
+                  if (i > 0) SizedBox(width: gap),
+                  SizedBox(width: minTileW, child: tiles[i]),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget? _tileFor(String system, List<DeviceState> devices, HcTokens t) {
+    switch (system) {
+      case 'lighting':
+        final lights = devices.where((d) {
+          final f = facetOf(d, d.schema);
+          return f == DeviceFacet.light ||
+              f == DeviceFacet.dimmableLight ||
+              f == DeviceFacet.colorLight;
+        }).toList();
+        final on = lights.where(isOn).length;
+        return _SystemTile(
+          expand: true,
+          icon: Icons.lightbulb_outline,
+          label: 'Lighting',
+          value: '$on',
+          detail: on == 0 ? 'all off' : 'of ${lights.length} on',
+          active: on > 0,
+          meter: lights.isEmpty ? null : on / lights.length,
+        );
+
+      case 'climate':
+        final temps = [
+          for (final d in devices)
+            if (d.state['temperature'] case final num v) v.toDouble(),
+        ];
+        if (temps.isEmpty) return null;
+        final avg = temps.reduce((a, b) => a + b) / temps.length;
+        return _SystemTile(
+          expand: true,
+          icon: Icons.thermostat_outlined,
+          label: 'Climate',
+          value: avg.toStringAsFixed(1),
+          detail: 'average of ${temps.length}',
+          active: false,
+        );
+
+      case 'security':
+        // Anything open or unlocked. This is the tile someone actually walks
+        // over to read, so it must be unambiguous: zero is calm, non-zero is not.
+        final open = devices.where((d) {
+          if (d.state['open'] == true) return true;
+          if (d.state['locked'] == false) return true;
+          return false;
+        }).toList();
+        return _SystemTile(
+          expand: true,
+          icon: open.isEmpty ? Icons.lock_outline : Icons.lock_open_outlined,
+          label: 'Security',
+          value: open.isEmpty ? 'Secure' : '${open.length}',
+          detail: open.isEmpty
+              ? 'all closed'
+              : open.map((d) => d.displayName).take(2).join(', '),
+          active: open.isNotEmpty,
+          alert: open.isNotEmpty,
+        );
+
+      case 'battery':
+        final batteries = [
+          for (final d in devices)
+            if (d.state['battery'] case final num v) (d, v.toDouble()),
+        ];
+        if (batteries.isEmpty) return null;
+        batteries.sort((a, b) => a.$2.compareTo(b.$2));
+        final lowest = batteries.first;
+        final low = lowest.$2 <= 20;
+        return _SystemTile(
+          expand: true,
+          icon: low ? Icons.battery_alert_outlined : Icons.battery_full,
+          label: 'Battery',
+          value: '${lowest.$2.round()}%',
+          detail: low ? lowest.$1.displayName : 'lowest of ${batteries.length}',
+          active: false,
+          alert: low,
+          meter: lowest.$2 / 100,
+        );
+
+      case 'media':
+        final players = devices
+            .where((d) => facetOf(d, d.schema) == DeviceFacet.mediaPlayer)
+            .toList();
+        if (players.isEmpty) return null;
+        final playing = players.where((d) => d.playbackState == 'playing');
+        return _SystemTile(
+          expand: true,
+          icon: Icons.speaker_outlined,
+          label: 'Media',
+          value: playing.isEmpty ? 'Idle' : '${playing.length}',
+          detail: playing.isEmpty
+              ? '${players.length} idle'
+              : playing.map((d) => d.displayName).take(2).join(', '),
+          active: playing.isNotEmpty,
+          meter: players.isEmpty ? null : playing.length / players.length,
+        );
+
+      case 'energy':
+        final watts = [
+          for (final d in devices)
+            if (d.state['power'] case final num v) v.toDouble(),
+        ];
+        if (watts.isEmpty) return null;
+        final total = watts.reduce((a, b) => a + b);
+        return _SystemTile(
+          expand: true,
+          icon: Icons.bolt_outlined,
+          label: 'Energy',
+          value: total.round().toString(),
+          detail: 'W across ${watts.length}',
+          active: total > 0,
+        );
+
+      case 'activity':
+        final motion = devices.where((d) {
+          final f = facetOf(d, d.schema);
+          return (f == DeviceFacet.motion || f == DeviceFacet.occupancy) &&
+              isOn(d);
+        }).toList();
+        return _SystemTile(
+          expand: true,
+          icon: Icons.sensors,
+          label: 'Activity',
+          value: motion.isEmpty ? 'Quiet' : '${motion.length}',
+          detail: motion.isEmpty
+              ? 'no motion'
+              : motion.map((d) => d.displayName).take(2).join(', '),
+          active: motion.isNotEmpty,
+        );
+
+      // An unrecognised system is skipped rather than guessed at.
+      default:
+        return null;
+    }
+  }
+}
+
+class _SystemTile extends StatelessWidget {
+  const _SystemTile({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.detail,
+    required this.active,
+    this.alert = false,
+    this.meter,
+    this.expand = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final String detail;
+  final bool active;
+  final bool alert;
+
+  /// Optional 0..1 proportion (lights on / total, battery level, players
+  /// playing / total …). When set, a thin accent bar reads the fraction at a
+  /// glance — the "how much", under the "how many".
+  final double? meter;
+
+  /// Fill the parent's height (hero band) — label pinned to the top, the value
+  /// stack dropped to the bottom — instead of hugging its content (stat grid).
+  final bool expand;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    final accent = alert
+        ? t.accent.warn
+        : active
+            ? t.accent.active
+            : t.surface.onBaseMuted;
+
+    return HcSurface(
+      glowColor: alert ? t.accent.warn : t.accent.active,
+      glowIntensity: (alert || active) ? 0.7 : 0,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: expand ? 18 : 16, color: accent),
+              SizedBox(width: t.space.sm),
+              Text(
+                label.toUpperCase(),
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: t.surface.onBaseMuted,
+                  letterSpacing: 0.8,
+                ),
+              ),
+            ],
+          ),
+          // In a tall hero the value stack drops to the bottom of the tile; in
+          // the compact stat grid it just follows the label.
+          if (expand) const Spacer() else SizedBox(height: t.space.sm),
+          HcValue(
+            value,
+            style: TextStyle(
+              fontSize: expand ? 42 : 30,
+              fontWeight: expand ? FontWeight.w200 : FontWeight.w300,
+              height: 1,
+              color: (active || alert) ? accent : t.surface.onBase,
+            ),
+          ),
+          SizedBox(height: t.space.xs),
+          Text(
+            detail,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 11, color: t.surface.onBaseMuted),
+          ),
+          if (meter != null) ...[
+            SizedBox(height: t.space.sm),
+            _MeterBar(value: meter!, color: accent),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// A thin rounded proportion bar — the accent fills [value] (0..1) of the track.
+class _MeterBar extends StatelessWidget {
+  const _MeterBar({required this.value, required this.color});
+
+  final double value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    final frac = value.clamp(0.0, 1.0);
+    return LayoutBuilder(
+      builder: (context, box) => Stack(
+        children: [
+          Container(
+            height: 4,
+            width: box.maxWidth,
+            decoration: BoxDecoration(
+              color: t.surface.onBaseMuted.withValues(alpha: 0.16),
+              borderRadius: BorderRadius.circular(999),
+            ),
+          ),
+          Container(
+            height: 4,
+            width: box.maxWidth * frac,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(999),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

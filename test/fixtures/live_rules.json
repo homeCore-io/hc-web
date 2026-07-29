@@ -1,0 +1,2170 @@
+[
+  {
+    "actions": [
+      {
+        "action": {
+          "SetDeviceState": {
+            "device_id": "switch_01",
+            "state": {
+              "on": true
+            },
+            "track_event_value": false
+          }
+        },
+        "enabled": true
+      },
+      {
+        "action": {
+          "Conditional": {
+            "condition": "device_state(\"mode_night\")[\"on\"] == true",
+            "else_actions": [],
+            "then_actions": [
+              {
+                "SetDeviceState": {
+                  "device_id": "timer_01",
+                  "state": {
+                    "command": "cancel"
+                  },
+                  "track_event_value": false
+                }
+              },
+              {
+                "SetDeviceState": {
+                  "device_id": "lutron_scene_01",
+                  "state": {
+                    "activate": true
+                  },
+                  "track_event_value": false
+                }
+              }
+            ]
+          }
+        },
+        "enabled": true
+      }
+    ],
+    "cancel_on_false": false,
+    "conditions": [],
+    "enabled": true,
+    "id": "842b2dc5-140b-471f-b459-ca8a773542bc",
+    "log_actions": false,
+    "log_events": false,
+    "log_triggers": false,
+    "name": "Rule 01",
+    "priority": 20,
+    "tags": [],
+    "trigger": {
+      "DeviceStateChanged": {
+        "attribute": "open",
+        "device_id": "yolink_d88b4c0000000001",
+        "device_ids": [
+          "yolink_d88b4c0000000002",
+          "yolink_d88b4c0000000003",
+          "yolink_d88b4c0000000004"
+        ],
+        "to": true
+      }
+    }
+  },
+  {
+    "actions": [
+      {
+        "action": {
+          "SetDeviceState": {
+            "device_id": "timer_02",
+            "state": {
+              "command": "cancel"
+            },
+            "track_event_value": false
+          }
+        },
+        "enabled": true
+      }
+    ],
+    "cancel_on_false": false,
+    "conditions": [
+      {
+        "DeviceState": {
+          "attribute": "state",
+          "device_id": "timer_02",
+          "op": "Eq",
+          "value": "running"
+        }
+      }
+    ],
+    "enabled": true,
+    "id": "ba000001-0001-0001-0001-000000000001",
+    "log_actions": false,
+    "log_events": false,
+    "log_triggers": false,
+    "name": "Rule 02",
+    "priority": 20,
+    "tags": [],
+    "trigger": {
+      "DeviceStateChanged": {
+        "attribute": "open",
+        "device_id": "yolink_d88b4c0000000005",
+        "to": false
+      }
+    }
+  },
+  {
+    "actions": [
+      {
+        "action": {
+          "SetDeviceState": {
+            "device_id": "timer_01",
+            "state": {
+              "command": "start",
+              "duration_secs": 300,
+              "label": "message 03"
+            },
+            "track_event_value": false
+          }
+        },
+        "enabled": true
+      }
+    ],
+    "cancel_on_false": false,
+    "conditions": [
+      {
+        "DeviceState": {
+          "attribute": "open",
+          "device_id": "yolink_d88b4c0000000001",
+          "op": "Eq",
+          "value": false
+        }
+      },
+      {
+        "DeviceState": {
+          "attribute": "open",
+          "device_id": "yolink_d88b4c0000000002",
+          "op": "Eq",
+          "value": false
+        }
+      },
+      {
+        "DeviceState": {
+          "attribute": "open",
+          "device_id": "yolink_d88b4c0000000003",
+          "op": "Eq",
+          "value": false
+        }
+      },
+      {
+        "DeviceState": {
+          "attribute": "open",
+          "device_id": "yolink_d88b4c0000000004",
+          "op": "Eq",
+          "value": false
+        }
+      },
+      {
+        "ModeIs": {
+          "mode_id": "mode_night",
+          "on": true
+        }
+      }
+    ],
+    "enabled": true,
+    "id": "4ad53081-5c15-465b-8d31-5ec97b289d12",
+    "log_actions": false,
+    "log_events": false,
+    "log_triggers": false,
+    "name": "Rule 03",
+    "priority": 20,
+    "tags": [],
+    "trigger": {
+      "DeviceStateChanged": {
+        "attribute": "open",
+        "device_id": "yolink_d88b4c0000000001",
+        "device_ids": [
+          "yolink_d88b4c0000000002",
+          "yolink_d88b4c0000000003",
+          "yolink_d88b4c0000000004"
+        ],
+        "to": false
+      }
+    }
+  },
+  {
+    "actions": [
+      {
+        "action": {
+          "SetDeviceState": {
+            "device_id": "lutron_01",
+            "state": {
+              "set_led": {
+                "button": 3,
+                "state": 1
+              }
+            },
+            "track_event_value": false
+          }
+        },
+        "enabled": true
+      }
+    ],
+    "cancel_on_false": false,
+    "conditions": [],
+    "enabled": true,
+    "id": "aabecf17-c4cd-4be1-97b2-6a0afbdfcbfa",
+    "log_actions": false,
+    "log_events": false,
+    "log_triggers": false,
+    "name": "Rule 04",
+    "priority": 10,
+    "tags": [],
+    "trigger": {
+      "DeviceStateChanged": {
+        "attribute": "on",
+        "device_id": "hue_00000000000000_light_00000001",
+        "to": true
+      }
+    }
+  },
+  {
+    "actions": [
+      {
+        "action": {
+          "SetDeviceState": {
+            "device_id": "lutron_02",
+            "state": {
+              "on": true
+            },
+            "track_event_value": false
+          }
+        },
+        "enabled": true
+      }
+    ],
+    "cancel_on_false": false,
+    "conditions": [],
+    "enabled": true,
+    "id": "ba000001-0003-0003-0003-000000000003",
+    "log_actions": false,
+    "log_events": false,
+    "log_triggers": false,
+    "name": "Rule 05",
+    "priority": 10,
+    "tags": [],
+    "trigger": {
+      "DeviceStateChanged": {
+        "attribute": "open",
+        "device_id": "yolink_d88b4c0000000005",
+        "to": false
+      }
+    }
+  },
+  {
+    "actions": [
+      {
+        "action": {
+          "SetDeviceState": {
+            "device_id": "hue_00000000000000_light_00000002",
+            "state": {
+              "on": false
+            },
+            "track_event_value": false
+          }
+        },
+        "enabled": true
+      },
+      {
+        "action": {
+          "SetDeviceState": {
+            "device_id": "hue_00000000000000_light_00000001",
+            "state": {
+              "on": false
+            },
+            "track_event_value": false
+          }
+        },
+        "enabled": true
+      },
+      {
+        "action": {
+          "SetDeviceState": {
+            "device_id": "hue_00000000000000_light_00000003",
+            "state": {
+              "on": false
+            },
+            "track_event_value": false
+          }
+        },
+        "enabled": true
+      },
+      {
+        "action": {
+          "SetDeviceState": {
+            "device_id": "lutron_01",
+            "state": {
+              "set_led": {
+                "button": 1,
+                "state": 0
+              }
+            },
+            "track_event_value": false
+          }
+        },
+        "enabled": true
+      }
+    ],
+    "cancel_on_false": false,
+    "conditions": [],
+    "enabled": true,
+    "id": "12c084ab-f8f3-4271-a96d-97ac7560895c",
+    "log_actions": false,
+    "log_events": false,
+    "log_triggers": false,
+    "name": "Rule 06",
+    "priority": 10,
+    "tags": [],
+    "trigger": {
+      "DeviceStateChanged": {
+        "attribute": "button_6",
+        "device_id": "lutron_01",
+        "to": "press"
+      }
+    }
+  },
+  {
+    "actions": [
+      {
+        "action": {
+          "SetDeviceState": {
+            "device_id": "lutron_scene_02",
+            "state": {
+              "activate": true
+            },
+            "track_event_value": false
+          }
+        },
+        "enabled": true
+      }
+    ],
+    "cancel_on_false": false,
+    "conditions": [
+      {
+        "DeviceState": {
+          "attribute": "on",
+          "device_id": "lutron_scene_03",
+          "op": "Eq",
+          "value": true
+        }
+      }
+    ],
+    "enabled": true,
+    "id": "e044c01c-11b8-4b11-bba1-01e4532bcbac",
+    "log_actions": false,
+    "log_events": false,
+    "log_triggers": false,
+    "name": "Rule 07",
+    "priority": 10,
+    "tags": [],
+    "trigger": {
+      "DeviceStateChanged": {
+        "attribute": "open",
+        "device_id": "yolink_d88b4c0000000006",
+        "to": false
+      }
+    }
+  },
+  {
+    "actions": [
+      {
+        "action": {
+          "SetDeviceState": {
+            "device_id": "hue_00000000000000_light_00000003",
+            "state": {
+              "on": false
+            },
+            "track_event_value": false
+          }
+        },
+        "enabled": true
+      },
+      {
+        "action": {
+          "SetDeviceState": {
+            "device_id": "lutron_01",
+            "state": {
+              "set_led": {
+                "button": 4,
+                "state": 0
+              }
+            },
+            "track_event_value": false
+          }
+        },
+        "enabled": true
+      }
+    ],
+    "cancel_on_false": false,
+    "conditions": [
+      {
+        "DeviceState": {
+          "attribute": "on",
+          "device_id": "hue_00000000000000_light_00000003",
+          "op": "Eq",
+          "value": true
+        }
+      }
+    ],
+    "enabled": true,
+    "id": "478aa7db-f162-4f79-a492-36e2d407ed0f",
+    "log_actions": false,
+    "log_events": false,
+    "log_triggers": false,
+    "name": "Rule 08",
+    "priority": 10,
+    "tags": [],
+    "trigger": {
+      "DeviceStateChanged": {
+        "attribute": "button_4",
+        "device_id": "lutron_01",
+        "to": "press"
+      }
+    }
+  },
+  {
+    "actions": [
+      {
+        "action": {
+          "SetDeviceState": {
+            "device_id": "lutron_03",
+            "state": {
+              "on": false
+            },
+            "track_event_value": false
+          }
+        },
+        "enabled": true
+      }
+    ],
+    "cancel_on_false": false,
+    "conditions": [],
+    "enabled": true,
+    "id": "0063f5b3-bfb0-4b15-ae21-1cd00f8f8105",
+    "log_actions": false,
+    "log_events": false,
+    "log_triggers": false,
+    "name": "Rule 09",
+    "priority": 10,
+    "tags": [],
+    "trigger": {
+      "DeviceStateChanged": {
+        "attribute": "state",
+        "device_id": "timer_03",
+        "to": "finished"
+      }
+    }
+  },
+  {
+    "actions": [
+      {
+        "action": {
+          "SetDeviceState": {
+            "device_id": "sonos_01",
+            "state": {
+              "action": "set_volume",
+              "volume": 15
+            },
+            "track_event_value": false
+          }
+        },
+        "enabled": true
+      },
+      {
+        "action": {
+          "SetDeviceState": {
+            "device_id": "sonos_01",
+            "state": {
+              "action": "set_shuffle",
+              "shuffle": true
+            },
+            "track_event_value": false
+          }
+        },
+        "enabled": true
+      },
+      {
+        "action": {
+          "SetDeviceState": {
+            "device_id": "sonos_01",
+            "state": {
+              "action": "play_favorite",
+              "favorite": "Relaxing Classical Piano Music"
+            },
+            "track_event_value": false
+          }
+        },
+        "enabled": true
+      }
+    ],
+    "cancel_on_false": false,
+    "conditions": [
+      {
+        "TimeWindow": {
+          "end": "12:00:00",
+          "start": "06:00:00"
+        }
+      }
+    ],
+    "enabled": true,
+    "id": "ba000001-0002-0002-0002-000000000002",
+    "log_actions": false,
+    "log_events": false,
+    "log_triggers": false,
+    "name": "Rule 10",
+    "priority": 10,
+    "tags": [],
+    "trigger": {
+      "DeviceStateChanged": {
+        "attribute": "open",
+        "device_id": "yolink_d88b4c0000000005",
+        "to": false
+      }
+    }
+  },
+  {
+    "actions": [
+      {
+        "action": {
+          "SetDeviceState": {
+            "device_id": "hue_00000000000000_light_00000002",
+            "state": {
+              "on": false
+            },
+            "track_event_value": false
+          }
+        },
+        "enabled": true
+      },
+      {
+        "action": {
+          "SetDeviceState": {
+            "device_id": "lutron_01",
+            "state": {
+              "set_led": {
+                "button": 2,
+                "state": 0
+              }
+            },
+            "track_event_value": false
+          }
+        },
+        "enabled": true
+      }
+    ],
+    "cancel_on_false": false,
+    "conditions": [
+      {
+        "DeviceState": {
+          "attribute": "on",
+          "device_id": "hue_00000000000000_light_00000002",
+          "op": "Eq",
+          "value": true
+        }
+      }
+    ],
+    "enabled": true,
+    "id": "fc0cfe30-1174-47e5-b04c-ec4c9fbc34ed",
+    "log_actions": false,
+    "log_events": false,
+    "log_triggers": false,
+    "name": "Rule 11",
+    "priority": 10,
+    "tags": [],
+    "trigger": {
+      "DeviceStateChanged": {
+        "attribute": "button_2",
+        "device_id": "lutron_01",
+        "to": "press"
+      }
+    }
+  },
+  {
+    "actions": [
+      {
+        "action": {
+          "SetDeviceState": {
+            "device_id": "lutron_01",
+            "state": {
+              "set_led": {
+                "button": 1,
+                "state": 1
+              }
+            },
+            "track_event_value": false
+          }
+        },
+        "enabled": true
+      }
+    ],
+    "cancel_on_false": false,
+    "conditions": [],
+    "enabled": true,
+    "id": "098ef15b-b40b-456b-8a69-7d43518c5821",
+    "log_actions": false,
+    "log_events": false,
+    "log_triggers": false,
+    "name": "Rule 12",
+    "priority": 10,
+    "tags": [],
+    "trigger": {
+      "DeviceStateChanged": {
+        "attribute": "on",
+        "device_id": "hue_00000000000000_light_00000002",
+        "device_ids": [
+          "hue_00000000000000_light_00000002",
+          "hue_00000000000000_light_00000001",
+          "hue_00000000000000_light_00000003"
+        ],
+        "to": true
+      }
+    }
+  },
+  {
+    "actions": [
+      {
+        "action": {
+          "SetDeviceState": {
+            "device_id": "lutron_01",
+            "state": {
+              "set_led": {
+                "button": 2,
+                "state": 1
+              }
+            },
+            "track_event_value": false
+          }
+        },
+        "enabled": true
+      }
+    ],
+    "cancel_on_false": false,
+    "conditions": [],
+    "enabled": true,
+    "id": "8f661076-db5d-4826-8c56-b2268365ec8e",
+    "log_actions": false,
+    "log_events": false,
+    "log_triggers": false,
+    "name": "Rule 13",
+    "priority": 10,
+    "tags": [],
+    "trigger": {
+      "DeviceStateChanged": {
+        "attribute": "on",
+        "device_id": "hue_00000000000000_light_00000002",
+        "to": true
+      }
+    }
+  },
+  {
+    "actions": [
+      {
+        "action": {
+          "SetDeviceState": {
+            "device_id": "hue_00000000000000_light_00000002",
+            "state": {
+              "on": true
+            },
+            "track_event_value": false
+          }
+        },
+        "enabled": true
+      },
+      {
+        "action": {
+          "SetDeviceState": {
+            "device_id": "hue_00000000000000_light_00000001",
+            "state": {
+              "on": true
+            },
+            "track_event_value": false
+          }
+        },
+        "enabled": true
+      },
+      {
+        "action": {
+          "SetDeviceState": {
+            "device_id": "hue_00000000000000_light_00000003",
+            "state": {
+              "on": true
+            },
+            "track_event_value": false
+          }
+        },
+        "enabled": true
+      },
+      {
+        "action": {
+          "SetDeviceState": {
+            "device_id": "lutron_01",
+            "state": {
+              "set_led": {
+                "button": 1,
+                "state": 1
+              }
+            },
+            "track_event_value": false
+          }
+        },
+        "enabled": true
+      }
+    ],
+    "cancel_on_false": false,
+    "conditions": [
+      {
+        "DeviceState": {
+          "attribute": "on",
+          "device_id": "hue_00000000000000_light_00000002",
+          "op": "Eq",
+          "value": false
+        }
+      },
+      {
+        "DeviceState": {
+          "attribute": "on",
+          "device_id": "hue_00000000000000_light_00000001",
+          "op": "Eq",
+          "value": false
+        }
+      },
+      {
+        "DeviceState": {
+          "attribute": "on",
+          "device_id": "hue_00000000000000_light_00000003",
+          "op": "Eq",
+          "value": false
+        }
+      }
+    ],
+    "enabled": true,
+    "id": "49e76f70-339d-4896-8d14-cd8e1c68c510",
+    "log_actions": false,
+    "log_events": false,
+    "log_triggers": false,
+    "name": "Rule 14",
+    "priority": 10,
+    "tags": [],
+    "trigger": {
+      "DeviceStateChanged": {
+        "attribute": "button_1",
+        "device_id": "lutron_01",
+        "to": "press"
+      }
+    }
+  },
+  {
+    "actions": [
+      {
+        "action": {
+          "SetDeviceState": {
+            "device_id": "lutron_01",
+            "state": {
+              "set_led": {
+                "button": 4,
+                "state": 1
+              }
+            },
+            "track_event_value": false
+          }
+        },
+        "enabled": true
+      }
+    ],
+    "cancel_on_false": false,
+    "conditions": [],
+    "enabled": true,
+    "id": "ebb48ed5-6605-4205-a41f-3d9e480f43af",
+    "log_actions": false,
+    "log_events": false,
+    "log_triggers": false,
+    "name": "Rule 15",
+    "priority": 10,
+    "tags": [],
+    "trigger": {
+      "DeviceStateChanged": {
+        "attribute": "on",
+        "device_id": "hue_00000000000000_light_00000003",
+        "to": true
+      }
+    }
+  },
+  {
+    "actions": [
+      {
+        "action": {
+          "SetDeviceState": {
+            "device_id": "lutron_03",
+            "state": {
+              "on": true
+            },
+            "track_event_value": false
+          }
+        },
+        "enabled": true
+      },
+      {
+        "action": {
+          "SetDeviceState": {
+            "device_id": "timer_03",
+            "state": {
+              "command": "start",
+              "duration_secs": 600,
+              "label": "message 16"
+            },
+            "track_event_value": false
+          }
+        },
+        "enabled": true
+      }
+    ],
+    "cancel_on_false": false,
+    "conditions": [],
+    "enabled": true,
+    "id": "d30ccaa1-c764-454b-9389-7507bfe0fcbe",
+    "log_actions": false,
+    "log_events": false,
+    "log_triggers": false,
+    "name": "Rule 16",
+    "priority": 10,
+    "tags": [],
+    "trigger": {
+      "DeviceStateChanged": {
+        "attribute": "open",
+        "device_id": "yolink_d88b4c0000000007",
+        "device_ids": [
+          "yolink_d88b4c0000000007",
+          "yolink_d88b4c0000000003"
+        ],
+        "to": true
+      }
+    }
+  },
+  {
+    "actions": [
+      {
+        "action": {
+          "SetDeviceState": {
+            "device_id": "lutron_02",
+            "state": {
+              "on": false
+            },
+            "track_event_value": false
+          }
+        },
+        "enabled": true
+      }
+    ],
+    "cancel_on_false": false,
+    "conditions": [
+      {
+        "DeviceState": {
+          "attribute": "state",
+          "device_id": "timer_02",
+          "op": "Eq",
+          "value": "finished"
+        }
+      }
+    ],
+    "enabled": true,
+    "id": "ba000001-0005-0005-0005-000000000005",
+    "log_actions": false,
+    "log_events": false,
+    "log_triggers": false,
+    "name": "Rule 17",
+    "priority": 10,
+    "tags": [],
+    "trigger": {
+      "DeviceStateChanged": {
+        "attribute": "state",
+        "device_id": "timer_02"
+      }
+    }
+  },
+  {
+    "actions": [
+      {
+        "action": {
+          "SetDeviceState": {
+            "device_id": "sonos_01",
+            "state": {
+              "action": "set_volume",
+              "volume": 15
+            },
+            "track_event_value": false
+          }
+        },
+        "enabled": true
+      },
+      {
+        "action": {
+          "SetDeviceState": {
+            "device_id": "sonos_01",
+            "state": {
+              "action": "set_shuffle",
+              "shuffle": true
+            },
+            "track_event_value": false
+          }
+        },
+        "enabled": true
+      },
+      {
+        "action": {
+          "SetDeviceState": {
+            "device_id": "sonos_01",
+            "state": {
+              "action": "play_favorite",
+              "favorite": "ALT Radio"
+            },
+            "track_event_value": false
+          }
+        },
+        "enabled": true
+      }
+    ],
+    "cancel_on_false": false,
+    "conditions": [
+      {
+        "TimeWindow": {
+          "end": "23:59:00",
+          "start": "12:00:00"
+        }
+      }
+    ],
+    "enabled": true,
+    "id": "ba000001-0007-0007-0007-000000000007",
+    "log_actions": false,
+    "log_events": false,
+    "log_triggers": false,
+    "name": "Rule 18",
+    "priority": 10,
+    "tags": [],
+    "trigger": {
+      "DeviceStateChanged": {
+        "attribute": "open",
+        "device_id": "yolink_d88b4c0000000005",
+        "to": false
+      }
+    }
+  },
+  {
+    "actions": [
+      {
+        "action": {
+          "SetDeviceState": {
+            "device_id": "yolink_d88b4c0000000008",
+            "state": {
+              "on": true
+            },
+            "track_event_value": false
+          }
+        },
+        "enabled": true
+      }
+    ],
+    "cancel_on_false": false,
+    "conditions": [
+      {
+        "DeviceState": {
+          "attribute": "humidity_pct",
+          "device_id": "yolink_d88b4c0000000009",
+          "op": "Lt",
+          "value": 35.0
+        }
+      },
+      {
+        "DeviceState": {
+          "attribute": "on",
+          "device_id": "yolink_d88b4c0000000008",
+          "op": "Eq",
+          "value": false
+        }
+      }
+    ],
+    "enabled": true,
+    "id": "e1000001-0001-0001-0001-000000000001",
+    "log_actions": false,
+    "log_events": false,
+    "log_triggers": false,
+    "name": "Rule 19",
+    "priority": 10,
+    "tags": [],
+    "trigger": {
+      "DeviceStateChanged": {
+        "attribute": "humidity_pct",
+        "device_id": "yolink_d88b4c0000000009"
+      }
+    }
+  },
+  {
+    "actions": [
+      {
+        "action": {
+          "SetDeviceState": {
+            "device_id": "lutron_scene_04",
+            "state": {
+              "activate": true
+            },
+            "track_event_value": false
+          }
+        },
+        "enabled": true
+      }
+    ],
+    "cancel_on_false": false,
+    "conditions": [
+      {
+        "ModeIs": {
+          "mode_id": "mode_night",
+          "on": false
+        }
+      },
+      {
+        "DeviceState": {
+          "attribute": "on",
+          "device_id": "switch_02",
+          "op": "Eq",
+          "value": true
+        }
+      },
+      {
+        "DeviceState": {
+          "attribute": "open",
+          "device_id": "yolink_d88b4c0000000006",
+          "op": "Eq",
+          "value": true
+        }
+      }
+    ],
+    "enabled": true,
+    "id": "8b49464c-2d17-4150-a10f-c6918ac669c0",
+    "log_actions": false,
+    "log_events": false,
+    "log_triggers": false,
+    "name": "Rule 20",
+    "priority": 10,
+    "tags": [],
+    "trigger": {
+      "DeviceStateChanged": {
+        "attribute": "state",
+        "device_id": "timer_04",
+        "to": "finished"
+      }
+    }
+  },
+  {
+    "actions": [
+      {
+        "action": {
+          "SetDeviceState": {
+            "device_id": "lutron_01",
+            "state": {
+              "set_led": {
+                "button": 1,
+                "state": 0
+              }
+            },
+            "track_event_value": false
+          }
+        },
+        "enabled": true
+      }
+    ],
+    "cancel_on_false": false,
+    "conditions": [
+      {
+        "DeviceState": {
+          "attribute": "on",
+          "device_id": "hue_00000000000000_light_00000002",
+          "op": "Eq",
+          "value": false
+        }
+      },
+      {
+        "DeviceState": {
+          "attribute": "on",
+          "device_id": "hue_00000000000000_light_00000001",
+          "op": "Eq",
+          "value": false
+        }
+      },
+      {
+        "DeviceState": {
+          "attribute": "on",
+          "device_id": "hue_00000000000000_light_00000003",
+          "op": "Eq",
+          "value": false
+        }
+      }
+    ],
+    "enabled": true,
+    "id": "c7454e2a-93a6-4108-a362-4830b8071945",
+    "log_actions": false,
+    "log_events": false,
+    "log_triggers": false,
+    "name": "Rule 21",
+    "priority": 10,
+    "tags": [],
+    "trigger": {
+      "DeviceStateChanged": {
+        "attribute": "on",
+        "device_id": "hue_00000000000000_light_00000002",
+        "device_ids": [
+          "hue_00000000000000_light_00000002",
+          "hue_00000000000000_light_00000001",
+          "hue_00000000000000_light_00000003"
+        ],
+        "to": false
+      }
+    }
+  },
+  {
+    "actions": [
+      {
+        "action": {
+          "SetDeviceState": {
+            "device_id": "lutron_01",
+            "state": {
+              "set_led": {
+                "button": 4,
+                "state": 0
+              }
+            },
+            "track_event_value": false
+          }
+        },
+        "enabled": true
+      }
+    ],
+    "cancel_on_false": false,
+    "conditions": [],
+    "enabled": true,
+    "id": "77c28d7d-be18-4a1a-a600-5f6333a386c8",
+    "log_actions": false,
+    "log_events": false,
+    "log_triggers": false,
+    "name": "Rule 22",
+    "priority": 10,
+    "tags": [],
+    "trigger": {
+      "DeviceStateChanged": {
+        "attribute": "on",
+        "device_id": "hue_00000000000000_light_00000003",
+        "to": false
+      }
+    }
+  },
+  {
+    "actions": [
+      {
+        "action": {
+          "SetDeviceState": {
+            "device_id": "wled_01",
+            "state": {
+              "on": true,
+              "preset": 12
+            },
+            "track_event_value": false
+          }
+        },
+        "enabled": true
+      }
+    ],
+    "cancel_on_false": false,
+    "conditions": [],
+    "enabled": true,
+    "id": "8b5265f9-7b35-4b35-9c94-b149b9d1859a",
+    "log_actions": false,
+    "log_events": false,
+    "log_triggers": false,
+    "name": "Rule 23",
+    "priority": 10,
+    "tags": [],
+    "trigger": {
+      "SunEvent": {
+        "event": "Sunset",
+        "offset_minutes": 0
+      }
+    }
+  },
+  {
+    "actions": [
+      {
+        "action": {
+          "SetDeviceState": {
+            "device_id": "hue_00000000000000_light_00000001",
+            "state": {
+              "on": false
+            },
+            "track_event_value": false
+          }
+        },
+        "enabled": true
+      },
+      {
+        "action": {
+          "SetDeviceState": {
+            "device_id": "lutron_01",
+            "state": {
+              "set_led": {
+                "button": 3,
+                "state": 0
+              }
+            },
+            "track_event_value": false
+          }
+        },
+        "enabled": true
+      }
+    ],
+    "cancel_on_false": false,
+    "conditions": [
+      {
+        "DeviceState": {
+          "attribute": "on",
+          "device_id": "hue_00000000000000_light_00000001",
+          "op": "Eq",
+          "value": true
+        }
+      }
+    ],
+    "enabled": true,
+    "id": "26a229bd-4f84-4467-a678-a93974afa543",
+    "log_actions": false,
+    "log_events": false,
+    "log_triggers": false,
+    "name": "Rule 24",
+    "priority": 10,
+    "tags": [],
+    "trigger": {
+      "DeviceStateChanged": {
+        "attribute": "button_3",
+        "device_id": "lutron_01",
+        "to": "press"
+      }
+    }
+  },
+  {
+    "actions": [
+      {
+        "action": {
+          "SetDeviceState": {
+            "device_id": "wled_01",
+            "state": {
+              "on": false
+            },
+            "track_event_value": false
+          }
+        },
+        "enabled": true
+      }
+    ],
+    "cancel_on_false": false,
+    "conditions": [],
+    "enabled": true,
+    "id": "8fc7b547-1cd7-4cd7-8697-45c6c01aad30",
+    "log_actions": false,
+    "log_events": false,
+    "log_triggers": false,
+    "name": "Rule 25",
+    "priority": 10,
+    "tags": [],
+    "trigger": {
+      "SunEvent": {
+        "event": "Sunrise",
+        "offset_minutes": 0
+      }
+    }
+  },
+  {
+    "actions": [
+      {
+        "action": {
+          "SetDeviceState": {
+            "device_id": "hue_00000000000000_light_00000002",
+            "state": {
+              "on": false
+            },
+            "track_event_value": false
+          }
+        },
+        "enabled": true
+      },
+      {
+        "action": {
+          "SetDeviceState": {
+            "device_id": "hue_00000000000000_light_00000001",
+            "state": {
+              "on": false
+            },
+            "track_event_value": false
+          }
+        },
+        "enabled": true
+      },
+      {
+        "action": {
+          "SetDeviceState": {
+            "device_id": "hue_00000000000000_light_00000003",
+            "state": {
+              "on": false
+            },
+            "track_event_value": false
+          }
+        },
+        "enabled": true
+      },
+      {
+        "action": {
+          "SetDeviceState": {
+            "device_id": "lutron_01",
+            "state": {
+              "set_led": {
+                "button": 1,
+                "state": 0
+              }
+            },
+            "track_event_value": false
+          }
+        },
+        "enabled": true
+      }
+    ],
+    "cancel_on_false": false,
+    "conditions": [
+      {
+        "Or": {
+          "conditions": [
+            {
+              "DeviceState": {
+                "attribute": "on",
+                "device_id": "hue_00000000000000_light_00000002",
+                "op": "Eq",
+                "value": true
+              }
+            },
+            {
+              "DeviceState": {
+                "attribute": "on",
+                "device_id": "hue_00000000000000_light_00000001",
+                "op": "Eq",
+                "value": true
+              }
+            },
+            {
+              "DeviceState": {
+                "attribute": "on",
+                "device_id": "hue_00000000000000_light_00000003",
+                "op": "Eq",
+                "value": true
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "enabled": true,
+    "id": "9d3596f0-e987-4a92-b709-5d9248e041d8",
+    "log_actions": false,
+    "log_events": false,
+    "log_triggers": false,
+    "name": "Rule 26",
+    "priority": 10,
+    "tags": [],
+    "trigger": {
+      "DeviceStateChanged": {
+        "attribute": "button_1",
+        "device_id": "lutron_01",
+        "to": "press"
+      }
+    }
+  },
+  {
+    "actions": [
+      {
+        "action": {
+          "Parallel": {
+            "actions": [
+              {
+                "SetDeviceState": {
+                  "device_id": "lutron_03",
+                  "state": {
+                    "on": true
+                  },
+                  "track_event_value": false
+                }
+              },
+              {
+                "SetDeviceState": {
+                  "device_id": "lutron_scene_03",
+                  "state": {
+                    "activate": true
+                  },
+                  "track_event_value": false
+                }
+              },
+              {
+                "SetDeviceState": {
+                  "device_id": "timer_04",
+                  "state": {
+                    "command": "start",
+                    "duration_secs": 600,
+                    "label": "message 27"
+                  },
+                  "track_event_value": false
+                }
+              }
+            ]
+          }
+        },
+        "enabled": true
+      }
+    ],
+    "cancel_on_false": false,
+    "conditions": [
+      {
+        "ModeIs": {
+          "mode_id": "mode_night",
+          "on": true
+        }
+      }
+    ],
+    "enabled": true,
+    "id": "507341a0-ad84-4fa7-9705-5f06b0b4f7db",
+    "log_actions": false,
+    "log_events": false,
+    "log_triggers": false,
+    "name": "Rule 27",
+    "priority": 10,
+    "tags": [],
+    "trigger": {
+      "DeviceStateChanged": {
+        "attribute": "open",
+        "device_id": "yolink_d88b4c0000000006",
+        "to": true
+      }
+    }
+  },
+  {
+    "actions": [
+      {
+        "action": {
+          "SetDeviceState": {
+            "device_id": "hue_00000000000000_light_00000002",
+            "state": {
+              "on": true
+            },
+            "track_event_value": false
+          }
+        },
+        "enabled": true
+      },
+      {
+        "action": {
+          "SetDeviceState": {
+            "device_id": "lutron_01",
+            "state": {
+              "set_led": {
+                "button": 2,
+                "state": 1
+              }
+            },
+            "track_event_value": false
+          }
+        },
+        "enabled": true
+      }
+    ],
+    "cancel_on_false": false,
+    "conditions": [
+      {
+        "DeviceState": {
+          "attribute": "on",
+          "device_id": "hue_00000000000000_light_00000002",
+          "op": "Eq",
+          "value": false
+        }
+      }
+    ],
+    "enabled": true,
+    "id": "2b3e325b-5f72-4daa-84e0-d3b9d263d396",
+    "log_actions": false,
+    "log_events": false,
+    "log_triggers": false,
+    "name": "Rule 28",
+    "priority": 10,
+    "tags": [],
+    "trigger": {
+      "DeviceStateChanged": {
+        "attribute": "button_2",
+        "device_id": "lutron_01",
+        "to": "press"
+      }
+    }
+  },
+  {
+    "actions": [
+      {
+        "action": {
+          "SetDeviceState": {
+            "device_id": "hue_00000000000000_light_00000003",
+            "state": {
+              "on": true
+            },
+            "track_event_value": false
+          }
+        },
+        "enabled": true
+      },
+      {
+        "action": {
+          "SetDeviceState": {
+            "device_id": "lutron_01",
+            "state": {
+              "set_led": {
+                "button": 4,
+                "state": 1
+              }
+            },
+            "track_event_value": false
+          }
+        },
+        "enabled": true
+      }
+    ],
+    "cancel_on_false": false,
+    "conditions": [
+      {
+        "DeviceState": {
+          "attribute": "on",
+          "device_id": "hue_00000000000000_light_00000003",
+          "op": "Eq",
+          "value": false
+        }
+      }
+    ],
+    "enabled": true,
+    "id": "dba5d032-b5c3-4ea2-9647-307419d2b556",
+    "log_actions": false,
+    "log_events": false,
+    "log_triggers": false,
+    "name": "Rule 29",
+    "priority": 10,
+    "tags": [],
+    "trigger": {
+      "DeviceStateChanged": {
+        "attribute": "button_4",
+        "device_id": "lutron_01",
+        "to": "press"
+      }
+    }
+  },
+  {
+    "actions": [
+      {
+        "action": {
+          "SetDeviceState": {
+            "device_id": "lutron_01",
+            "state": {
+              "set_led": {
+                "button": 3,
+                "state": 0
+              }
+            },
+            "track_event_value": false
+          }
+        },
+        "enabled": true
+      }
+    ],
+    "cancel_on_false": false,
+    "conditions": [],
+    "enabled": true,
+    "id": "02dd76df-a820-4177-aeb7-9506f97cbf2e",
+    "log_actions": false,
+    "log_events": false,
+    "log_triggers": false,
+    "name": "Rule 30",
+    "priority": 10,
+    "tags": [],
+    "trigger": {
+      "DeviceStateChanged": {
+        "attribute": "on",
+        "device_id": "hue_00000000000000_light_00000001",
+        "to": false
+      }
+    }
+  },
+  {
+    "actions": [
+      {
+        "action": {
+          "SetDeviceState": {
+            "device_id": "lutron_scene_05",
+            "state": {
+              "activate": true
+            },
+            "track_event_value": false
+          }
+        },
+        "enabled": true
+      }
+    ],
+    "cancel_on_false": false,
+    "conditions": [],
+    "enabled": true,
+    "id": "ea75205d-22fe-4e5b-a1c0-65eb24ce54a6",
+    "log_actions": false,
+    "log_events": false,
+    "log_triggers": false,
+    "name": "Rule 31",
+    "priority": 10,
+    "tags": [],
+    "trigger": {
+      "DeviceStateChanged": {
+        "attribute": "state",
+        "device_id": "timer_01",
+        "to": "finished"
+      }
+    }
+  },
+  {
+    "actions": [
+      {
+        "action": {
+          "SetDeviceState": {
+            "device_id": "yolink_d88b4c0000000008",
+            "state": {
+              "on": false
+            },
+            "track_event_value": false
+          }
+        },
+        "enabled": true
+      }
+    ],
+    "cancel_on_false": false,
+    "conditions": [
+      {
+        "DeviceState": {
+          "attribute": "humidity_pct",
+          "device_id": "yolink_d88b4c0000000009",
+          "op": "Gte",
+          "value": 35.0
+        }
+      },
+      {
+        "DeviceState": {
+          "attribute": "on",
+          "device_id": "yolink_d88b4c0000000008",
+          "op": "Eq",
+          "value": true
+        }
+      }
+    ],
+    "enabled": true,
+    "id": "e1000001-0002-0002-0002-000000000002",
+    "log_actions": false,
+    "log_events": false,
+    "log_triggers": false,
+    "name": "Rule 32",
+    "priority": 10,
+    "tags": [],
+    "trigger": {
+      "DeviceStateChanged": {
+        "attribute": "humidity_pct",
+        "device_id": "yolink_d88b4c0000000009"
+      }
+    }
+  },
+  {
+    "actions": [
+      {
+        "action": {
+          "Parallel": {
+            "actions": [
+              {
+                "SetDeviceState": {
+                  "device_id": "lutron_03",
+                  "state": {
+                    "on": true
+                  },
+                  "track_event_value": false
+                }
+              },
+              {
+                "SetDeviceState": {
+                  "device_id": "timer_04",
+                  "state": {
+                    "command": "start",
+                    "duration_secs": 600,
+                    "label": "message 33"
+                  },
+                  "track_event_value": false
+                }
+              }
+            ]
+          }
+        },
+        "enabled": true
+      }
+    ],
+    "cancel_on_false": false,
+    "conditions": [
+      {
+        "ModeIs": {
+          "mode_id": "mode_night",
+          "on": false
+        }
+      }
+    ],
+    "enabled": true,
+    "id": "534b8117-c31e-4f8d-acdb-9cfc2d66aefc",
+    "log_actions": false,
+    "log_events": false,
+    "log_triggers": false,
+    "name": "Rule 33",
+    "priority": 10,
+    "tags": [],
+    "trigger": {
+      "DeviceStateChanged": {
+        "attribute": "open",
+        "device_id": "yolink_d88b4c0000000006",
+        "to": true
+      }
+    }
+  },
+  {
+    "actions": [
+      {
+        "action": {
+          "SetDeviceState": {
+            "device_id": "hue_00000000000000_light_00000001",
+            "state": {
+              "on": true
+            },
+            "track_event_value": false
+          }
+        },
+        "enabled": true
+      },
+      {
+        "action": {
+          "SetDeviceState": {
+            "device_id": "lutron_01",
+            "state": {
+              "set_led": {
+                "button": 3,
+                "state": 1
+              }
+            },
+            "track_event_value": false
+          }
+        },
+        "enabled": true
+      }
+    ],
+    "cancel_on_false": false,
+    "conditions": [
+      {
+        "DeviceState": {
+          "attribute": "on",
+          "device_id": "hue_00000000000000_light_00000001",
+          "op": "Eq",
+          "value": false
+        }
+      }
+    ],
+    "enabled": true,
+    "id": "57d7da0a-6cf7-41de-8bad-9477de8cd971",
+    "log_actions": false,
+    "log_events": false,
+    "log_triggers": false,
+    "name": "Rule 34",
+    "priority": 10,
+    "tags": [],
+    "trigger": {
+      "DeviceStateChanged": {
+        "attribute": "button_3",
+        "device_id": "lutron_01",
+        "to": "press"
+      }
+    }
+  },
+  {
+    "actions": [
+      {
+        "action": {
+          "SetDeviceState": {
+            "device_id": "lutron_01",
+            "state": {
+              "set_led": {
+                "button": 2,
+                "state": 0
+              }
+            },
+            "track_event_value": false
+          }
+        },
+        "enabled": true
+      }
+    ],
+    "cancel_on_false": false,
+    "conditions": [],
+    "enabled": true,
+    "id": "877fcff4-e777-4458-a5f8-7e3c58ab8ca2",
+    "log_actions": false,
+    "log_events": false,
+    "log_triggers": false,
+    "name": "Rule 35",
+    "priority": 10,
+    "tags": [],
+    "trigger": {
+      "DeviceStateChanged": {
+        "attribute": "on",
+        "device_id": "hue_00000000000000_light_00000002",
+        "to": false
+      }
+    }
+  },
+  {
+    "actions": [
+      {
+        "action": {
+          "Parallel": {
+            "actions": [
+              {
+                "SetDeviceState": {
+                  "device_id": "lutron_scene_04",
+                  "state": {
+                    "activate": true
+                  },
+                  "track_event_value": false
+                }
+              },
+              {
+                "SetDeviceState": {
+                  "device_id": "lutron_scene_02",
+                  "state": {
+                    "activate": true
+                  },
+                  "track_event_value": false
+                }
+              }
+            ]
+          }
+        },
+        "enabled": true
+      }
+    ],
+    "cancel_on_false": false,
+    "conditions": [
+      {
+        "ModeIs": {
+          "mode_id": "mode_night",
+          "on": true
+        }
+      },
+      {
+        "DeviceState": {
+          "attribute": "on",
+          "device_id": "switch_02",
+          "op": "Eq",
+          "value": true
+        }
+      },
+      {
+        "DeviceState": {
+          "attribute": "open",
+          "device_id": "yolink_d88b4c0000000006",
+          "op": "Eq",
+          "value": true
+        }
+      }
+    ],
+    "enabled": true,
+    "id": "20e9331a-8e2f-4144-8490-955f4ddbd4cf",
+    "log_actions": false,
+    "log_events": false,
+    "log_triggers": false,
+    "name": "Rule 36",
+    "priority": 10,
+    "tags": [],
+    "trigger": {
+      "DeviceStateChanged": {
+        "attribute": "state",
+        "device_id": "timer_04",
+        "to": "finished"
+      }
+    }
+  },
+  {
+    "actions": [
+      {
+        "action": {
+          "SetDeviceState": {
+            "device_id": "sonos_01",
+            "state": {
+              "action": "stop"
+            },
+            "track_event_value": false
+          }
+        },
+        "enabled": true
+      },
+      {
+        "action": {
+          "SetDeviceState": {
+            "device_id": "timer_02",
+            "state": {
+              "command": "start",
+              "duration_secs": 300
+            },
+            "track_event_value": false
+          }
+        },
+        "enabled": true
+      }
+    ],
+    "cancel_on_false": false,
+    "conditions": [],
+    "enabled": true,
+    "id": "d12062ac-32f8-41c5-9dab-38adc0de6dd0",
+    "log_actions": false,
+    "log_events": false,
+    "log_triggers": false,
+    "name": "Rule 37",
+    "priority": 10,
+    "tags": [],
+    "trigger": {
+      "DeviceStateChanged": {
+        "attribute": "open",
+        "device_id": "yolink_d88b4c0000000005",
+        "to": true
+      }
+    }
+  },
+  {
+    "actions": [
+      {
+        "action": {
+          "SetDeviceState": {
+            "device_id": "timer_04",
+            "state": {
+              "command": "start",
+              "duration_secs": 600
+            },
+            "track_event_value": false
+          }
+        },
+        "enabled": true
+      }
+    ],
+    "cancel_on_false": false,
+    "conditions": [
+      {
+        "DeviceState": {
+          "attribute": "open",
+          "device_id": "yolink_d88b4c0000000006",
+          "op": "Eq",
+          "value": true
+        }
+      }
+    ],
+    "enabled": true,
+    "id": "45c2d019-9ce4-422b-9186-3d8c21faaa73",
+    "log_actions": false,
+    "log_events": false,
+    "log_triggers": false,
+    "name": "Rule 38",
+    "priority": 5,
+    "tags": [
+      "tag_01",
+      "tag_02",
+      "tag_03"
+    ],
+    "trigger": "SystemStarted"
+  },
+  {
+    "actions": [
+      {
+        "action": {
+          "Notify": {
+            "channel": "telegram",
+            "message": "message 39",
+            "title": null
+          }
+        },
+        "enabled": true
+      }
+    ],
+    "cancel_on_false": false,
+    "conditions": [
+      {
+        "DeviceState": {
+          "attribute": "open",
+          "device_id": "yolink_d88b4c0000000007",
+          "op": "Eq",
+          "value": true
+        }
+      }
+    ],
+    "enabled": false,
+    "id": "c829dc15-e7d7-48c4-9fcc-8f757d8d7ab6",
+    "log_actions": false,
+    "log_events": false,
+    "log_triggers": false,
+    "name": "Rule 39",
+    "priority": 5,
+    "tags": [
+      "tag_01",
+      "tag_02",
+      "tag_03"
+    ],
+    "trigger": "SystemStarted"
+  },
+  {
+    "actions": [
+      {
+        "action": {
+          "Delay": {
+            "cancelable": false,
+            "duration_secs": 60
+          }
+        },
+        "enabled": true
+      },
+      {
+        "action": {
+          "Conditional": {
+            "condition": "device_state(\"yolink_d88b4c0000000006\")[\"open\"] == true",
+            "else_actions": [],
+            "then_actions": [
+              {
+                "Notify": {
+                  "channel": "telegram",
+                  "message": "message 40",
+                  "title": null
+                }
+              }
+            ]
+          }
+        },
+        "enabled": true
+      }
+    ],
+    "cancel_on_false": false,
+    "conditions": [
+      {
+        "DeviceState": {
+          "attribute": "open",
+          "device_id": "yolink_d88b4c0000000006",
+          "op": "Eq",
+          "value": true
+        }
+      }
+    ],
+    "enabled": false,
+    "id": "841818bd-f732-46df-bbb3-5c444f97846f",
+    "log_actions": false,
+    "log_events": false,
+    "log_triggers": false,
+    "name": "Rule 40",
+    "priority": 5,
+    "tags": [
+      "tag_01",
+      "tag_02"
+    ],
+    "trigger": {
+      "DeviceStateChanged": {
+        "attribute": "state",
+        "device_id": "timer_04",
+        "to": "finished"
+      }
+    }
+  },
+  {
+    "actions": [
+      {
+        "action": {
+          "Notify": {
+            "channel": "telegram",
+            "message": "message 41",
+            "title": null
+          }
+        },
+        "enabled": true
+      }
+    ],
+    "cancel_on_false": false,
+    "conditions": [
+      {
+        "DeviceState": {
+          "attribute": "open",
+          "device_id": "yolink_d88b4c0000000003",
+          "op": "Eq",
+          "value": true
+        }
+      }
+    ],
+    "enabled": false,
+    "id": "14111fa1-2889-4a6b-9eef-ccef4179435e",
+    "log_actions": false,
+    "log_events": false,
+    "log_triggers": false,
+    "name": "Rule 41",
+    "priority": 5,
+    "tags": [
+      "tag_04",
+      "tag_02",
+      "tag_03"
+    ],
+    "trigger": "SystemStarted"
+  },
+  {
+    "actions": [
+      {
+        "action": {
+          "SetDeviceState": {
+            "device_id": "yolink_d88b4c0000000010",
+            "state": {
+              "on": true
+            },
+            "track_event_value": false
+          }
+        },
+        "enabled": true
+      }
+    ],
+    "cancel_on_false": false,
+    "conditions": [],
+    "enabled": true,
+    "id": "310053cb-c19f-40d6-b856-2b4cd878529f",
+    "log_actions": false,
+    "log_events": false,
+    "log_triggers": false,
+    "name": "Rule 42",
+    "priority": 0,
+    "tags": [],
+    "trigger": {
+      "DeviceStateChanged": {
+        "attribute": "water_detected",
+        "change_kind": "external",
+        "device_id": "yolink_d88b4c0000000011",
+        "device_ids": [
+          "yolink_d88b4c0000000011",
+          "yolink_d88b4c0000000012",
+          "yolink_d88b4c0000000013",
+          "yolink_d88b4c0000000014"
+        ],
+        "to": true
+      }
+    }
+  }
+]

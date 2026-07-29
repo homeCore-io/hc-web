@@ -55,6 +55,9 @@ class _DashboardCard extends ConsumerWidget {
 
   IconData _icon() {
     switch (dashboard.icon) {
+      case 'rocket':
+      case 'getting-started':
+        return Icons.rocket_launch_outlined;
       case 'shield':
         return Icons.shield_outlined;
       case 'chair':

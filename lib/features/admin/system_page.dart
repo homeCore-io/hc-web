@@ -1,8 +1,12 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../core/providers/auth_provider.dart';
 import '../../core/providers/time_display_provider.dart';
+import '../../design/components/hc_surface.dart';
+import '../../design/tokens.dart';
+import '../../shared/widgets/section_scaffold.dart';
 
 final _healthProvider = FutureProvider<Map<String, dynamic>>((ref) async {
   final client = ref.read(homecoreClientProvider);
@@ -42,144 +46,146 @@ class _SystemPageState extends ConsumerState<SystemPage> {
 
   @override
   Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
     final healthAsync = ref.watch(_healthProvider);
     final statusAsync = ref.watch(_statusProvider);
     final currentUser = ref.watch(currentUserProvider).valueOrNull;
     final isUtc = ref.watch(timeUtcProvider);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('System'),
-        actions: [
-          IconButton(
-              icon: const Icon(Icons.refresh),
-              onPressed: () {
-                ref.invalidate(_healthProvider);
-                ref.invalidate(_statusProvider);
-              }),
-        ],
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          const _SectionHeader('Health'),
-          healthAsync.when(
-            loading: () => const Card(
-              child: ListTile(
-                leading: CircularProgressIndicator(),
-                title: Text('Checking...'),
-              ),
-            ),
-            error: (e, _) => Card(
-              child: ListTile(
-                leading: Icon(Icons.error_outline,
-                    color: Theme.of(context).colorScheme.error),
-                title: const Text('Unreachable'),
-                subtitle: Text('$e'),
-              ),
-            ),
-            data: (health) {
-              final status = health['status'] as String? ?? 'unknown';
-              final version = health['version'] as String? ?? '—';
-              final ok = status == 'ok';
-              return Card(
-                child: Column(
-                  children: [
-                    ListTile(
-                      leading: Icon(
-                        ok ? Icons.check_circle_outline : Icons.warning_amber,
-                        color: ok ? Colors.green : Colors.orange,
-                      ),
-                      title: Text(ok ? 'Healthy' : status),
-                      subtitle: Text('Version $version'),
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
-          const SizedBox(height: 16),
-          const _SectionHeader('Status'),
-          statusAsync.when(
-            loading: () => const Card(
-              child: ListTile(
-                leading: CircularProgressIndicator(),
-                title: Text('Loading...'),
-              ),
-            ),
-            error: (e, _) => Card(
-              child: ListTile(
-                leading: Icon(Icons.error_outline,
-                    color: Theme.of(context).colorScheme.error),
-                title: const Text('Status unavailable'),
-                subtitle: Text('$e'),
-              ),
-            ),
-            data: (status) {
-              final uptimeSecs = status['uptime_secs'] as int? ?? 0;
-              final version = status['version'] as String? ?? '—';
-              final ruleCount = status['rule_count'] as int? ?? 0;
-              final deviceCount = status['device_count'] as int? ?? 0;
-              final pluginCount = status['plugin_count'] as int? ?? 0;
-              final stateDbBytes = status['state_db_bytes'] as int? ?? 0;
-              final historyDbBytes = status['history_db_bytes'] as int? ?? 0;
+    // Headline health, mirroring the Status stat tile in the body.
+    final healthStatus = healthAsync.valueOrNull?['status'] as String? ?? '';
+    final healthy = healthStatus == 'ok';
+    final SectionStat? statusStat = healthAsync.hasError
+        ? const SectionStat(
+            value: 'Unreachable', label: '', tone: SectionTone.danger)
+        : healthAsync.hasValue
+            ? SectionStat(
+                value: healthy ? 'Healthy' : healthStatus,
+                label: '',
+                tone: healthy ? SectionTone.active : SectionTone.warn,
+                glow: healthy)
+            : null;
 
-              return Card(
-                child: Column(
-                  children: [
-                    _StatusRow(Icons.timer_outlined, 'Uptime', _fmtUptime(uptimeSecs)),
-                    _StatusRow(Icons.info_outline, 'Version', version),
-                    _StatusRow(Icons.rule_outlined, 'Rules', '$ruleCount'),
-                    _StatusRow(Icons.device_hub, 'Devices', '$deviceCount'),
-                    _StatusRow(Icons.extension_outlined, 'Plugins', '$pluginCount'),
-                    _StatusRow(Icons.storage_outlined, 'State DB', _fmtBytes(stateDbBytes)),
-                    _StatusRow(Icons.history, 'History DB', _fmtBytes(historyDbBytes)),
-                  ],
+    return SectionScaffold(
+      title: 'System',
+      stats: [if (statusStat != null) statusStat],
+      actions: [
+        Builder(builder: (context) {
+          final tk = HcTokens.of(context);
+          return IconButton(
+            icon: Icon(Icons.refresh, color: tk.surface.onBaseMuted),
+            tooltip: 'Refresh',
+            onPressed: () {
+              ref.invalidate(_healthProvider);
+              ref.invalidate(_statusProvider);
+            },
+          );
+        }),
+      ],
+      child: ListView(
+        padding: EdgeInsets.all(t.space.lg),
+        children: [
+          // ── health + key status as stat tiles ──
+          LayoutBuilder(builder: (context, c) {
+            final health = healthAsync.valueOrNull;
+            final status = statusAsync.valueOrNull;
+            final okStatus = health?['status'] as String? ?? 'unknown';
+            final ok = okStatus == 'ok';
+            final version =
+                (status?['version'] ?? health?['version']) as String? ?? '—';
+            final uptime = _fmtUptime(status?['uptime_secs'] as int? ?? 0);
+
+            return Wrap(
+              spacing: t.space.md,
+              runSpacing: t.space.md,
+              children: [
+                _StatTile(
+                  label: 'Status',
+                  value: healthAsync.hasError
+                      ? 'Unreachable'
+                      : (ok ? 'Healthy' : okStatus),
+                  accent: healthAsync.hasError
+                      ? t.accent.danger
+                      : (ok ? t.accent.active : t.accent.warn),
+                  dot: true,
                 ),
-              );
+                _StatTile(label: 'Uptime', value: uptime),
+                _StatTile(label: 'Version', value: version),
+              ],
+            );
+          }),
+          SizedBox(height: t.space.lg),
+
+          // ── detailed status ──
+          const SectionLabel('Runtime'),
+          statusAsync.when(
+            loading: () => const _Loading(),
+            error: (e, _) => _ErrorSurface('Status unavailable', '$e'),
+            data: (status) {
+              final rows = <(IconData, String, String)>[
+                (
+                  Icons.rule_outlined,
+                  'Rules',
+                  '${status['rule_count'] as int? ?? 0}'
+                ),
+                (
+                  Icons.device_hub,
+                  'Devices',
+                  '${status['device_count'] as int? ?? 0}'
+                ),
+                (
+                  Icons.extension_outlined,
+                  'Plugins',
+                  '${status['plugin_count'] as int? ?? 0}'
+                ),
+                (
+                  Icons.storage_outlined,
+                  'State DB',
+                  _fmtBytes(status['state_db_bytes'] as int? ?? 0)
+                ),
+                (
+                  Icons.history,
+                  'History DB',
+                  _fmtBytes(status['history_db_bytes'] as int? ?? 0)
+                ),
+              ];
+              return _RowsSurface([
+                for (final r in rows)
+                  _KvRow(icon: r.$1, label: r.$2, value: r.$3),
+              ]);
             },
           ),
-          const SizedBox(height: 16),
-          const _SectionHeader('Display'),
-          Card(
+          SizedBox(height: t.space.lg),
+
+          // ── this session ──
+          const SectionLabel('Signed in as'),
+          _RowsSurface([
+            _KvRow(
+              icon: Icons.account_circle_outlined,
+              label: currentUser?['username'] as String? ?? '—',
+              value: _displayRole(currentUser?['role'] as String? ?? ''),
+            ),
+          ]),
+          SizedBox(height: t.space.lg),
+
+          // ── display preference ──
+          const SectionLabel('Display'),
+          HcSurface(
+            padding: EdgeInsets.symmetric(
+                horizontal: t.space.md, vertical: t.space.xs),
             child: SwitchListTile(
-              secondary: const Icon(Icons.access_time_outlined),
-              title: const Text('Show times in UTC'),
-              subtitle: Text(isUtc ? 'Timestamps shown as UTC (Z)' : 'Timestamps shown in local time'),
+              contentPadding: EdgeInsets.zero,
+              secondary: Icon(Icons.access_time_outlined,
+                  color: t.surface.onBaseMuted),
+              title: Text('Show times in UTC',
+                  style: TextStyle(color: t.surface.onBase)),
+              subtitle: Text(
+                isUtc ? 'Timestamps shown as UTC (Z)' : 'Local time',
+                style: TextStyle(color: t.surface.onBaseMuted, fontSize: 12.5),
+              ),
+              activeThumbColor: t.accent.active,
               value: isUtc,
               onChanged: (_) => ref.read(timeUtcProvider.notifier).toggle(),
-            ),
-          ),
-          const SizedBox(height: 16),
-          const _SectionHeader('Signed in as'),
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.account_circle_outlined),
-              title: Text(currentUser?['username'] as String? ?? '—'),
-              subtitle: Text(
-                  _displayRole(currentUser?['role'] as String? ?? '')),
-            ),
-          ),
-          const SizedBox(height: 16),
-          const _SectionHeader('API'),
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.api),
-              title: const Text('OpenAPI spec'),
-              subtitle: const Text('/api/v1/openapi.json'),
-              trailing: const Icon(Icons.open_in_new),
-              onTap: () {
-                // Opens in same tab — acceptable for an admin tool
-                final base = Uri.base;
-                final url = Uri(
-                  scheme: base.scheme,
-                  host: base.host,
-                  port: base.port,
-                  path: '/api/v1/openapi.json',
-                ).toString();
-                // ignore: avoid_print
-                print('Navigate to $url');
-              },
             ),
           ),
         ],
@@ -188,10 +194,12 @@ class _SystemPageState extends ConsumerState<SystemPage> {
   }
 
   String _fmtUptime(int secs) {
+    if (secs <= 0) return '—';
     final h = secs ~/ 3600;
     final m = (secs % 3600) ~/ 60;
-    final s = secs % 60;
-    return '${h}h ${m}m ${s}s';
+    if (h >= 24) return '${h ~/ 24}d ${h % 24}h';
+    if (h >= 1) return '${h}h ${m}m';
+    return '${m}m ${secs % 60}s';
   }
 
   String _fmtBytes(int bytes) {
@@ -204,38 +212,153 @@ class _SystemPageState extends ConsumerState<SystemPage> {
         'admin' => 'Admin',
         'user' => 'User',
         'read_only' => 'Read Only',
+        'observer' => 'Observer',
+        'device_operator' => 'Device Operator',
+        'rule_editor' => 'Rule Editor',
+        'service_operator' => 'Service Operator',
         _ => role,
       };
 }
 
-class _StatusRow extends StatelessWidget {
+class _StatTile extends StatelessWidget {
+  const _StatTile({
+    required this.label,
+    required this.value,
+    this.accent,
+    this.dot = false,
+  });
+  final String label;
+  final String value;
+  final Color? accent;
+  final bool dot;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return HcSurface(
+      padding:
+          EdgeInsets.fromLTRB(t.space.md, t.space.md, t.space.md, t.space.md),
+      child: SizedBox(
+        width: 150,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(label.toUpperCase(),
+                style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.8,
+                    color: t.surface.onBaseMuted)),
+            SizedBox(height: t.space.sm),
+            Row(children: [
+              if (dot && accent != null) ...[
+                Container(
+                  width: 9,
+                  height: 9,
+                  decoration:
+                      BoxDecoration(color: accent, shape: BoxShape.circle),
+                ),
+                const SizedBox(width: 8),
+              ],
+              Flexible(
+                child: Text(value,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w600,
+                        color: accent ?? t.surface.onBase,
+                        fontFeatures: t.numericFontFeatures)),
+              ),
+            ]),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RowsSurface extends StatelessWidget {
+  const _RowsSurface(this.rows);
+  final List<Widget> rows;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return HcSurface(
+      padding: EdgeInsets.symmetric(horizontal: t.space.md),
+      child: Column(children: [
+        for (var i = 0; i < rows.length; i++) ...[
+          if (i > 0) Divider(height: 1, color: t.stroke.hairline),
+          rows[i],
+        ],
+      ]),
+    );
+  }
+}
+
+class _KvRow extends StatelessWidget {
+  const _KvRow({required this.icon, required this.label, required this.value});
   final IconData icon;
   final String label;
   final String value;
-  const _StatusRow(this.icon, this.label, this.value);
 
   @override
-  Widget build(BuildContext context) => ListTile(
-        dense: true,
-        leading: Icon(icon, size: 20),
-        title: Text(label),
-        trailing: Text(value,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Theme.of(context).colorScheme.primary)),
-      );
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: t.space.md),
+      child: Row(children: [
+        Icon(icon, size: 18, color: t.surface.onBaseMuted),
+        SizedBox(width: t.space.md),
+        Expanded(child: Text(label, style: TextStyle(color: t.surface.onBase))),
+        Text(value,
+            style: TextStyle(
+                color: t.surface.onBaseMuted,
+                fontFeatures: t.numericFontFeatures)),
+      ]),
+    );
+  }
 }
 
-class _SectionHeader extends StatelessWidget {
-  final String title;
-  const _SectionHeader(this.title);
-
+class _Loading extends StatelessWidget {
+  const _Loading();
   @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: Text(title,
-            style: Theme.of(context)
-                .textTheme
-                .labelLarge
-                ?.copyWith(color: Theme.of(context).colorScheme.primary)),
-      );
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return HcSurface(
+      padding: EdgeInsets.all(t.space.lg),
+      child: const Center(child: CircularProgressIndicator()),
+    );
+  }
+}
+
+class _ErrorSurface extends StatelessWidget {
+  const _ErrorSurface(this.title, this.detail);
+  final String title;
+  final String detail;
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return HcSurface(
+      padding: EdgeInsets.all(t.space.md),
+      child: Row(children: [
+        Icon(Icons.error_outline, color: t.accent.danger, size: 18),
+        SizedBox(width: t.space.md),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: TextStyle(color: t.surface.onBase)),
+              Text(detail,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: t.surface.onBaseMuted, fontSize: 12)),
+            ],
+          ),
+        ),
+      ]),
+    );
+  }
 }

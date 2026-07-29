@@ -6,8 +6,7 @@ final areasApiProvider = Provider<AreasApi>((ref) {
   return AreasApi(ref.watch(homecoreClientProvider));
 });
 
-final areasProvider =
-    FutureProvider<List<Map<String, dynamic>>>((ref) async {
+final areasProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
   final raw = await ref.read(areasApiProvider).listAreas();
   return raw;
 });

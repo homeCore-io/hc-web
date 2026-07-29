@@ -2,59 +2,117 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/models/device_state.dart';
+import '../../core/models/plugin_entry.dart';
 import '../../core/models/scene.dart';
 import '../../core/providers/devices_provider.dart';
-import '../../core/providers/name_resolver_provider.dart';
+import '../../core/providers/plugins_provider.dart';
 import '../../core/providers/scenes_provider.dart';
-import '../../shared/widgets/filter_bar.dart';
+import '../../core/text/humanize.dart';
+import '../../design/components/hc_scene_chip.dart';
+import '../../design/tokens.dart';
+import '../../shared/widgets/area_power_toggle.dart';
+import '../../shared/widgets/section_group.dart';
+import '../../shared/widgets/section_scaffold.dart';
+import '../../shared/widgets/section_toolbar.dart';
 import '../../shared/widgets/skeleton.dart';
 
-// ── Scene filter state ────────────────────────────────────────────────────────
+// ── Filter state ───────────────────────────────────────────────────────────────
 
 class _SceneFilter {
   final String search;
-  final String type; // 'all' | 'native' | 'plugin'
-  final String sort; // 'name_asc' | 'name_desc'
-
-  const _SceneFilter({this.search = '', this.type = 'all', this.sort = 'name_asc'});
-
-  _SceneFilter copyWith({String? search, String? type, String? sort}) =>
+  final String source; // 'all' | 'custom' | <pluginId>
+  final bool descending;
+  const _SceneFilter(
+      {this.search = '', this.source = 'all', this.descending = false});
+  _SceneFilter copyWith({String? search, String? source, bool? descending}) =>
       _SceneFilter(
           search: search ?? this.search,
-          type: type ?? this.type,
-          sort: sort ?? this.sort);
+          source: source ?? this.source,
+          descending: descending ?? this.descending);
 }
 
-final _sceneFilterProvider =
+final _filterProvider =
     StateProvider<_SceneFilter>((_) => const _SceneFilter());
 
-// ---------------------------------------------------------------------------
-// Unified display model
-// ---------------------------------------------------------------------------
+// ── Display + group models ─────────────────────────────────────────────────────
+
+const _kNative = 'homecore';
+
+/// Coerce an attribute to a bool, accepting the string spellings plugins use —
+/// mirrors the old Leptos `bool_attr`. Returns null when the value isn't a
+/// recognisable boolean, so the caller can fall through to the next key.
+bool? _boolAttr(dynamic v) {
+  if (v is bool) return v;
+  if (v is String) {
+    switch (v.trim().toLowerCase()) {
+      case 'true':
+      case 'on':
+      case 'open':
+      case 'active':
+      case 'occupied':
+      case 'detected':
+        return true;
+      case 'false':
+      case 'off':
+      case 'closed':
+      case 'inactive':
+      case 'clear':
+      case 'unoccupied':
+        return false;
+    }
+  }
+  return null;
+}
+
+/// Whether a plugin scene is currently applied. Plugins disagree on the field:
+/// Hue publishes `active`, Lutron publishes `on` (from the phantom-button LED),
+/// others `activate`/`state`. Check them in order, first recognisable boolean
+/// wins — the same resilient logic the previous (Leptos) UI used.
+bool _sceneActive(Map<String, dynamic> attrs) {
+  for (final k in const ['on', 'active', 'activate', 'state']) {
+    final b = _boolAttr(attrs[k]);
+    if (b != null) return b;
+  }
+  return false;
+}
 
 class _DisplayScene {
   final String id;
   final String name;
-  /// true = plugin-managed scene device; false = HomeCore-native scene
   final bool isPlugin;
-  final List<String> deviceIds;
+  final String source; // pluginId, or 'homecore' for native
+  final String? area; // slug, or null when no single room
+  final bool active;
+  final String? groupKind; // 'room' | 'zone' | null
 
-  _DisplayScene.native(SceneModel s)
-      : id = s.id,
-        name = s.name,
-        isPlugin = false,
-        deviceIds = s.states.keys.toList();
-
-  _DisplayScene.plugin(DeviceState d)
-      : id = d.id,
-        name = d.displayName,
-        isPlugin = true,
-        deviceIds = const [];
+  _DisplayScene({
+    required this.id,
+    required this.name,
+    required this.isPlugin,
+    required this.source,
+    required this.area,
+    required this.active,
+    required this.groupKind,
+  });
 }
 
-// ---------------------------------------------------------------------------
-// Page
-// ---------------------------------------------------------------------------
+class _Group {
+  _Group({
+    required this.key,
+    required this.title,
+    required this.isRoom,
+    required this.isZone,
+    required this.areaSlug,
+  });
+  final String key; // collapse id suffix
+  final String title;
+  final bool isRoom;
+  final bool isZone;
+  final String? areaSlug;
+  final List<_DisplayScene> scenes = [];
+}
+
+// ── Page ───────────────────────────────────────────────────────────────────────
 
 class ScenesPage extends ConsumerStatefulWidget {
   const ScenesPage({super.key});
@@ -69,11 +127,9 @@ class _ScenesPageState extends ConsumerState<ScenesPage> {
   @override
   void initState() {
     super.initState();
-    _searchCtrl.addListener(() {
-      ref
-          .read(_sceneFilterProvider.notifier)
-          .update((f) => f.copyWith(search: _searchCtrl.text));
-    });
+    _searchCtrl.addListener(() => ref
+        .read(_filterProvider.notifier)
+        .update((f) => f.copyWith(search: _searchCtrl.text)));
   }
 
   @override
@@ -82,392 +138,290 @@ class _ScenesPageState extends ConsumerState<ScenesPage> {
     super.dispose();
   }
 
-  List<_DisplayScene> _applyFilter(List<_DisplayScene> scenes, _SceneFilter f) {
-    var out = scenes.where((s) {
-      if (f.search.isNotEmpty &&
-          !s.name.toLowerCase().contains(f.search.toLowerCase())) return false;
-      if (f.type == 'native' && s.isPlugin) return false;
-      if (f.type == 'plugin' && !s.isPlugin) return false;
-      return true;
-    }).toList();
+  /// A native scene's room is the area its members agree on — one shared area,
+  /// or none.
+  String? _nativeArea(SceneModel s, Map<String, DeviceState> byId) {
+    final areas = s.states.keys
+        .map((id) => byId[id]?.effectiveArea)
+        .where((a) => a != null && a.isNotEmpty)
+        .toSet();
+    return areas.length == 1 ? areas.first : null;
+  }
 
-    if (f.sort == 'name_desc') {
-      out.sort((a, b) => b.name.compareTo(a.name));
-    } else {
-      out.sort((a, b) => a.name.compareTo(b.name));
+  List<_DisplayScene> _display(
+      List<SceneModel> native, List<DeviceState> devices) {
+    final byId = {for (final d in devices) d.id: d};
+    return [
+      for (final s in native)
+        _DisplayScene(
+          id: s.id,
+          name: s.name,
+          isPlugin: false,
+          source: _kNative,
+          area: _nativeArea(s, byId),
+          active: false,
+          groupKind: null,
+        ),
+      for (final d in devices.where((d) => d.deviceType == 'scene'))
+        _DisplayScene(
+          id: d.id,
+          name: d.displayName,
+          isPlugin: true,
+          source: d.pluginId,
+          area: (d.effectiveArea?.isNotEmpty ?? false) ? d.effectiveArea : null,
+          active: _sceneActive(d.state),
+          groupKind: d.state['group_kind'] as String?,
+        ),
+    ];
+  }
+
+  String _sourceName(String source, List<PluginEntry>? plugins) {
+    if (source == _kNative) return 'HomeCore';
+    final match = plugins?.where((p) => p.pluginId == source);
+    return (match != null && match.isNotEmpty)
+        ? match.first.displayName
+        : humanize(source.replaceFirst('plugin.', ''));
+  }
+
+  /// Group by room (a scene's area), falling back to a source group when the
+  /// scene has no room. Rooms A→Z first, then source groups A→Z.
+  List<_Group> _group(List<_DisplayScene> scenes, List<PluginEntry>? plugins) {
+    final groups = <String, _Group>{};
+    for (final s in scenes) {
+      if (s.area != null) {
+        final key = 'room:${s.area}';
+        final g = groups.putIfAbsent(
+            key,
+            () => _Group(
+                  key: s.area!,
+                  title: humanize(s.area!),
+                  isRoom: true,
+                  isZone: s.groupKind == 'zone',
+                  areaSlug: s.area,
+                ));
+        g.scenes.add(s);
+      } else {
+        final key = 'src:${s.source}';
+        final g = groups.putIfAbsent(
+            key,
+            () => _Group(
+                  key: 'src_${s.source}',
+                  title: _sourceName(s.source, plugins),
+                  isRoom: false,
+                  isZone: false,
+                  areaSlug: null,
+                ));
+        g.scenes.add(s);
+      }
     }
-    return out;
+    final rooms = groups.values.where((g) => g.isRoom).toList()
+      ..sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
+    final sources = groups.values.where((g) => !g.isRoom).toList()
+      ..sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
+    for (final g in [...rooms, ...sources]) {
+      g.scenes
+          .sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    }
+    return [...rooms, ...sources];
   }
 
   @override
   Widget build(BuildContext context) {
     final nativeAsync = ref.watch(scenesProvider);
     final devicesAsync = ref.watch(devicesProvider);
-    final activatedTimes = ref.watch(sceneActivatedTimesProvider);
-    final resolver = ref.watch(deviceNameResolverProvider);
-    final filter = ref.watch(_sceneFilterProvider);
+    final plugins = ref.watch(pluginsProvider).valueOrNull;
+    final filter = ref.watch(_filterProvider);
 
-    final isLoading = nativeAsync.isLoading || devicesAsync.isLoading;
-    final error = nativeAsync.error ?? devicesAsync.error;
+    final loaded = nativeAsync.hasValue && devicesAsync.hasValue;
+    final native = nativeAsync.valueOrNull ?? const <SceneModel>[];
+    final devices = devicesAsync.valueOrNull ?? const <DeviceState>[];
+    final all = _display(native, devices);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Scenes'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
+    final roomCount =
+        all.where((s) => s.area != null).map((s) => s.area).toSet().length;
+    final customCount = all.where((s) => !s.isPlugin).length;
+    final pluginSources =
+        all.where((s) => s.isPlugin).map((s) => s.source).toSet();
+
+    return SectionScaffold(
+      title: 'Scenes',
+      stats: loaded && all.isNotEmpty
+          ? [
+              SectionStat(value: '${all.length}', label: 'scenes'),
+              if (roomCount > 0)
+                SectionStat(value: '$roomCount', label: 'rooms'),
+              if (customCount > 0)
+                SectionStat(value: '$customCount', label: 'custom'),
+            ]
+          : const [],
+      actions: [
+        Builder(builder: (context) {
+          final t = HcTokens.of(context);
+          return IconButton(
+            icon: Icon(Icons.refresh, color: t.surface.onBaseMuted),
+            tooltip: 'Refresh',
             onPressed: () {
               ref.invalidate(scenesProvider);
               ref.invalidate(devicesProvider);
             },
-          ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => context.push('/scenes/new'),
-        tooltip: 'New scene',
-        child: const Icon(Icons.add),
-      ),
-      body: isLoading
-          ? const SkeletonList(count: 6)
-          : error != null
-              ? Center(child: Text('Error: $error'))
-              : _buildList(
-                  context,
-                  ref,
-                  nativeAsync.valueOrNull ?? [],
-                  devicesAsync.valueOrNull ?? [],
-                  activatedTimes,
-                  resolver,
-                  filter,
-                ),
-    );
-  }
-
-  Widget _buildList(
-    BuildContext context,
-    WidgetRef ref,
-    List<SceneModel> native,
-    List<DeviceState> allDevices,
-    Map<String, DateTime> activatedTimes,
-    DeviceNameResolver resolver,
-    _SceneFilter filter,
-  ) {
-    final pluginScenes =
-        allDevices.where((d) => d.deviceType == 'scene').toList();
-
-    final allScenes = [
-      ...native.map(_DisplayScene.native),
-      ...pluginScenes.map(_DisplayScene.plugin),
-    ];
-
-    final scenes = _applyFilter(allScenes, filter);
-
-    if (allScenes.isEmpty) {
-      return const Center(
-          child: Text('No scenes yet.\nTap + to create one.',
-              textAlign: TextAlign.center));
-    }
-
-    return Column(
-      children: [
-        FilterBar(
-          searchController: _searchCtrl,
-          searchHint: 'Search scenes…',
-          countLabel: 'Showing ${scenes.length} of ${allScenes.length}',
-          chips: [
-            for (final t in [
-              ('all', 'All'),
-              ('native', 'Native'),
-              ('plugin', 'Plugin'),
-            ])
-              FilterChip(
-                label: Text(t.$2, style: const TextStyle(fontSize: 11)),
-                selected: filter.type == t.$1,
-                onSelected: (_) => ref
-                    .read(_sceneFilterProvider.notifier)
-                    .update((f) => f.copyWith(type: t.$1)),
-                visualDensity: VisualDensity.compact,
-              ),
-          ],
-          trailing: DropdownButton<String>(
-            value: filter.sort,
-            underline: const SizedBox(),
-            isDense: true,
-            items: const [
-              DropdownMenuItem(
-                  value: 'name_asc',
-                  child: Text('Name A→Z', style: TextStyle(fontSize: 12))),
-              DropdownMenuItem(
-                  value: 'name_desc',
-                  child: Text('Name Z→A', style: TextStyle(fontSize: 12))),
-            ],
-            onChanged: (v) => ref
-                .read(_sceneFilterProvider.notifier)
-                .update((f) => f.copyWith(sort: v)),
-          ),
-        ),
-        _ListHeader(),
-        const Divider(height: 1),
-        Expanded(
-          child: scenes.isEmpty
-              ? const Center(child: Text('No scenes match the filter.'))
-              : ListView.separated(
-                  itemCount: scenes.length,
-                  separatorBuilder: (_, __) =>
-                      const Divider(height: 1, indent: 16),
-                  itemBuilder: (context, i) => _SceneRow(
-                    scene: scenes[i],
-                    lastActivated: activatedTimes[scenes[i].id],
-                    resolver: resolver,
-                  ),
-                ),
+          );
+        }),
+        SectionHeaderAction(
+          icon: Icons.add_rounded,
+          label: 'New scene',
+          onPressed: () => context.push('/scenes/new'),
         ),
       ],
-    );
-  }
-}
+      child: Builder(builder: (context) {
+        final t = HcTokens.of(context);
+        if (!loaded) return const SkeletonList(count: 6);
+        if (all.isEmpty) {
+          return Center(
+            child: Text('No scenes yet — add one to get started.',
+                style: TextStyle(color: t.surface.onBaseMuted)),
+          );
+        }
 
-// ---------------------------------------------------------------------------
-// Column header
-// ---------------------------------------------------------------------------
+        // Apply source + search filter, then group.
+        final filtered = all.where((s) {
+          if (filter.source == 'custom' && s.isPlugin) return false;
+          if (filter.source != 'all' &&
+              filter.source != 'custom' &&
+              s.source != filter.source) {
+            return false;
+          }
+          if (filter.search.isNotEmpty) {
+            final q = filter.search.toLowerCase();
+            final room = s.area != null ? humanize(s.area!).toLowerCase() : '';
+            if (!s.name.toLowerCase().contains(q) && !room.contains(q)) {
+              return false;
+            }
+          }
+          return true;
+        }).toList();
 
-class _ListHeader extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final style = Theme.of(context).textTheme.labelSmall?.copyWith(
-          color: Theme.of(context).colorScheme.outline,
-          fontWeight: FontWeight.w600,
+        var groups = _group(filtered, plugins);
+        if (filter.descending) {
+          groups = groups.reversed.toList();
+          for (final g in groups) {
+            g.scenes.sort(
+                (a, b) => b.name.toLowerCase().compareTo(a.name.toLowerCase()));
+          }
+        }
+
+        final sourceChips = <Widget>[
+          SectionChip(
+              label: 'All',
+              selected: filter.source == 'all',
+              onTap: () => ref
+                  .read(_filterProvider.notifier)
+                  .update((f) => f.copyWith(source: 'all'))),
+          if (customCount > 0)
+            SectionChip(
+                label: 'Custom',
+                selected: filter.source == 'custom',
+                onTap: () => ref
+                    .read(_filterProvider.notifier)
+                    .update((f) => f.copyWith(source: 'custom'))),
+          for (final src in pluginSources)
+            SectionChip(
+                label: _sourceName(src, plugins),
+                selected: filter.source == src,
+                onTap: () => ref
+                    .read(_filterProvider.notifier)
+                    .update((f) => f.copyWith(source: src))),
+        ];
+
+        return ListView(
+          padding: EdgeInsets.fromLTRB(
+              t.space.md, t.space.sm, t.space.md, t.space.xl),
+          children: [
+            SectionToolbar(
+              controller: _searchCtrl,
+              hint: 'Search scenes & rooms…',
+              trailing: [
+                SectionMenuButton(
+                  label: filter.descending ? 'Z→A' : 'A→Z',
+                  icon: filter.descending
+                      ? Icons.arrow_upward_rounded
+                      : Icons.arrow_downward_rounded,
+                  onTap: () => ref
+                      .read(_filterProvider.notifier)
+                      .update((f) => f.copyWith(descending: !f.descending)),
+                ),
+              ],
+              chips: sourceChips,
+            ),
+            SizedBox(height: t.space.sm),
+            if (groups.isEmpty)
+              Padding(
+                padding: EdgeInsets.only(top: t.space.xl),
+                child: Center(
+                    child: Text('No scenes match the filter.',
+                        style: TextStyle(color: t.surface.onBaseMuted))),
+              )
+            else
+              for (final g in groups)
+                for (final areaDevices in [
+                  g.areaSlug != null
+                      ? devices
+                          .where((d) => d.effectiveArea == g.areaSlug)
+                          .toList()
+                      : const <DeviceState>[]
+                ])
+                  SectionGroup(
+                    id: 'scenes:${g.key}',
+                    title: g.title,
+                    tag: g.isRoom ? (g.isZone ? 'Zone' : null) : 'Source',
+                    tagAccent: true,
+                    count: g.isRoom
+                        ? '${g.scenes.length} scenes'
+                        : '${g.scenes.length} · no room',
+                    trailing: areaDevices.isNotEmpty
+                        ? AreaPowerToggle(devices: areaDevices)
+                        : null,
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final s in g.scenes)
+                          HcSceneChip(
+                            name: s.name,
+                            active: s.active,
+                            onRun: () => _run(s),
+                            onEdit: s.isPlugin
+                                ? null
+                                : () => context.push('/scenes/${s.id}'),
+                          ),
+                      ],
+                    ),
+                  ),
+          ],
         );
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Row(
-        children: [
-          Expanded(flex: 3, child: Text('NAME', style: style)),
-          Expanded(flex: 3, child: Text('DEVICES', style: style)),
-          Expanded(flex: 2, child: Text('LAST ACTIVATED', style: style)),
-          SizedBox(width: 120, child: Text('ACTIONS', style: style)),
-        ],
-      ),
+      }),
     );
   }
-}
 
-// ---------------------------------------------------------------------------
-// Scene row
-// ---------------------------------------------------------------------------
-
-class _SceneRow extends ConsumerStatefulWidget {
-  final _DisplayScene scene;
-  final DateTime? lastActivated;
-  final DeviceNameResolver resolver;
-  const _SceneRow(
-      {required this.scene, this.lastActivated, required this.resolver});
-
-  @override
-  ConsumerState<_SceneRow> createState() => _SceneRowState();
-}
-
-class _SceneRowState extends ConsumerState<_SceneRow> {
-  bool _activating = false;
-  bool _expanded = false;
-
-  String _relativeTime(DateTime dt) {
-    final diff = DateTime.now().difference(dt);
-    if (diff.inSeconds < 60) return 'just now';
-    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-    if (diff.inHours < 24) return '${diff.inHours}h ago';
-    return '${diff.inDays}d ago';
-  }
-
-  Future<void> _activate() async {
-    setState(() => _activating = true);
+  Future<void> _run(_DisplayScene s) async {
     try {
-      if (widget.scene.isPlugin) {
+      if (s.isPlugin) {
         await ref
             .read(devicesApiProvider)
-            .setDeviceState(widget.scene.id, {'activate': true});
+            .setDeviceState(s.id, {'activate': true});
       } else {
-        await ref.read(scenesApiProvider).activateScene(widget.scene.id);
+        await ref.read(scenesApiProvider).activateScene(s.id);
       }
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('${widget.scene.name} activated')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('${s.name} activated')));
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text('Failed: $e')));
       }
-    } finally {
-      if (mounted) setState(() => _activating = false);
     }
-  }
-
-  Future<void> _delete() async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete scene?'),
-        content: Text('Delete "${widget.scene.name}"?'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
-          FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Delete')),
-        ],
-      ),
-    );
-    if (ok == true && mounted) {
-      await ref.read(scenesApiProvider).deleteScene(widget.scene.id);
-      ref.invalidate(scenesProvider);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final s = widget.scene;
-    final deviceNames = s.deviceIds
-        .take(3)
-        .map((id) => widget.resolver.resolve(id))
-        .join(', ');
-    final overflow =
-        s.deviceIds.length > 3 ? ' +${s.deviceIds.length - 3}' : '';
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        InkWell(
-          onTap: s.isPlugin ? null : () => context.push('/scenes/${s.id}'),
-          child: Padding(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: Row(
-              children: [
-                // Name
-                Expanded(
-                  flex: 3,
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.movie_creation_outlined,
-                        size: 18,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          s.name,
-                          style: Theme.of(context).textTheme.bodyMedium,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      if (!s.isPlugin && s.deviceIds.isNotEmpty)
-                        IconButton(
-                          icon: Icon(
-                            _expanded
-                                ? Icons.expand_less
-                                : Icons.expand_more,
-                            size: 16,
-                          ),
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
-                          onPressed: () =>
-                              setState(() => _expanded = !_expanded),
-                          tooltip: 'Show devices',
-                        ),
-                    ],
-                  ),
-                ),
-                // Devices
-                Expanded(
-                  flex: 3,
-                  child: s.isPlugin
-                      ? Text('Plugin scene',
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodySmall
-                              ?.copyWith(
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .secondary))
-                      : Text(
-                          s.deviceIds.isEmpty
-                              ? '—'
-                              : '$deviceNames$overflow',
-                          style: Theme.of(context).textTheme.bodySmall,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                ),
-                // Last activated
-                Expanded(
-                  flex: 2,
-                  child: Text(
-                    widget.lastActivated != null
-                        ? _relativeTime(widget.lastActivated!)
-                        : '—',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.outline),
-                  ),
-                ),
-                // Actions
-                SizedBox(
-                  width: 120,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _activating
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2))
-                          : FilledButton.tonal(
-                              onPressed: _activate,
-                              style: FilledButton.styleFrom(
-                                  minimumSize: const Size(72, 32),
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 10)),
-                              child: const Text('Run',
-                                  style: TextStyle(fontSize: 12)),
-                            ),
-                      if (!s.isPlugin) ...[
-                        const SizedBox(width: 4),
-                        IconButton(
-                          icon: const Icon(Icons.delete_outline, size: 16),
-                          onPressed: _delete,
-                          tooltip: 'Delete',
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        // Expanded device list
-        if (_expanded && s.deviceIds.isNotEmpty)
-          Container(
-            color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
-            padding: const EdgeInsets.only(left: 42, right: 16, bottom: 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: s.deviceIds
-                  .map((id) => Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 2),
-                        child: Text(
-                          '• ${widget.resolver.resolve(id)}',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      ))
-                  .toList(),
-            ),
-          ),
-      ],
-    );
   }
 }
+
+// ── Scene chip ─────────────────────────────────────────────────────────────────

@@ -1,321 +1,35 @@
-import 'dart:convert';
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../core/models/device_reference.dart';
-import '../../core/models/device_state.dart';
-import '../../core/models/mode_state.dart';
-import '../../core/models/rule.dart';
+
 import '../../core/providers/automations_provider.dart';
-import '../../core/providers/name_resolver_provider.dart';
+import '../../core/rules/node.dart';
+import '../../core/rules/rule.dart';
+import '../../core/rules/schema.dart';
+import '../../design/components/hc_dialog.dart';
+import '../../design/components/hc_sentence.dart';
+import '../../design/tokens.dart';
+import '../../shared/widgets/section_scaffold.dart';
+import 'rule_phrasing.dart';
+import 'widgets/device_trigger_picker.dart';
+import 'widgets/node_trees.dart';
+import 'widgets/rule_outline_pane.dart';
+import 'widgets/editor_style.dart';
+import 'widgets/rule_refs.dart';
+import 'widgets/sentence_editor.dart';
 
-// ─── Summary helpers ─────────────────────────────────────────────────────────
-
-String _triggerSummary(
-  Map<String, dynamic> trigger,
-  DeviceNameResolver dr,
-  ModeNameResolver mr,
-) {
-  final type = trigger['type'] as String? ?? 'unknown';
-  switch (type) {
-    case 'device_state_changed':
-      final refs = readDeviceRefs(trigger);
-      final devStr = refs.isEmpty ? '?' : refs.map(dr.resolve).join(', ');
-      final attr = trigger['attribute'] as String?;
-      final to = trigger['to'];
-      if (attr != null && to != null) return 'Device $devStr: $attr → $to';
-      if (attr != null) return 'Device $devStr: $attr changes';
-      return 'Device $devStr changes';
-    case 'device_availability_changed':
-      final dev = dr.resolve(readSingleDeviceRef(trigger) ?? '');
-      final to = trigger['to'];
-      if (to == true) return 'Device $dev comes online';
-      if (to == false) return 'Device $dev goes offline';
-      return 'Device $dev availability changes';
-    case 'time_of_day':
-      final time = trigger['time'] as String? ?? '?';
-      final days = (trigger['days'] as List?)?.join(', ') ?? 'every day';
-      return 'Time: $time ($days)';
-    case 'sun_event':
-      final event = trigger['event'] as String? ?? 'sunset';
-      final offset = trigger['offset_minutes'] as int? ?? 0;
-      if (offset == 0) return 'Sun: $event';
-      return 'Sun: $event ${offset > 0 ? '+' : ''}${offset}min';
-    case 'mode_changed':
-      final modeId = trigger['mode_id'] as String?;
-      final modeName = modeId != null ? mr.resolve(modeId) : 'any mode';
-      final to = trigger['to'];
-      if (to == true) return 'Mode $modeName turns on';
-      if (to == false) return 'Mode $modeName turns off';
-      return 'Mode $modeName changes';
-    case 'webhook_received':
-      return 'Webhook: ${trigger['path'] ?? '/'}';
-    case 'manual_trigger':
-      return 'Manual trigger';
-    case 'mqtt_message':
-      return 'MQTT: ${trigger['topic_pattern'] ?? ''}';
-    case 'custom_event':
-      return 'Event: ${trigger['event_type'] ?? ''}';
-    case 'system_started':
-      return 'System started';
-    case 'cron':
-      return 'Cron: ${trigger['expression'] ?? ''}';
-    case 'periodic':
-      final n = trigger['every_n'] ?? '?';
-      final unit = trigger['unit'] ?? 'minutes';
-      return 'Every $n $unit';
-    case 'button_event':
-      final dev = dr.resolve(readSingleDeviceRef(trigger) ?? '');
-      final event = trigger['event'] as String? ?? 'pushed';
-      final btn = trigger['button_number'];
-      return btn != null
-          ? 'Button $btn on $dev: $event'
-          : 'Button on $dev: $event';
-    case 'numeric_threshold':
-      final dev = dr.resolve(readSingleDeviceRef(trigger) ?? '');
-      final attr = trigger['attribute'] as String? ?? '';
-      final op = trigger['op'] as String? ?? '';
-      final val = trigger['value'];
-      return 'Numeric: $dev.$attr $op $val';
-    case 'hub_variable_changed':
-      final name = trigger['name'] as String?;
-      return name != null ? 'Variable "$name" changed' : 'Any variable changed';
-    case 'calendar_event':
-      final title = trigger['title_contains'] as String?;
-      return title != null
-          ? 'Calendar event containing "$title"'
-          : 'Calendar event';
-    default:
-      return type;
-  }
-}
-
-String _conditionSummary(
-  Map<String, dynamic> cond,
-  DeviceNameResolver dr,
-  ModeNameResolver mr,
-) {
-  final type = cond['type'] as String? ?? 'unknown';
-  switch (type) {
-    case 'device_state':
-      final dev = dr.resolve(readSingleDeviceRef(cond) ?? '');
-      final attr = cond['attribute'] as String? ?? '';
-      final op = cond['op'] as String? ?? 'eq';
-      final val = cond['value'];
-      return '$dev.$attr $op $val';
-    case 'mode_is':
-      final modeId = cond['mode_id'] as String?;
-      final modeName = modeId != null ? mr.resolve(modeId) : '';
-      final on = cond['on'] as bool? ?? true;
-      return 'Mode $modeName is ${on ? 'on' : 'off'}';
-    case 'time_window':
-      return 'Time between ${cond['start'] ?? '?'} and ${cond['end'] ?? '?'}';
-    case 'hub_variable':
-      final name = cond['name'] as String? ?? '';
-      final op = cond['op'] as String? ?? 'eq';
-      final val = cond['value'];
-      return 'Variable "$name" $op $val';
-    case 'script_expression':
-      final script = cond['script'] as String? ?? '';
-      return 'Script: ${script.length > 40 ? '${script.substring(0, 40)}…' : script}';
-    case 'time_elapsed':
-      final dev = dr.resolve(readSingleDeviceRef(cond) ?? '');
-      final attr = cond['attribute'] as String? ?? '';
-      final secs = cond['duration_secs'];
-      return '$dev.$attr unchanged for ${secs}s';
-    case 'private_boolean_is':
-      final name = cond['name'] as String? ?? '';
-      final val = cond['value'] as bool? ?? true;
-      return 'Bool "$name" is ${val ? 'true' : 'false'}';
-    case 'not':
-      final inner = cond['condition'] as Map<String, dynamic>?;
-      if (inner == null) return 'NOT (?)';
-      return 'NOT (${_conditionSummary(inner, dr, mr)})';
-    case 'and':
-      final nested = (cond['conditions'] as List?)?.length ?? 0;
-      return 'AND ($nested conditions)';
-    case 'or':
-      final nested = (cond['conditions'] as List?)?.length ?? 0;
-      return 'OR ($nested conditions)';
-    case 'xor':
-      final nested = (cond['conditions'] as List?)?.length ?? 0;
-      return 'XOR ($nested conditions)';
-    default:
-      return type;
-  }
-}
-
-String _actionSummary(Map<String, dynamic> action, DeviceNameResolver dr) {
-  final type = action['type'] as String? ?? 'unknown';
-  switch (type) {
-    case 'set_device_state':
-      final dev = dr.resolve(readSingleDeviceRef(action) ?? '');
-      final state = action['state'];
-      return 'Set $dev → ${state != null ? jsonEncode(state) : '{}'}';
-    case 'delay':
-      final secs = action['duration_secs'] ?? 0;
-      return 'Delay ${secs}s';
-    case 'notify':
-      final channel = action['channel'] as String? ?? '';
-      final msg = action['message'] as String? ?? '';
-      return 'Notify [$channel]: ${msg.length > 40 ? '${msg.substring(0, 40)}…' : msg}';
-    case 'log_message':
-      final level = action['level'] as String? ?? 'info';
-      final msg = action['message'] as String? ?? '';
-      return 'Log [$level]: ${msg.length > 40 ? '${msg.substring(0, 40)}…' : msg}';
-    case 'fire_event':
-      return 'Fire event: ${action['event_type'] ?? ''}';
-    case 'comment':
-      final text = action['text'] as String? ?? '';
-      return '// ${text.length > 50 ? '${text.substring(0, 50)}…' : text}';
-    case 'set_mode':
-      return 'Set mode ${action['mode_id'] ?? ''}: ${action['command'] ?? 'on'}';
-    case 'set_hub_variable':
-      final name = action['name'] as String? ?? '';
-      final op = action['op'] as String? ?? 'set';
-      final val = action['value'];
-      return 'Variable "$name" $op $val';
-    case 'run_rule_actions':
-      return 'Run rule: ${action['rule_id'] ?? ''}';
-    case 'exit_rule':
-      return 'Exit rule';
-    case 'stop_rule_chain':
-      return 'Stop rule chain';
-    default:
-      return type;
-  }
-}
-
-// ─── Action clipboard (persists across rule navigations) ─────────────────────
-
-final actionClipboardProvider =
-    StateProvider<Map<String, dynamic>?>((_) => null);
-
-Map<String, dynamic> _normalizeTrigger(
-  Map<String, dynamic> trigger,
-  DeviceNameResolver resolver,
-) {
-  final normalized = Map<String, dynamic>.from(trigger);
-  final type = normalized['type'] as String? ?? '';
-
-  switch (type) {
-    case 'device_state_changed':
-      final refs =
-          readDeviceRefs(normalized).map(resolver.preferredRuleRef).toList();
-      writeDeviceRefs(normalized, refs);
-      break;
-    case 'device_availability_changed':
-    case 'button_event':
-    case 'numeric_threshold':
-      final ref = readSingleDeviceRef(normalized);
-      writeSingleDeviceRef(
-        normalized,
-        ref == null ? null : resolver.preferredRuleRef(ref),
-      );
-      break;
-  }
-
-  return normalized;
-}
-
-Map<String, dynamic> _normalizeCondition(
-  Map<String, dynamic> condition,
-  DeviceNameResolver resolver,
-) {
-  final normalized = Map<String, dynamic>.from(condition);
-  final type = normalized['type'] as String? ?? '';
-
-  switch (type) {
-    case 'device_state':
-    case 'time_elapsed':
-      final ref = readSingleDeviceRef(normalized);
-      writeSingleDeviceRef(
-        normalized,
-        ref == null ? null : resolver.preferredRuleRef(ref),
-      );
-      break;
-    case 'not':
-      final nested = normalized['condition'];
-      if (nested is Map) {
-        normalized['condition'] = _normalizeCondition(
-          Map<String, dynamic>.from(nested),
-          resolver,
-        );
-      }
-      break;
-    case 'and':
-    case 'or':
-    case 'xor':
-      final nested = normalized['conditions'];
-      if (nested is List) {
-        normalized['conditions'] = nested
-            .whereType<Map>()
-            .map((item) => _normalizeCondition(
-                  Map<String, dynamic>.from(item),
-                  resolver,
-                ))
-            .toList();
-      }
-      break;
-  }
-
-  return normalized;
-}
-
-Map<String, dynamic> _normalizeAction(
-  Map<String, dynamic> action,
-  DeviceNameResolver resolver,
-) {
-  final normalized = Map<String, dynamic>.from(action);
-  final type = normalized['type'] as String? ?? '';
-
-  switch (type) {
-    case 'set_device_state':
-      final ref = readSingleDeviceRef(normalized);
-      writeSingleDeviceRef(
-        normalized,
-        ref == null ? null : resolver.preferredRuleRef(ref),
-      );
-      break;
-    case 'parallel':
-    case 'repeat_until':
-      final nested = normalized['actions'];
-      if (nested is List) {
-        normalized['actions'] = nested
-            .whereType<Map>()
-            .map((item) => _normalizeAction(
-                  Map<String, dynamic>.from(item),
-                  resolver,
-                ))
-            .toList();
-      }
-      break;
-    case 'conditional':
-      for (final key in ['then_actions', 'else_actions']) {
-        final nested = normalized[key];
-        if (nested is List) {
-          normalized[key] = nested
-              .whereType<Map>()
-              .map((item) => _normalizeAction(
-                    Map<String, dynamic>.from(item),
-                    resolver,
-                  ))
-              .toList();
-        }
-      }
-      break;
-  }
-
-  return normalized;
-}
-
-// ─── Main page ────────────────────────────────────────────────────────────────
-
+/// The rule editor.
+///
+/// Every form below is generated from the descriptors in `core/rules/schema.dart`
+/// — there is no per-variant form code anywhere in this file. That is what lets
+/// one page cover 18 triggers, 13 conditions and 34 actions, *including* the
+/// recursive ones (`Not`/`And`/`Or`/`Xor`, `Conditional`, `Parallel`, `Repeat*`)
+/// that the previous editor dropped into a raw JSON textarea.
 class AutomationEditorPage extends ConsumerStatefulWidget {
+  const AutomationEditorPage({super.key, required this.ruleId});
+
+  /// A rule UUID, or `'new'`.
   final String? ruleId;
-  const AutomationEditorPage({this.ruleId, super.key});
 
   @override
   ConsumerState<AutomationEditorPage> createState() =>
@@ -323,2518 +37,1105 @@ class AutomationEditorPage extends ConsumerStatefulWidget {
 }
 
 class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
-  final _formKey = GlobalKey<FormState>();
+  HcRule? _rule;
+  bool _dirty = false;
+  bool _saving = false;
 
-  // Basic fields
-  final _nameCtrl = TextEditingController();
-  bool _enabled = true;
+  /// Comparison pane, off until asked for.
+  bool _showOutline = false;
+  String? _saveError;
 
-  // Trigger
-  String _triggerType = 'device_state_changed';
-  Map<String, dynamic> _trigger = {'type': 'device_state_changed'};
+  /// Dry-run outcomes, positionally aligned with the condition list.
+  List<ConditionResult>? _testResults;
+  bool? _wouldFire;
 
-  // Conditions & Actions
-  List<Map<String, dynamic>> _conditions = [];
-  List<Map<String, dynamic>> _actions = [];
+  bool get _isNew => widget.ruleId == null || widget.ruleId == 'new';
 
-  // Settings
-  final _priorityCtrl = TextEditingController(text: '0');
-  String _runMode = 'parallel';
-  int _maxQueue = 10;
-  int? _cooldownSecs;
-  String _cooldownPreset = 'none';
-  final _cooldownCustomCtrl = TextEditingController();
-  List<String> _tags = [];
-  final _tagCtrl = TextEditingController();
+  void _touch() => setState(() => _dirty = true);
 
-  bool _loading = false;
-  bool _initialized = false;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (!_initialized) {
-      _initialized = true;
-      if (widget.ruleId != null && widget.ruleId != 'new') {
-        final rules = ref.read(automationsProvider).valueOrNull ?? [];
-        final match = rules.where((r) => r.id == widget.ruleId).toList();
-        if (match.isNotEmpty) _loadRule(match.first);
-      }
-    }
-  }
-
-  void _loadRule(HcRule rule) {
-    _nameCtrl.text = rule.name;
-    _enabled = rule.enabled;
-    _priorityCtrl.text = rule.priority.toString();
-    _runMode = rule.runMode.isNotEmpty ? rule.runMode : 'parallel';
-    _maxQueue = rule.maxQueue;
-    _trigger = Map<String, dynamic>.from(rule.trigger);
-    _triggerType = rule.trigger['type'] as String? ?? 'device_state_changed';
-    _conditions =
-        rule.conditions.map((c) => Map<String, dynamic>.from(c)).toList();
-    _actions = rule.actions.map((a) => Map<String, dynamic>.from(a)).toList();
-    _tags = List<String>.from(rule.tags);
-
-    // Cooldown preset
-    final cs = rule.cooldownSecs;
-    if (cs == null) {
-      _cooldownPreset = 'none';
-    } else if (cs == 30) {
-      _cooldownPreset = '30s';
-    } else if (cs == 60) {
-      _cooldownPreset = '1m';
-    } else if (cs == 300) {
-      _cooldownPreset = '5m';
-    } else {
-      _cooldownPreset = 'custom';
-      _cooldownCustomCtrl.text = cs.toString();
-    }
-    _cooldownSecs = cs;
-  }
-
-  int? _resolveCooldown() {
-    switch (_cooldownPreset) {
-      case 'none':
-        return null;
-      case '30s':
-        return 30;
-      case '1m':
-        return 60;
-      case '5m':
-        return 300;
-      case 'custom':
-        return int.tryParse(_cooldownCustomCtrl.text);
-      default:
-        return null;
-    }
-  }
-
-  void _showSaveError(Object e) {
-    String title;
-    String detail;
-    String? payloadJson;
-
-    if (e is DioException) {
-      final status = e.response?.statusCode;
-      title = 'Save failed (${status ?? 'no response'})';
-      final raw = e.response?.data;
-      detail = raw?.toString() ?? e.message ?? e.toString();
-    } else {
-      title = 'Save failed';
-      detail = e.toString();
-    }
-
-    // Also dump the payload we tried to send so the user can inspect it.
-    try {
-      if (e is DioException) {
-        final data = e.requestOptions.data;
-        payloadJson = const JsonEncoder.withIndent('  ').convert(data);
-      }
-    } catch (_) {}
-
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(title),
-        content: SizedBox(
-          width: 560,
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text('Server response:',
-                    style: Theme.of(ctx).textTheme.labelSmall),
-                const SizedBox(height: 4),
-                SelectableText(
-                  detail,
-                  style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
-                ),
-                if (payloadJson != null) ...[
-                  const SizedBox(height: 16),
-                  Text('Request payload:',
-                      style: Theme.of(ctx).textTheme.labelSmall),
-                  const SizedBox(height: 4),
-                  SelectableText(
-                    payloadJson,
-                    style:
-                        const TextStyle(fontFamily: 'monospace', fontSize: 11),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Clipboard.setData(ClipboardData(
-                  text: payloadJson != null
-                      ? '$title\n\n$detail\n\nPayload:\n$payloadJson'
-                      : '$title\n\n$detail'));
-              Navigator.pop(ctx);
-            },
-            child: const Text('Copy & Close'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Close'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _save() async {
-    if (!_formKey.currentState!.validate()) return;
-    setState(() => _loading = true);
-    try {
-      final deviceResolver = ref.read(deviceNameResolverProvider);
-      final cooldown = _resolveCooldown();
-      final payload = <String, dynamic>{
-        'name': _nameCtrl.text.trim(),
-        'enabled': _enabled,
-        'priority': int.tryParse(_priorityCtrl.text) ?? 0,
-        if (_runMode != 'parallel')
-          'run_mode': HcRule.encodeRunMode(_runMode, _maxQueue),
-        'trigger': _normalizeTrigger(_trigger, deviceResolver),
-        'conditions': _conditions
-            .map((condition) => _normalizeCondition(condition, deviceResolver))
-            .toList(),
-        'actions': _actions
-            .map((action) => _normalizeAction(action, deviceResolver))
-            .toList(),
-        'tags': _tags,
-        if (cooldown != null) 'cooldown_secs': cooldown,
-      };
-      final api = ref.read(automationsApiProvider);
-      if (widget.ruleId == null || widget.ruleId == 'new') {
-        await api.createRule(payload);
-      } else {
-        await api.updateRule(widget.ruleId!, payload);
-      }
-      await ref.read(automationsProvider.notifier).reload();
-      if (mounted) context.pop();
-    } catch (e) {
-      if (mounted) {
-        _showSaveError(e);
-      }
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  @override
-  void dispose() {
-    _nameCtrl.dispose();
-    _priorityCtrl.dispose();
-    _cooldownCustomCtrl.dispose();
-    _tagCtrl.dispose();
-    super.dispose();
-  }
-
-  // ─── Trigger type label ──────────────────────────────────────────────────
-
-  static const _triggerLabels = {
-    'device_state_changed': 'Device State Changed',
-    'device_availability_changed': 'Device Availability Changed',
-    'time_of_day': 'Time of Day',
-    'sun_event': 'Sun Event',
-    'mode_changed': 'Mode Changed',
-    'webhook_received': 'Webhook Received',
-    'manual_trigger': 'Manual Trigger',
-    'mqtt_message': 'MQTT Message',
-    'custom_event': 'Custom Event',
-    'system_started': 'System Started',
-    'cron': 'Cron Schedule',
-    'periodic': 'Periodic',
-    'button_event': 'Button Event',
-    'numeric_threshold': 'Numeric Threshold',
-    'hub_variable_changed': 'Hub Variable Changed',
-    'calendar_event': 'Calendar Event',
-  };
-
-  // ─── Build ───────────────────────────────────────────────────────────────
+  void _goBack() =>
+      context.canPop() ? context.pop() : context.go('/automations');
 
   @override
   Widget build(BuildContext context) {
-    final dr = ref.watch(deviceNameResolverProvider);
-    final mr = ref.watch(modeNameResolverProvider);
-    final isNew = widget.ruleId == null || widget.ruleId == 'new';
+    final rulesAsync = ref.watch(automationsProvider);
+    final refs = ref.watch(ruleRefsProvider);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(isNew ? 'New Automation' : 'Edit Automation'),
-        actions: [
-          if (!_loading)
-            TextButton(
-              onPressed: () => context.pop(),
-              child: const Text('Cancel'),
+    // Seed the working copy once, as a deep copy — abandoning the editor must
+    // not leave half-applied edits in the cached list.
+    if (_rule == null) {
+      if (_isNew) {
+        _rule = HcRule(id: '', name: '', trigger: HcNode('ManualTrigger'));
+      } else {
+        if (rulesAsync.isLoading) {
+          return SectionScaffold(
+            title: 'Automations',
+            onBack: _goBack,
+            child: const Center(child: CircularProgressIndicator()),
+          );
+        }
+        final found = rulesAsync.valueOrNull
+            ?.where((r) => r.id == widget.ruleId)
+            .firstOrNull;
+        if (found == null) {
+          return SectionScaffold(
+            title: 'Automations',
+            onBack: _goBack,
+            child: Center(
+              child: Text('Rule not found.',
+                  style: TextStyle(
+                      color: HcTokens.of(context).surface.onBaseMuted)),
             ),
-          if (_loading)
-            const Padding(
-              padding: EdgeInsets.all(14),
-              child: SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
+          );
+        }
+        _rule = found.copy();
+      }
+    }
+
+    final rule = _rule!;
+
+    // The header says where you ARE ("Automations"); the rule's own name is the
+    // page's title, in the body, so it is never printed twice.
+    return SectionScaffold(
+      title: 'Automations',
+      onBack: _goBack,
+      actions: [
+        // The outline pane is a comparison, not a replacement: it is off by
+        // default and shows the same rule beside the tree so the two can be
+        // judged on real rules rather than a mockup.
+        Builder(builder: (ctx) {
+          final tt = HcTokens.of(ctx);
+          final on = _showOutline;
+          return TextButton.icon(
+            onPressed: () => setState(() => _showOutline = !_showOutline),
+            icon: Icon(Icons.account_tree_outlined,
+                size: 15,
+                color: on ? tt.accent.active : tt.surface.onBaseMuted),
+            label: Text('Outline',
+                style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: on ? tt.accent.active : tt.surface.onBaseMuted)),
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            ),
+          );
+        }),
+        if (!_isNew)
+          Builder(builder: (ctx) {
+            final tt = HcTokens.of(ctx);
+            return TextButton(
+              onPressed: _saving ? null : _test,
+              style: TextButton.styleFrom(
+                foregroundColor: tt.surface.onBaseMuted,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               ),
-            )
-          else
-            FilledButton(
-              onPressed: _save,
-              child: const Text('Save'),
-            ),
-          const SizedBox(width: 8),
-        ],
-      ),
-      body: Form(
-        key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            _buildNameCard(),
-            const SizedBox(height: 12),
-            _buildTriggerCard(dr, mr),
-            const SizedBox(height: 12),
-            _buildConditionsCard(dr, mr),
-            const SizedBox(height: 12),
-            _buildActionsCard(dr),
-            const SizedBox(height: 12),
-            _buildSettingsCard(),
-            const SizedBox(height: 24),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ─── Name card ───────────────────────────────────────────────────────────
-
-  Widget _buildNameCard() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Expanded(
-              child: TextFormField(
-                controller: _nameCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Rule Name',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (v) =>
-                    v == null || v.trim().isEmpty ? 'Name is required' : null,
-              ),
-            ),
-            const SizedBox(width: 16),
-            Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text('Enabled', style: Theme.of(context).textTheme.labelMedium),
-                Switch(
-                  value: _enabled,
-                  onChanged: (v) => setState(() => _enabled = v),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ─── Trigger card ────────────────────────────────────────────────────────
-
-  Widget _buildTriggerCard(DeviceNameResolver dr, ModeNameResolver mr) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Trigger', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              value: _triggerType,
-              decoration: const InputDecoration(
-                labelText: 'Trigger Type',
-                border: OutlineInputBorder(),
-              ),
-              items: _triggerLabels.entries
-                  .map((e) => DropdownMenuItem(
-                        value: e.key,
-                        child: Text(e.value),
-                      ))
-                  .toList(),
-              onChanged: (v) {
-                if (v == null) return;
-                setState(() {
-                  _triggerType = v;
-                  _trigger = {'type': v};
-                });
-              },
-            ),
-            const SizedBox(height: 12),
-            _TriggerForm(
-              triggerType: _triggerType,
-              trigger: _trigger,
-              deviceResolver: dr,
-              modeResolver: mr,
-              onChanged: (updated) => setState(() => _trigger = updated),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ─── Conditions card ─────────────────────────────────────────────────────
-
-  Widget _buildConditionsCard(DeviceNameResolver dr, ModeNameResolver mr) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Text('Conditions (AND)',
-                    style: Theme.of(context).textTheme.titleMedium),
-                const Spacer(),
-                FilledButton.tonal(
-                  onPressed: () async {
-                    final result = await showDialog<Map<String, dynamic>>(
-                      context: context,
-                      builder: (_) => _ConditionEditorDialog(
-                        deviceResolver: dr,
-                        modeResolver: mr,
-                        initial: null,
-                      ),
-                    );
-                    if (result != null) {
-                      setState(() => _conditions.add(result));
-                    }
-                  },
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.add, size: 16),
-                      SizedBox(width: 4),
-                      Text('Add Condition'),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            if (_conditions.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 12),
-                child: Text(
-                  'No conditions — rule fires whenever trigger matches.',
-                  style: TextStyle(fontStyle: FontStyle.italic),
-                ),
-              )
-            else
-              ...List.generate(_conditions.length, (i) {
-                final cond = _conditions[i];
-                return Card(
-                  margin: const EdgeInsets.only(top: 8),
-                  color: Theme.of(context)
-                      .colorScheme
-                      .surfaceContainerHighest
-                      .withOpacity(0.4),
-                  child: ListTile(
-                    leading: const Icon(Icons.filter_alt_outlined),
-                    title: Text(_conditionSummary(cond, dr, mr)),
-                    subtitle: Text(cond['type'] as String? ?? ''),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          icon: const Icon(Icons.edit_outlined),
-                          tooltip: 'Edit',
-                          onPressed: () async {
-                            final result =
-                                await showDialog<Map<String, dynamic>>(
-                              context: context,
-                              builder: (_) => _ConditionEditorDialog(
-                                deviceResolver: dr,
-                                modeResolver: mr,
-                                initial: cond,
-                              ),
-                            );
-                            if (result != null) {
-                              setState(() => _conditions[i] = result);
-                            }
-                          },
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.delete_outline),
-                          tooltip: 'Delete',
-                          onPressed: () =>
-                              setState(() => _conditions.removeAt(i)),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              }),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ─── Actions card ────────────────────────────────────────────────────────
-
-  Widget _buildActionsCard(DeviceNameResolver dr) {
-    final clipboard = ref.watch(actionClipboardProvider);
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Text('Actions', style: Theme.of(context).textTheme.titleMedium),
-                const Spacer(),
-                if (clipboard != null) ...[
-                  Tooltip(
-                    message: _actionSummary(clipboard, dr),
-                    child: OutlinedButton.icon(
-                      icon: const Icon(Icons.content_paste_outlined, size: 14),
-                      label: Text(
-                        'Paste ${clipboard['type'] as String? ?? 'action'}',
-                        style: const TextStyle(fontSize: 12),
-                      ),
-                      onPressed: () {
-                        final copy = jsonDecode(jsonEncode(clipboard))
-                            as Map<String, dynamic>;
-                        setState(() => _actions.add(copy));
-                      },
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close, size: 16),
-                    tooltip: 'Clear clipboard',
-                    onPressed: () =>
-                        ref.read(actionClipboardProvider.notifier).state = null,
-                  ),
-                  const SizedBox(width: 4),
-                ],
-                FilledButton.tonal(
-                  onPressed: () async {
-                    final result = await showDialog<Map<String, dynamic>>(
-                      context: context,
-                      builder: (_) => _ActionEditorDialog(
-                        deviceResolver: dr,
-                        modeResolver: ref.read(modeNameResolverProvider),
-                        initial: null,
-                      ),
-                    );
-                    if (result != null) {
-                      setState(() => _actions.add(result));
-                    }
-                  },
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.add, size: 16),
-                      SizedBox(width: 4),
-                      Text('Add Action'),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            if (_actions.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 12),
-                child: Text(
-                  'No actions configured.',
-                  style: TextStyle(fontStyle: FontStyle.italic),
-                ),
-              )
-            else
-              ...List.generate(_actions.length, (i) {
-                final action = _actions[i];
-                return Card(
-                  margin: const EdgeInsets.only(top: 8),
-                  color: Theme.of(context)
-                      .colorScheme
-                      .surfaceContainerHighest
-                      .withOpacity(0.4),
-                  child: ListTile(
-                    leading: const Icon(Icons.bolt_outlined),
-                    title: Text(_actionSummary(action, dr)),
-                    subtitle: Text(action['type'] as String? ?? ''),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        PopupMenuButton<String>(
-                          icon: const Icon(Icons.more_vert, size: 18),
-                          tooltip: 'More',
-                          onSelected: (val) {
-                            switch (val) {
-                              case 'copy':
-                                ref
-                                        .read(actionClipboardProvider.notifier)
-                                        .state =
-                                    jsonDecode(jsonEncode(action))
-                                        as Map<String, dynamic>;
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                        'Copied: ${action['type'] ?? 'action'}'),
-                                    duration: const Duration(seconds: 2),
-                                  ),
-                                );
-                              case 'cut':
-                                ref
-                                        .read(actionClipboardProvider.notifier)
-                                        .state =
-                                    jsonDecode(jsonEncode(action))
-                                        as Map<String, dynamic>;
-                                setState(() => _actions.removeAt(i));
-                              case 'paste_after':
-                                if (clipboard != null) {
-                                  final copy = jsonDecode(jsonEncode(clipboard))
-                                      as Map<String, dynamic>;
-                                  setState(() => _actions.insert(i + 1, copy));
-                                }
-                            }
-                          },
-                          itemBuilder: (_) => [
-                            const PopupMenuItem(
-                              value: 'copy',
-                              child: Row(children: [
-                                Icon(Icons.copy_outlined, size: 16),
-                                SizedBox(width: 8),
-                                Text('Copy'),
-                              ]),
-                            ),
-                            const PopupMenuItem(
-                              value: 'cut',
-                              child: Row(children: [
-                                Icon(Icons.content_cut, size: 16),
-                                SizedBox(width: 8),
-                                Text('Cut'),
-                              ]),
-                            ),
-                            if (clipboard != null)
-                              PopupMenuItem(
-                                value: 'paste_after',
-                                child: Row(children: [
-                                  const Icon(Icons.content_paste_outlined,
-                                      size: 16),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                      'Paste after (${clipboard['type'] as String? ?? 'action'})'),
-                                ]),
-                              ),
-                          ],
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.edit_outlined),
-                          tooltip: 'Edit',
-                          onPressed: () async {
-                            final result =
-                                await showDialog<Map<String, dynamic>>(
-                              context: context,
-                              builder: (_) => _ActionEditorDialog(
-                                deviceResolver: dr,
-                                modeResolver:
-                                    ref.read(modeNameResolverProvider),
-                                initial: action,
-                              ),
-                            );
-                            if (result != null) {
-                              setState(() => _actions[i] = result);
-                            }
-                          },
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.delete_outline),
-                          tooltip: 'Delete',
-                          onPressed: () => setState(() => _actions.removeAt(i)),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              }),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ─── Settings card ───────────────────────────────────────────────────────
-
-  Widget _buildSettingsCard() {
-    return Card(
-      child: ExpansionTile(
-        title: const Text('Settings'),
-        childrenPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: const Text('Dry run',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+            );
+          }),
+      ],
+      child: Column(
         children: [
-          // Priority
-          TextFormField(
-            controller: _priorityCtrl,
-            decoration: const InputDecoration(
-              labelText: 'Priority',
-              helperText: 'Higher priority rules run first (default 0)',
-              border: OutlineInputBorder(),
-            ),
-            keyboardType: TextInputType.number,
-          ),
-          const SizedBox(height: 16),
-
-          // Cooldown
-          DropdownButtonFormField<String>(
-            value: _cooldownPreset,
-            decoration: const InputDecoration(
-              labelText: 'Cooldown',
-              border: OutlineInputBorder(),
-            ),
-            items: const [
-              DropdownMenuItem(value: 'none', child: Text('None')),
-              DropdownMenuItem(value: '30s', child: Text('30 seconds')),
-              DropdownMenuItem(value: '1m', child: Text('1 minute')),
-              DropdownMenuItem(value: '5m', child: Text('5 minutes')),
-              DropdownMenuItem(value: 'custom', child: Text('Custom...')),
-            ],
-            onChanged: (v) => setState(() {
-              _cooldownPreset = v ?? 'none';
-              _cooldownSecs = _resolveCooldown();
+          Expanded(
+            child: LayoutBuilder(builder: (context, box) {
+              // Side by side only where there is room for both to be read;
+              // narrower than this and the outline would squeeze the editor it
+              // is supposed to be compared against.
+              final wide = box.maxWidth >= 1100;
+              final editor = _editorList(context, rule);
+              if (!_showOutline || !wide) return editor;
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(flex: 3, child: editor),
+                  // Full height, so the pane is a column beside the editor
+                  // rather than a card floating at the top of one.
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(0, 16, 20, 24),
+                    child: SizedBox(
+                      width: 360,
+                      child: RuleOutlinePane(rule: rule, refs: refs),
+                    ),
+                  ),
+                ],
+              );
             }),
           ),
-          if (_cooldownPreset == 'custom') ...[
-            const SizedBox(height: 8),
-            TextFormField(
-              controller: _cooldownCustomCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Cooldown (seconds)',
-                border: OutlineInputBorder(),
+          // Save arrives when there is something to save, and leaves when there
+          // isn't — an app tells you when you have something to lose.
+          _SaveBar(
+            visible: _dirty || _isNew,
+            saving: _saving,
+            onSave: _saving ? null : _save,
+            onDiscard: _saving ? null : _goBack,
+          ),
+        ],
+      ),
+    );
+  }
+
+  // -- header --------------------------------------------------------------
+
+  /// The rule's name, as a title you type into — not a labelled box.
+  ///
+  /// The name is the only one of these five fields anyone edits more than once,
+  /// so it gets the weight of a heading and the other four get demoted to the
+  /// meta line below. They used to be three outlined `TextFormField`s and a
+  /// `Switch` given exactly as much visual weight as the rule's own name, which
+  /// is how a rule ended up looking like a settings screen.
+  Widget _ruleHeader(HcRule rule) {
+    final t = HcTokens.of(context);
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(0, t.space.sm, 0, t.space.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextFormField(
+            initialValue: rule.name,
+            style: TextStyle(
+              fontSize: 26,
+              fontWeight: FontWeight.w700,
+              letterSpacing: -0.6,
+              color: t.surface.onBase,
+            ),
+            decoration: InputDecoration(
+              hintText: 'Name this automation',
+              hintStyle: TextStyle(
+                fontSize: 26,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.6,
+                color: t.surface.onBaseMuted.withValues(alpha: 0.4),
               ),
-              keyboardType: TextInputType.number,
-              onChanged: (_) => setState(() {
-                _cooldownSecs = _resolveCooldown();
-              }),
+              isDense: true,
+              contentPadding: EdgeInsets.zero,
+              border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none,
+            ),
+            onChanged: (v) {
+              rule.name = v;
+              _touch();
+            },
+          ),
+          SizedBox(height: t.space.sm),
+          _MetaLine(rule: rule, onChanged: _touch),
+        ],
+      ),
+    );
+  }
+
+  // -- trigger -------------------------------------------------------------
+
+  Widget _triggerEditor(HcRule rule, RuleRefs refs) => NodeBody(
+        node: rule.trigger,
+        registry: kTriggers,
+        refs: refs,
+        onChanged: _touch,
+        phraseFor: (n) => _withLiveSummary(triggerPhrase(n), n, refs),
+        size: HcSentenceSize.large,
+        // A rule has exactly one trigger, so swapping it is a *replace*, not an
+        // add — and it lives on the sentence rather than above it.
+        trailing: IconButton(
+          tooltip: 'Change the trigger',
+          icon: const Icon(Icons.swap_horiz, size: 17),
+          onPressed: () async {
+            final picked = await showDialog<HcNode>(
+              context: context,
+              builder: (_) => DeviceTriggerPicker(refs: refs),
+            );
+            if (picked != null) {
+              rule.trigger = picked;
+              _touch();
+            }
+          },
+        ),
+      );
+
+  /// Glosses the trigger with what the device is doing *right now*.
+  ///
+  /// A rule that says "when the Bathroom Door Sensor closes" is more useful when
+  /// it also says "currently closed · 14:02" — you can see whether it is armed.
+  Phrase? _withLiveSummary(Phrase? p, HcNode n, RuleRefs refs) {
+    if (p == null) return null;
+
+    // EVERY device the trigger watches, not just the first. The gloss used to
+    // read `currently closed · dining_room.dining_room_door_sensor` beneath a
+    // sentence naming four doors — the same lie the sentence had just stopped
+    // telling, in smaller type.
+    final devices = [
+      for (final ref in devicesOf(n))
+        if (refs.deviceFor(ref) case final d?) d,
+    ];
+    if (devices.isEmpty) return p;
+
+    final attr = n['attribute'] as String?;
+    final offline = devices.where((d) => !d.available).toList();
+
+    // One device: say exactly what it is doing. Several: say whether they AGREE,
+    // because "3 of 4 open" is the fact you actually want when a rule fires on
+    // any of them.
+    String gloss;
+    if (devices.length == 1) {
+      final d = devices.single;
+      gloss = !d.available
+          ? 'offline'
+          : (attr != null && d.state.containsKey(attr))
+              ? 'currently ${_say(attr, d.state[attr])}'
+              : (d.canonicalName ?? d.id);
+    } else if (attr == null) {
+      gloss = '${devices.length} devices';
+    } else {
+      final known =
+          devices.where((d) => d.available && d.state.containsKey(attr));
+      final values = known.map((d) => _say(attr, d.state[attr])).toSet();
+      gloss = values.length == 1
+          ? 'all ${devices.length} currently ${values.single}'
+          : known
+              .map((d) => '${d.displayName}: ${_say(attr, d.state[attr])}')
+              .join(' · ');
+    }
+
+    if (offline.isNotEmpty) {
+      gloss = '$gloss · ${offline.length} offline';
+    }
+    return Phrase(p.parts, summary: gloss);
+  }
+
+  static String _say(String attr, Object? v) => switch ((attr, v)) {
+        ('open', true) => 'open',
+        ('open', false) => 'closed',
+        ('on', true) => 'on',
+        ('on', false) => 'off',
+        ('locked', true) => 'locked',
+        ('locked', false) => 'unlocked',
+        _ => '$v',
+      };
+
+  /// True when the trigger's device already sits at the value the rule waits for.
+  bool _triggerIsLive(HcRule rule, RuleRefs refs) {
+    final n = rule.trigger;
+    final ref = n['device_id'] as String?;
+    final attr = n['attribute'] as String?;
+    if (ref == null || attr == null) return false;
+
+    final d = refs.deviceFor(ref);
+    if (d == null || !d.available) return false;
+
+    final want = n['to'];
+    // No target value means "any change", which is never *currently* true.
+    return want != null && d.state[attr] == want;
+  }
+
+  // -- advanced ------------------------------------------------------------
+
+  Widget _advanced(HcRule rule) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextFormField(
+            initialValue: rule.requiredExpression ?? '',
+            decoration: const InputDecoration(
+              labelText: 'Required expression',
+              helperText: 'Rhai boolean. Gates the rule before the trigger is '
+                  'even considered.',
+              helperMaxLines: 2,
+              isDense: true,
+              border: OutlineInputBorder(),
+            ),
+            style: const TextStyle(fontFamily: 'monospace'),
+            onChanged: (v) {
+              rule.requiredExpression = v.isEmpty ? null : v;
+              _touch();
+            },
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            initialValue: rule.triggerCondition ?? '',
+            decoration: const InputDecoration(
+              labelText: 'Trigger condition',
+              helperText:
+                  'Rhai boolean. Runs after the trigger, before the conditions.',
+              helperMaxLines: 2,
+              isDense: true,
+              border: OutlineInputBorder(),
+            ),
+            style: const TextStyle(fontFamily: 'monospace'),
+            onChanged: (v) {
+              rule.triggerCondition = v.isEmpty ? null : v;
+              _touch();
+            },
+          ),
+          CheckboxListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            value: rule.cancelOnFalse,
+            title: const Text('Cancel pending delays when the gate goes false'),
+            onChanged: (v) {
+              rule.cancelOnFalse = v ?? false;
+              _touch();
+            },
+          ),
+          const Divider(),
+          Text('Logging', style: Theme.of(context).textTheme.labelLarge),
+          CheckboxListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            value: rule.logTriggers,
+            title: const Text('Log triggers'),
+            onChanged: (v) {
+              rule.logTriggers = v ?? false;
+              _touch();
+            },
+          ),
+          CheckboxListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            value: rule.logActions,
+            title: const Text('Log actions'),
+            onChanged: (v) {
+              rule.logActions = v ?? false;
+              _touch();
+            },
+          ),
+          CheckboxListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            value: rule.logEvents,
+            title: const Text('Log events'),
+            onChanged: (v) {
+              rule.logEvents = v ?? false;
+              _touch();
+            },
+          ),
+        ],
+      );
+
+  // -- banners -------------------------------------------------------------
+
+  /// The editor itself — the scrolling clause list, unchanged. Extracted so the
+  /// outline pane can sit beside it without either knowing about the other.
+  Widget _editorList(BuildContext context, HcRule rule) {
+    final refs = ref.watch(ruleRefsProvider);
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+      children: [
+        // Core sets `error` on a rule whose file failed to parse or
+        // whose devices were deleted. It never executes — say so loudly.
+        if (rule.hasError) _banner(context, rule.error!, isError: true),
+        if (_saveError != null) _banner(context, _saveError!, isError: true),
+        if (_wouldFire != null) _testBanner(context),
+        _ruleHeader(rule),
+
+        // The clauses read down the page as one sentence about the
+        // house, joined by a rail. There is no card around them: a card
+        // says "this is a form", and a rule is a paragraph.
+        HcClause(
+          label: 'When',
+          // The rail node lights when the trigger's device is already in
+          // the state the rule waits for, so a rule shows you where the
+          // house actually IS, standing still.
+          live: _triggerIsLive(rule, refs),
+          child: _triggerEditor(rule, refs),
+        ),
+        HcClause(
+          label: 'And if',
+          child: ConditionTree(
+            conditions: rule.conditions,
+            refs: refs,
+            results: _testResults,
+            onChanged: _touch,
+          ),
+        ),
+        HcClause(
+          label: 'Then',
+          last: true,
+          child: ActionTree(
+            actions: rule.actions,
+            refs: refs,
+            onChanged: _touch,
+          ),
+        ),
+        const SizedBox(height: 8),
+        _Section(
+          title: 'Advanced',
+          initiallyExpanded: false,
+          child: _advanced(rule),
+        ),
+      ],
+    );
+  }
+
+  Widget _banner(BuildContext context, String message, {bool isError = false}) {
+    final t = HcTokens.of(context);
+    final c = isError ? t.accent.danger : t.surface.onBaseMuted;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: c.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: c.withValues(alpha: isError ? 0.4 : 0.25)),
+      ),
+      child: Row(
+        children: [
+          Icon(isError ? Icons.error_outline : Icons.info_outline,
+              size: 18, color: c),
+          const SizedBox(width: 8),
+          Expanded(
+            child: SelectableText(message,
+                style: TextStyle(fontSize: 13, color: t.surface.onBase)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _testBanner(BuildContext context) {
+    final t = HcTokens.of(context);
+    final fire = _wouldFire == true;
+    final c = fire ? t.accent.success : t.surface.onBaseMuted;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: c.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: c.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        children: [
+          Icon(fire ? Icons.check_circle_outline : Icons.block,
+              size: 18, color: c),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              fire
+                  ? 'As things stand right now, this rule would fire.'
+                  : 'As things stand right now, this rule would not fire — the '
+                      'failing condition is marked below.',
+              style: TextStyle(fontSize: 13, color: t.surface.onBase),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // -- commands ------------------------------------------------------------
+
+  Future<void> _save() async {
+    setState(() {
+      _saving = true;
+      _saveError = null;
+    });
+    try {
+      final saved = await ref.read(automationsProvider.notifier).save(_rule!);
+      if (!mounted) return;
+      final wasNew = _isNew;
+      setState(() {
+        _rule = saved.copy();
+        _dirty = false;
+        _saving = false;
+      });
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Saved.')));
+      // A new rule gets its UUID from core, so land on the real route.
+      if (wasNew) context.go('/automations/${saved.id}');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _saveError = _describe(e);
+      });
+    }
+  }
+
+  Future<void> _test() async {
+    try {
+      final result =
+          await ref.read(automationsApiProvider).testRule(widget.ruleId!);
+      if (!mounted) return;
+      setState(() {
+        _wouldFire = result['would_fire'] as bool?;
+        _testResults = [
+          for (final c in (result['conditions'] as List? ?? const []))
+            ConditionResult.fromJson(c as Map),
+        ];
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Test failed: ${_describe(e)}')),
+      );
+    }
+  }
+
+  /// Core's rejections are specific and useful ("invalid rule body: expected
+  /// map with a single key"), so show the server's own words rather than
+  /// burying them under a generic failure message.
+  String _describe(Object e) {
+    final s = '$e';
+    final match = RegExp(r'"error":"(.*?)"').firstMatch(s);
+    return match?.group(1) ?? s;
+  }
+}
+
+/// Trigger picker, grouped by the category each trigger declares.
+/// The unsaved-changes bar.
+///
+/// It slides up the moment the rule differs from what the server holds, and it
+/// is the only place Save exists. That is the difference between an app and a
+/// form: a form shows you a disabled Save button forever, an app tells you when
+/// you have something to lose.
+class _SaveBar extends StatelessWidget {
+  const _SaveBar({
+    required this.visible,
+    required this.saving,
+    required this.onSave,
+    required this.onDiscard,
+  });
+
+  final bool visible;
+  final bool saving;
+  final VoidCallback? onSave;
+  final VoidCallback? onDiscard;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+
+    return AnimatedSlide(
+      offset: visible ? Offset.zero : const Offset(0, 1),
+      duration: t.motion.base,
+      curve: Curves.easeOutCubic,
+      child: AnimatedOpacity(
+        opacity: visible ? 1 : 0,
+        duration: t.motion.base,
+        child: Container(
+          padding: EdgeInsets.fromLTRB(
+              t.space.md, t.space.sm, t.space.md, t.space.sm),
+          decoration: BoxDecoration(
+            color: t.surface.raised,
+            border: Border(top: BorderSide(color: t.stroke.hairline)),
+          ),
+          child: SafeArea(
+            top: false,
+            child: Row(
+              children: [
+                Container(
+                  width: 7,
+                  height: 7,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: t.accent.warn,
+                  ),
+                ),
+                SizedBox(width: t.space.sm),
+                Text(
+                  'Unsaved changes',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: t.surface.onBase,
+                  ),
+                ),
+                const Spacer(),
+                TextButton(
+                  onPressed: onDiscard,
+                  child: Text(
+                    'Discard',
+                    style: TextStyle(color: t.surface.onBaseMuted),
+                  ),
+                ),
+                SizedBox(width: t.space.xs),
+                FilledButton(
+                  onPressed: onSave,
+                  child: saving
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Save'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Everything about the rule that is not its name, said in one line.
+///
+/// Priority, cooldown and run mode are set once and then forgotten, so they read
+/// as prose and open an editor when tapped rather than occupying three permanent
+/// labelled boxes. The line states the *effect* — "at most once every 5 min" —
+/// not the field name and its raw value.
+class _MetaLine extends ConsumerWidget {
+  const _MetaLine({required this.rule, required this.onChanged});
+
+  final HcRule rule;
+  final VoidCallback onChanged;
+
+  static String _cooldown(int? secs) {
+    if (secs == null || secs == 0) return 'no cooldown';
+    if (secs % 3600 == 0) {
+      final h = secs ~/ 3600;
+      return 'at most once every $h ${h == 1 ? 'hour' : 'hours'}';
+    }
+    if (secs % 60 == 0) {
+      final m = secs ~/ 60;
+      return 'at most once every $m ${m == 1 ? 'minute' : 'minutes'}';
+    }
+    return 'at most once every ${secs}s';
+  }
+
+  static String _runMode(RunMode m) => switch (m.kind) {
+        'Queued' => 'queue up to ${m.maxQueue}',
+        'Parallel' => 'run in parallel',
+        'Restart' => 'restart if re-triggered',
+        _ => 'one run at a time',
+      };
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = HcTokens.of(context);
+    // Tags already existed end to end — core stores them, the API filters on
+    // them, and the list groups by them — with nothing anywhere to set one.
+    // Thirty of thirty-four rules sat under "Untagged" because tagging a rule
+    // meant editing its RON file by hand.
+    final known = <String>{
+      for (final r in ref.watch(automationsProvider).valueOrNull ?? const [])
+        ...r.tags,
+    }.toList()
+      ..sort();
+
+    return Wrap(
+      spacing: t.space.xs,
+      runSpacing: t.space.xs,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        // Enabled is the one meta field with a consequence you care about at a
+        // glance, so it keeps a colour and a dot. The rest are grey.
+        _MetaChip(
+          label: rule.enabled ? 'Enabled' : 'Disabled',
+          lit: rule.enabled,
+          dot: true,
+          onTap: () {
+            rule.enabled = !rule.enabled;
+            onChanged();
+          },
+        ),
+        _dot(t),
+        _MetaChip(
+          label: rule.priority == 0
+              ? 'normal priority'
+              : 'priority ${rule.priority}',
+          onTap: () => _editNumber(
+            context,
+            title: 'Priority',
+            help: 'Higher runs first. −1000 to 1000.',
+            value: rule.priority,
+            onSet: (v) {
+              rule.priority = (v ?? 0).clamp(-1000, 1000);
+              onChanged();
+            },
+          ),
+        ),
+        _dot(t),
+        _MetaChip(
+          label: _cooldown(rule.cooldownSecs),
+          onTap: () => _editNumber(
+            context,
+            title: 'Cooldown (seconds)',
+            help: 'Leave empty for none.',
+            value: rule.cooldownSecs,
+            nullable: true,
+            onSet: (v) {
+              rule.cooldownSecs = v;
+              onChanged();
+            },
+          ),
+        ),
+        _dot(t),
+        _MetaChip(
+          label: _runMode(rule.runMode),
+          onTap: () => _editRunMode(context),
+        ),
+        _dot(t),
+        // Each tag is its own chip so removing one is a single tap, rather
+        // than editing a comma-separated string and hoping.
+        for (final tag in rule.tags)
+          _MetaChip(
+            label: tag,
+            lit: true,
+            icon: Icons.local_offer_outlined,
+            onTap: () {
+              rule.tags.remove(tag);
+              onChanged();
+            },
+          ),
+        _MetaChip(
+          label: rule.tags.isEmpty ? 'add a tag' : 'add',
+          icon: Icons.add,
+          onTap: () => _addTag(context, known),
+        ),
+      ],
+    );
+  }
+
+  /// Add a tag, offering the ones already in use.
+  ///
+  /// Offering them is the point: tags only group rules if they are spelled the
+  /// same, and a free text box produces "deck", "Deck" and "decks" within a
+  /// week. Typing a new one is still allowed — that is how the first of any
+  /// tag gets created.
+  Future<void> _addTag(BuildContext context, List<String> known) async {
+    final controller = TextEditingController();
+    final available = known.where((k) => !rule.tags.contains(k)).toList();
+
+    final picked = await showDialog<String>(
+      context: context,
+      builder: (ctx) {
+        final t = HcTokens.of(ctx);
+        return HcDialog(
+          title: 'Add a tag',
+          description: 'Tags group rules on the automations list.',
+          width: 420,
+          actions: [
+            HcButton(label: 'Cancel', onPressed: () => Navigator.pop(ctx)),
+            HcButton(
+              label: 'Add',
+              kind: HcButtonKind.primary,
+              onPressed: () => Navigator.pop(ctx, controller.text.trim()),
             ),
           ],
-          const SizedBox(height: 16),
-
-          // Run mode
-          Column(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Run Mode', style: Theme.of(context).textTheme.labelLarge),
-              const SizedBox(height: 8),
-              DropdownButtonFormField<String>(
-                value: _runMode,
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
+              if (available.isNotEmpty) ...[
+                const RailLabel('Already in use'),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    for (final k in available)
+                      ActionChip(
+                        label: Text(k),
+                        onPressed: () => Navigator.pop(ctx, k),
+                      ),
+                  ],
                 ),
-                items: const [
-                  DropdownMenuItem(
-                      value: 'parallel',
-                      child: Text('Parallel — run multiple instances at once')),
-                  DropdownMenuItem(
-                      value: 'single',
-                      child: Text('Single — skip if already running')),
-                  DropdownMenuItem(
-                      value: 'restart',
-                      child: Text('Restart — cancel and restart')),
-                  DropdownMenuItem(
-                      value: 'queued',
-                      child: Text('Queued — queue and run in order')),
-                ],
-                onChanged: (v) => setState(() => _runMode = v ?? 'parallel'),
+                SizedBox(height: t.space.md),
+              ],
+              const RailLabel('Or a new one'),
+              const SizedBox(height: 6),
+              TextField(
+                controller: controller,
+                autofocus: available.isEmpty,
+                decoration:
+                    fieldDecoration(t, hint: 'deck, vacation, security'),
+                onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
               ),
             ],
           ),
-          const SizedBox(height: 16),
+        );
+      },
+    );
+    controller.dispose();
 
-          // Tags
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Tags', style: Theme.of(context).textTheme.labelLarge),
-              const SizedBox(height: 8),
-              if (_tags.isNotEmpty)
-                Wrap(
-                  spacing: 6,
-                  children: _tags
-                      .map((tag) => Chip(
-                            label: Text(tag),
-                            onDeleted: () => setState(() => _tags.remove(tag)),
-                            visualDensity: VisualDensity.compact,
-                          ))
-                      .toList(),
-                ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _tagCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Add tag',
-                        border: OutlineInputBorder(),
-                        isDense: true,
+    final tag = picked?.trim();
+    if (tag == null || tag.isEmpty || rule.tags.contains(tag)) return;
+    rule.tags.add(tag);
+    rule.tags.sort();
+    onChanged();
+  }
+
+  Widget _dot(HcTokens t) => Text(
+        '·',
+        style: TextStyle(color: t.surface.onBaseMuted.withValues(alpha: 0.5)),
+      );
+
+  Future<void> _editNumber(
+    BuildContext context, {
+    required String title,
+    required String help,
+    required int? value,
+    required ValueChanged<int?> onSet,
+    bool nullable = false,
+  }) async {
+    final controller = TextEditingController(text: value?.toString() ?? '');
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => HcDialog(
+        title: title,
+        description: help,
+        actions: [
+          HcButton(
+            label: 'Done',
+            kind: HcButtonKind.primary,
+            onPressed: () => Navigator.pop(ctx),
+          ),
+        ],
+        child: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType: TextInputType.number,
+          onSubmitted: (_) => Navigator.pop(ctx),
+        ),
+      ),
+    );
+
+    final text = controller.text.trim();
+    if (text.isEmpty && nullable) {
+      onSet(null);
+    } else {
+      final parsed = int.tryParse(text);
+      if (parsed != null) onSet(parsed);
+    }
+    controller.dispose();
+  }
+
+  Future<void> _editRunMode(BuildContext context) async {
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setInner) {
+          final t = HcTokens.of(ctx);
+          return HcDialog(
+            title: 'When it fires again',
+            actions: [
+              HcButton(
+                label: 'Done',
+                kind: HcButtonKind.primary,
+                onPressed: () => Navigator.pop(ctx),
+              ),
+            ],
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (final k in RunMode.kinds)
+                  InkWell(
+                    onTap: () {
+                      rule.runMode =
+                          RunMode(k, maxQueue: rule.runMode.maxQueue);
+                      setInner(() {});
+                      onChanged();
+                    },
+                    borderRadius: BorderRadius.circular(8),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 4, vertical: 10),
+                      child: Row(
+                        children: [
+                          Icon(
+                            rule.runMode.kind == k
+                                ? Icons.radio_button_checked
+                                : Icons.radio_button_unchecked,
+                            size: 18,
+                            color: rule.runMode.kind == k
+                                ? t.accent.active
+                                : t.surface.onBaseMuted,
+                          ),
+                          const SizedBox(width: 10),
+                          Text(
+                            _runMode(
+                                RunMode(k, maxQueue: rule.runMode.maxQueue)),
+                            style: TextStyle(
+                                fontSize: 13.5, color: t.surface.onBase),
+                          ),
+                        ],
                       ),
-                      onSubmitted: (v) {
-                        final tag = v.trim();
-                        if (tag.isNotEmpty && !_tags.contains(tag)) {
-                          setState(() {
-                            _tags.add(tag);
-                            _tagCtrl.clear();
-                          });
-                        }
-                      },
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  IconButton.filled(
-                    icon: const Icon(Icons.add),
-                    onPressed: () {
-                      final tag = _tagCtrl.text.trim();
-                      if (tag.isNotEmpty && !_tags.contains(tag)) {
-                        setState(() {
-                          _tags.add(tag);
-                          _tagCtrl.clear();
-                        });
-                      }
+                if (rule.runMode.kind == 'Queued') ...[
+                  const SizedBox(height: 10),
+                  TextFormField(
+                    initialValue: '${rule.runMode.maxQueue}',
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(labelText: 'Max queued'),
+                    onChanged: (v) {
+                      final n = int.tryParse(v);
+                      if (n == null) return;
+                      rule.runMode = RunMode('Queued', maxQueue: n);
+                      setInner(() {});
+                      onChanged();
                     },
                   ),
                 ],
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _MetaChip extends StatelessWidget {
+  const _MetaChip({
+    required this.label,
+    required this.onTap,
+    this.lit = false,
+    this.dot = false,
+    this.icon,
+  });
+
+  final String label;
+  final VoidCallback onTap;
+  final bool lit;
+  final bool dot;
+
+  /// A leading glyph, for chips whose label alone does not say what kind of
+  /// thing they are. A tag reading `deck` sits next to `run in parallel` and
+  /// is otherwise indistinguishable from a setting.
+  final IconData? icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    // `lit` used to be read only alongside `dot`, so a chip that set it
+    // without one rendered in the same grey as everything else — which is how
+    // the tag chips ended up invisible among the settings.
+    //
+    // With a dot it means "this state is good" (enabled → green). Without one
+    // it means "this is content, not a setting", and takes the same accent
+    // the automations list gives a tag group heading, so the same tag is the
+    // same colour in both places.
+    final colour = lit
+        ? (dot ? t.accent.success : t.accent.active)
+        : t.surface.onBaseMuted;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: t.radius.smR,
+      child: Padding(
+        padding: EdgeInsets.symmetric(
+          horizontal: t.space.xs,
+          vertical: 2,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (dot) ...[
+              Container(
+                width: 6,
+                height: 6,
+                decoration:
+                    BoxDecoration(shape: BoxShape.circle, color: colour),
               ),
+              SizedBox(width: t.space.xs),
             ],
+            if (icon != null) ...[
+              Icon(icon, size: 12, color: colour),
+              const SizedBox(width: 4),
+            ],
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12.5,
+                color: colour,
+                fontWeight: dot ? FontWeight.w600 : FontWeight.w400,
+                fontFeatures: t.numericFontFeatures,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A titled block on a token surface. Advanced starts collapsed — but the
+/// clauses above it never do: a rule you cannot see all of is one you get wrong.
+class _Section extends StatefulWidget {
+  const _Section({
+    required this.title,
+    required this.child,
+    this.initiallyExpanded = true,
+  });
+
+  final String title;
+  final Widget child;
+  final bool initiallyExpanded;
+
+  @override
+  State<_Section> createState() => _SectionState();
+}
+
+class _SectionState extends State<_Section> {
+  late bool _open = widget.initiallyExpanded;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: t.surface.raised,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: t.stroke.hairline),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          InkWell(
+            onTap: () => setState(() => _open = !_open),
+            borderRadius: BorderRadius.circular(12),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+              child: Row(
+                children: [
+                  Text(widget.title,
+                      style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: t.surface.onBase)),
+                  const Spacer(),
+                  AnimatedRotation(
+                    turns: _open ? 0.5 : 0,
+                    duration: t.motion.fast,
+                    child: Icon(Icons.keyboard_arrow_down_rounded,
+                        color: t.surface.onBaseMuted),
+                  ),
+                ],
+              ),
+            ),
           ),
-          const SizedBox(height: 8),
+          if (_open)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: widget.child,
+            ),
         ],
       ),
     );
   }
 }
 
-// ─── Trigger form ─────────────────────────────────────────────────────────────
-
-class _TriggerForm extends StatefulWidget {
-  final String triggerType;
-  final Map<String, dynamic> trigger;
-  final DeviceNameResolver deviceResolver;
-  final ModeNameResolver modeResolver;
-  final ValueChanged<Map<String, dynamic>> onChanged;
-
-  const _TriggerForm({
-    required this.triggerType,
-    required this.trigger,
-    required this.deviceResolver,
-    required this.modeResolver,
+/// Test seam for the rule meta line.
+///
+/// The tag controls live on it, and pumping the whole editor page would drag
+/// in every provider the page touches to test four chips.
+class RuleMetaLineTestAccess extends StatelessWidget {
+  const RuleMetaLineTestAccess({
+    super.key,
+    required this.rule,
     required this.onChanged,
   });
 
-  @override
-  State<_TriggerForm> createState() => _TriggerFormState();
-}
-
-class _TriggerFormState extends State<_TriggerForm> {
-  late Map<String, dynamic> _data;
-  // Separate slot list for device_state_changed — allows empty "pending" slots
-  // that haven't been filled yet without corrupting _data.
-  late List<String> _deviceSlots;
+  final HcRule rule;
+  final VoidCallback onChanged;
 
   @override
-  void initState() {
-    super.initState();
-    _data = Map<String, dynamic>.from(widget.trigger);
-    if (_data['type'] == null) _data['type'] = widget.triggerType;
-    _deviceSlots = _slotsFromData();
-  }
-
-  @override
-  void didUpdateWidget(_TriggerForm old) {
-    super.didUpdateWidget(old);
-    if (old.triggerType != widget.triggerType) {
-      // Trigger type switched — reset everything.
-      _data = {'type': widget.triggerType};
-      _deviceSlots = [''];
-    } else if (old.trigger != widget.trigger &&
-        widget.trigger['type'] != _data['type']) {
-      // External data reload (e.g. navigating to a different rule).
-      _data = Map<String, dynamic>.from(widget.trigger);
-      _deviceSlots = _slotsFromData();
-    }
-  }
-
-  /// Build the initial slot list from _data.
-  List<String> _slotsFromData() {
-    final refs = readDeviceRefs(_data);
-    return refs.isEmpty ? [''] : refs;
-  }
-
-  /// Write _deviceSlots back to _data and notify parent.
-  /// Empty slots are excluded from device / devices.
-  void _flushDeviceSlots() {
-    writeDeviceRefs(_data, _deviceSlots);
-    widget.onChanged(Map<String, dynamic>.from(_data));
-  }
-
-  void _setDeviceRef(String? ref) {
-    setState(() {
-      writeSingleDeviceRef(_data, ref);
-      widget.onChanged(Map<String, dynamic>.from(_data));
-    });
-  }
-
-  void _set(String key, dynamic value) {
-    setState(() {
-      _data[key] = value;
-      widget.onChanged(Map<String, dynamic>.from(_data));
-    });
-  }
-
-  void _remove(String key) {
-    setState(() {
-      _data.remove(key);
-      widget.onChanged(Map<String, dynamic>.from(_data));
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    switch (widget.triggerType) {
-      case 'device_state_changed':
-        return _buildDeviceStateChanged();
-      case 'device_availability_changed':
-        return _buildDeviceAvailabilityChanged();
-      case 'time_of_day':
-        return _buildTimeOfDay();
-      case 'sun_event':
-        return _buildSunEvent();
-      case 'mode_changed':
-        return _buildModeChanged();
-      case 'webhook_received':
-        return _buildWebhookReceived();
-      case 'manual_trigger':
-        return _buildManualTrigger();
-      case 'mqtt_message':
-        return _buildMqttMessage();
-      case 'custom_event':
-        return _buildCustomEvent();
-      case 'system_started':
-        return _buildSystemStarted();
-      case 'cron':
-        return _buildCron();
-      case 'periodic':
-        return _buildPeriodic();
-      case 'button_event':
-        return _buildButtonEvent();
-      case 'numeric_threshold':
-        return _buildNumericThreshold();
-      case 'hub_variable_changed':
-        return _buildHubVariableChanged();
-      case 'calendar_event':
-        return _buildCalendarEvent();
-      default:
-        return const Text('No configuration needed.');
-    }
-  }
-
-  Widget _buildDeviceStateChanged() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // One picker row per slot
-        for (int i = 0; i < _deviceSlots.length; i++)
-          Padding(
-            key: ValueKey('device_slot_$i'),
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Row(
-              children: [
-                Expanded(
-                  child: _DevicePicker(
-                    hint: i == 0 ? 'Device (required)' : 'Additional device',
-                    value: _deviceSlots[i].isEmpty ? null : _deviceSlots[i],
-                    devices: widget.deviceResolver.devices,
-                    onChanged: (v) {
-                      setState(() {
-                        _deviceSlots[i] = v ?? '';
-                        _flushDeviceSlots();
-                      });
-                    },
-                  ),
-                ),
-                if (_deviceSlots.length > 1)
-                  IconButton(
-                    icon: const Icon(Icons.remove_circle_outline, size: 20),
-                    tooltip: 'Remove device',
-                    onPressed: () {
-                      setState(() {
-                        _deviceSlots.removeAt(i);
-                        _flushDeviceSlots();
-                      });
-                    },
-                  ),
-              ],
-            ),
-          ),
-        // Add device button — just appends an empty slot, no data flush yet
-        TextButton.icon(
-          onPressed: () => setState(() => _deviceSlots.add('')),
-          icon: const Icon(Icons.add, size: 16),
-          label: const Text('Add device (OR)'),
-          style: TextButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 4)),
-        ),
-        const SizedBox(height: 8),
-        _FormField(
-          label: 'Attribute (optional)',
-          value: _data['attribute'] as String? ?? '',
-          onChanged: (v) =>
-              v.isEmpty ? _remove('attribute') : _set('attribute', v),
-        ),
-        const SizedBox(height: 8),
-        _FormField(
-          label: 'To value (optional)',
-          value: _data['to'] != null ? jsonEncode(_data['to']) : '',
-          hint: 'e.g. true, 42, "open"',
-          onChanged: (v) {
-            if (v.isEmpty) {
-              _remove('to');
-            } else {
-              try {
-                _set('to', jsonDecode(v));
-              } catch (_) {
-                _set('to', v);
-              }
-            }
-          },
-        ),
-      ],
-    );
-  }
-
-  Widget _buildDeviceAvailabilityChanged() {
-    final toVal = _data['to'];
-    String toStr = 'any';
-    if (toVal == true) toStr = 'online';
-    if (toVal == false) toStr = 'offline';
-    return Column(
-      children: [
-        _DevicePicker(
-          hint: 'Select device',
-          value: readSingleDeviceRef(_data),
-          devices: widget.deviceResolver.devices,
-          onChanged: _setDeviceRef,
-        ),
-        const SizedBox(height: 8),
-        DropdownButtonFormField<String>(
-          value: toStr,
-          decoration: const InputDecoration(
-            labelText: 'To state',
-            border: OutlineInputBorder(),
-          ),
-          items: const [
-            DropdownMenuItem(
-                value: 'any', child: Text('Any (online or offline)')),
-            DropdownMenuItem(value: 'online', child: Text('Online')),
-            DropdownMenuItem(value: 'offline', child: Text('Offline')),
-          ],
-          onChanged: (v) {
-            if (v == 'any') _remove('to');
-            if (v == 'online') _set('to', true);
-            if (v == 'offline') _set('to', false);
-          },
-        ),
-      ],
-    );
-  }
-
-  Widget _buildTimeOfDay() {
-    final days = List<String>.from(_data['days'] as List? ??
-        ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']);
-    const allDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _FormField(
-          label: 'Time (HH:MM or HH:MM:SS)',
-          value: _data['time'] as String? ?? '',
-          hint: '07:30:00',
-          onChanged: (v) => _set('time', v),
-        ),
-        const SizedBox(height: 12),
-        Text('Days', style: Theme.of(context).textTheme.labelLarge),
-        const SizedBox(height: 4),
-        Row(
-          children: [
-            ActionChip(
-              label: const Text('All'),
-              onPressed: () => _set('days', List<String>.from(allDays)),
-            ),
-            const SizedBox(width: 4),
-            ActionChip(
-              label: const Text('Weekdays'),
-              onPressed: () =>
-                  _set('days', ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']),
-            ),
-            const SizedBox(width: 4),
-            ActionChip(
-              label: const Text('Weekend'),
-              onPressed: () => _set('days', ['Sat', 'Sun']),
-            ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        Wrap(
-          spacing: 4,
-          children: allDays.map((d) {
-            final selected = days.contains(d);
-            return FilterChip(
-              label: Text(d),
-              selected: selected,
-              onSelected: (on) {
-                final updated = List<String>.from(days);
-                if (on) {
-                  updated.add(d);
-                } else {
-                  updated.remove(d);
-                }
-                // Preserve order
-                updated.sort(
-                    (a, b) => allDays.indexOf(a).compareTo(allDays.indexOf(b)));
-                _set('days', updated);
-              },
-            );
-          }).toList(),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSunEvent() {
-    final offset = (_data['offset_minutes'] as num?)?.toInt() ?? 0;
-    return Column(
-      children: [
-        DropdownButtonFormField<String>(
-          value: _data['event'] as String? ?? 'sunset',
-          decoration: const InputDecoration(
-            labelText: 'Solar event',
-            border: OutlineInputBorder(),
-          ),
-          items: const [
-            DropdownMenuItem(value: 'sunrise', child: Text('Sunrise')),
-            DropdownMenuItem(value: 'sunset', child: Text('Sunset')),
-            DropdownMenuItem(value: 'solar_noon', child: Text('Solar Noon')),
-            DropdownMenuItem(value: 'civil_dawn', child: Text('Civil Dawn')),
-            DropdownMenuItem(value: 'civil_dusk', child: Text('Civil Dusk')),
-          ],
-          onChanged: (v) => _set('event', v ?? 'sunset'),
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Offset: ${offset > 0 ? '+' : ''}${offset} min',
-                    style: Theme.of(context).textTheme.labelLarge,
-                  ),
-                  Slider(
-                    value: offset.toDouble(),
-                    min: -120,
-                    max: 120,
-                    divisions: 48,
-                    label: '${offset > 0 ? '+' : ''}${offset} min',
-                    onChanged: (v) => _set('offset_minutes', v.round()),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildModeChanged() {
-    final toVal = _data['to'];
-    String toStr = 'any';
-    if (toVal == true) toStr = 'on';
-    if (toVal == false) toStr = 'off';
-    return Column(
-      children: [
-        _ModePicker(
-          value: _data['mode_id'] as String?,
-          modes: widget.modeResolver.modes,
-          nullable: true,
-          nullLabel: 'Any mode',
-          onChanged: (v) {
-            if (v == null) {
-              _remove('mode_id');
-            } else {
-              _set('mode_id', v);
-            }
-          },
-        ),
-        const SizedBox(height: 8),
-        DropdownButtonFormField<String>(
-          value: toStr,
-          decoration: const InputDecoration(
-            labelText: 'To state',
-            border: OutlineInputBorder(),
-          ),
-          items: const [
-            DropdownMenuItem(value: 'any', child: Text('Any (on or off)')),
-            DropdownMenuItem(value: 'on', child: Text('On')),
-            DropdownMenuItem(value: 'off', child: Text('Off')),
-          ],
-          onChanged: (v) {
-            if (v == 'any') _remove('to');
-            if (v == 'on') _set('to', true);
-            if (v == 'off') _set('to', false);
-          },
-        ),
-      ],
-    );
-  }
-
-  Widget _buildWebhookReceived() {
-    return _FormField(
-      label: 'Path',
-      value: _data['path'] as String? ?? '',
-      hint: '/webhook/my-hook',
-      onChanged: (v) => _set('path', v),
-    );
-  }
-
-  Widget _buildManualTrigger() {
-    return const Padding(
-      padding: EdgeInsets.symmetric(vertical: 8),
-      child: Text(
-        'This rule can only be triggered manually via the API or dashboard.',
-        style: TextStyle(fontStyle: FontStyle.italic),
-      ),
-    );
-  }
-
-  Widget _buildMqttMessage() {
-    return Column(
-      children: [
-        _FormField(
-          label: 'Topic pattern',
-          value: _data['topic_pattern'] as String? ?? '',
-          hint: 'homecore/+/state',
-          onChanged: (v) => _set('topic_pattern', v),
-        ),
-        const SizedBox(height: 8),
-        _FormField(
-          label: 'Payload match (optional)',
-          value: _data['payload'] as String? ?? '',
-          onChanged: (v) => v.isEmpty ? _remove('payload') : _set('payload', v),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildCustomEvent() {
-    return _FormField(
-      label: 'Event type',
-      value: _data['event_type'] as String? ?? '',
-      hint: 'my_custom_event',
-      onChanged: (v) => _set('event_type', v),
-    );
-  }
-
-  Widget _buildSystemStarted() {
-    return const Padding(
-      padding: EdgeInsets.symmetric(vertical: 8),
-      child: Text(
-        'This rule fires once each time the homeCore system starts.',
-        style: TextStyle(fontStyle: FontStyle.italic),
-      ),
-    );
-  }
-
-  Widget _buildCron() {
-    return _FormField(
-      label: 'Cron expression',
-      value: _data['expression'] as String? ?? '',
-      hint: '0 30 7 * * * (sec min hour day month weekday)',
-      onChanged: (v) => _set('expression', v),
-    );
-  }
-
-  Widget _buildPeriodic() {
-    return Column(
-      children: [
-        _FormField(
-          label: 'Every N',
-          value: (_data['every_n'] as num?)?.toString() ?? '5',
-          keyboardType: TextInputType.number,
-          onChanged: (v) => _set('every_n', int.tryParse(v) ?? 5),
-        ),
-        const SizedBox(height: 8),
-        DropdownButtonFormField<String>(
-          value: _data['unit'] as String? ?? 'minutes',
-          decoration: const InputDecoration(
-            labelText: 'Unit',
-            border: OutlineInputBorder(),
-          ),
-          items: const [
-            DropdownMenuItem(value: 'minutes', child: Text('Minutes')),
-            DropdownMenuItem(value: 'hours', child: Text('Hours')),
-            DropdownMenuItem(value: 'days', child: Text('Days')),
-            DropdownMenuItem(value: 'weeks', child: Text('Weeks')),
-          ],
-          onChanged: (v) => _set('unit', v ?? 'minutes'),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildButtonEvent() {
-    return Column(
-      children: [
-        _DevicePicker(
-          hint: 'Select button device',
-          value: readSingleDeviceRef(_data),
-          devices: widget.deviceResolver.devices,
-          onChanged: _setDeviceRef,
-        ),
-        const SizedBox(height: 8),
-        _FormField(
-          label: 'Button number (optional)',
-          value: (_data['button_number'] as num?)?.toString() ?? '',
-          hint: 'e.g. 1',
-          keyboardType: TextInputType.number,
-          onChanged: (v) {
-            final n = int.tryParse(v);
-            if (n == null)
-              _remove('button_number');
-            else
-              _set('button_number', n);
-          },
-        ),
-        const SizedBox(height: 8),
-        DropdownButtonFormField<String>(
-          value: _data['event'] as String? ?? 'pushed',
-          decoration: const InputDecoration(
-            labelText: 'Button event',
-            border: OutlineInputBorder(),
-          ),
-          items: const [
-            DropdownMenuItem(value: 'pushed', child: Text('Pushed')),
-            DropdownMenuItem(value: 'held', child: Text('Held')),
-            DropdownMenuItem(
-                value: 'double_tapped', child: Text('Double Tapped')),
-            DropdownMenuItem(value: 'released', child: Text('Released')),
-          ],
-          onChanged: (v) => _set('event', v ?? 'pushed'),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildNumericThreshold() {
-    return Column(
-      children: [
-        _DevicePicker(
-          hint: 'Select device',
-          value: readSingleDeviceRef(_data),
-          devices: widget.deviceResolver.devices,
-          onChanged: _setDeviceRef,
-        ),
-        const SizedBox(height: 8),
-        _FormField(
-          label: 'Attribute',
-          value: _data['attribute'] as String? ?? '',
-          hint: 'e.g. temperature',
-          onChanged: (v) => _set('attribute', v),
-        ),
-        const SizedBox(height: 8),
-        DropdownButtonFormField<String>(
-          value: _data['op'] as String? ?? 'above',
-          decoration: const InputDecoration(
-            labelText: 'Operator',
-            border: OutlineInputBorder(),
-          ),
-          items: const [
-            DropdownMenuItem(value: 'above', child: Text('Above')),
-            DropdownMenuItem(value: 'below', child: Text('Below')),
-            DropdownMenuItem(
-                value: 'crosses_above', child: Text('Crosses Above')),
-            DropdownMenuItem(
-                value: 'crosses_below', child: Text('Crosses Below')),
-          ],
-          onChanged: (v) => _set('op', v ?? 'above'),
-        ),
-        const SizedBox(height: 8),
-        _FormField(
-          label: 'Value',
-          value: (_data['value'] as num?)?.toString() ?? '',
-          keyboardType: TextInputType.number,
-          onChanged: (v) => _set('value', num.tryParse(v) ?? 0),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildHubVariableChanged() {
-    return _FormField(
-      label: 'Variable name (optional)',
-      value: _data['name'] as String? ?? '',
-      hint: 'Leave blank to match any variable',
-      onChanged: (v) => v.isEmpty ? _remove('name') : _set('name', v),
-    );
-  }
-
-  Widget _buildCalendarEvent() {
-    return Column(
-      children: [
-        _FormField(
-          label: 'Calendar ID (optional)',
-          value: _data['calendar_id'] as String? ?? '',
-          onChanged: (v) =>
-              v.isEmpty ? _remove('calendar_id') : _set('calendar_id', v),
-        ),
-        const SizedBox(height: 8),
-        _FormField(
-          label: 'Title contains (optional)',
-          value: _data['title_contains'] as String? ?? '',
-          hint: 'e.g. "Meeting"',
-          onChanged: (v) =>
-              v.isEmpty ? _remove('title_contains') : _set('title_contains', v),
-        ),
-        const SizedBox(height: 8),
-        _FormField(
-          label: 'Offset minutes (optional)',
-          value: (_data['offset_minutes'] as num?)?.toString() ?? '',
-          keyboardType: TextInputType.number,
-          onChanged: (v) {
-            final n = int.tryParse(v);
-            if (n == null)
-              _remove('offset_minutes');
-            else
-              _set('offset_minutes', n);
-          },
-        ),
-      ],
-    );
-  }
-}
-
-// ─── Condition editor dialog ──────────────────────────────────────────────────
-
-class _ConditionEditorDialog extends StatefulWidget {
-  final DeviceNameResolver deviceResolver;
-  final ModeNameResolver modeResolver;
-  final Map<String, dynamic>? initial;
-
-  const _ConditionEditorDialog({
-    required this.deviceResolver,
-    required this.modeResolver,
-    required this.initial,
-  });
-
-  @override
-  State<_ConditionEditorDialog> createState() => _ConditionEditorDialogState();
-}
-
-class _ConditionEditorDialogState extends State<_ConditionEditorDialog> {
-  late String _type;
-  late Map<String, dynamic> _data;
-  final _jsonCtrl = TextEditingController();
-
-  static const _conditionTypes = [
-    'device_state',
-    'mode_is',
-    'time_window',
-    'time_elapsed',
-    'hub_variable',
-    'script_expression',
-    'private_boolean_is',
-    'not',
-    'and',
-    'or',
-    'xor',
-  ];
-
-  static const _conditionLabels = {
-    'device_state': 'Device State',
-    'mode_is': 'Mode Is',
-    'time_window': 'Time Window',
-    'time_elapsed': 'Time Elapsed (unchanged)',
-    'hub_variable': 'Hub Variable',
-    'script_expression': 'Script Expression',
-    'private_boolean_is': 'Private Boolean',
-    'not': 'NOT (negate condition)',
-    'and': 'AND (all must pass)',
-    'or': 'OR (any must pass)',
-    'xor': 'XOR (exactly one must pass)',
-  };
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.initial != null) {
-      _data = Map<String, dynamic>.from(widget.initial!);
-      _type = _data['type'] as String? ?? 'device_state';
-    } else {
-      _type = 'device_state';
-      _data = {'type': _type};
-    }
-    final isKnown = _conditionTypes.contains(_type);
-    if (!isKnown) {
-      _jsonCtrl.text = const JsonEncoder.withIndent('  ').convert(_data);
-    }
-  }
-
-  @override
-  void dispose() {
-    _jsonCtrl.dispose();
-    super.dispose();
-  }
-
-  void _set(String key, dynamic value) {
-    setState(() => _data[key] = value);
-  }
-
-  void _remove(String key) {
-    setState(() => _data.remove(key));
-  }
-
-  static const _jsonEditorTypes = {'not', 'and', 'or', 'xor'};
-
-  Map<String, dynamic>? _build() {
-    final isKnown = _conditionTypes.contains(_type);
-    // not/and/or/xor are "known" types but edited via JSON controller
-    if (!isKnown || _jsonEditorTypes.contains(_type)) {
-      try {
-        return Map<String, dynamic>.from(jsonDecode(_jsonCtrl.text) as Map);
-      } catch (_) {
-        return null;
-      }
-    }
-    return Map<String, dynamic>.from(_data);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final isKnown = _conditionTypes.contains(_type);
-    return AlertDialog(
-      title: Text(widget.initial == null ? 'Add Condition' : 'Edit Condition'),
-      content: SizedBox(
-        width: 480,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              DropdownButtonFormField<String>(
-                value: isKnown ? _type : null,
-                hint: isKnown ? null : Text(_type),
-                decoration: const InputDecoration(
-                  labelText: 'Condition type',
-                  border: OutlineInputBorder(),
-                ),
-                items: [
-                  ..._conditionTypes.map((t) => DropdownMenuItem(
-                        value: t,
-                        child: Text(_conditionLabels[t] ?? t),
-                      )),
-                  if (!isKnown)
-                    DropdownMenuItem(
-                      value: _type,
-                      child: Text(_type),
-                    ),
-                ],
-                onChanged: (v) {
-                  if (v == null) return;
-                  setState(() {
-                    _type = v;
-                    _data = {'type': v};
-                    if (!_conditionTypes.contains(v)) {
-                      _jsonCtrl.text =
-                          const JsonEncoder.withIndent('  ').convert(_data);
-                    }
-                  });
-                },
-              ),
-              const SizedBox(height: 16),
-              if (isKnown) _buildKnownConditionForm() else _buildJsonForm(),
-            ],
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: () {
-            final result = _build();
-            Navigator.of(context).pop(result);
-          },
-          child: const Text('OK'),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildKnownConditionForm() {
-    switch (_type) {
-      case 'device_state':
-        return Column(
-          children: [
-            _DevicePicker(
-              hint: 'Select device',
-              value: readSingleDeviceRef(_data),
-              devices: widget.deviceResolver.devices,
-              onChanged: (v) {
-                setState(() => writeSingleDeviceRef(_data, v));
-              },
-            ),
-            const SizedBox(height: 8),
-            _FormField(
-              label: 'Attribute',
-              value: _data['attribute'] as String? ?? '',
-              hint: 'e.g. on, temperature',
-              onChanged: (v) => _set('attribute', v),
-            ),
-            const SizedBox(height: 8),
-            DropdownButtonFormField<String>(
-              value: _data['op'] as String? ?? 'eq',
-              decoration: const InputDecoration(
-                labelText: 'Operator',
-                border: OutlineInputBorder(),
-              ),
-              items: const [
-                DropdownMenuItem(value: 'eq', child: Text('eq — equals')),
-                DropdownMenuItem(value: 'ne', child: Text('ne — not equals')),
-                DropdownMenuItem(value: 'gt', child: Text('gt — greater than')),
-                DropdownMenuItem(value: 'gte', child: Text('gte — ≥')),
-                DropdownMenuItem(value: 'lt', child: Text('lt — less than')),
-                DropdownMenuItem(value: 'lte', child: Text('lte — ≤')),
-              ],
-              onChanged: (v) => _set('op', v ?? 'eq'),
-            ),
-            const SizedBox(height: 8),
-            _FormField(
-              label: 'Value',
-              value: _data['value'] != null ? jsonEncode(_data['value']) : '',
-              hint: 'e.g. true, 42, "open"',
-              onChanged: (v) {
-                try {
-                  _set('value', jsonDecode(v));
-                } catch (_) {
-                  _set('value', v);
-                }
-              },
-            ),
-          ],
-        );
-
-      case 'mode_is':
-        return Column(
-          children: [
-            _ModePicker(
-              value: _data['mode_id'] as String?,
-              modes: widget.modeResolver.modes,
-              nullable: false,
-              nullLabel: '',
-              onChanged: (v) {
-                if (v != null) _set('mode_id', v);
-              },
-            ),
-            const SizedBox(height: 8),
-            SwitchListTile(
-              title: const Text('Mode is on'),
-              value: _data['on'] as bool? ?? true,
-              onChanged: (v) => _set('on', v),
-              contentPadding: EdgeInsets.zero,
-            ),
-          ],
-        );
-
-      case 'time_window':
-        return Column(
-          children: [
-            _FormField(
-              label: 'Start time (HH:MM or HH:MM:SS)',
-              value: _data['start'] as String? ?? '',
-              hint: '08:00:00',
-              onChanged: (v) => _set('start', v),
-            ),
-            const SizedBox(height: 8),
-            _FormField(
-              label: 'End time (HH:MM or HH:MM:SS)',
-              value: _data['end'] as String? ?? '',
-              hint: '22:00:00',
-              onChanged: (v) => _set('end', v),
-            ),
-          ],
-        );
-
-      case 'hub_variable':
-        return Column(
-          children: [
-            _FormField(
-              label: 'Variable name',
-              value: _data['name'] as String? ?? '',
-              onChanged: (v) => _set('name', v),
-            ),
-            const SizedBox(height: 8),
-            DropdownButtonFormField<String>(
-              value: _data['op'] as String? ?? 'eq',
-              decoration: const InputDecoration(
-                labelText: 'Operator',
-                border: OutlineInputBorder(),
-              ),
-              items: const [
-                DropdownMenuItem(value: 'eq', child: Text('eq — equals')),
-                DropdownMenuItem(value: 'ne', child: Text('ne — not equals')),
-                DropdownMenuItem(value: 'gt', child: Text('gt — greater than')),
-                DropdownMenuItem(value: 'gte', child: Text('gte — ≥')),
-                DropdownMenuItem(value: 'lt', child: Text('lt — less than')),
-                DropdownMenuItem(value: 'lte', child: Text('lte — ≤')),
-              ],
-              onChanged: (v) => _set('op', v ?? 'eq'),
-            ),
-            const SizedBox(height: 8),
-            _FormField(
-              label: 'Value',
-              value: _data['value'] != null ? jsonEncode(_data['value']) : '',
-              hint: 'e.g. true, 42, "hello"',
-              onChanged: (v) {
-                try {
-                  _set('value', jsonDecode(v));
-                } catch (_) {
-                  _set('value', v);
-                }
-              },
-            ),
-          ],
-        );
-
-      case 'time_elapsed':
-        return Column(
-          children: [
-            _DevicePicker(
-              hint: 'Select device',
-              value: readSingleDeviceRef(_data),
-              devices: widget.deviceResolver.devices,
-              onChanged: (v) {
-                setState(() => writeSingleDeviceRef(_data, v));
-              },
-            ),
-            const SizedBox(height: 8),
-            _FormField(
-              label: 'Attribute',
-              value: _data['attribute'] as String? ?? '',
-              hint: 'e.g. on, motion',
-              onChanged: (v) => _set('attribute', v),
-            ),
-            const SizedBox(height: 8),
-            _FormField(
-              label: 'Duration (seconds)',
-              value: (_data['duration_secs'] as num?)?.toString() ?? '',
-              hint: 'e.g. 300 (5 minutes)',
-              keyboardType: TextInputType.number,
-              onChanged: (v) => _set('duration_secs', int.tryParse(v) ?? 0),
-            ),
-          ],
-        );
-
-      case 'script_expression':
-        return TextFormField(
-          initialValue: _data['script'] as String? ?? '',
-          decoration: const InputDecoration(
-            labelText: 'Script',
-            border: OutlineInputBorder(),
-            helperText: 'Rhai expression returning a boolean',
-          ),
-          maxLines: 5,
-          style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
-          onChanged: (v) => _set('script', v),
-        );
-
-      case 'private_boolean_is':
-        return Column(
-          children: [
-            _FormField(
-              label: 'Boolean name',
-              value: _data['name'] as String? ?? '',
-              hint: 'e.g. my_flag',
-              onChanged: (v) => _set('name', v),
-            ),
-            const SizedBox(height: 8),
-            SwitchListTile(
-              title: const Text('Expected value'),
-              value: _data['value'] as bool? ?? true,
-              onChanged: (v) => _set('value', v),
-              contentPadding: EdgeInsets.zero,
-            ),
-          ],
-        );
-
-      case 'not':
-        _jsonCtrl.text = const JsonEncoder.withIndent('  ').convert(_data);
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Wraps a single condition and inverts its result. '
-              'Edit the nested condition as JSON:',
-              style: TextStyle(fontStyle: FontStyle.italic, fontSize: 12),
-            ),
-            const SizedBox(height: 8),
-            _buildJsonForm(),
-          ],
-        );
-
-      case 'and':
-      case 'or':
-      case 'xor':
-        _jsonCtrl.text = const JsonEncoder.withIndent('  ').convert(_data);
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '${_type.toUpperCase()} group — edit the nested conditions list as JSON:',
-              style: const TextStyle(fontStyle: FontStyle.italic, fontSize: 12),
-            ),
-            const SizedBox(height: 8),
-            _buildJsonForm(),
-          ],
-        );
-
-      default:
-        return _buildJsonForm();
-    }
-  }
-
-  Widget _buildJsonForm() {
-    return TextFormField(
-      controller: _jsonCtrl,
-      maxLines: 10,
-      style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
-      decoration: const InputDecoration(
-        border: OutlineInputBorder(),
-        labelText: 'Raw JSON',
-        helperText: 'Edit condition as raw JSON',
-      ),
-    );
-  }
-}
-
-// ─── Action editor dialog ─────────────────────────────────────────────────────
-
-class _ActionEditorDialog extends StatefulWidget {
-  final DeviceNameResolver deviceResolver;
-  final ModeNameResolver modeResolver;
-  final Map<String, dynamic>? initial;
-
-  const _ActionEditorDialog({
-    required this.deviceResolver,
-    required this.modeResolver,
-    required this.initial,
-  });
-
-  @override
-  State<_ActionEditorDialog> createState() => _ActionEditorDialogState();
-}
-
-class _ActionEditorDialogState extends State<_ActionEditorDialog> {
-  late String _type;
-  late Map<String, dynamic> _data;
-  final _jsonCtrl = TextEditingController();
-
-  static const _actionTypes = [
-    'set_device_state',
-    'delay',
-    'run_script',
-    'notify',
-    'log_message',
-    'fire_event',
-    'set_mode',
-    'set_hub_variable',
-    'run_rule_actions',
-    'parallel',
-    'conditional',
-    'repeat_until',
-    'exit_rule',
-    'stop_rule_chain',
-    'comment',
-  ];
-
-  static const _actionLabels = {
-    'set_device_state': 'Set Device State',
-    'delay': 'Delay',
-    'run_script': 'Run Script (Rhai)',
-    'notify': 'Notify',
-    'log_message': 'Log Message',
-    'fire_event': 'Fire Event',
-    'set_mode': 'Set Mode',
-    'set_hub_variable': 'Set Hub Variable',
-    'run_rule_actions': 'Run Rule Actions',
-    'parallel': 'Parallel (run actions concurrently)',
-    'conditional': 'Conditional (if/then/else)',
-    'repeat_until': 'Repeat Until',
-    'exit_rule': 'Exit Rule',
-    'stop_rule_chain': 'Stop Rule Chain',
-    'comment': 'Comment',
-  };
-
-  static const _jsonBlockTypes = {'parallel', 'conditional', 'repeat_until'};
-
-  static const _jsonBlockTemplates = {
-    'parallel':
-        '{\n  "type": "parallel",\n  "actions": [\n    {"type": "set_device_state", "device": "", "state": {}}\n  ]\n}',
-    'conditional':
-        '{\n  "type": "conditional",\n  "expression": "ctx.get(\\"on\\") == true",\n  "then_actions": [\n    {"type": "set_device_state", "device": "", "state": {}}\n  ],\n  "else_actions": []\n}',
-    'repeat_until':
-        '{\n  "type": "repeat_until",\n  "condition_expression": "ctx.get(\\"on\\") == true",\n  "max_iterations": 10,\n  "actions": [\n    {"type": "delay", "duration_secs": 1}\n  ]\n}',
-  };
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.initial != null) {
-      _data = Map<String, dynamic>.from(widget.initial!);
-      _type = _data['type'] as String? ?? 'set_device_state';
-    } else {
-      _type = 'set_device_state';
-      _data = {'type': _type};
-    }
-    if (!_actionTypes.contains(_type) || _jsonBlockTypes.contains(_type)) {
-      final template = _jsonBlockTemplates[_type];
-      _jsonCtrl.text =
-          template ?? const JsonEncoder.withIndent('  ').convert(_data);
-    }
-  }
-
-  @override
-  void dispose() {
-    _jsonCtrl.dispose();
-    super.dispose();
-  }
-
-  void _set(String key, dynamic value) {
-    setState(() => _data[key] = value);
-  }
-
-  void _remove(String key) {
-    setState(() => _data.remove(key));
-  }
-
-  Map<String, dynamic>? _build() {
-    if (!_actionTypes.contains(_type) || _jsonBlockTypes.contains(_type)) {
-      try {
-        return Map<String, dynamic>.from(jsonDecode(_jsonCtrl.text) as Map);
-      } catch (_) {
-        return null;
-      }
-    }
-    return Map<String, dynamic>.from(_data);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final isKnown =
-        _actionTypes.contains(_type) && !_jsonBlockTypes.contains(_type);
-    return AlertDialog(
-      title: Text(widget.initial == null ? 'Add Action' : 'Edit Action'),
-      content: SizedBox(
-        width: 480,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              DropdownButtonFormField<String>(
-                value: isKnown ? _type : null,
-                hint: isKnown ? null : Text(_type),
-                decoration: const InputDecoration(
-                  labelText: 'Action type',
-                  border: OutlineInputBorder(),
-                ),
-                items: [
-                  ..._actionTypes.map((t) => DropdownMenuItem(
-                        value: t,
-                        child: Text(_actionLabels[t] ?? t),
-                      )),
-                  if (!isKnown)
-                    DropdownMenuItem(
-                      value: _type,
-                      child: Text(_type),
-                    ),
-                ],
-                onChanged: (v) {
-                  if (v == null) return;
-                  setState(() {
-                    _type = v;
-                    _data = {'type': v};
-                    if (!_actionTypes.contains(v) ||
-                        _jsonBlockTypes.contains(v)) {
-                      _jsonCtrl.text = _jsonBlockTemplates[v] ??
-                          const JsonEncoder.withIndent('  ').convert(_data);
-                    }
-                  });
-                },
-              ),
-              const SizedBox(height: 16),
-              if (isKnown)
-                _buildKnownActionForm()
-              else if (_type == 'parallel')
-                _buildBlockJsonForm(
-                    'Runs all listed actions concurrently. Edit the "actions" array below.')
-              else if (_type == 'conditional')
-                _buildBlockJsonForm(
-                    'Evaluates a Rhai expression; runs then_actions if true, else_actions if false.')
-              else if (_type == 'repeat_until')
-                _buildBlockJsonForm(
-                    'Repeats actions until condition_expression is true (or max_iterations reached).')
-              else
-                _buildJsonForm(),
-            ],
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: () {
-            final result = _build();
-            Navigator.of(context).pop(result);
-          },
-          child: const Text('OK'),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildKnownActionForm() {
-    switch (_type) {
-      case 'set_device_state':
-        return Column(
-          children: [
-            _DevicePicker(
-              hint: 'Select device',
-              value: readSingleDeviceRef(_data),
-              devices: widget.deviceResolver.devices,
-              onChanged: (v) {
-                setState(() => writeSingleDeviceRef(_data, v));
-              },
-            ),
-            const SizedBox(height: 8),
-            TextFormField(
-              initialValue: _data['state'] != null
-                  ? const JsonEncoder.withIndent('  ').convert(_data['state'])
-                  : '{\n  "on": true\n}',
-              decoration: const InputDecoration(
-                labelText: 'State (JSON)',
-                border: OutlineInputBorder(),
-                helperText: 'e.g. {"on": true} or {"brightness": 80}',
-              ),
-              maxLines: 5,
-              style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
-              onChanged: (v) {
-                try {
-                  _set('state', jsonDecode(v));
-                } catch (_) {}
-              },
-            ),
-          ],
-        );
-
-      case 'delay':
-        return Column(
-          children: [
-            _FormField(
-              label: 'Duration (seconds)',
-              value: (_data['duration_secs'] as num?)?.toString() ?? '',
-              keyboardType: TextInputType.number,
-              onChanged: (v) => _set('duration_secs', num.tryParse(v) ?? 0),
-            ),
-            const SizedBox(height: 8),
-            SwitchListTile(
-              title: const Text('Cancelable'),
-              value: _data['cancelable'] as bool? ?? false,
-              onChanged: (v) => _set('cancelable', v),
-              contentPadding: EdgeInsets.zero,
-            ),
-            if (_data['cancelable'] == true) ...[
-              const SizedBox(height: 8),
-              _FormField(
-                label: 'Cancel key (optional)',
-                value: _data['cancel_key'] as String? ?? '',
-                hint: 'Unique key to cancel this delay',
-                onChanged: (v) =>
-                    v.isEmpty ? _remove('cancel_key') : _set('cancel_key', v),
-              ),
-            ],
-          ],
-        );
-
-      case 'notify':
-        return Column(
-          children: [
-            _FormField(
-              label: 'Channel',
-              value: _data['channel'] as String? ?? '',
-              hint: 'e.g. pushover, slack',
-              onChanged: (v) => _set('channel', v),
-            ),
-            const SizedBox(height: 8),
-            _FormField(
-              label: 'Message',
-              value: _data['message'] as String? ?? '',
-              onChanged: (v) => _set('message', v),
-              maxLines: 3,
-            ),
-            const SizedBox(height: 8),
-            _FormField(
-              label: 'Title (optional)',
-              value: _data['title'] as String? ?? '',
-              onChanged: (v) => v.isEmpty ? _remove('title') : _set('title', v),
-            ),
-          ],
-        );
-
-      case 'log_message':
-        return Column(
-          children: [
-            _FormField(
-              label: 'Message',
-              value: _data['message'] as String? ?? '',
-              onChanged: (v) => _set('message', v),
-              maxLines: 3,
-            ),
-            const SizedBox(height: 8),
-            DropdownButtonFormField<String>(
-              value: _data['level'] as String? ?? 'info',
-              decoration: const InputDecoration(
-                labelText: 'Log level',
-                border: OutlineInputBorder(),
-              ),
-              items: const [
-                DropdownMenuItem(value: 'trace', child: Text('Trace')),
-                DropdownMenuItem(value: 'debug', child: Text('Debug')),
-                DropdownMenuItem(value: 'info', child: Text('Info')),
-                DropdownMenuItem(value: 'warn', child: Text('Warn')),
-                DropdownMenuItem(value: 'error', child: Text('Error')),
-              ],
-              onChanged: (v) => _set('level', v ?? 'info'),
-            ),
-          ],
-        );
-
-      case 'fire_event':
-        return Column(
-          children: [
-            _FormField(
-              label: 'Event type',
-              value: _data['event_type'] as String? ?? '',
-              hint: 'e.g. my_custom_event',
-              onChanged: (v) => _set('event_type', v),
-            ),
-            const SizedBox(height: 8),
-            TextFormField(
-              initialValue: _data['payload'] != null
-                  ? const JsonEncoder.withIndent('  ').convert(_data['payload'])
-                  : '{}',
-              decoration: const InputDecoration(
-                labelText: 'Payload (JSON)',
-                border: OutlineInputBorder(),
-              ),
-              maxLines: 4,
-              style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
-              onChanged: (v) {
-                try {
-                  _set('payload', jsonDecode(v));
-                } catch (_) {}
-              },
-            ),
-          ],
-        );
-
-      case 'comment':
-        return _FormField(
-          label: 'Comment text',
-          value: _data['text'] as String? ?? '',
-          onChanged: (v) => _set('text', v),
-          maxLines: 3,
-        );
-
-      case 'set_mode':
-        return Column(
-          children: [
-            _ModePicker(
-              value: _data['mode_id'] as String?,
-              modes: widget.modeResolver.modes,
-              nullable: false,
-              nullLabel: '',
-              onChanged: (v) {
-                if (v != null) _set('mode_id', v);
-              },
-            ),
-            const SizedBox(height: 8),
-            DropdownButtonFormField<String>(
-              value: _data['command'] as String? ?? 'on',
-              decoration: const InputDecoration(
-                labelText: 'Command',
-                border: OutlineInputBorder(),
-              ),
-              items: const [
-                DropdownMenuItem(value: 'on', child: Text('On')),
-                DropdownMenuItem(value: 'off', child: Text('Off')),
-                DropdownMenuItem(value: 'toggle', child: Text('Toggle')),
-              ],
-              onChanged: (v) => _set('command', v ?? 'on'),
-            ),
-          ],
-        );
-
-      case 'set_hub_variable':
-        return Column(
-          children: [
-            _FormField(
-              label: 'Variable name',
-              value: _data['name'] as String? ?? '',
-              onChanged: (v) => _set('name', v),
-            ),
-            const SizedBox(height: 8),
-            _FormField(
-              label: 'Value',
-              value: _data['value'] != null ? jsonEncode(_data['value']) : '',
-              hint: 'e.g. true, 42, "hello"',
-              onChanged: (v) {
-                try {
-                  _set('value', jsonDecode(v));
-                } catch (_) {
-                  _set('value', v);
-                }
-              },
-            ),
-            const SizedBox(height: 8),
-            DropdownButtonFormField<String>(
-              value: _data['op'] as String? ?? 'set',
-              decoration: const InputDecoration(
-                labelText: 'Operation',
-                border: OutlineInputBorder(),
-              ),
-              items: const [
-                DropdownMenuItem(value: 'set', child: Text('Set')),
-                DropdownMenuItem(value: 'add', child: Text('Add')),
-                DropdownMenuItem(value: 'subtract', child: Text('Subtract')),
-                DropdownMenuItem(value: 'toggle', child: Text('Toggle')),
-                DropdownMenuItem(value: 'multiply', child: Text('Multiply')),
-                DropdownMenuItem(value: 'divide', child: Text('Divide')),
-              ],
-              onChanged: (v) => _set('op', v ?? 'set'),
-            ),
-          ],
-        );
-
-      case 'run_rule_actions':
-        return _FormField(
-          label: 'Rule ID (UUID)',
-          value: _data['rule_id'] as String? ?? '',
-          hint: 'The UUID of the rule whose actions to run',
-          onChanged: (v) => _set('rule_id', v),
-        );
-
-      case 'run_script':
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Rhai script. Use set_device_state(id, state), notify(channel, msg), http_get(url), publish_mqtt(topic, payload).',
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
-                  ?.copyWith(color: Theme.of(context).colorScheme.outline),
-            ),
-            const SizedBox(height: 8),
-            TextFormField(
-              initialValue: _data['script'] as String? ?? '',
-              decoration: const InputDecoration(
-                labelText: 'Script (Rhai)',
-                border: OutlineInputBorder(),
-                helperText: 'Script runs in a sandboxed Rhai environment',
-              ),
-              maxLines: 10,
-              style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
-              onChanged: (v) => _set('script', v),
-            ),
-            const SizedBox(height: 8),
-            _FormField(
-              label: 'Timeout seconds (optional)',
-              value: (_data['timeout_secs'] as num?)?.toString() ?? '',
-              keyboardType: TextInputType.number,
-              hint: 'Default: 5',
-              onChanged: (v) {
-                final n = int.tryParse(v);
-                if (n == null)
-                  _remove('timeout_secs');
-                else
-                  _set('timeout_secs', n);
-              },
-            ),
-          ],
-        );
-
-      case 'exit_rule':
-        return const Padding(
-          padding: EdgeInsets.symmetric(vertical: 8),
-          child: Text(
-            'Exits the current rule immediately. Subsequent actions in this rule will not run.',
-            style: TextStyle(fontStyle: FontStyle.italic),
-          ),
-        );
-
-      case 'stop_rule_chain':
-        return const Padding(
-          padding: EdgeInsets.symmetric(vertical: 8),
-          child: Text(
-            'Stops the entire rule chain. No further rules will be evaluated for this event.',
-            style: TextStyle(fontStyle: FontStyle.italic),
-          ),
-        );
-
-      default:
-        return _buildJsonForm();
-    }
-  }
-
-  Widget _buildBlockJsonForm(String description) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          description,
-          style: Theme.of(context)
-              .textTheme
-              .bodySmall
-              ?.copyWith(color: Theme.of(context).colorScheme.outline),
-        ),
-        const SizedBox(height: 8),
-        _buildJsonForm(),
-      ],
-    );
-  }
-
-  Widget _buildJsonForm() {
-    return TextFormField(
-      controller: _jsonCtrl,
-      maxLines: 10,
-      style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
-      decoration: const InputDecoration(
-        border: OutlineInputBorder(),
-        labelText: 'Raw JSON',
-        helperText: 'Edit action as raw JSON',
-      ),
-    );
-  }
-}
-
-// ─── Shared widgets ───────────────────────────────────────────────────────────
-
-/// A text form field with an outline border, suitable for trigger/condition/action forms.
-class _FormField extends StatelessWidget {
-  final String label;
-  final String value;
-  final String? hint;
-  final TextInputType keyboardType;
-  final int maxLines;
-  final ValueChanged<String> onChanged;
-
-  const _FormField({
-    required this.label,
-    required this.value,
-    required this.onChanged,
-    this.hint,
-    this.keyboardType = TextInputType.text,
-    this.maxLines = 1,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return TextFormField(
-      initialValue: value,
-      decoration: InputDecoration(
-        labelText: label,
-        hintText: hint,
-        border: const OutlineInputBorder(),
-      ),
-      keyboardType: keyboardType,
-      maxLines: maxLines,
-      onChanged: onChanged,
-    );
-  }
-}
-
-/// Device picker dropdown grouped visually by area.
-class _DevicePicker extends StatelessWidget {
-  final String hint;
-  final String? value;
-  final List<DeviceState> devices;
-  final ValueChanged<String?> onChanged;
-
-  const _DevicePicker({
-    required this.hint,
-    required this.value,
-    required this.devices,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    // Build area-grouped list: sort by area then name
-    final sorted = List<DeviceState>.from(devices)
-      ..sort((a, b) {
-        final aArea = a.area ?? '';
-        final bArea = b.area ?? '';
-        final cmp = aArea.compareTo(bArea);
-        return cmp != 0 ? cmp : a.displayName.compareTo(b.displayName);
-      });
-
-    DeviceState? selectedDevice;
-    final rawValue = (value != null && value!.isNotEmpty) ? value : null;
-    if (rawValue != null) {
-      final byRuleRef =
-          sorted.where((d) => d.ruleReference == rawValue).toList();
-      if (byRuleRef.isNotEmpty) {
-        selectedDevice = byRuleRef.first;
-      } else {
-        final byCanonical =
-            sorted.where((d) => d.canonicalName == rawValue).toList();
-        if (byCanonical.isNotEmpty) {
-          selectedDevice = byCanonical.first;
-        } else {
-          final byId = sorted.where((d) => d.id == rawValue).toList();
-          if (byId.isNotEmpty) {
-            selectedDevice = byId.first;
-          } else {
-            final byName = sorted.where((d) => d.name == rawValue).toList();
-            if (byName.length == 1) {
-              selectedDevice = byName.first;
-            }
-          }
-        }
-      }
-    }
-    final effectiveValue = selectedDevice?.ruleReference ?? rawValue;
-
-    final items = <DropdownMenuItem<String>>[];
-    String? lastArea;
-    for (final device in sorted) {
-      final area = device.area ?? 'No Area';
-      if (area != lastArea) {
-        // Area header (disabled item used as visual separator)
-        items.add(DropdownMenuItem<String>(
-          enabled: false,
-          value: '__header_$area',
-          child: Text(
-            area.toUpperCase(),
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.bold,
-              color: Theme.of(context).colorScheme.primary,
-            ),
-          ),
-        ));
-        lastArea = area;
-      }
-      items.add(DropdownMenuItem<String>(
-        value: device.ruleReference,
-        child: Padding(
-          padding: const EdgeInsets.only(left: 8),
-          child: Text(device.displayName),
-        ),
-      ));
-    }
-
-    // If current value isn't in the list, add it at the top
-    final knownRefs = sorted.map((d) => d.ruleReference).toSet();
-    if (effectiveValue != null && !knownRefs.contains(effectiveValue)) {
-      items.insert(
-        0,
-        DropdownMenuItem<String>(
-          value: effectiveValue,
-          child: Text(effectiveValue),
-        ),
-      );
-    }
-
-    return DropdownButtonFormField<String>(
-      value: effectiveValue,
-      hint: Text(hint),
-      isExpanded: true,
-      decoration: InputDecoration(
-        labelText: hint,
-        border: const OutlineInputBorder(),
-      ),
-      items: items,
-      onChanged: onChanged,
-    );
-  }
-}
-
-/// Mode picker dropdown.
-class _ModePicker extends StatelessWidget {
-  final String? value;
-  final List<ModeState> modes;
-  final bool nullable;
-  final String nullLabel;
-  final ValueChanged<String?> onChanged;
-
-  const _ModePicker({
-    required this.value,
-    required this.modes,
-    required this.nullable,
-    required this.nullLabel,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final items = <DropdownMenuItem<String>>[];
-    if (nullable) {
-      items.add(DropdownMenuItem<String>(
-        value: null,
-        child: Text(nullLabel.isEmpty ? '— any —' : nullLabel),
-      ));
-    }
-    for (final mode in modes) {
-      items.add(DropdownMenuItem<String>(
-        value: mode.id,
-        child: Text(mode.displayName),
-      ));
-    }
-    return DropdownButtonFormField<String>(
-      value: value,
-      decoration: const InputDecoration(
-        labelText: 'Mode',
-        border: OutlineInputBorder(),
-      ),
-      items: items,
-      onChanged: onChanged,
-    );
-  }
+  Widget build(BuildContext context) =>
+      _MetaLine(rule: rule, onChanged: onChanged);
 }

@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'core/providers/auth_provider.dart';
-import 'core/theme/app_theme.dart';
-import 'features/admin/admin_shell.dart';
+import 'design/skins.dart';
 import 'features/admin/areas_page.dart';
+import 'features/admin/audit_page.dart';
+import 'features/settings/system_config_page.dart';
 import 'features/admin/logs_page.dart';
-import 'features/admin/plugins_page.dart';
+import 'features/plugins/config_descriptor/config_preview_page.dart';
+import 'features/plugins/plugin_studio_page.dart';
+import 'features/plugins/plugins_page.dart';
 import 'features/admin/system_page.dart';
 import 'features/admin/users_page.dart';
 import 'features/auth/login_page.dart';
@@ -21,10 +25,17 @@ import 'features/devices/device_detail_page.dart';
 import 'features/devices/device_history_page.dart';
 import 'features/devices/device_list_page.dart';
 import 'features/events/events_page.dart';
+import 'features/media/media_page.dart';
+import 'features/glue/glue_page.dart';
 import 'features/modes/modes_page.dart';
+import 'features/pages/page_screen.dart';
 import 'features/scenes/scene_editor_page.dart';
 import 'features/scenes/scenes_page.dart';
-import 'shared/widgets/app_shell.dart';
+import 'shell/shell_scope.dart';
+import 'features/home/home_page.dart';
+import 'features/manage/manage_page.dart';
+import 'features/cameras/cameras_page.dart';
+import 'features/cameras/kiosk_wall_page.dart';
 
 class _RouterNotifier extends ChangeNotifier {
   _RouterNotifier(Ref ref) {
@@ -34,21 +45,73 @@ class _RouterNotifier extends ChangeNotifier {
 
 GoRouter _buildRouter(Ref ref) {
   final notifier = _RouterNotifier(ref);
+  // Honour the user's chosen Home page once, on the first landing — after that
+  // '/' is the house again, always reachable from the rail.
+  var honouredLanding = false;
   return GoRouter(
-    initialLocation: '/dashboard',
+    initialLocation: '/',
     refreshListenable: notifier,
     redirect: (context, state) async {
       final isLoggedIn = await ref.read(authProvider.future);
       final isLoginPage = state.matchedLocation == '/login';
       if (!isLoggedIn && !isLoginPage) return '/login';
-      if (isLoggedIn && isLoginPage) return '/dashboard';
+      if (isLoggedIn && isLoginPage) return '/';
+      if (isLoggedIn && !honouredLanding && state.matchedLocation == '/') {
+        honouredLanding = true;
+        final prefs = await SharedPreferences.getInstance();
+        final landing = prefs.getString('landing_route') ?? '/';
+        if (landing != '/') return landing;
+      }
       return null;
     },
     routes: [
       GoRoute(path: '/login', builder: (_, __) => const LoginPage()),
+      // The kiosk camera wall — OUTSIDE the shell, so it has no nav rail or bars.
+      // This is the URL a device (Fully Kiosk on a tablet) loads; the query
+      // string chooses the presentation. See KioskWallPage.
+      GoRoute(
+        path: '/wall',
+        builder: (_, state) => KioskWallPage(params: state.uri.queryParameters),
+      ),
       ShellRoute(
-        builder: (context, state, child) => AppShell(child: child),
+        // One scope for every route: it resolves which shell the location
+        // belongs to, applies that shell's skin, and wraps the page in the right
+        // chrome. The pages themselves know nothing about any of it.
+        builder: (context, state, child) => ShellScope(child: child),
         routes: [
+          // The wall panel. Same dashboard pages as everywhere else — only the
+          // shell and the skin differ.
+          GoRoute(
+            path: '/wall',
+            builder: (_, __) => const DashboardPage(),
+          ),
+          GoRoute(
+            path: '/wall/:id',
+            builder: (_, state) =>
+                DashboardViewPage(dashboardId: state.pathParameters['id']!),
+          ),
+          // The house is the app's one primary surface, and it is where you
+          // land. `/dashboard` used to bounce you here through a redirector.
+          GoRoute(path: '/', builder: (_, __) => const HomePage()),
+          // App-native dashboard pages — view + in-place editor, the replacement
+          // for the old /dashboards CMS. Same document, same grid engine.
+          GoRoute(
+            path: '/pages/:id',
+            builder: (_, state) =>
+                PageScreen(dashboardId: state.pathParameters['id']!),
+          ),
+          GoRoute(path: '/manage', builder: (_, __) => const ManagePage()),
+          // Configuration is a Manage section, not an /admin one: `/admin/*`
+          // still resolves to the pre-redesign chrome, and this screen belongs
+          // on the app-native shell with Plugins and Devices.
+          GoRoute(
+              path: '/config', builder: (_, __) => const SystemConfigPage()),
+          // Dev scaffold: renderer-first preview of the plugin config descriptor
+          // protocol (Sonos). Folds into the Studio config pane once settled.
+          GoRoute(
+              path: '/dev/config',
+              builder: (_, __) => const ConfigPreviewPage()),
+          GoRoute(path: '/cameras', builder: (_, __) => const CamerasPage()),
           GoRoute(
             path: '/dashboard',
             builder: (_, __) => const DashboardPage(),
@@ -71,7 +134,17 @@ GoRouter _buildRouter(Ref ref) {
             builder: (_, state) =>
                 DashboardEditorPage(dashboardId: state.pathParameters['id']!),
           ),
-          GoRoute(path: '/devices', builder: (_, __) => const DeviceListPage()),
+          GoRoute(
+              path: '/devices',
+              builder: (_, state) {
+                // `?plugin=<id>` scopes the list to that plugin (a plugin's
+                // "View all"). Key on it so a new scope remounts + re-seeds.
+                final plugin = state.uri.queryParameters['plugin'];
+                return DeviceListPage(
+                  key: ValueKey('devices-${plugin ?? 'all'}'),
+                  pluginId: plugin,
+                );
+              }),
           GoRoute(
               path: '/automations',
               builder: (_, __) => const AutomationListPage()),
@@ -94,7 +167,15 @@ GoRouter _buildRouter(Ref ref) {
               builder: (_, state) =>
                   SceneEditorPage(sceneId: state.pathParameters['id'])),
           GoRoute(path: '/modes', builder: (_, __) => const ModesPage()),
+          GoRoute(path: '/helpers', builder: (_, __) => const GluePage()),
           GoRoute(path: '/events', builder: (_, __) => const EventsPage()),
+          GoRoute(path: '/media', builder: (_, __) => const MediaPage()),
+          GoRoute(path: '/plugins', builder: (_, __) => const PluginsPage()),
+          GoRoute(
+            path: '/plugins/:id',
+            builder: (_, state) =>
+                PluginStudioPage(pluginId: state.pathParameters['id']!),
+          ),
           GoRoute(
               path: '/devices/:id',
               builder: (_, state) =>
@@ -103,24 +184,15 @@ GoRouter _buildRouter(Ref ref) {
               path: '/devices/:id/history',
               builder: (_, state) =>
                   DeviceHistoryPage(deviceId: state.pathParameters['id']!)),
-          // Admin sub-section — inner shell provides the tab bar.
-          ShellRoute(
-            builder: (context, state, child) => AdminShell(child: child),
-            routes: [
-              GoRoute(
-                  path: '/admin/users', builder: (_, __) => const UsersPage()),
-              GoRoute(
-                  path: '/admin/plugins',
-                  builder: (_, __) => const PluginsPage()),
-              GoRoute(
-                  path: '/admin/areas', builder: (_, __) => const AreasPage()),
-              GoRoute(
-                  path: '/admin/system',
-                  builder: (_, __) => const SystemPage()),
-              GoRoute(
-                  path: '/admin/logs', builder: (_, __) => const LogsPage()),
-            ],
-          ),
+          // Administration destinations — peers of the other Manage entries,
+          // each a standalone full page (the Admin tab shell is gone). Paths
+          // stay under /admin for stable deep links.
+          GoRoute(path: '/admin/users', builder: (_, __) => const UsersPage()),
+          GoRoute(path: '/admin/areas', builder: (_, __) => const AreasPage()),
+          GoRoute(
+              path: '/admin/system', builder: (_, __) => const SystemPage()),
+          GoRoute(path: '/admin/logs', builder: (_, __) => const LogsPage()),
+          GoRoute(path: '/admin/audit', builder: (_, __) => const AuditPage()),
         ],
       ),
     ],
@@ -135,10 +207,16 @@ class HomecoreApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(routerProvider);
+
     return MaterialApp.router(
       title: 'HomeCore',
-      theme: AppTheme.light,
-      darkTheme: AppTheme.dark,
+      // Only the base — every routed page is re-themed by [ShellScope], which
+      // knows which surface the route belongs to. This theme is what the login
+      // page (the one route outside any shell) renders in.
+      // Dark by default — the design was drawn dark, and the login page is the
+      // one route that renders outside any shell.
+      theme: hcTheme(HcSkin.midnight),
+      darkTheme: hcTheme(HcSkin.midnight),
       routerConfig: router,
     );
   }

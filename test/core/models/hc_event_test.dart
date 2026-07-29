@@ -62,8 +62,8 @@ void main() {
 
       expect(e.timestamp.isAfter(before.subtract(const Duration(seconds: 1))),
           isTrue);
-      expect(e.timestamp.isBefore(after.add(const Duration(seconds: 1))),
-          isTrue);
+      expect(
+          e.timestamp.isBefore(after.add(const Duration(seconds: 1))), isTrue);
     });
 
     test('defaults type to unknown on missing field', () {

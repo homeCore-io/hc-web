@@ -1,0 +1,29 @@
+# go2rtc streams — copy to go2rtc.yaml and add your cameras.
+#
+#   cp go2rtc.example.yaml go2rtc.yaml
+#
+# One entry per camera. The KEY is the stream name; it is exactly the `src` you
+# put in the hc-web camera URL:
+#
+#   camera name in hc-web:  http://<this-host>:1984/stream.html?src=driveway
+#                                                                     ▲
+#   streams: { driveway: ... }  ────────────────────────────────────┘
+#
+# Full source syntax: https://github.com/AlexxIT/go2rtc#module-streams
+
+streams:
+  driveway: rtsp://USER:PASS@192.168.1.10:554/h264Preview_01_main
+  # garage:  rtsp://USER:PASS@192.168.1.11:554/h264Preview_01_main
+  # garden:  rtsp://USER:PASS@192.168.1.12:554/h264Preview_01_main
+
+# No `api.origin` is needed for hc-web. It embeds go2rtc's own stream page in an
+# iframe (same-origin to go2rtc, so its WebSocket passes go2rtc's Origin check),
+# and it loads the still thumbnails as plain <img>, which browsers display
+# cross-origin without any CORS header. Set origin only if some OTHER client
+# calls go2rtc's API cross-origin.
+
+# webrtc:
+#   # Only needed with the BRIDGE networking alternative in compose.yaml. Under
+#   # host networking (the default), go2rtc finds the right address itself.
+#   candidates:
+#     - "192.168.1.50:8555"

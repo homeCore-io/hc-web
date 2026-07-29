@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../api/automations_api.dart';
-import '../models/rule.dart';
+import '../rules/rule.dart';
 import 'auth_provider.dart';
 
 final automationsApiProvider = Provider<AutomationsApi>((ref) {
@@ -19,30 +19,43 @@ class AutomationsNotifier extends AsyncNotifier<List<HcRule>> {
         () => ref.read(automationsApiProvider).listRules());
   }
 
+  /// Applies [change] to the rule with [id] in place, leaving the rest alone.
+  void _patchLocal(
+      bool Function(HcRule) matches, void Function(HcRule) change) {
+    final current = state.valueOrNull ?? [];
+    state = AsyncData([
+      for (final r in current)
+        if (matches(r)) (r.copy()..let(change)) else r,
+    ]);
+  }
+
   Future<void> toggle(String id, bool enabled) async {
     await ref.read(automationsApiProvider).patchRule(id, {'enabled': enabled});
-    final current = state.valueOrNull ?? [];
-    state = AsyncData(current.map((r) => r.id == id
-        ? HcRule(
-            id: r.id,
-            name: r.name,
-            enabled: enabled,
-            priority: r.priority,
-            cooldownSecs: r.cooldownSecs,
-            runMode: r.runMode,
-            maxQueue: r.maxQueue,
-            trigger: r.trigger,
-            conditions: r.conditions,
-            actions: r.actions,
-            tags: r.tags,
-            error: r.error)
-        : r).toList());
+    _patchLocal((r) => r.id == id, (r) => r.enabled = enabled);
   }
 
   Future<void> delete(String id) async {
     await ref.read(automationsApiProvider).deleteRule(id);
     final current = state.valueOrNull ?? [];
     state = AsyncData(current.where((r) => r.id != id).toList());
+  }
+
+  Future<HcRule> save(HcRule rule) async {
+    final api = ref.read(automationsApiProvider);
+    final saved = rule.id.isEmpty
+        ? await api.createRule(rule)
+        : await api.updateRule(rule);
+
+    final current = state.valueOrNull ?? [];
+    final next = [...current];
+    final existing = next.indexWhere((r) => r.id == saved.id);
+    if (existing >= 0) {
+      next[existing] = saved;
+    } else {
+      next.add(saved);
+    }
+    state = AsyncData(next);
+    return saved;
   }
 
   Future<String> clone(String id) async {
@@ -53,17 +66,18 @@ class AutomationsNotifier extends AsyncNotifier<List<HcRule>> {
   }
 
   Future<void> bulkSetEnabled(List<String> ids, bool enabled) async {
-    await ref.read(automationsApiProvider).bulkPatch({'ids': ids, 'enabled': enabled});
-    final current = state.valueOrNull ?? [];
-    state = AsyncData(current.map((r) =>
-      ids.contains(r.id) ? HcRule(
-        id: r.id, name: r.name, enabled: enabled,
-        priority: r.priority, cooldownSecs: r.cooldownSecs,
-        runMode: r.runMode, maxQueue: r.maxQueue,
-        trigger: r.trigger, conditions: r.conditions,
-        actions: r.actions, tags: r.tags, error: r.error,
-      ) : r).toList());
+    // A bulk PATCH with no selector is a 400 by design — it once disabled every
+    // rule in the house — so never call this with an empty id list.
+    if (ids.isEmpty) return;
+    await ref
+        .read(automationsApiProvider)
+        .bulkPatch({'ids': ids, 'enabled': enabled});
+    _patchLocal((r) => ids.contains(r.id), (r) => r.enabled = enabled);
   }
+}
+
+extension<T> on T {
+  void let(void Function(T) f) => f(this);
 }
 
 final automationsProvider =
