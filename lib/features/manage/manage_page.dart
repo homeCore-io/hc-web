@@ -91,6 +91,12 @@ class ManagePage extends ConsumerWidget {
     // distinct group under their own subheader, and carried Material glyphs as
     // the old Admin tabs.
     final adminEntries = <_Entry>[
+      const _Entry(
+        route: '/config',
+        icon: Icons.tune_rounded,
+        title: 'Configuration',
+        detail: 'Ports, storage, logging, integrations',
+      ),
       _Entry(
         route: '/admin/users',
         icon: Icons.people_outline,

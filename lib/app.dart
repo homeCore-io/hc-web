@@ -6,6 +6,7 @@ import 'core/providers/auth_provider.dart';
 import 'design/skins.dart';
 import 'features/admin/areas_page.dart';
 import 'features/admin/audit_page.dart';
+import 'features/settings/system_config_page.dart';
 import 'features/admin/logs_page.dart';
 import 'features/plugins/config_descriptor/config_preview_page.dart';
 import 'features/plugins/plugin_studio_page.dart';
@@ -100,6 +101,11 @@ GoRouter _buildRouter(Ref ref) {
                 PageScreen(dashboardId: state.pathParameters['id']!),
           ),
           GoRoute(path: '/manage', builder: (_, __) => const ManagePage()),
+          // Configuration is a Manage section, not an /admin one: `/admin/*`
+          // still resolves to the pre-redesign chrome, and this screen belongs
+          // on the app-native shell with Plugins and Devices.
+          GoRoute(
+              path: '/config', builder: (_, __) => const SystemConfigPage()),
           // Dev scaffold: renderer-first preview of the plugin config descriptor
           // protocol (Sonos). Folds into the Studio config pane once settled.
           GoRoute(
