@@ -169,6 +169,28 @@ class SystemDataApi {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
+  /// Send a message through a channel, so a person can find out whether it
+  /// works without waiting for a rule to fire.
+  ///
+  /// Returns core's own words on failure: a channel that is not configured and
+  /// an SMTP server that refused the credentials are different problems, and
+  /// the message is the whole reason to press the button.
+  Future<({bool sent, String detail})> testNotifyChannel(String channel) async {
+    try {
+      final res = await client.dio.post('/notify/test', data: {
+        'channel': channel,
+      });
+      final body = Map<String, dynamic>.from(res.data as Map);
+      return (sent: body['sent'] == true, detail: 'Sent.');
+    } on DioException catch (e) {
+      final data = e.response?.data;
+      final detail = data is Map && data['error'] != null
+          ? '${data['error']}'
+          : (e.message ?? 'Unknown error');
+      return (sent: false, detail: detail);
+    }
+  }
+
   Future<List<Map<String, dynamic>>> calendars() async {
     final res = await client.dio.get('/calendars');
     return [

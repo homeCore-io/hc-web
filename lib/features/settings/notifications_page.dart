@@ -71,9 +71,8 @@ class NotificationsPage extends ConsumerWidget {
                       channel: c,
                       onEdit: () => _edit(context, ref, channels, c),
                       onDelete: () => _delete(context, ref, channels, c),
+                      onTest: () => _test(context, ref, c),
                     ),
-                  SizedBox(height: HcTokens.of(context).space.md),
-                  _TestNote(),
                 ],
               ),
       ),
@@ -142,6 +141,31 @@ class NotificationsPage extends ConsumerWidget {
     );
   }
 
+  /// Prove the channel, or say why not.
+  ///
+  /// A channel only counts as configured once something has arrived at the
+  /// other end. Core sends through the same service the rule executor uses, so
+  /// a success here means a rule would succeed too.
+  Future<void> _test(
+    BuildContext context,
+    WidgetRef ref,
+    NotifyChannel channel,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(
+      SnackBar(content: Text('Sending through “${channel.name}”…')),
+    );
+    final result =
+        await ref.read(systemDataApiProvider).testNotifyChannel(channel.name);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(SnackBar(
+      content: Text(result.sent
+          ? 'Sent through “${channel.name}”. Check the device it goes to.'
+          : 'Could not send: ${result.detail}'),
+      duration: Duration(seconds: result.sent ? 4 : 10),
+    ));
+  }
+
   /// Send the whole list, because that is what replacing a block means.
   Future<void> _write(
     ScaffoldMessengerState messenger,
@@ -170,11 +194,13 @@ class _ChannelRow extends StatelessWidget {
     required this.channel,
     required this.onEdit,
     required this.onDelete,
+    required this.onTest,
   });
 
   final NotifyChannel channel;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
+  final VoidCallback onTest;
 
   @override
   Widget build(BuildContext context) {
@@ -221,6 +247,7 @@ class _ChannelRow extends StatelessWidget {
                     style: TextStyle(
                         fontSize: 12.5, color: t.surface.onBaseMuted)),
               ),
+            TextButton(onPressed: onTest, child: const Text('Send test')),
             TextButton(onPressed: onEdit, child: const Text('Edit')),
             IconButton(
               icon:
@@ -287,28 +314,6 @@ class _Empty extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-/// Says plainly that there is no test button, and why.
-class _TestNote extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final t = HcTokens.of(context);
-    return Row(
-      children: [
-        Icon(Icons.info_outline, size: 15, color: t.surface.onBaseMuted),
-        SizedBox(width: t.space.sm),
-        Expanded(
-          child: Text(
-            'There is no send-test yet: core has no endpoint for it, and the '
-            'notification service is not reachable from the API. Until there '
-            'is one, a channel is proven by a rule firing.',
-            style: TextStyle(fontSize: 12, color: t.surface.onBaseMuted),
-          ),
-        ),
-      ],
     );
   }
 }
