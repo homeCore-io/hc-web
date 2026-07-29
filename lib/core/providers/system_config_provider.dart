@@ -8,6 +8,17 @@ final systemConfigApiProvider = Provider<SystemConfigApi>((ref) {
   return SystemConfigApi(ref.watch(homecoreClientProvider));
 });
 
+final systemDataApiProvider = Provider<SystemDataApi>((ref) {
+  return SystemDataApi(ref.watch(homecoreClientProvider));
+});
+
+/// Calendars core has loaded. Not part of the config bundle: they live in
+/// core's own store, fetched from a URL, not in homecore.toml.
+final calendarsProvider =
+    FutureProvider<List<Map<String, dynamic>>>((ref) async {
+  return ref.watch(systemDataApiProvider).calendars();
+});
+
 /// The file and the description of it, fetched together.
 ///
 /// Together because neither is useful alone: values with no descriptor is a

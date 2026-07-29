@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:dio/dio.dart';
 
 import 'homecore_client.dart';
@@ -118,5 +120,75 @@ class SystemConfigApi {
     } catch (_) {
       return false;
     }
+  }
+}
+
+/// Backup, restore and calendars — the file-shaped half of Administration.
+///
+/// Separate from [SystemConfigApi] because none of it touches homecore.toml:
+/// a backup is a zip of the databases, and a calendar is fetched from a URL
+/// into core's own store.
+class SystemDataApi {
+  SystemDataApi(this.client);
+  final HomecoreClient client;
+
+  /// The whole house as a zip: both databases, the config, the rules.
+  ///
+  /// Returned as bytes rather than a URL because the endpoint is
+  /// authenticated — a plain link would arrive without the token.
+  Future<(String, Uint8List)> backup() async {
+    final res = await client.dio.post<List<int>>(
+      '/system/backup',
+      options: Options(
+        responseType: ResponseType.bytes,
+        // A quarter-gigabyte zip is built and streamed; the default 10s
+        // receive timeout cuts it off partway and looks like a server fault.
+        receiveTimeout: const Duration(minutes: 10),
+      ),
+    );
+    final disposition = res.headers.value('content-disposition') ?? '';
+    final match = RegExp('filename="?([^";]+)').firstMatch(disposition);
+    final name = match?.group(1) ?? 'homecore-backup.zip';
+    return (name, Uint8List.fromList(res.data ?? const []));
+  }
+
+  /// Replace everything from a backup. Core answers with what it restored.
+  Future<Map<String, dynamic>> restore(Uint8List zip) async {
+    final res = await client.dio.post(
+      '/system/restore',
+      data: Stream.fromIterable([zip]),
+      options: Options(
+        headers: {
+          'content-type': 'application/zip',
+          'content-length': zip.length,
+        },
+        sendTimeout: const Duration(minutes: 10),
+        receiveTimeout: const Duration(minutes: 10),
+      ),
+    );
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<List<Map<String, dynamic>>> calendars() async {
+    final res = await client.dio.get('/calendars');
+    return [
+      for (final c in (res.data as List)) Map<String, dynamic>.from(c as Map),
+    ];
+  }
+
+  Future<void> addCalendar({
+    required String url,
+    String? name,
+    int? refreshHours,
+  }) async {
+    await client.dio.post('/calendars/fetch', data: {
+      'url': url,
+      if (name != null && name.isNotEmpty) 'name': name,
+      if (refreshHours != null) 'refresh_hours': refreshHours,
+    });
+  }
+
+  Future<void> deleteCalendar(String id) async {
+    await client.dio.delete('/calendars/$id');
   }
 }

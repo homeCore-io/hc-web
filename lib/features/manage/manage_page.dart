@@ -104,10 +104,16 @@ class ManagePage extends ConsumerWidget {
         detail: 'Email, Pushover, Telegram',
       ),
       const _Entry(
-        route: '/notifications',
-        icon: Icons.notifications_none_rounded,
-        title: 'Notifications',
-        detail: 'Email, Pushover, Telegram',
+        route: '/data',
+        icon: Icons.inventory_2_outlined,
+        title: 'Data',
+        detail: 'Backups and calendars',
+      ),
+      const _Entry(
+        route: '/maintenance',
+        icon: Icons.cleaning_services_outlined,
+        title: 'Maintenance',
+        detail: 'Broken rules, unclaimed devices',
       ),
       _Entry(
         route: '/admin/users',
