@@ -74,6 +74,23 @@ class SystemConfigApi {
         Map<String, dynamic>.from(res.data as Map));
   }
 
+  /// Replace an entire `[[section]]` array-of-tables.
+  ///
+  /// Field-level patching cannot express a list: removing the second of three
+  /// channels is not a change to any one key. Core replaces the block whole and
+  /// leaves every other section alone, so the caller must send the full list —
+  /// including the rows it did not touch.
+  Future<ConfigSaveResult> putArrayOfTables(
+    String section,
+    List<Map<String, dynamic>> items,
+  ) async {
+    final res = await client.dio.put('/system/config', data: {
+      'array_of_tables': {'section': section, 'items': items},
+    });
+    return ConfigSaveResult.fromJson(
+        Map<String, dynamic>.from(res.data as Map));
+  }
+
   /// Replace the file wholesale — the raw editor's save.
   Future<ConfigSaveResult> putRaw(String raw) async {
     final res = await client.dio.put('/system/config', data: {'raw': raw});

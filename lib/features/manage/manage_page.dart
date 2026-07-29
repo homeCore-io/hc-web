@@ -97,6 +97,18 @@ class ManagePage extends ConsumerWidget {
         title: 'Configuration',
         detail: 'Ports, storage, logging, integrations',
       ),
+      const _Entry(
+        route: '/notifications',
+        icon: Icons.notifications_none_rounded,
+        title: 'Notifications',
+        detail: 'Email, Pushover, Telegram',
+      ),
+      const _Entry(
+        route: '/notifications',
+        icon: Icons.notifications_none_rounded,
+        title: 'Notifications',
+        detail: 'Email, Pushover, Telegram',
+      ),
       _Entry(
         route: '/admin/users',
         icon: Icons.people_outline,
