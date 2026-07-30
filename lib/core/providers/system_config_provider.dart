@@ -12,6 +12,31 @@ final systemDataApiProvider = Provider<SystemDataApi>((ref) {
   return SystemDataApi(ref.watch(homecoreClientProvider));
 });
 
+final systemLogLevelApiProvider = Provider<SystemLogLevelApi>((ref) {
+  return SystemLogLevelApi(ref.watch(homecoreClientProvider));
+});
+
+/// Core's live log filter. Null data means core has no reloadable filter —
+/// distinct from an error, and the screen renders it differently.
+class LogLevelNotifier extends AsyncNotifier<String?> {
+  @override
+  Future<String?> build() => ref.read(systemLogLevelApiProvider).get();
+
+  /// Apply a directive, then re-read rather than assume: core normalises what
+  /// it parsed, and the field should show what is actually running.
+  Future<({bool ok, String detail})> apply(String directive) async {
+    final res = await ref.read(systemLogLevelApiProvider).set(directive);
+    if (res.ok) {
+      state = await AsyncValue.guard(
+          () => ref.read(systemLogLevelApiProvider).get());
+    }
+    return res;
+  }
+}
+
+final logLevelProvider =
+    AsyncNotifierProvider<LogLevelNotifier, String?>(LogLevelNotifier.new);
+
 /// Calendars core has loaded. Not part of the config bundle: they live in
 /// core's own store, fetched from a URL, not in homecore.toml.
 final calendarsProvider =

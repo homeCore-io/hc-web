@@ -9,6 +9,7 @@ import '../../core/providers/client_error_log_provider.dart';
 import '../../core/providers/time_display_provider.dart';
 import '../../design/tokens.dart';
 import '../../shared/widgets/section_scaffold.dart';
+import 'log_level_control.dart';
 
 final _logsApiProvider = Provider.autoDispose<LogsApi>((ref) {
   final api = LogsApi();
@@ -202,7 +203,15 @@ class _ServerLogsPageState extends ConsumerState<_ServerLogsPage> {
                   ),
                 ),
               ),
+              SizedBox(width: t.space.sm),
+              const LogLevelControl(),
               const Spacer(),
+              // Labelled, because the chips next to it look like the same kind
+              // of control as the server level and are not: these hide lines
+              // that already arrived.
+              Text('Show',
+                  style: TextStyle(color: t.surface.onBaseMuted, fontSize: 11)),
+              const SizedBox(width: 6),
               for (final level in _levels)
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 2),
