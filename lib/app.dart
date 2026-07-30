@@ -3,16 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'core/providers/auth_provider.dart';
+import 'features/admin/administration_shell.dart';
 import 'design/skins.dart';
-import 'features/admin/areas_page.dart';
-import 'features/admin/audit_page.dart';
-import 'features/settings/system_config_page.dart';
-import 'features/admin/logs_page.dart';
 import 'features/plugins/config_descriptor/config_preview_page.dart';
 import 'features/plugins/plugin_studio_page.dart';
 import 'features/plugins/plugins_page.dart';
-import 'features/admin/system_page.dart';
-import 'features/admin/users_page.dart';
 import 'features/auth/login_page.dart';
 import 'features/automations/automation_editor_page.dart';
 import 'features/automations/automation_groups_page.dart';
@@ -101,11 +96,17 @@ GoRouter _buildRouter(Ref ref) {
                 PageScreen(dashboardId: state.pathParameters['id']!),
           ),
           GoRoute(path: '/manage', builder: (_, __) => const ManagePage()),
-          // Configuration is a Manage section, not an /admin one: `/admin/*`
-          // still resolves to the pre-redesign chrome, and this screen belongs
-          // on the app-native shell with Plugins and Devices.
+          // The old top-level paths for what are now Administration sections.
+          // Kept as redirects rather than deleted: they were live, they are in
+          // bookmarks and in the command palette, and a link that used to work
+          // should keep working rather than 404 into the router's error page.
+          GoRoute(path: '/config', redirect: (_, __) => '/admin/config'),
           GoRoute(
-              path: '/config', builder: (_, __) => const SystemConfigPage()),
+              path: '/notifications',
+              redirect: (_, __) => '/admin/notifications'),
+          GoRoute(path: '/data', redirect: (_, __) => '/admin/data'),
+          GoRoute(
+              path: '/maintenance', redirect: (_, __) => '/admin/maintenance'),
           // Dev scaffold: renderer-first preview of the plugin config descriptor
           // protocol (Sonos). Folds into the Studio config pane once settled.
           GoRoute(
@@ -184,15 +185,16 @@ GoRouter _buildRouter(Ref ref) {
               path: '/devices/:id/history',
               builder: (_, state) =>
                   DeviceHistoryPage(deviceId: state.pathParameters['id']!)),
-          // Administration destinations — peers of the other Manage entries,
-          // each a standalone full page (the Admin tab shell is gone). Paths
-          // stay under /admin for stable deep links.
-          GoRoute(path: '/admin/users', builder: (_, __) => const UsersPage()),
-          GoRoute(path: '/admin/areas', builder: (_, __) => const AreasPage()),
-          GoRoute(
-              path: '/admin/system', builder: (_, __) => const SystemPage()),
-          GoRoute(path: '/admin/logs', builder: (_, __) => const LogsPage()),
-          GoRoute(path: '/admin/audit', builder: (_, __) => const AuditPage()),
+          // Administration: one shell, one real route per section, generated
+          // from the section list so adding a section cannot forget its route.
+          // Deliberately not `/admin/:section`, which would swallow a typo and
+          // quietly render System for a path nobody defined.
+          GoRoute(path: '/admin', redirect: (_, __) => '/admin/system'),
+          for (final s in AdministrationShell.sections)
+            GoRoute(
+              path: s.route,
+              builder: (_, __) => AdministrationShell(section: s.id),
+            ),
         ],
       ),
     ],

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers/system_config_provider.dart';
 import '../../core/web/browser_files.dart';
 import '../../design/components/hc_surface.dart';
+import '../../core/providers/system_health_provider.dart';
 import '../../design/tokens.dart';
 import '../../shared/widgets/section_scaffold.dart';
 
@@ -41,7 +42,8 @@ class _DataPageState extends ConsumerState<DataPage> {
           _Card(
             title: 'Download a backup',
             body: 'Both databases, homecore.toml, modes and every rule, as one '
-                'zip. The history database is nearly all of the size.',
+                'zip. The history database is nearly all of the size.'
+                '${_lastBackupSentence(ref)}',
             action: FilledButton(
               onPressed: _working ? null : _backup,
               child: Text(_working ? 'Working…' : 'Download'),
@@ -100,6 +102,24 @@ class _DataPageState extends ConsumerState<DataPage> {
         ],
       ),
     );
+  }
+
+  /// Appended to the download card so the answer to "do I need to?" is on the
+  /// button that does it.
+  ///
+  /// Core derives this from the audit log, which is pruned, so silence means
+  /// "nothing on record" rather than "never" — and an empty string is better
+  /// than a sentence asserting either.
+  String _lastBackupSentence(WidgetRef ref) {
+    final status = ref.watch(systemStatusProvider).valueOrNull;
+    if (status == null) return '';
+    final raw = status['last_backup_at'];
+    if (raw is! String) return ' No backup on record for this house.';
+    final at = DateTime.tryParse(raw)?.toLocal();
+    if (at == null) return '';
+    final days = DateTime.now().difference(at).inDays;
+    if (days == 0) return ' Last backed up today.';
+    return ' Last backed up $days day${days == 1 ? '' : 's'} ago.';
   }
 
   Future<void> _backup() async {

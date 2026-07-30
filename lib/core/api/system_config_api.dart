@@ -123,6 +123,51 @@ class SystemConfigApi {
   }
 }
 
+/// Core's live log filter: `GET`/`PUT /system/log-level`.
+///
+/// Separate from [SystemConfigApi] because it does not touch homecore.toml at
+/// all. Core reloads the tracing filter in place and writes nothing, so the
+/// setting is **runtime only** and a restart returns to `[logging] level` in
+/// the file. Nothing in the response says so, so the screen has to.
+class SystemLogLevelApi {
+  SystemLogLevelApi(this.client);
+  final HomecoreClient client;
+
+  /// The active directive, or null when this core has no reloadable filter.
+  ///
+  /// Core answers 503 for that — a real state, not an error: the process is
+  /// healthy, the knob simply is not there, and the screen should say so
+  /// rather than show a control that cannot work.
+  Future<String?> get() async {
+    try {
+      final res = await client.dio.get('/system/log-level');
+      final data = Map<String, dynamic>.from(res.data as Map);
+      return data['level'] as String?;
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 503) return null;
+      rethrow;
+    }
+  }
+
+  /// Apply [directive].
+  ///
+  /// Core parses it as an EnvFilter and answers 400 with the parse error when
+  /// it will not — that message names the part it choked on, which is the
+  /// whole value of showing it, so it comes back rather than throwing.
+  Future<({bool ok, String detail})> set(String directive) async {
+    try {
+      await client.dio.put('/system/log-level', data: {'level': directive});
+      return (ok: true, detail: 'Applied.');
+    } on DioException catch (e) {
+      final data = e.response?.data;
+      final detail = data is Map && data['error'] != null
+          ? '${data['error']}'
+          : (e.message ?? 'Unknown error');
+      return (ok: false, detail: detail);
+    }
+  }
+}
+
 /// Backup, restore and calendars — the file-shaped half of Administration.
 ///
 /// Separate from [SystemConfigApi] because none of it touches homecore.toml:

@@ -3,23 +3,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers/auth_provider.dart';
+import '../../core/providers/system_health_provider.dart';
 import '../../core/providers/time_display_provider.dart';
 import '../../design/components/hc_surface.dart';
 import '../../design/tokens.dart';
 import '../../shared/widgets/section_scaffold.dart';
 
-final _healthProvider = FutureProvider<Map<String, dynamic>>((ref) async {
-  final client = ref.read(homecoreClientProvider);
-  final response = await client.dio.get('/health');
-  return Map<String, dynamic>.from(response.data as Map);
-});
-
-final _statusProvider = FutureProvider<Map<String, dynamic>>((ref) async {
-  final client = ref.read(homecoreClientProvider);
-  final response = await client.dio.get('/system/status');
-  return Map<String, dynamic>.from(response.data as Map);
-});
-
+// Both live in core/providers now: Administration's header shows the same
+// health above every section, and two private copies meant two requests for
+// one answer.
 class SystemPage extends ConsumerStatefulWidget {
   const SystemPage({super.key});
 
@@ -34,7 +26,7 @@ class _SystemPageState extends ConsumerState<SystemPage> {
   void initState() {
     super.initState();
     _timer = Timer.periodic(const Duration(seconds: 30), (_) {
-      ref.invalidate(_statusProvider);
+      ref.invalidate(systemStatusProvider);
     });
   }
 
@@ -47,8 +39,8 @@ class _SystemPageState extends ConsumerState<SystemPage> {
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
-    final healthAsync = ref.watch(_healthProvider);
-    final statusAsync = ref.watch(_statusProvider);
+    final healthAsync = ref.watch(systemHealthProvider);
+    final statusAsync = ref.watch(systemStatusProvider);
     final currentUser = ref.watch(currentUserProvider).valueOrNull;
     final isUtc = ref.watch(timeUtcProvider);
 
@@ -76,8 +68,8 @@ class _SystemPageState extends ConsumerState<SystemPage> {
             icon: Icon(Icons.refresh, color: tk.surface.onBaseMuted),
             tooltip: 'Refresh',
             onPressed: () {
-              ref.invalidate(_healthProvider);
-              ref.invalidate(_statusProvider);
+              ref.invalidate(systemHealthProvider);
+              ref.invalidate(systemStatusProvider);
             },
           );
         }),

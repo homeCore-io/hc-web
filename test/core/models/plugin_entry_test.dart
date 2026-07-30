@@ -135,4 +135,39 @@ void main() {
           isFalse);
     });
   });
+
+  group('the log level core last asked for', () {
+    test('absent means nobody asked, not "info"', () {
+      final p = PluginEntry.fromJson(const {
+        'plugin_id': 'plugin.wled',
+        'status': 'active',
+      });
+      // Core omits log_level until something sets it. Defaulting to a level
+      // here would make the screen assert a value it never read.
+      expect(p.logLevel, isNull);
+    });
+
+    test('a directive round-trips whole, targets and all', () {
+      final p = PluginEntry.fromJson(const {
+        'plugin_id': 'plugin.sonos',
+        'status': 'active',
+        'log_level': 'debug,rumqttd=info',
+      });
+      expect(p.logLevel, 'debug,rumqttd=info');
+    });
+
+    test('copyWith keeps it', () {
+      // copyWith only names status and enabled, so every other field is carried
+      // by hand — which is exactly how one goes missing.
+      final p = PluginEntry.fromJson(const {
+        'plugin_id': 'plugin.hue',
+        'status': 'active',
+        'log_level': 'trace',
+        'supports_management': true,
+      });
+      final next = p.copyWith(status: 'offline');
+      expect(next.logLevel, 'trace');
+      expect(next.supportsManagement, isTrue);
+    });
+  });
 }

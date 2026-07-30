@@ -16,6 +16,7 @@ class PluginEntry {
     this.lastHeartbeat,
     this.configPath,
     this.supportsManagement = false,
+    this.logLevel,
   });
 
   final String pluginId;
@@ -43,6 +44,15 @@ class PluginEntry {
   final String? configPath;
   final bool supportsManagement;
 
+  /// The log filter core last *asked* this plugin for, and nothing more.
+  ///
+  /// Core records it when the request is sent and never hears back — the reply
+  /// is dropped on the way — so this is intent, not confirmation. Null means
+  /// nobody has asked during this run of core: the plugin is on whatever
+  /// `logging.level` in its own config said at boot. Core also forgets it when
+  /// the plugin re-registers, which is what a plugin restart does.
+  final String? logLevel;
+
   factory PluginEntry.fromJson(Map<String, dynamic> json) => PluginEntry(
         pluginId: json['plugin_id'] as String,
         status: json['status'] as String? ?? 'unknown',
@@ -56,6 +66,7 @@ class PluginEntry {
         lastHeartbeat: DateTime.tryParse('${json['last_heartbeat'] ?? ''}'),
         configPath: json['config_path'] as String?,
         supportsManagement: json['supports_management'] as bool? ?? false,
+        logLevel: json['log_level'] as String?,
       );
 
   PluginEntry copyWith({String? status, bool? enabled}) => PluginEntry(
@@ -71,6 +82,7 @@ class PluginEntry {
         lastHeartbeat: lastHeartbeat,
         configPath: configPath,
         supportsManagement: supportsManagement,
+        logLevel: logLevel,
       );
 
   bool get isActive => status == 'active';

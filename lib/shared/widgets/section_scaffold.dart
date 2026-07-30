@@ -4,16 +4,36 @@ import 'package:go_router/go_router.dart';
 import '../../design/skins.dart';
 import '../../design/tokens.dart';
 
+/// Marks everything below it as living inside a shell that already draws the
+/// page chrome.
+///
+/// A section reached on its own is a page: back arrow, big title, the lot. The
+/// same section reached inside Administration is a *pane* — the shell owns the
+/// frame, and a second back arrow pointing at Manage from inside a screen you
+/// did not reach from Manage is just wrong. Rather than thread a flag through
+/// nine constructors, the shell declares itself here and [SectionScaffold]
+/// reads it, so a page is written once and renders correctly either way.
+class SectionShellScope extends InheritedWidget {
+  const SectionShellScope({super.key, required super.child});
+
+  static bool of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<SectionShellScope>() != null;
+
+  @override
+  bool updateShouldNotify(SectionShellScope oldWidget) => false;
+}
+
 /// One header for every Manage section — house *and* admin.
 ///
-/// The nav rail has only two destinations (Home and Manage), so a section
-/// reached from Manage has no rail entry of its own: the single way back up is
-/// an in-page back arrow. That arrow used to exist only on the admin pages (the
-/// old `AdminScaffold`) and was missing from the studio surfaces like Plugins,
-/// which is exactly how the app grew two header patterns where only one
-/// navigated. This is that one pattern: back arrow → Manage, a title, optional
-/// inline stats, and optional actions, rendered in the Midnight skin the
-/// app-native surfaces use regardless of the shell around them.
+/// Reached on its own it is a page: back arrow → Manage, a title, optional
+/// inline stats and actions, in the Midnight skin the app-native surfaces use
+/// regardless of the shell around them. That arrow used to exist only on the
+/// admin pages (the old `AdminScaffold`) and was missing from studio surfaces
+/// like Plugins, which is how the app grew two header patterns where only one
+/// navigated.
+///
+/// Reached inside [SectionShellScope] the same declarations render as a pane —
+/// see [_pane]. One call site, both shapes.
 class SectionScaffold extends StatelessWidget {
   const SectionScaffold({
     super.key,
@@ -23,10 +43,15 @@ class SectionScaffold extends StatelessWidget {
     this.stats = const [],
     this.actions = const [],
     this.onBack,
+    this.breadcrumbs = const [],
   });
 
   final String title;
   final String? subtitle;
+
+  /// Trail above the title — `Manage › Administration`. The last entry is the
+  /// current place and is not repeated here; [title] is it.
+  final List<String> breadcrumbs;
 
   /// Live counts shown inline beside the title, à la the Plugins header.
   final List<SectionStat> stats;
@@ -40,6 +65,7 @@ class SectionScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (SectionShellScope.of(context)) return _pane(context);
     return Theme(
       data: hcTheme(HcSkin.midnight),
       child: Builder(builder: (context) {
@@ -69,6 +95,14 @@ class SectionScaffold extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
                           children: [
+                            if (breadcrumbs.isNotEmpty)
+                              Text(
+                                '${breadcrumbs.join('  ›  ')}  ›',
+                                style: TextStyle(
+                                  color: t.surface.onBaseMuted,
+                                  fontSize: 11.5,
+                                ),
+                              ),
                             Text(
                               title,
                               style: TextStyle(
@@ -111,6 +145,65 @@ class SectionScaffold extends StatelessWidget {
           ),
         );
       }),
+    );
+  }
+
+  /// The same section, drawn as a pane: no back arrow and no page-sized title,
+  /// because the shell above already shows both. Everything the page declared
+  /// about itself — its name, what it is for, its counts, its actions — is
+  /// still here, one step down in the hierarchy where it belongs.
+  Widget _pane(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: EdgeInsets.fromLTRB(
+              t.space.lg, t.space.lg, t.space.lg, t.space.sm),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Flexible(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        color: t.surface.onBase,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    if (subtitle != null)
+                      Text(
+                        subtitle!,
+                        style: TextStyle(
+                          color: t.surface.onBaseMuted,
+                          fontSize: 12,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              if (stats.isNotEmpty) ...[
+                const SizedBox(width: 18),
+                Flexible(
+                  child: Wrap(
+                    spacing: 16,
+                    runSpacing: 6,
+                    children: [for (final s in stats) _Stat(s)],
+                  ),
+                ),
+              ],
+              const Spacer(),
+              ...actions,
+            ],
+          ),
+        ),
+        Expanded(child: child),
+      ],
     );
   }
 }
