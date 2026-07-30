@@ -112,6 +112,20 @@ class PluginsApi {
     await client.dio.patch('/plugins/$id', data: {'enabled': enabled});
   }
 
+  /// Ask a plugin to change its live log filter.
+  ///
+  /// Core records the value and fires a `set_log_level` management command at
+  /// the plugin **without waiting for the answer** — the reply is dropped, so a
+  /// 200 here means "asked", not "applied". A plugin with
+  /// `supports_management == false` never receives it at all; callers should
+  /// not offer this for one.
+  ///
+  /// Not persisted anywhere: `PATCH /plugins/:id` writes only `enabled` to
+  /// homecore.toml. The plugin's own `logging.level` is the durable setting.
+  Future<void> setLogLevel(String id, String directive) async {
+    await client.dio.patch('/plugins/$id', data: {'log_level': directive});
+  }
+
   Future<void> lifecycle(String id, String action) async {
     // action ∈ start | stop | restart
     await client.dio.post('/plugins/$id/$action');

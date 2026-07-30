@@ -13,6 +13,7 @@ import '../../../core/providers/plugins_provider.dart';
 import '../../../core/text/humanize.dart';
 import '../../../design/tokens.dart';
 import '../../../core/schema/plugin_capabilities.dart';
+import '../plugin_log_level_card.dart';
 import 'config_merge.dart';
 import 'descriptor.dart';
 import 'descriptor_renderer.dart';
@@ -59,6 +60,19 @@ class _DescriptorConfigPaneState extends ConsumerState<DescriptorConfigPane> {
         f.kind == 'link');
   }
 
+  /// Whether this section is the one carrying the plugin's boot log level.
+  ///
+  /// Matched on a field named `*.level` under a `logging` key rather than on
+  /// the section title, so a plugin that titles it "Diagnostics" still gets the
+  /// runtime control next to it.
+  bool get _sectionSetsLogLevel => _section.fields.any((f) {
+        final key = f.key;
+        if (key == null) return false;
+        return key == 'logging.level' ||
+            key == 'log.level' ||
+            (key == 'level' && _section.id.toLowerCase().contains('log'));
+      });
+
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
@@ -97,7 +111,7 @@ class _DescriptorConfigPaneState extends ConsumerState<DescriptorConfigPane> {
               // The baseline a save diffs against — what this editor was shown,
               // which may already be behind the server.
               _loaded = Map<String, dynamic>.from(cfg?.config ?? const {});
-              return ConfigDescriptorRenderer(
+              final renderer = ConfigDescriptorRenderer(
                 descriptor: widget.descriptor,
                 onlySectionId: widget.sectionId,
                 initialValues: values,
@@ -110,6 +124,22 @@ class _DescriptorConfigPaneState extends ConsumerState<DescriptorConfigPane> {
                 onSourceEdit: _saveSourceEdit,
                 onImport: _runImport,
                 onSave: _save,
+              );
+              // The runtime knob sits with the durable one it is so easily
+              // confused for. Keyed off the section actually holding a level
+              // field rather than the id string, because a plugin is free to
+              // call the section whatever it likes.
+              if (!_sectionSetsLogLevel) return renderer;
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(
+                        t.space.lg, t.space.sm, t.space.lg, 0),
+                    child: PluginLogLevelCard(pluginId: widget.pluginId),
+                  ),
+                  Expanded(child: renderer),
+                ],
               );
             },
           ),

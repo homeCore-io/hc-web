@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hc_web/features/admin/log_level_directive.dart';
+import 'package:hc_web/core/models/log_level_directive.dart';
 
 void main() {
   group('reading what core reports', () {

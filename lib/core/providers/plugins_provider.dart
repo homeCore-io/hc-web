@@ -56,6 +56,17 @@ class PluginsNotifier extends AsyncNotifier<List<PluginEntry>> {
     return raw.map(PluginEntry.fromJson).toList();
   }
 
+  /// Ask [pluginId] to change its live log filter, then refetch.
+  ///
+  /// Refetch rather than patch the record locally: core echoes back what it
+  /// stored, and the whole point of showing this value is that it is core's
+  /// record of the request rather than the client's memory of one.
+  Future<void> setLogLevel(String pluginId, String directive) async {
+    await ref.read(pluginsApiProvider).setLogLevel(pluginId, directive);
+    final raw = await ref.read(pluginsApiProvider).listPlugins();
+    state = AsyncData(raw.map(PluginEntry.fromJson).toList());
+  }
+
   /// Refetch until the plugin has finished coming back, or we give up.
   ///
   /// Install and restart both return the moment core has *dispatched* the
