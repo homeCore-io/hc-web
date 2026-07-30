@@ -2,26 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/devices/orphans.dart';
 import '../../core/models/device_state.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/providers/devices_provider.dart';
+import '../../core/providers/stale_refs_provider.dart';
 import '../../design/components/hc_surface.dart';
 import '../../design/tokens.dart';
 import '../../shared/widgets/section_scaffold.dart';
-
-/// Rules pointing at devices that are gone, and devices no plugin claims.
-///
-/// Both halves are quiet failures: a rule with a dead reference does nothing
-/// every time it fires, and a device nothing owns sits in every picker
-/// forever. Neither shows up anywhere else in the app.
-final staleRefsProvider =
-    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
-  final client = ref.watch(homecoreClientProvider);
-  final res = await client.dio.get('/automations/stale-refs');
-  return [
-    for (final r in (res.data as List)) Map<String, dynamic>.from(r as Map),
-  ];
-});
 
 class MaintenancePage extends ConsumerStatefulWidget {
   const MaintenancePage({super.key});
@@ -40,7 +28,7 @@ class _MaintenancePageState extends ConsumerState<MaintenancePage> {
     final t = HcTokens.of(context);
     final stale = ref.watch(staleRefsProvider);
     final devices = ref.watch(devicesProvider).valueOrNull ?? const [];
-    final orphans = _orphans(devices);
+    final orphans = orphanDevices(devices);
 
     return SectionScaffold(
       title: 'Maintenance',
@@ -144,22 +132,6 @@ class _MaintenancePageState extends ConsumerState<MaintenancePage> {
         ],
       ),
     );
-  }
-
-  /// A device whose plugin is not running and which has not been seen.
-  ///
-  /// Deliberately narrow: unavailable alone is a light that is switched off at
-  /// the wall, and this list is a delete button. A device only qualifies when
-  /// nothing has claimed it — no plugin id the plugin list knows about.
-  List<DeviceState> _orphans(List<DeviceState> devices) {
-    final livePlugins = {
-      for (final d in devices)
-        if (d.available) d.pluginId,
-    };
-    return [
-      for (final d in devices)
-        if (!d.available && !livePlugins.contains(d.pluginId)) d,
-    ]..sort((a, b) => a.id.compareTo(b.id));
   }
 
   Future<void> _deleteSelected() async {
