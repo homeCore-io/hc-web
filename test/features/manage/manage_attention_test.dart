@@ -141,4 +141,46 @@ void main() {
       '/admin/audit',
     });
   });
+
+  group('when the house was last backed up', () {
+    test('silent until core has answered', () {
+      // backupKnown false = /system/status has not come back. Saying "no
+      // backup on record" here would accuse every house on every cold load.
+      expect(buildAttention(lastBackupAt: null), isEmpty);
+    });
+
+    test('no record is not "never"', () {
+      final items = buildAttention(backupKnown: true);
+      expect(items.single.headline, 'No backup on record for this house.');
+      expect(items.single.route, '/admin/data');
+      // The audit log this is read from is pruned, so a two-year-old backup
+      // looks identical to none. The wording must not claim otherwise.
+      expect(items.single.headline, isNot(contains('never')));
+    });
+
+    test('a recent backup is not a finding', () {
+      expect(
+        buildAttention(
+          backupKnown: true,
+          lastBackupAt: DateTime.now().subtract(const Duration(days: 3)),
+        ),
+        isEmpty,
+      );
+    });
+
+    test('a stale backup is, once it is a month old', () {
+      expect(
+        buildAttention(
+          backupKnown: true,
+          lastBackupAt: DateTime.now().subtract(const Duration(days: 29)),
+        ),
+        isEmpty,
+      );
+      final items = buildAttention(
+        backupKnown: true,
+        lastBackupAt: DateTime.now().subtract(const Duration(days: 45)),
+      );
+      expect(items.single.headline, 'Last backed up 45 days ago.');
+    });
+  });
 }

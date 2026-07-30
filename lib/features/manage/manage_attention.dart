@@ -10,6 +10,7 @@ import '../../core/providers/automations_provider.dart';
 import '../../core/providers/devices_provider.dart';
 import '../../core/providers/plugins_provider.dart';
 import '../../core/providers/stale_refs_provider.dart';
+import '../../core/providers/system_health_provider.dart';
 
 /// How loudly a finding asks.
 enum AttentionLevel { bad, warn }
@@ -71,6 +72,8 @@ List<Attention> buildAttention({
   List<PluginEntry>? plugins,
   int? staleRefs,
   int? deniedToday,
+  DateTime? lastBackupAt,
+  bool backupKnown = false,
 }) {
   final items = <Attention>[];
 
@@ -144,6 +147,34 @@ List<Attention> buildAttention({
     }
   }
 
+  // Wording matters here. Core reads this back out of the audit log, which is
+  // pruned, so an absent timestamp means "no backup on record" and *not*
+  // "never backed up" — a house that last backed up two years ago would look
+  // identical to one that never has, and telling someone they have no backup
+  // when they do is the kind of wrong that gets a screen ignored.
+  if (backupKnown) {
+    final days = lastBackupAt == null
+        ? null
+        : DateTime.now().difference(lastBackupAt).inDays;
+    if (lastBackupAt == null) {
+      items.add(const Attention(
+        level: AttentionLevel.warn,
+        headline: 'No backup on record for this house.',
+        detail: 'Everything it knows lives in two files on this machine.',
+        action: 'Back up',
+        route: '/admin/data',
+      ));
+    } else if (days != null && days >= 30) {
+      items.add(Attention(
+        level: AttentionLevel.warn,
+        headline: 'Last backed up $days days ago.',
+        detail: 'Every device, rule and scene added since is only here.',
+        action: 'Back up',
+        route: '/admin/data',
+      ));
+    }
+  }
+
   if (deniedToday != null && deniedToday > 0) {
     items.add(Attention(
       level: AttentionLevel.warn,
@@ -167,4 +198,12 @@ List<Attention> attentionItems(WidgetRef ref) => buildAttention(
       plugins: ref.watch(pluginsProvider).valueOrNull,
       staleRefs: ref.watch(staleRefsProvider).valueOrNull?.length,
       deniedToday: ref.watch(deniedTodayProvider).valueOrNull,
+      lastBackupAt: lastBackupAt(ref.watch(systemStatusProvider).valueOrNull),
+      backupKnown: ref.watch(systemStatusProvider).hasValue,
     );
+
+/// `last_backup_at` from `/system/status`, when core reported one.
+DateTime? lastBackupAt(Map<String, dynamic>? status) {
+  final raw = status?['last_backup_at'];
+  return raw is String ? DateTime.tryParse(raw)?.toLocal() : null;
+}

@@ -174,11 +174,12 @@ class ManagePage extends ConsumerWidget {
         title: 'Notifications',
         detail: 'The channels a rule can send to',
       ),
-      const _Entry(
+      _Entry(
         route: '/admin/data',
         icon: Icons.inventory_2_outlined,
         title: 'Data & backups',
-        detail: 'Backups and calendars',
+        detail: _backupDetail(status),
+        warn: status != null && status['last_backup_at'] == null,
       ),
       _Entry(
         route: '/admin/system',
@@ -264,6 +265,19 @@ class ManagePage extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  /// How long ago the last backup was, or that there is not one on record.
+  ///
+  /// Not "never": core reads this from the audit log, which is pruned, so an
+  /// absent timestamp means nothing was recorded within the retention window.
+  static String? _backupDetail(Map<String, dynamic>? status) {
+    if (status == null) return null;
+    final at = lastBackupAt(status);
+    if (at == null) return 'No backup on record';
+    final days = DateTime.now().difference(at).inDays;
+    if (days == 0) return 'Backed up today';
+    return 'Last backed up $days day${days == 1 ? '' : 's'} ago';
   }
 
   /// "Healthy · v0.1.6 · up 2h 14m", from whichever parts have answered.
