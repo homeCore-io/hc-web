@@ -32,6 +32,30 @@ void main() {
         .map((m) => m.group(1)!)
         .toSet();
 
+    // Administration's routes are generated from its section list rather than
+    // written out in app.dart, so read them from where they are declared.
+    // Skipping this would let the whole of Administration go unchecked.
+    //
+    // `\s*` is load-bearing: dart format wraps the longer constructors onto the
+    // next line, and the first version of this regex silently matched seven of
+    // nine — reporting two real routes as missing. Partial parsing is the
+    // failure mode of reading source as text, so it is asserted against below
+    // rather than left to be noticed.
+    final shell = read('lib/features/admin/administration_shell.dart');
+    final adminSections = RegExp(r"AdminSection\(\s*'([a-z-]+)'")
+        .allMatches(shell)
+        .map((m) => '/admin/${m.group(1)!}')
+        .toSet();
+    // Every `AdminSection(` that is not the constructor declaration itself.
+    final declared =
+        RegExp(r'AdminSection\(\s*(?!this\.)').allMatches(shell).length;
+    expect(
+      adminSections,
+      hasLength(declared),
+      reason: 'parsed fewer sections than administration_shell.dart declares',
+    );
+    defined.addAll(adminSections);
+
     // If either regex stops matching — someone reformats the entries, or
     // switches to a route-name constant — this test would pass by finding
     // nothing to check. Fail loudly instead.

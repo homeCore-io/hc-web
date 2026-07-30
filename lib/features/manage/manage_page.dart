@@ -92,25 +92,25 @@ class ManagePage extends ConsumerWidget {
     // the old Admin tabs.
     final adminEntries = <_Entry>[
       const _Entry(
-        route: '/config',
+        route: '/admin/config',
         icon: Icons.tune_rounded,
         title: 'Configuration',
         detail: 'Ports, storage, logging, integrations',
       ),
       const _Entry(
-        route: '/notifications',
+        route: '/admin/notifications',
         icon: Icons.notifications_none_rounded,
         title: 'Notifications',
         detail: 'Email, Pushover, Telegram',
       ),
       const _Entry(
-        route: '/data',
+        route: '/admin/data',
         icon: Icons.inventory_2_outlined,
         title: 'Data',
         detail: 'Backups and calendars',
       ),
       const _Entry(
-        route: '/maintenance',
+        route: '/admin/maintenance',
         icon: Icons.cleaning_services_outlined,
         title: 'Maintenance',
         detail: 'Broken rules, unclaimed devices',
