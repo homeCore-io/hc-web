@@ -6,6 +6,9 @@ import 'core/providers/auth_provider.dart';
 import 'design/skins.dart';
 import 'features/admin/areas_page.dart';
 import 'features/admin/audit_page.dart';
+import 'features/settings/data_page.dart';
+import 'features/settings/maintenance_page.dart';
+import 'features/settings/notifications_page.dart';
 import 'features/settings/system_config_page.dart';
 import 'features/admin/logs_page.dart';
 import 'features/plugins/config_descriptor/config_preview_page.dart';
@@ -101,11 +104,19 @@ GoRouter _buildRouter(Ref ref) {
                 PageScreen(dashboardId: state.pathParameters['id']!),
           ),
           GoRoute(path: '/manage', builder: (_, __) => const ManagePage()),
-          // Configuration is a Manage section, not an /admin one: `/admin/*`
-          // still resolves to the pre-redesign chrome, and this screen belongs
-          // on the app-native shell with Plugins and Devices.
+          // The Administration screens that never had an /admin tab to inherit.
+          // They are Manage sections in their own right, reached from ManagePage
+          // alongside Plugins and Devices, so their paths are top-level.
+          // ManagePage links all four; a missing route here is a dead menu row.
           GoRoute(
               path: '/config', builder: (_, __) => const SystemConfigPage()),
+          GoRoute(
+              path: '/notifications',
+              builder: (_, __) => const NotificationsPage()),
+          GoRoute(path: '/data', builder: (_, __) => const DataPage()),
+          GoRoute(
+              path: '/maintenance',
+              builder: (_, __) => const MaintenancePage()),
           // Dev scaffold: renderer-first preview of the plugin config descriptor
           // protocol (Sonos). Folds into the Studio config pane once settled.
           GoRoute(
