@@ -78,36 +78,13 @@ class _SystemPageState extends ConsumerState<SystemPage> {
       child: ListView(
         padding: EdgeInsets.all(t.space.lg),
         children: [
-          // ── health + key status as stat tiles ──
-          LayoutBuilder(builder: (context, c) {
-            final health = healthAsync.valueOrNull;
-            final status = statusAsync.valueOrNull;
-            final okStatus = health?['status'] as String? ?? 'unknown';
-            final ok = okStatus == 'ok';
-            final version =
-                (status?['version'] ?? health?['version']) as String? ?? '—';
-            final uptime = _fmtUptime(status?['uptime_secs'] as int? ?? 0);
-
-            return Wrap(
-              spacing: t.space.md,
-              runSpacing: t.space.md,
-              children: [
-                _StatTile(
-                  label: 'Status',
-                  value: healthAsync.hasError
-                      ? 'Unreachable'
-                      : (ok ? 'Healthy' : okStatus),
-                  accent: healthAsync.hasError
-                      ? t.accent.danger
-                      : (ok ? t.accent.active : t.accent.warn),
-                  dot: true,
-                ),
-                _StatTile(label: 'Uptime', value: uptime),
-                _StatTile(label: 'Version', value: version),
-              ],
-            );
-          }),
-          SizedBox(height: t.space.lg),
+          // No status/uptime/version tiles here.
+          //
+          // The shell header above this pane already says "Healthy · core
+          // 0.1.6 · 18h 48m uptime". Repeating it as three large tiles was
+          // both duplication and the reason this section looked unlike every
+          // other one in Administration, which are rows and cards. The same
+          // facts are rows below, where the rest of the runtime already lives.
 
           // ── detailed status ──
           const SectionLabel('Runtime'),
@@ -116,20 +93,12 @@ class _SystemPageState extends ConsumerState<SystemPage> {
             error: (e, _) => _ErrorSurface('Status unavailable', '$e'),
             data: (status) {
               final rows = <(IconData, String, String)>[
-                (
-                  Icons.rule_outlined,
-                  'Rules',
-                  '${status['rule_count'] as int? ?? 0}'
-                ),
-                (
-                  Icons.device_hub,
-                  'Devices',
-                  '${status['device_count'] as int? ?? 0}'
-                ),
+                (Icons.rule_outlined, 'Rules', _count(status['rules_total'])),
+                (Icons.device_hub, 'Devices', _count(status['devices_total'])),
                 (
                   Icons.extension_outlined,
                   'Plugins',
-                  '${status['plugin_count'] as int? ?? 0}'
+                  _count(status['plugins_active'])
                 ),
                 (
                   Icons.storage_outlined,
@@ -141,6 +110,14 @@ class _SystemPageState extends ConsumerState<SystemPage> {
                   'History DB',
                   _fmtBytes(status['history_db_bytes'] as int? ?? 0)
                 ),
+                (
+                  Icons.timer_outlined,
+                  'Uptime',
+                  status['uptime_seconds'] is num
+                      ? formatUptime(status['uptime_seconds'] as num)
+                      : '—'
+                ),
+                (Icons.schedule, 'Timezone', '${status['timezone'] ?? '—'}'),
               ];
               return _RowsSurface([
                 for (final r in rows)
@@ -214,14 +191,15 @@ class _SystemPageState extends ConsumerState<SystemPage> {
     );
   }
 
-  String _fmtUptime(int secs) {
-    if (secs <= 0) return '—';
-    final h = secs ~/ 3600;
-    final m = (secs % 3600) ~/ 60;
-    if (h >= 24) return '${h ~/ 24}d ${h % 24}h';
-    if (h >= 1) return '${h}h ${m}m';
-    return '${m}m ${secs % 60}s';
-  }
+  /// A count, or an em dash when core did not send one.
+  ///
+  /// This used to be `status['rule_count'] as int? ?? 0`, against keys core
+  /// does not send — it sends rules_total, devices_total, plugins_active. The
+  /// `?? 0` turned every one of those misses into a confident zero, so a house
+  /// with 34 rules and 190 devices reported none of them, and only the two
+  /// keys that happened to match (the database sizes) were ever right. A
+  /// missing key is now visibly missing.
+  static String _count(Object? v) => v is num ? '$v' : '—';
 
   String _fmtBytes(int bytes) {
     if (bytes < 1024) return '${bytes}B';
@@ -239,65 +217,6 @@ class _SystemPageState extends ConsumerState<SystemPage> {
         'service_operator' => 'Service Operator',
         _ => role,
       };
-}
-
-class _StatTile extends StatelessWidget {
-  const _StatTile({
-    required this.label,
-    required this.value,
-    this.accent,
-    this.dot = false,
-  });
-  final String label;
-  final String value;
-  final Color? accent;
-  final bool dot;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = HcTokens.of(context);
-    return HcSurface(
-      padding:
-          EdgeInsets.fromLTRB(t.space.md, t.space.md, t.space.md, t.space.md),
-      child: SizedBox(
-        width: 150,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(label.toUpperCase(),
-                style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.8,
-                    color: t.surface.onBaseMuted)),
-            SizedBox(height: t.space.sm),
-            Row(children: [
-              if (dot && accent != null) ...[
-                Container(
-                  width: 9,
-                  height: 9,
-                  decoration:
-                      BoxDecoration(color: accent, shape: BoxShape.circle),
-                ),
-                const SizedBox(width: 8),
-              ],
-              Flexible(
-                child: Text(value,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w600,
-                        color: accent ?? t.surface.onBase,
-                        fontFeatures: t.numericFontFeatures)),
-              ),
-            ]),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
 class _RowsSurface extends StatelessWidget {

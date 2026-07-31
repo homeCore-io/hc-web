@@ -108,11 +108,23 @@ List<DeviceProblem> problemsIn(List<DeviceState> devices) {
 }
 
 /// Real devices with no room. Not a fault, but grouping and rules both get
-/// worse without one. Built-in/virtual devices (modes, timers, switches —
-/// `core.*`) are excluded: they aren't physical, so "assign a room" is
-/// meaningless for them and nagging about it is noise.
+/// worse without one.
+///
+/// Excluded, because "assign a room" is meaningless for them and nagging about
+/// it is noise:
+///
+/// - Built-in virtual devices (modes, timers, switches — `core.*`).
+/// - **Scenes.** A plugin's scenes arrive as devices with `device_type:
+///   "scene"` and no area, and they are not `core.*`, so they counted. On a
+///   real house that was 17 of the 28 the home page reported: the card said
+///   "28 devices have no room" when 11 physical devices did, and the other 17
+///   were Hue and Lutron scenes that will never have one. A number that is
+///   mostly noise gets the whole card ignored.
 List<DeviceState> unassigned(List<DeviceState> devices) => devices
-    .where((d) => (d.effectiveArea ?? '').isEmpty && !d.isSystem)
+    .where((d) =>
+        (d.effectiveArea ?? '').isEmpty &&
+        !d.isSystem &&
+        facetOf(d, d.schema) != DeviceFacet.scene)
     .toList();
 
 /// Matches a device against a query string.
