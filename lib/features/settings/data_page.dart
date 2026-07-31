@@ -121,6 +121,11 @@ class _DataPageState extends ConsumerState<DataPage> {
             children: [
               const Expanded(child: SectionLabel('Calendars')),
               TextButton.icon(
+                icon: const Icon(Icons.upload_file, size: 16),
+                label: const Text('Upload .ics'),
+                onPressed: _working ? null : _uploadCalendar,
+              ),
+              TextButton.icon(
                 icon: const Icon(Icons.add, size: 16),
                 label: const Text('Add calendar'),
                 onPressed: _working ? null : _addCalendar,
@@ -248,6 +253,40 @@ class _DataPageState extends ConsumerState<DataPage> {
       }
     } catch (e) {
       if (mounted) setState(() => _status = 'Import failed: $e');
+    } finally {
+      if (mounted) setState(() => _working = false);
+    }
+  }
+
+  /// Add a calendar from a file rather than a URL.
+  ///
+  /// A URL only works for a feed that is reachable and stays reachable. An
+  /// exported .ics — a season's fixtures, school terms, a rota someone
+  /// emailed — has no URL to give.
+  Future<void> _uploadCalendar() async {
+    final file = await pickFile(accept: '.ics,text/calendar');
+    if (file == null) return;
+    setState(() {
+      _working = true;
+      _status = null;
+    });
+    try {
+      final text = utf8.decode(file.bytes);
+      if (!text.contains('BEGIN:VCALENDAR')) {
+        setState(() => _status =
+            'That does not look like an .ics file — no BEGIN:VCALENDAR in it.');
+        return;
+      }
+      final name =
+          file.name.replaceAll(RegExp(r'\.ics$', caseSensitive: false), '');
+      final res =
+          await ref.read(systemDataApiProvider).uploadCalendar(text, name);
+      if (!mounted) return;
+      setState(() =>
+          _status = res.ok ? 'Added $name.' : 'Upload failed: ${res.detail}');
+      if (res.ok) ref.invalidate(calendarsProvider);
+    } catch (e) {
+      if (mounted) setState(() => _status = 'Upload failed: $e');
     } finally {
       if (mounted) setState(() => _working = false);
     }

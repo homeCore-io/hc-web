@@ -16,6 +16,24 @@ class DashboardsPage extends ConsumerWidget {
         title: const Text('Dashboards'),
         actions: [
           IconButton(
+            // Dashboards are files on disk as well as records in core, so one
+            // edited or restored by hand is invisible until core re-reads them.
+            tooltip: 'Reload from disk',
+            onPressed: () async {
+              final messenger = ScaffoldMessenger.of(context);
+              try {
+                await ref.read(dashboardsApiProvider).reload();
+                ref.invalidate(dashboardsProvider);
+                messenger.showSnackBar(
+                    const SnackBar(content: Text('Reloaded from disk.')));
+              } catch (e) {
+                messenger
+                    .showSnackBar(SnackBar(content: Text('Reload failed: $e')));
+              }
+            },
+            icon: const Icon(Icons.refresh),
+          ),
+          IconButton(
             tooltip: 'Import dashboard',
             onPressed: () => _showImportDialog(context, ref),
             icon: const Icon(Icons.upload_file_outlined),

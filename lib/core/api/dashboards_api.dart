@@ -45,6 +45,15 @@ class DashboardsApi {
     return _parseDashboard(Map<String, dynamic>.from(response.data as Map));
   }
 
+  /// Re-read the dashboard files from disk.
+  ///
+  /// Dashboards are documents on disk as well as records in core, so editing
+  /// one by hand — or restoring a directory of them — leaves core serving what
+  /// it loaded at startup until it is told to look again. Admin only.
+  Future<void> reload() async {
+    await client.dio.post('/dashboards/reload');
+  }
+
   Future<void> deleteDashboard(String id) async {
     await client.dio.delete('/dashboards/$id');
   }

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers/auth_provider.dart';
 import '../../core/providers/system_health_provider.dart';
+import '../../core/text/humanize.dart';
 import '../../core/providers/time_display_provider.dart';
 import '../../design/components/hc_surface.dart';
 import '../../design/tokens.dart';
@@ -147,6 +148,34 @@ class _SystemPageState extends ConsumerState<SystemPage> {
               ]);
             },
           ),
+          SizedBox(height: t.space.lg),
+
+          // ── what this house is actually running ──
+          const SectionLabel('Versions'),
+          ref.watch(systemVersionsProvider).when(
+                loading: () => const _Loading(),
+                error: (e, _) => _ErrorSurface('Versions unavailable', '$e'),
+                data: (versions) {
+                  // Whatever core reports, in the order it reports it. A
+                  // container image writes a bill of materials here — core, the
+                  // SDK, every plugin baked in; a plain binary reports only
+                  // itself, and rendering that as one row is the truth rather
+                  // than a gap.
+                  final entries = versions.entries.toList();
+                  if (entries.isEmpty) {
+                    return const _ErrorSurface(
+                        'No versions reported', 'core returned an empty set');
+                  }
+                  return _RowsSurface([
+                    for (final e in entries)
+                      _KvRow(
+                        icon: Icons.inventory_2_outlined,
+                        label: humanize(e.key),
+                        value: '${e.value}',
+                      ),
+                  ]);
+                },
+              ),
           SizedBox(height: t.space.lg),
 
           // ── this session ──

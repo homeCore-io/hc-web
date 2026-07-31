@@ -129,6 +129,61 @@ class SystemConfigApi {
 /// all. Core reloads the tracing filter in place and writes nothing, so the
 /// setting is **runtime only** and a restart returns to `[logging] level` in
 /// the file. Nothing in the response says so, so the screen has to.
+/// What `GET /devices/orphaned` reports, per plugin.
+class OrphanReport {
+  const OrphanReport({required this.total, required this.plugins});
+  final int total;
+  final List<OrphanPlugin> plugins;
+
+  factory OrphanReport.fromJson(Map<String, dynamic> j) => OrphanReport(
+        total: (j['total_orphans'] as num?)?.toInt() ?? 0,
+        plugins: [
+          for (final p in (j['plugins'] as List? ?? const []))
+            OrphanPlugin.fromJson(Map<String, dynamic>.from(p as Map)),
+        ],
+      );
+}
+
+class OrphanPlugin {
+  const OrphanPlugin({
+    required this.pluginId,
+    required this.coreHolds,
+    required this.pluginReports,
+    required this.suspects,
+  });
+
+  final String pluginId;
+
+  /// How many devices core has for this plugin, against how many the plugin
+  /// says it owns. The gap is the suspect list.
+  final int coreHolds;
+  final int pluginReports;
+  final List<OrphanSuspect> suspects;
+
+  factory OrphanPlugin.fromJson(Map<String, dynamic> j) => OrphanPlugin(
+        pluginId: j['plugin_id'] as String? ?? '',
+        coreHolds: (j['core_holds'] as num?)?.toInt() ?? 0,
+        pluginReports: (j['plugin_reports'] as num?)?.toInt() ?? 0,
+        suspects: [
+          for (final d in (j['suspects'] as List? ?? const []))
+            OrphanSuspect.fromJson(Map<String, dynamic>.from(d as Map)),
+        ],
+      );
+}
+
+class OrphanSuspect {
+  const OrphanSuspect({required this.deviceId, this.name, this.staleSecs});
+  final String deviceId;
+  final String? name;
+  final int? staleSecs;
+
+  factory OrphanSuspect.fromJson(Map<String, dynamic> j) => OrphanSuspect(
+        deviceId: j['device_id'] as String? ?? '',
+        name: j['name'] as String?,
+        staleSecs: (j['stale_secs'] as num?)?.toInt(),
+      );
+}
+
 class SystemLogLevelApi {
   SystemLogLevelApi(this.client);
   final HomecoreClient client;
@@ -291,6 +346,40 @@ class SystemDataApi {
           ? '${data['error']}'
           : (e.message ?? 'Unknown error');
       return (ok: false, imported: 0, detail: detail);
+    }
+  }
+
+  /// Devices a *running* plugin no longer claims.
+  ///
+  /// Not the same question as the unclaimed-device list Maintenance computes
+  /// from the device list. That one finds detritus of plugins that are gone
+  /// entirely; this compares what core holds against what each live plugin
+  /// reports owning, so it catches a bulb you unpaired from a bridge that is
+  /// still running perfectly. Core only checks active plugins that speak the
+  /// management protocol — a stopped plugin reports zero devices and would
+  /// otherwise look like it had abandoned all of them.
+  Future<OrphanReport> orphanReport() async {
+    final res = await client.dio.get('/devices/orphaned');
+    return OrphanReport.fromJson(Map<String, dynamic>.from(res.data as Map));
+  }
+
+  /// Add a calendar from an `.ics` file rather than a URL.
+  ///
+  /// Core takes the file's text in JSON, not a multipart upload.
+  Future<({bool ok, String detail})> uploadCalendar(
+      String content, String? name) async {
+    try {
+      await client.dio.post('/calendars/upload', data: {
+        'content': content,
+        if (name != null && name.isNotEmpty) 'name': name,
+      });
+      return (ok: true, detail: 'Added.');
+    } on DioException catch (e) {
+      final data = e.response?.data;
+      final detail = data is Map && data['error'] != null
+          ? '${data['error']}'
+          : (e.message ?? 'Unknown error');
+      return (ok: false, detail: detail);
     }
   }
 
