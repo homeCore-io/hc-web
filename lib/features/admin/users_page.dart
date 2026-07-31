@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -258,6 +259,8 @@ class _UserDetail extends ConsumerWidget {
               children: [
                 _RoleSection(user: user),
                 SizedBox(height: t.space.lg),
+                _PasswordSection(user: user, isSelf: isSelf),
+                SizedBox(height: t.space.lg),
                 _DashboardAccessSection(user: user),
                 SizedBox(height: t.space.lg),
                 _AccessKeysSection(user: user),
@@ -295,6 +298,249 @@ class _UserDetail extends ConsumerWidget {
     } catch (e) {
       messenger.showSnackBar(SnackBar(content: Text('Failed: $e')));
     }
+  }
+}
+
+/// Changing a password, which is two different operations wearing one label.
+///
+/// Looking at your own account it is a *change*: you prove you know the current
+/// password and core takes the account from your token. Looking at someone
+/// else's it is a *reset*: an admin sets a password for an account they cannot
+/// log into, which is the only way back in for a user who has forgotten theirs
+/// — a user record holds no email, so there is no reset link to send.
+///
+/// One section rather than two, because from here they answer the same
+/// question. The form differs by exactly one field, and the confirmation says
+/// which one happened.
+class _PasswordSection extends ConsumerStatefulWidget {
+  const _PasswordSection({required this.user, required this.isSelf});
+  final UserEntry user;
+  final bool isSelf;
+
+  @override
+  ConsumerState<_PasswordSection> createState() => _PasswordSectionState();
+}
+
+class _PasswordSectionState extends ConsumerState<_PasswordSection> {
+  final _current = TextEditingController();
+  final _next = TextEditingController();
+  final _confirm = TextEditingController();
+  bool _open = false;
+  bool _working = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _current.dispose();
+    _next.dispose();
+    _confirm.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+
+    if (!_open) {
+      return _Section(
+        title: 'Password',
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                widget.isSelf
+                    ? 'Change your own password. You will need your current one.'
+                    : 'Set a new password for ${widget.user.username}. They are '
+                        'not told — pass it on yourself.',
+                style: TextStyle(color: t.surface.onBaseMuted, fontSize: 12.5),
+              ),
+            ),
+            SizedBox(width: t.space.md),
+            HcButton(
+              label: widget.isSelf ? 'Change…' : 'Set password…',
+              kind: HcButtonKind.ghost,
+              onPressed: () => setState(() => _open = true),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return _Section(
+      title: 'Password',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (widget.isSelf) ...[
+            _PasswordField(
+              controller: _current,
+              label: 'Current password',
+              onSubmitted: (_) {},
+            ),
+            SizedBox(height: t.space.sm),
+          ],
+          _PasswordField(
+            controller: _next,
+            label: 'New password',
+            // Core's floor, stated up front rather than discovered by a 422.
+            helper: 'At least 8 characters',
+            onSubmitted: (_) {},
+          ),
+          SizedBox(height: t.space.sm),
+          _PasswordField(
+            controller: _confirm,
+            label: 'Confirm new password',
+            onSubmitted: (_) => _submit(),
+          ),
+          if (_error != null) ...[
+            SizedBox(height: t.space.sm),
+            Text(_error!,
+                style: TextStyle(color: t.accent.danger, fontSize: 12.5)),
+          ],
+          SizedBox(height: t.space.md),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              HcButton(
+                label: 'Cancel',
+                kind: HcButtonKind.ghost,
+                onPressed: _working ? null : _close,
+              ),
+              SizedBox(width: t.space.sm),
+              HcButton(
+                label: _working ? 'Saving…' : 'Save password',
+                kind: HcButtonKind.primary,
+                onPressed: _working ? null : _submit,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _close() {
+    _current.clear();
+    _next.clear();
+    _confirm.clear();
+    setState(() {
+      _open = false;
+      _error = null;
+    });
+  }
+
+  Future<void> _submit() async {
+    final next = _next.text;
+    // Checked here as well as in core: a mismatch is the user's typo, and a
+    // round trip to be told so is worse than saying it immediately. The length
+    // floor is core's rule — this only avoids spending a request to hear it.
+    if (next.length < 8) {
+      setState(() => _error = 'Password must be at least 8 characters.');
+      return;
+    }
+    if (next != _confirm.text) {
+      setState(() => _error = 'The two new passwords do not match.');
+      return;
+    }
+    if (widget.isSelf && _current.text.isEmpty) {
+      setState(() => _error = 'Enter your current password.');
+      return;
+    }
+
+    setState(() {
+      _working = true;
+      _error = null;
+    });
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final api = ref.read(usersApiProvider);
+      if (widget.isSelf) {
+        await api.changeOwnPassword(_current.text, next);
+      } else {
+        await api.setPassword(widget.user.id, next);
+      }
+      if (!mounted) return;
+      _close();
+      messenger.showSnackBar(SnackBar(
+        content: Text(widget.isSelf
+            ? 'Your password has been changed.'
+            : 'Password set for ${widget.user.username}.'),
+      ));
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = _readable(e));
+    } finally {
+      if (mounted) setState(() => _working = false);
+    }
+  }
+
+  /// Core answers a wrong current password with 401 and a JSON `error`. Showing
+  /// the raw DioException puts a stack of transport detail in front of a
+  /// one-line answer the user can act on.
+  String _readable(Object e) {
+    if (e is DioException) {
+      final data = e.response?.data;
+      if (data is Map && data['error'] is String) {
+        return data['error'] as String;
+      }
+      if (e.response?.statusCode == 401) {
+        return 'Current password is incorrect.';
+      }
+    }
+    return 'Could not save: $e';
+  }
+}
+
+/// An obscured field with a reveal toggle.
+///
+/// Revealable on purpose: a password being *set* by someone who will have to
+/// read it out or paste it somewhere is worth being able to see, and hiding it
+/// only guarantees typos in a field nobody can check.
+class _PasswordField extends StatefulWidget {
+  const _PasswordField({
+    required this.controller,
+    required this.label,
+    required this.onSubmitted,
+    this.helper,
+  });
+
+  final TextEditingController controller;
+  final String label;
+  final String? helper;
+  final ValueChanged<String> onSubmitted;
+
+  @override
+  State<_PasswordField> createState() => _PasswordFieldState();
+}
+
+class _PasswordFieldState extends State<_PasswordField> {
+  bool _hidden = true;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return TextField(
+      controller: widget.controller,
+      obscureText: _hidden,
+      autofillHints: const [],
+      onSubmitted: widget.onSubmitted,
+      style: TextStyle(color: t.surface.onBase, fontSize: 13.5),
+      decoration: InputDecoration(
+        labelText: widget.label,
+        helperText: widget.helper,
+        helperStyle: TextStyle(color: t.surface.onBaseMuted, fontSize: 11.5),
+        isDense: true,
+        suffixIcon: IconButton(
+          icon: Icon(
+            _hidden ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+            size: 18,
+            color: t.surface.onBaseMuted,
+          ),
+          tooltip: _hidden ? 'Show' : 'Hide',
+          onPressed: () => setState(() => _hidden = !_hidden),
+        ),
+      ),
+    );
   }
 }
 
