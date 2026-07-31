@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/devices/presentation.dart';
 import '../../core/providers/areas_provider.dart';
+import '../devices/device_query.dart';
 import '../../core/providers/automations_provider.dart';
 import '../../core/providers/devices_provider.dart';
 import '../../core/providers/glue_provider.dart';
@@ -63,8 +64,10 @@ class ManagePage extends ConsumerWidget {
         .toList();
     final playing =
         players?.where((d) => d.playbackState == 'playing').length ?? 0;
-    final unassigned =
-        devices?.where((d) => (d.areaOverride ?? d.area) == null).length ?? 0;
+    // The same rule the home page and the device list use, rather than a
+    // third answer: this counted every device without an area, including the
+    // scenes and virtual devices that will never have one.
+    final unassignedCount = devices == null ? 0 : unassigned(devices).length;
     final attention = attentionItems(ref);
 
     final house = <_Entry>[
@@ -152,9 +155,9 @@ class ManagePage extends ConsumerWidget {
             ? null
             : [
                 '${areas.length} rooms',
-                if (unassigned > 0) '$unassigned devices unassigned',
+                if (unassignedCount > 0) '$unassignedCount devices unassigned',
               ].join(' · '),
-        warn: unassigned > 0,
+        warn: unassignedCount > 0,
       ),
       _Entry(
         route: '/admin/users',

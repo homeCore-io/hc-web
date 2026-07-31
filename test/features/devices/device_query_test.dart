@@ -137,6 +137,30 @@ void main() {
       // 33 of these exist on the real install and are currently invisible.
       expect(unassigned(_house).map((d) => d.id), ['stray']);
     });
+
+    test('a scene is not a device missing a room', () {
+      // Reported from a real house: "28 devices have no room" when 11 did.
+      // The other 17 were Hue and Lutron scenes — they arrive as devices with
+      // device_type "scene" and no area, and they are not `core.*`, so they
+      // counted. A number that is mostly noise gets the whole card ignored.
+      final withScenes = [
+        ..._house,
+        _d('hue_scene_relax',
+            name: 'Relax', type: 'scene', plugin: 'plugin.hue'),
+        _d('lutron_scene_evening',
+            name: 'Evening', type: 'scene', plugin: 'plugin.lutron'),
+      ];
+      expect(unassigned(withScenes).map((d) => d.id), ['stray']);
+    });
+
+    test('built-in virtual devices are not either', () {
+      final withVirtuals = [
+        ..._house,
+        _d('timer_garage', name: 'Garage Timer', plugin: 'core.timer'),
+        _d('mode_night', name: 'Night', plugin: 'core.mode'),
+      ];
+      expect(unassigned(withVirtuals).map((d) => d.id), ['stray']);
+    });
   });
 
   group('search — every identity a device has', () {
