@@ -486,6 +486,105 @@ ThemeData hcTheme(HcSkin skin, {bool reduceMotion = false}) {
       surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(borderRadius: t.radius.lgR),
     ),
+    // ── the surfaces that only appear once you touch something ──────────────
+    //
+    // These were the last Material defaults in the app, and the easiest to miss
+    // because none of them is on screen when you look at a page. A screenshot
+    // of every section can be entirely on-skin while every confirmation, menu
+    // and dropdown that opens over it is not.
+    //
+    // The snackbar is the worst of them: Material 3 draws it on
+    // `colorScheme.inverseSurface`, which is unset here and so defaults to a
+    // *light* grey for a dark scheme. The app raises 107 of them — every save,
+    // every failure — each a pale pill in a black house.
+    snackBarTheme: SnackBarThemeData(
+      backgroundColor: t.surface.overlay,
+      contentTextStyle: TextStyle(color: t.surface.onBase, fontSize: 13),
+      actionTextColor: t.accent.active,
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(
+        borderRadius: t.radius.mdR,
+        side: BorderSide(color: t.stroke.hairline, width: t.stroke.width),
+      ),
+      elevation: 0,
+    ),
+    // Menus and dropdowns open on `surface`, which is right, but with Material's
+    // corner radius and a tint — and 29 DropdownButtonFormFields plus 10
+    // PopupMenuButtons is most of the app's configuration surface.
+    popupMenuTheme: PopupMenuThemeData(
+      color: t.surface.overlay,
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: t.radius.mdR,
+        side: BorderSide(color: t.stroke.hairline, width: t.stroke.width),
+      ),
+      textStyle: TextStyle(color: t.surface.onBase, fontSize: 13),
+    ),
+    dropdownMenuTheme: DropdownMenuThemeData(
+      textStyle: TextStyle(color: t.surface.onBase, fontSize: 13),
+      menuStyle: MenuStyle(
+        backgroundColor: WidgetStatePropertyAll(t.surface.overlay),
+        surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
+        shape: WidgetStatePropertyAll(RoundedRectangleBorder(
+          borderRadius: t.radius.mdR,
+          side: BorderSide(color: t.stroke.hairline, width: t.stroke.width),
+        )),
+      ),
+    ),
+    menuTheme: MenuThemeData(
+      style: MenuStyle(
+        backgroundColor: WidgetStatePropertyAll(t.surface.overlay),
+        surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
+        shape: WidgetStatePropertyAll(RoundedRectangleBorder(
+          borderRadius: t.radius.mdR,
+          side: BorderSide(color: t.stroke.hairline, width: t.stroke.width),
+        )),
+      ),
+    ),
+    // Text fields: hairline box on the sunken surface, matching the descriptor
+    // renderer's own `_Input` — which had to hand-draw exactly this because the
+    // theme did not supply it.
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: t.surface.sunken,
+      hintStyle: TextStyle(color: t.surface.onBaseMuted, fontSize: 13),
+      labelStyle: TextStyle(color: t.surface.onBaseMuted, fontSize: 13),
+      contentPadding: EdgeInsets.symmetric(
+        horizontal: t.space.md,
+        vertical: t.space.sm + 2,
+      ),
+      border: OutlineInputBorder(
+        borderRadius: t.radius.smR,
+        borderSide: BorderSide(color: t.stroke.hairline, width: t.stroke.width),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: t.radius.smR,
+        borderSide: BorderSide(color: t.stroke.hairline, width: t.stroke.width),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: t.radius.smR,
+        borderSide: BorderSide(color: t.stroke.focus, width: t.stroke.width),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: t.radius.smR,
+        borderSide: BorderSide(color: t.accent.danger, width: t.stroke.width),
+      ),
+    ),
+    // Spinners default to colorScheme.primary — the blue again, and the one
+    // Material widget that appears on every page before its data arrives.
+    progressIndicatorTheme: ProgressIndicatorThemeData(
+      color: t.accent.active,
+      linearTrackColor: t.accent.inactive,
+      circularTrackColor: Colors.transparent,
+    ),
+    tooltipTheme: TooltipThemeData(
+      decoration: BoxDecoration(
+        color: t.surface.overlay,
+        borderRadius: t.radius.smR,
+        border: Border.all(color: t.stroke.hairline, width: t.stroke.width),
+      ),
+      textStyle: TextStyle(color: t.surface.onBase, fontSize: 12),
+    ),
     extensions: [t],
   );
 }
