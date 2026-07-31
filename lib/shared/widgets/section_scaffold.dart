@@ -179,6 +179,8 @@ class SectionScaffold extends StatelessWidget {
                   children: [
                     Text(
                       title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         color: t.surface.onBase,
                         fontSize: 18,
@@ -188,6 +190,8 @@ class SectionScaffold extends StatelessWidget {
                     if (subtitle != null)
                       Text(
                         subtitle!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           color: t.surface.onBaseMuted,
                           fontSize: 12,

@@ -387,16 +387,35 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
 
   // ── scalar row: [label + help | control] ──────────────────────────────────
   Widget _scalarRow(HcTokens t, CfgField f) {
+    // Label beside control, until there is no room for both.
+    //
+    // The controls are a fixed 240 wide. Beside them the label had whatever was
+    // left, and on a narrow window that is a column a few characters across —
+    // so "Bind address. 0.0.0.0 = all interfaces" rendered one letter per line.
+    // Below the breakpoint the two stack instead, which is the same
+    // information in the order you read it.
     return Padding(
       padding: EdgeInsets.symmetric(vertical: t.space.sm),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Expanded(child: _labelBlock(t, f)),
-          SizedBox(width: t.space.md),
-          _control(t, f),
-        ],
-      ),
+      child: LayoutBuilder(builder: (context, box) {
+        if (box.maxWidth < 480) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _labelBlock(t, f),
+              SizedBox(height: t.space.sm),
+              Align(alignment: Alignment.centerLeft, child: _control(t, f)),
+            ],
+          );
+        }
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(child: _labelBlock(t, f)),
+            SizedBox(width: t.space.md),
+            _control(t, f),
+          ],
+        );
+      }),
     );
   }
 
