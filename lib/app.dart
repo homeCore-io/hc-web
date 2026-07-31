@@ -178,6 +178,10 @@ GoRouter _buildRouter(Ref ref) {
           // Deliberately not `/admin/:section`, which would swallow a typo and
           // quietly render System for a path nobody defined.
           GoRoute(path: '/admin', redirect: (_, __) => '/admin/system'),
+          // Areas is about the house, not the system, and moved out of /admin
+          // in 0.1.10. The old path shipped in 0.1.7–0.1.9 and is in bookmarks
+          // and the command palette, so it redirects rather than 404s.
+          GoRoute(path: '/admin/areas', redirect: (_, __) => '/areas'),
 
           // Every Manage section, in one shell.
           //
@@ -234,8 +238,7 @@ GoRouter _buildRouter(Ref ref) {
                   builder: (_, __) => const NotificationsPage()),
               GoRoute(
                   path: '/admin/users', builder: (_, __) => const UsersPage()),
-              GoRoute(
-                  path: '/admin/areas', builder: (_, __) => const AreasPage()),
+              GoRoute(path: '/areas', builder: (_, __) => const AreasPage()),
               GoRoute(
                   path: '/admin/data', builder: (_, __) => const DataPage()),
               GoRoute(

@@ -39,6 +39,8 @@ class ManageShell extends ConsumerWidget {
         group: SectionGroup.house, path: '/devices'),
     ManageSection('scenes', 'Scenes', HcIcons.scenes,
         group: SectionGroup.house, path: '/scenes'),
+    ManageSection('areas', 'Areas & rooms', Icons.meeting_room_outlined,
+        group: SectionGroup.house, path: '/areas'),
     ManageSection('modes', 'Modes', HcIcons.modes,
         group: SectionGroup.house, path: '/modes'),
     ManageSection('helpers', 'Helpers', Icons.tune,
@@ -57,7 +59,6 @@ class ManageShell extends ConsumerWidget {
     ManageSection(
         'notifications', 'Notifications', Icons.notifications_none_rounded),
     ManageSection('users', 'Users & access', Icons.people_outline),
-    ManageSection('areas', 'Areas & rooms', Icons.meeting_room_outlined),
     ManageSection('data', 'Data & backups', Icons.inventory_2_outlined),
     ManageSection(
         'maintenance', 'Maintenance', Icons.cleaning_services_outlined),

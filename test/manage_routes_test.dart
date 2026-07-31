@@ -91,4 +91,34 @@ void main() {
           'them; the menu row will dead-end on the router error page',
     );
   });
+
+  test('paths that moved still resolve', () {
+    // Every one of these shipped as a real route and is in bookmarks and the
+    // command palette. They are redirects now, and a redirect is exactly the
+    // kind of line that looks like dead weight to someone tidying up — so
+    // name them here, where deleting one fails.
+    final app = File('lib/app.dart').readAsStringSync();
+    const moved = {
+      '/config': '/admin/config',
+      '/notifications': '/admin/notifications',
+      '/data': '/admin/data',
+      '/maintenance': '/admin/maintenance',
+      '/admin/areas': '/areas',
+    };
+
+    for (final entry in moved.entries) {
+      // `[\s\S]{0,120}?` and not `[^)]*`: the redirect is written
+      // `redirect: (_, __) => '/x'`, and a negated-paren class stops at the
+      // lambda's own closing paren, never reaching the target.
+      final route = RegExp(
+        "path:\\s*'${RegExp.escape(entry.key)}'[\\s\\S]{0,120}?"
+        "redirect:[\\s\\S]{0,60}?'${RegExp.escape(entry.value)}'",
+      );
+      expect(
+        route.hasMatch(app),
+        isTrue,
+        reason: '${entry.key} no longer redirects to ${entry.value}',
+      );
+    }
+  });
 }

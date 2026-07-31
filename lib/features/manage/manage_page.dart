@@ -145,7 +145,7 @@ class ManagePage extends ConsumerWidget {
         alert: pluginsOffline > 0,
       ),
       _Entry(
-        route: '/admin/areas',
+        route: '/areas',
         icon: Icons.meeting_room_outlined,
         title: 'Areas & rooms',
         detail: areas == null
