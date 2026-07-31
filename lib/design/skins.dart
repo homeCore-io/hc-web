@@ -394,10 +394,14 @@ ThemeData hcTheme(HcSkin skin, {bool reduceMotion = false}) {
     // are mostly buttons and rows: a token-built surface with Material-default
     // controls sitting on it.
     //
-    // Theming rather than a shared HcButton because the app already writes
-    // FilledButton/OutlinedButton/TextButton in ~40 places. A component means
-    // touching all of them and missing some; a theme reaches every one,
-    // including the ones added tomorrow.
+    // These mirror HcButton, which is the real vocabulary — design/components
+    // already ships HcButton, HcChip, HcToggle and HcIconButton, and new code
+    // should reach for those. The theme exists because the app still writes raw
+    // FilledButton/OutlinedButton/TextButton in ~40 places, and an unstyled one
+    // does not fail: it renders in Material's defaults off `colorScheme`, which
+    // is how Administration kept a blue primary action next to an amber one.
+    // So the rule is that a raw Material button and its HcButton equivalent
+    // must be indistinguishable, and every colour below is chosen to match.
     filledButtonTheme: FilledButtonThemeData(
       style: ButtonStyle(
         minimumSize: WidgetStatePropertyAll(Size(0, t.density.rowHeight)),
@@ -405,6 +409,26 @@ ThemeData hcTheme(HcSkin skin, {bool reduceMotion = false}) {
             EdgeInsets.symmetric(horizontal: t.space.md)),
         shape: WidgetStatePropertyAll(
             RoundedRectangleBorder(borderRadius: t.radius.pillR)),
+        // The colours, which the first version of this theme left out.
+        //
+        // Shape and density alone still let the fill fall through to
+        // `colorScheme.primary` — and on Midnight that is the blue #7CC4FF used
+        // for links and selection, not the amber #FFB661 that every primary
+        // action wears. So Notifications' "Add channel" came out bright blue
+        // beside Users' amber "Add user", both allegedly themed. Matching
+        // HcButton(kind: primary) and SectionHeaderAction is the point: one
+        // accent means one primary action, whichever widget draws it.
+        backgroundColor: WidgetStateProperty.resolveWith((states) =>
+            states.contains(WidgetState.disabled)
+                ? t.surface.raised
+                : t.accent.active),
+        foregroundColor: WidgetStateProperty.resolveWith((states) =>
+            states.contains(WidgetState.disabled)
+                ? t.surface.onBaseMuted
+                : t.accent.onPrimary),
+        overlayColor:
+            WidgetStatePropertyAll(t.accent.onPrimary.withValues(alpha: 0.10)),
+        elevation: const WidgetStatePropertyAll(0),
         textStyle: const WidgetStatePropertyAll(
             TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
       ),
@@ -418,7 +442,7 @@ ThemeData hcTheme(HcSkin skin, {bool reduceMotion = false}) {
             RoundedRectangleBorder(borderRadius: t.radius.pillR)),
         side: WidgetStateProperty.resolveWith((states) => BorderSide(
               color: states.contains(WidgetState.hovered)
-                  ? t.accent.primary
+                  ? t.accent.active
                   : t.stroke.hairline,
             )),
         backgroundColor: WidgetStatePropertyAll(t.surface.overlay),
@@ -432,7 +456,7 @@ ThemeData hcTheme(HcSkin skin, {bool reduceMotion = false}) {
         minimumSize: WidgetStatePropertyAll(Size(0, t.density.rowHeight)),
         shape: WidgetStatePropertyAll(
             RoundedRectangleBorder(borderRadius: t.radius.pillR)),
-        foregroundColor: WidgetStatePropertyAll(t.accent.primary),
+        foregroundColor: WidgetStatePropertyAll(t.accent.active),
         textStyle: const WidgetStatePropertyAll(
             TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
       ),

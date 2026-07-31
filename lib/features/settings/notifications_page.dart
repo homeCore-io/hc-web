@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers/system_config_provider.dart';
 import '../../design/components/hc_surface.dart';
 import '../../design/tokens.dart';
+import '../../design/components/hc_controls.dart';
+import '../../design/components/hc_rows.dart';
 import '../../shared/widgets/section_scaffold.dart';
 import '../../shell/hc_sheet.dart';
 import 'notify_channels.dart';
@@ -39,20 +41,23 @@ class NotificationsPage extends ConsumerWidget {
           return Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              IconButton(
-                icon: Icon(Icons.refresh, color: t.surface.onBaseMuted),
+              HcIconButton(
+                icon: Icons.refresh,
                 tooltip: 'Reload',
                 onPressed: () =>
                     ref.read(systemConfigProvider.notifier).reload(),
               ),
               SizedBox(width: t.space.xs),
-              FilledButton.icon(
-                icon: const Icon(Icons.add, size: 16),
-                label: const Text('Add channel'),
-                onPressed: async.hasValue
-                    ? () => _edit(context, ref, channels, null)
-                    : null,
-              ),
+              // SectionHeaderAction, not a FilledButton: every other section
+              // header uses it, and it is a tinted amber pill rather than a
+              // solid one. A solid fill here would still be the odd button out
+              // even now that both are amber.
+              if (async.hasValue)
+                SectionHeaderAction(
+                  icon: Icons.add,
+                  label: 'Add channel',
+                  onPressed: () => _edit(context, ref, channels, null),
+                ),
               SizedBox(width: t.space.md),
             ],
           );
@@ -423,13 +428,12 @@ class _ChannelEditorState extends State<_ChannelEditor> {
     final value = c.values[f.key];
 
     if (f.kind == FieldKind.boolean) {
-      return SwitchListTile(
-        contentPadding: EdgeInsets.zero,
-        dense: true,
-        title: Text(f.label, style: const TextStyle(fontSize: 13.5)),
-        subtitle: f.help == null
-            ? null
-            : Text(f.help!, style: const TextStyle(fontSize: 12)),
+      // HcToggleRow, not SwitchListTile — this sits in a channel editor beside
+      // the app's own fields, and Material's switch is a different shape and a
+      // different blue from every other toggle in the house.
+      return HcToggleRow(
+        label: f.label,
+        subtitle: f.help,
         value: value == true,
         onChanged: (v) => setState(() => c.values[f.key] = v),
       );
