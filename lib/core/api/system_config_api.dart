@@ -236,6 +236,64 @@ class SystemDataApi {
     }
   }
 
+  /// Every rule as core holds it, for saving somewhere that is not this house.
+  ///
+  /// The *source* rules — what the editor writes and what a RON file contains —
+  /// not the compiled form the engine runs, so an export round-trips through
+  /// import unchanged.
+  Future<List<dynamic>> exportAutomations() async {
+    final res = await client.dio.get('/automations/export');
+    return List<dynamic>.from(res.data as List);
+  }
+
+  /// Add rules from an export.
+  ///
+  /// Adds. Core assigns every imported rule a fresh UUID and appends it, so
+  /// importing a file this house produced duplicates every rule in it rather
+  /// than restoring over the top. There is no replace, and the UI has to say
+  /// so — "restore" is the word people expect and the wrong one here.
+  ///
+  /// 422 with core's message when a rule references a device that does not
+  /// exist: the whole import is refused at that point, and rules already
+  /// written stay written.
+  Future<({bool ok, int imported, String detail})> importAutomations(
+      List<dynamic> rules) async {
+    try {
+      final res = await client.dio.post('/automations/import', data: rules);
+      final body = Map<String, dynamic>.from(res.data as Map);
+      final n = (body['imported'] as num?)?.toInt() ?? rules.length;
+      return (ok: true, imported: n, detail: 'Imported $n.');
+    } on DioException catch (e) {
+      final data = e.response?.data;
+      final detail = data is Map && data['error'] != null
+          ? '${data['error']}'
+          : (e.message ?? 'Unknown error');
+      return (ok: false, imported: 0, detail: detail);
+    }
+  }
+
+  Future<List<dynamic>> exportScenes() async {
+    final res = await client.dio.get('/scenes/export');
+    return List<dynamic>.from(res.data as List);
+  }
+
+  /// Same additive semantics as [importAutomations].
+  Future<({bool ok, int imported, String detail})> importScenes(
+      List<dynamic> scenes) async {
+    try {
+      final res = await client.dio.post('/scenes/import', data: scenes);
+      final body = Map<String, dynamic>.from(res.data as Map);
+      final n = (body['imported'] as num?)?.toInt() ?? scenes.length;
+      return (ok: true, imported: n, detail: 'Imported $n.');
+    } on DioException catch (e) {
+      final data = e.response?.data;
+      final detail = data is Map && data['error'] != null
+          ? '${data['error']}'
+          : (e.message ?? 'Unknown error');
+      return (ok: false, imported: 0, detail: detail);
+    }
+  }
+
   Future<List<Map<String, dynamic>>> calendars() async {
     final res = await client.dio.get('/calendars');
     return [
