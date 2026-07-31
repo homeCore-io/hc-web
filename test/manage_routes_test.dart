@@ -41,18 +41,28 @@ void main() {
     // nine — reporting two real routes as missing. Partial parsing is the
     // failure mode of reading source as text, so it is asserted against below
     // rather than left to be noticed.
-    final shell = read('lib/features/admin/administration_shell.dart');
-    final adminSections = RegExp(r"AdminSection\(\s*'([a-z-]+)'")
-        .allMatches(shell)
-        .map((m) => '/admin/${m.group(1)!}')
-        .toSet();
-    // Every `AdminSection(` that is not the constructor declaration itself.
-    final declared =
-        RegExp(r'AdminSection\(\s*(?!this\.)').allMatches(shell).length;
+    final shell = read('lib/features/manage/manage_shell.dart');
+    // A section's route is `/admin/<id>` unless it declares `path:` — the
+    // house sections keep the top-level paths they already ship with.
+    final adminSections = <String>{};
+    for (final m
+        in RegExp(r"ManageSection\(\s*'([a-z-]+)'[^)]*?\)").allMatches(shell)) {
+      final decl = m.group(0)!;
+      final explicit = RegExp(r"path:\s*'([^']+)'").firstMatch(decl);
+      adminSections
+          .add(explicit != null ? explicit.group(1)! : '/admin/${m.group(1)!}');
+    }
+    // Every `ManageSection(` that is not the constructor declaration itself.
+    // Counted by subtraction rather than a lookahead: the constructor's
+    // parameters sit on the next line, and `\s*(?!this\.)` happily matches the
+    // whitespace before them — which counted the declaration as a section and
+    // made this assertion fail by exactly one.
+    final total = RegExp(r'ManageSection\(').allMatches(shell).length;
+    final ctor = RegExp(r'ManageSection\(\s*this\.').allMatches(shell).length;
     expect(
       adminSections,
-      hasLength(declared),
-      reason: 'parsed fewer sections than administration_shell.dart declares',
+      hasLength(total - ctor),
+      reason: 'parsed fewer sections than manage_shell.dart declares',
     );
     defined.addAll(adminSections);
 

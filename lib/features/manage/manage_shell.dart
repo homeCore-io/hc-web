@@ -9,11 +9,11 @@ import '../settings/data_page.dart';
 import '../settings/maintenance_page.dart';
 import '../settings/notifications_page.dart';
 import '../settings/system_config_page.dart';
-import 'areas_page.dart';
-import 'audit_page.dart';
-import 'logs_page.dart';
-import 'system_page.dart';
-import 'users_page.dart';
+import '../admin/areas_page.dart';
+import '../admin/audit_page.dart';
+import '../admin/logs_page.dart';
+import '../admin/system_page.dart';
+import '../admin/users_page.dart';
 
 /// Administration, as one application surface.
 ///
@@ -31,26 +31,26 @@ import 'users_page.dart';
 ///
 /// The section is in the URL rather than in a field, so a deep link, a browser
 /// reload and the command palette all land in the same place.
-class AdministrationShell extends ConsumerWidget {
-  const AdministrationShell({super.key, required this.section});
+class ManageShell extends ConsumerWidget {
+  const ManageShell({super.key, required this.section});
 
   final String section;
 
-  static const sections = <AdminSection>[
-    AdminSection('system', 'System', Icons.monitor_heart_outlined),
-    AdminSection('config', 'Configuration', Icons.tune_rounded),
-    AdminSection(
+  static const sections = <ManageSection>[
+    ManageSection('system', 'System', Icons.monitor_heart_outlined),
+    ManageSection('config', 'Configuration', Icons.tune_rounded),
+    ManageSection(
         'notifications', 'Notifications', Icons.notifications_none_rounded),
-    AdminSection('users', 'Users & access', Icons.people_outline),
-    AdminSection('areas', 'Areas & rooms', Icons.meeting_room_outlined),
-    AdminSection('data', 'Data & backups', Icons.inventory_2_outlined),
-    AdminSection(
+    ManageSection('users', 'Users & access', Icons.people_outline),
+    ManageSection('areas', 'Areas & rooms', Icons.meeting_room_outlined),
+    ManageSection('data', 'Data & backups', Icons.inventory_2_outlined),
+    ManageSection(
         'maintenance', 'Maintenance', Icons.cleaning_services_outlined),
-    AdminSection('audit', 'Audit', Icons.fact_check_outlined),
-    AdminSection('logs', 'Logs', Icons.terminal_outlined),
+    ManageSection('audit', 'Audit', Icons.fact_check_outlined),
+    ManageSection('logs', 'Logs', Icons.terminal_outlined),
   ];
 
-  static AdminSection resolve(String id) => sections.firstWhere(
+  static ManageSection resolve(String id) => sections.firstWhere(
         (s) => s.id == id,
         orElse: () => sections.first,
       );
@@ -96,8 +96,11 @@ class AdministrationShell extends ConsumerWidget {
     ];
 
     return SectionScaffold(
+      // The header names the half you are in, from the section's own group —
+      // so a house section says Manage and a system one says Administration,
+      // without this widget knowing which sections exist.
       breadcrumbs: const ['Manage'],
-      title: 'Administration',
+      title: current.group.title,
       subtitle: current.label,
       stats: stats,
       child: LayoutBuilder(builder: (context, box) {
@@ -135,13 +138,43 @@ class AdministrationShell extends ConsumerWidget {
   }
 }
 
-class AdminSection {
-  const AdminSection(this.id, this.label, this.icon);
+/// Which half of Manage a section belongs to.
+///
+/// The house is what the house *is* — the devices, rooms, scenes and rules it
+/// runs on. The system is what runs it. They are different kinds of errand and
+/// the rail says so, rather than presenting eighteen equal entries.
+enum SectionGroup {
+  house('The house', 'Manage'),
+  system('The system', 'Administration');
+
+  const SectionGroup(this.heading, this.title);
+
+  /// Heading above the group in the rail.
+  final String heading;
+
+  /// What the header calls the place you are in.
+  final String title;
+}
+
+class ManageSection {
+  const ManageSection(
+    this.id,
+    this.label,
+    this.icon, {
+    this.group = SectionGroup.system,
+    this.path,
+  });
+
   final String id;
   final String label;
   final IconData icon;
+  final SectionGroup group;
 
-  String get route => '/admin/$id';
+  /// Explicit route, for sections that do not live under `/admin`. The house
+  /// sections keep the top-level paths they already ship with.
+  final String? path;
+
+  String get route => path ?? '/admin/$id';
 }
 
 class _SectionNav extends StatelessWidget {
@@ -161,7 +194,7 @@ class _SectionNav extends StatelessWidget {
             EdgeInsets.symmetric(horizontal: t.space.sm, vertical: t.space.xs),
         child: Row(
           children: [
-            for (final s in AdministrationShell.sections)
+            for (final s in ManageShell.sections)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 2),
                 child: _NavEntry(section: s, selected: s.id == current),
@@ -171,26 +204,34 @@ class _SectionNav extends StatelessWidget {
       );
     }
 
+    // Grouped, in declaration order, with a heading per group. A group with
+    // no sections prints no heading — so this reads correctly while only the
+    // system half is registered, and again once the house half joins it.
     return ColoredBox(
       color: t.surface.sunken,
       child: ListView(
         padding:
             EdgeInsets.symmetric(horizontal: t.space.sm, vertical: t.space.md),
         children: [
-          Padding(
-            padding: EdgeInsets.fromLTRB(t.space.sm, 0, 0, t.space.sm),
-            child: Text(
-              'SECTIONS',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 1.2,
-                color: t.surface.onBaseMuted,
+          for (final group in SectionGroup.values)
+            if (ManageShell.sections.any((s) => s.group == group)) ...[
+              Padding(
+                padding:
+                    EdgeInsets.fromLTRB(t.space.sm, t.space.sm, 0, t.space.sm),
+                child: Text(
+                  group.heading.toUpperCase(),
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.2,
+                    color: t.surface.onBaseMuted,
+                  ),
+                ),
               ),
-            ),
-          ),
-          for (final s in AdministrationShell.sections)
-            _NavEntry(section: s, selected: s.id == current),
+              for (final s in ManageShell.sections)
+                if (s.group == group)
+                  _NavEntry(section: s, selected: s.id == current),
+            ],
         ],
       ),
     );
@@ -200,7 +241,7 @@ class _SectionNav extends StatelessWidget {
 class _NavEntry extends StatelessWidget {
   const _NavEntry({required this.section, required this.selected});
 
-  final AdminSection section;
+  final ManageSection section;
   final bool selected;
 
   @override

@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'core/providers/auth_provider.dart';
-import 'features/admin/administration_shell.dart';
+import 'features/manage/manage_shell.dart';
 import 'design/skins.dart';
 import 'features/plugins/config_descriptor/config_preview_page.dart';
 import 'features/plugins/plugin_studio_page.dart';
@@ -190,10 +190,10 @@ GoRouter _buildRouter(Ref ref) {
           // Deliberately not `/admin/:section`, which would swallow a typo and
           // quietly render System for a path nobody defined.
           GoRoute(path: '/admin', redirect: (_, __) => '/admin/system'),
-          for (final s in AdministrationShell.sections)
+          for (final s in ManageShell.sections)
             GoRoute(
               path: s.route,
-              builder: (_, __) => AdministrationShell(section: s.id),
+              builder: (_, __) => ManageShell(section: s.id),
             ),
         ],
       ),
