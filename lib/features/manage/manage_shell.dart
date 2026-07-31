@@ -212,18 +212,39 @@ class _SectionNav extends StatelessWidget {
     final t = HcTokens.of(context);
 
     if (horizontal) {
-      return SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        padding:
-            EdgeInsets.symmetric(horizontal: t.space.sm, vertical: t.space.xs),
-        child: Row(
-          children: [
-            for (final s in ManageShell.sections)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 2),
-                child: _NavEntry(section: s, selected: s.id == current),
-              ),
-          ],
+      // A strip does not survive eighteen entries: it becomes a scroll you
+      // have to drag past the house half to reach the system one, with no
+      // indication the second half exists. A picker names where you are and
+      // opens the same grouped list the wide layout shows all at once.
+      final selected = current == null
+          ? null
+          : ManageShell.sections.where((s) => s.id == current).firstOrNull;
+      return Material(
+        color: t.surface.sunken,
+        child: InkWell(
+          onTap: () => _pick(context),
+          child: Padding(
+            padding: EdgeInsets.symmetric(
+                horizontal: t.space.md, vertical: t.space.sm),
+            child: Row(
+              children: [
+                Icon(selected?.icon ?? Icons.menu_rounded,
+                    size: 17, color: t.surface.onBaseMuted),
+                SizedBox(width: t.space.sm),
+                Expanded(
+                  child: Text(
+                    selected?.label ?? 'Sections',
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w600,
+                      color: t.surface.onBase,
+                    ),
+                  ),
+                ),
+                Icon(Icons.expand_more, size: 18, color: t.surface.onBaseMuted),
+              ],
+            ),
+          ),
         ),
       );
     }
@@ -260,6 +281,52 @@ class _SectionNav extends StatelessWidget {
       ),
     );
   }
+}
+
+/// The grouped list, as a sheet. Same order and headings as the rail — it is
+/// the same list, shown when there is no room to keep it open.
+Future<void> _pick(BuildContext context) async {
+  final t = HcTokens.of(context);
+  await showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: t.surface.raised,
+    isScrollControlled: true,
+    builder: (sheetContext) => SafeArea(
+      child: ListView(
+        shrinkWrap: true,
+        padding:
+            EdgeInsets.symmetric(horizontal: t.space.sm, vertical: t.space.md),
+        children: [
+          for (final group in SectionGroup.values)
+            if (ManageShell.sections.any((s) => s.group == group)) ...[
+              Padding(
+                padding:
+                    EdgeInsets.fromLTRB(t.space.sm, t.space.sm, 0, t.space.sm),
+                child: Text(
+                  group.heading.toUpperCase(),
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.2,
+                    color: t.surface.onBaseMuted,
+                  ),
+                ),
+              ),
+              for (final s in ManageShell.sections)
+                if (s.group == group)
+                  ListTile(
+                    leading: Icon(s.icon, size: 19),
+                    title: Text(s.label),
+                    onTap: () {
+                      Navigator.of(sheetContext).pop();
+                      context.go(s.route);
+                    },
+                  ),
+            ],
+        ],
+      ),
+    ),
+  );
 }
 
 class _NavEntry extends StatelessWidget {

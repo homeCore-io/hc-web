@@ -103,8 +103,15 @@ class SectionScaffold extends StatelessWidget {
                                   fontSize: 11.5,
                                 ),
                               ),
+                            // One line, ellipsized. Squeezed between a back
+                            // arrow and the stats on a narrow window, the
+                            // default wrapping broke words down the middle —
+                            // "Administratio / n" — which reads as a rendering
+                            // fault rather than a long title.
                             Text(
                               title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                               style: TextStyle(
                                 color: t.surface.onBase,
                                 fontSize: 26,
@@ -115,6 +122,8 @@ class SectionScaffold extends StatelessWidget {
                             if (subtitle != null)
                               Text(
                                 subtitle!,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
                                   color: t.surface.onBaseMuted,
                                   fontSize: 12.5,
