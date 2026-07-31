@@ -143,6 +143,12 @@ ENV HOMECORE_URL=http://homecore:8080
 # Bridge mode ignores it: `ports: ["3000:80"]` maps the default just fine.
 ENV WEB_PORT=80
 
+# Opt in to nginx:alpine's 15-local-resolvers.envsh, which reads
+# /etc/resolv.conf and exports NGINX_LOCAL_RESOLVERS for the template below.
+# The script returns early unless this is set, so without it the template would
+# render `resolver ;` and nginx would refuse the config.
+ENV NGINX_ENTRYPOINT_LOCAL_RESOLVERS=1
+
 # A template, not a static conf: nginx:alpine's entrypoint runs envsubst over
 # /etc/nginx/templates/*.template at container start, so HOMECORE_URL is a
 # RUNTIME knob. The same image therefore points at any homeCore without a
@@ -172,7 +178,27 @@ server {
     # SPA fallback: without it, /api/v1/devices matches `try_files ... /index.html`
     # and the client is handed HTML where it expects JSON.
     location /api/v1/ {
-        proxy_pass ${HOMECORE_URL};
+        # Resolve the upstream per request, not once at config load.
+        #
+        # `proxy_pass http://homecore:8080` with a literal hostname is resolved
+        # when nginx parses its config, and nginx *refuses to start* if that
+        # fails: `host not found in upstream`. So anything that makes core
+        # briefly unresolvable — it has not started yet, the stack was deployed
+        # onto a network without DNS — turns the healthy half of the stack into
+        # a container that exits and restarts forever, reporting a name lookup
+        # instead of the real problem. That is a boot loop as the failure mode
+        # for what should be a 502.
+        #
+        # A variable in proxy_pass defers resolution to request time, which
+        # needs an explicit resolver. Then an unreachable core is a 502 that
+        # recovers by itself the moment core answers.
+        #
+        # $request_uri is not optional here: with a variable, nginx no longer
+        # appends the request URI itself, so dropping it would proxy every
+        # call to / and silently break the whole API.
+        resolver ${NGINX_LOCAL_RESOLVERS} valid=10s;
+        set $homecore_url ${HOMECORE_URL};
+        proxy_pass $homecore_url$request_uri;
 
         proxy_http_version 1.1;
         proxy_set_header Upgrade    $http_upgrade;
