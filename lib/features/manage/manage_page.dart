@@ -145,7 +145,7 @@ class ManagePage extends ConsumerWidget {
         alert: pluginsOffline > 0,
       ),
       _Entry(
-        route: '/admin/areas',
+        route: '/areas',
         icon: Icons.meeting_room_outlined,
         title: 'Areas & rooms',
         detail: areas == null
@@ -208,9 +208,8 @@ class ManagePage extends ConsumerWidget {
     ];
 
     return SectionScaffold(
-      title: 'Manage',
-      // Manage is a rail destination, so "up" is the house, not itself.
-      onBack: () => context.go('/'),
+      // The shell header already says Manage; this pane is the overview in it.
+      title: 'Overview',
       stats: [
         if (devices != null)
           SectionStat(value: '${devices.length}', label: 'devices'),
@@ -379,7 +378,7 @@ class _AttentionRow extends StatelessWidget {
         item.level == AttentionLevel.bad ? t.accent.danger : t.accent.warn;
 
     return InkWell(
-      onTap: () => context.push(item.route),
+      onTap: () => context.go(item.route),
       borderRadius: t.radius.smR,
       child: Padding(
         padding: EdgeInsets.symmetric(
@@ -439,7 +438,7 @@ class _HouseTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
     return InkWell(
-      onTap: () => context.push(entry.route),
+      onTap: () => context.go(entry.route),
       borderRadius: t.radius.mdR,
       child: Container(
         height: 104,
@@ -504,7 +503,7 @@ class _SystemRow extends StatelessWidget {
             : null;
 
     return InkWell(
-      onTap: () => context.push(entry.route),
+      onTap: () => context.go(entry.route),
       child: Container(
         padding: EdgeInsets.symmetric(
             horizontal: t.space.md, vertical: t.space.sm + 2),

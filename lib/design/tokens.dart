@@ -233,6 +233,7 @@ class HcRadii {
   final double lg;
   final double pill;
 
+  BorderRadius get pillR => BorderRadius.circular(pill);
   BorderRadius get smR => BorderRadius.circular(sm);
   BorderRadius get mdR => BorderRadius.circular(md);
   BorderRadius get lgR => BorderRadius.circular(lg);

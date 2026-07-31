@@ -384,6 +384,84 @@ ThemeData hcTheme(HcSkin skin, {bool reduceMotion = false}) {
       space: 1,
       thickness: 1,
     ),
+
+    // Buttons and dialogs, in the skin.
+    //
+    // These were never themed, so every FilledButton in the app rendered at
+    // Material's default geometry — stadium-ish but not the design's pill,
+    // its own paddings, its own heights — while the screens around them were
+    // built from tokens. Administration showed it worst, because those screens
+    // are mostly buttons and rows: a token-built surface with Material-default
+    // controls sitting on it.
+    //
+    // Theming rather than a shared HcButton because the app already writes
+    // FilledButton/OutlinedButton/TextButton in ~40 places. A component means
+    // touching all of them and missing some; a theme reaches every one,
+    // including the ones added tomorrow.
+    filledButtonTheme: FilledButtonThemeData(
+      style: ButtonStyle(
+        minimumSize: WidgetStatePropertyAll(Size(0, t.density.rowHeight)),
+        padding: WidgetStatePropertyAll(
+            EdgeInsets.symmetric(horizontal: t.space.md)),
+        shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(borderRadius: t.radius.pillR)),
+        textStyle: const WidgetStatePropertyAll(
+            TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+      ),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: ButtonStyle(
+        minimumSize: WidgetStatePropertyAll(Size(0, t.density.rowHeight)),
+        padding: WidgetStatePropertyAll(
+            EdgeInsets.symmetric(horizontal: t.space.md)),
+        shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(borderRadius: t.radius.pillR)),
+        side: WidgetStateProperty.resolveWith((states) => BorderSide(
+              color: states.contains(WidgetState.hovered)
+                  ? t.accent.primary
+                  : t.stroke.hairline,
+            )),
+        backgroundColor: WidgetStatePropertyAll(t.surface.overlay),
+        foregroundColor: WidgetStatePropertyAll(t.surface.onBase),
+        textStyle: const WidgetStatePropertyAll(
+            TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+      ),
+    ),
+    textButtonTheme: TextButtonThemeData(
+      style: ButtonStyle(
+        minimumSize: WidgetStatePropertyAll(Size(0, t.density.rowHeight)),
+        shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(borderRadius: t.radius.pillR)),
+        foregroundColor: WidgetStatePropertyAll(t.accent.primary),
+        textStyle: const WidgetStatePropertyAll(
+            TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+      ),
+    ),
+    // Rows and switches, for the same reason: Administration is largely lists
+    // of them, and Material's defaults are a different density and a different
+    // blue from everything around them.
+    listTileTheme: ListTileThemeData(
+      iconColor: t.surface.onBaseMuted,
+      textColor: t.surface.onBase,
+      shape: RoundedRectangleBorder(borderRadius: t.radius.smR),
+      horizontalTitleGap: t.space.sm,
+    ),
+    switchTheme: SwitchThemeData(
+      thumbColor: WidgetStateProperty.resolveWith((states) =>
+          states.contains(WidgetState.selected)
+              ? t.accent.active
+              : t.surface.onBaseMuted),
+      trackColor: WidgetStateProperty.resolveWith((states) =>
+          states.contains(WidgetState.selected)
+              ? t.accent.active.withValues(alpha: 0.30)
+              : t.accent.inactive),
+      trackOutlineColor: WidgetStatePropertyAll(t.stroke.hairline),
+    ),
+    dialogTheme: DialogThemeData(
+      backgroundColor: t.surface.raised,
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(borderRadius: t.radius.lgR),
+    ),
     extensions: [t],
   );
 }
