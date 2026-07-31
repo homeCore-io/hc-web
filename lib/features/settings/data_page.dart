@@ -1,6 +1,11 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/providers/automations_provider.dart';
+import '../../core/providers/scenes_provider.dart';
 import '../../core/providers/system_config_provider.dart';
 import '../../core/web/browser_files.dart';
 import '../../design/components/hc_surface.dart';
@@ -62,9 +67,64 @@ class _DataPageState extends ConsumerState<DataPage> {
             ),
           ),
           SizedBox(height: t.space.lg),
+          const SectionLabel('Automations & scenes'),
+          Padding(
+            padding: EdgeInsets.only(bottom: t.space.sm),
+            child: Text(
+              'The half of a backup worth moving on its own. A whole-house '
+              'archive is mostly history and restoring one replaces '
+              'everything; these are just the rules and scenes, as JSON.',
+              style: TextStyle(fontSize: 12.5, color: t.surface.onBaseMuted),
+            ),
+          ),
+          _Card(
+            title: 'Export automations',
+            body: 'Every rule as core holds it. Keep it, diff it, or load it '
+                'into another house.',
+            action: OutlinedButton(
+              onPressed: _working ? null : () => _export(scenes: false),
+              child: const Text('Export'),
+            ),
+          ),
+          SizedBox(height: t.space.sm),
+          _Card(
+            title: 'Import automations',
+            body: 'Adds the rules in the file — it does not replace what is '
+                'here. Core gives each one a new id, so importing this '
+                "house's own export leaves you with two of everything. A rule "
+                'naming a device that does not exist is refused.',
+            action: OutlinedButton(
+              onPressed: _working ? null : () => _import(scenes: false),
+              child: const Text('Choose file…'),
+            ),
+          ),
+          SizedBox(height: t.space.sm),
+          _Card(
+            title: 'Export scenes',
+            body: 'Every scene and the device states it sets.',
+            action: OutlinedButton(
+              onPressed: _working ? null : () => _export(scenes: true),
+              child: const Text('Export'),
+            ),
+          ),
+          SizedBox(height: t.space.sm),
+          _Card(
+            title: 'Import scenes',
+            body: 'Adds, like automations — new ids, nothing replaced.',
+            action: OutlinedButton(
+              onPressed: _working ? null : () => _import(scenes: true),
+              child: const Text('Choose file…'),
+            ),
+          ),
+          SizedBox(height: t.space.lg),
           Row(
             children: [
               const Expanded(child: SectionLabel('Calendars')),
+              TextButton.icon(
+                icon: const Icon(Icons.upload_file, size: 16),
+                label: const Text('Upload .ics'),
+                onPressed: _working ? null : _uploadCalendar,
+              ),
               TextButton.icon(
                 icon: const Icon(Icons.add, size: 16),
                 label: const Text('Add calendar'),
@@ -120,6 +180,116 @@ class _DataPageState extends ConsumerState<DataPage> {
     final days = DateTime.now().difference(at).inDays;
     if (days == 0) return ' Last backed up today.';
     return ' Last backed up $days day${days == 1 ? '' : 's'} ago.';
+  }
+
+  /// Hand over rules or scenes as JSON.
+  ///
+  /// Named for the day it is opened, because the first question of a file
+  /// found in a downloads folder a year later is when it came from.
+  Future<void> _export({required bool scenes}) async {
+    final what = scenes ? 'scenes' : 'automations';
+    setState(() {
+      _working = true;
+      _status = null;
+    });
+    try {
+      final api = ref.read(systemDataApiProvider);
+      final data =
+          scenes ? await api.exportScenes() : await api.exportAutomations();
+      final pretty = const JsonEncoder.withIndent('  ').convert(data);
+      final stamp = DateTime.now().toIso8601String().split('T').first;
+      downloadBytes(
+        Uint8List.fromList(utf8.encode(pretty)),
+        'homecore-$what-$stamp.json',
+        mime: 'application/json',
+      );
+      if (mounted) {
+        setState(() => _status = 'Exported ${data.length} $what.');
+      }
+    } catch (e) {
+      if (mounted) setState(() => _status = 'Export failed: $e');
+    } finally {
+      if (mounted) setState(() => _working = false);
+    }
+  }
+
+  Future<void> _import({required bool scenes}) async {
+    final what = scenes ? 'scenes' : 'automations';
+    final file = await pickFile(accept: '.json,application/json');
+    if (file == null) return;
+    setState(() {
+      _working = true;
+      _status = null;
+    });
+    try {
+      final decoded = jsonDecode(utf8.decode(file.bytes));
+      if (decoded is! List) {
+        setState(() {
+          _status = 'That file is not an export: expected a JSON array '
+              'of $what.';
+        });
+        return;
+      }
+      final api = ref.read(systemDataApiProvider);
+      final res = scenes
+          ? await api.importScenes(decoded)
+          : await api.importAutomations(decoded);
+      if (!mounted) return;
+      setState(() => _status = res.ok
+          ? 'Added ${res.imported} $what from ${file.name}. Nothing was replaced.'
+          : 'Import failed: ${res.detail}');
+      if (res.ok) {
+        // Invalidated separately: the two providers are different types, and a
+        // ternary between them widens to Object, which invalidate refuses.
+        if (scenes) {
+          ref.invalidate(scenesProvider);
+        } else {
+          ref.invalidate(automationsProvider);
+        }
+      }
+    } on FormatException catch (e) {
+      if (mounted) {
+        setState(() => _status = 'That file is not JSON: ${e.message}');
+      }
+    } catch (e) {
+      if (mounted) setState(() => _status = 'Import failed: $e');
+    } finally {
+      if (mounted) setState(() => _working = false);
+    }
+  }
+
+  /// Add a calendar from a file rather than a URL.
+  ///
+  /// A URL only works for a feed that is reachable and stays reachable. An
+  /// exported .ics — a season's fixtures, school terms, a rota someone
+  /// emailed — has no URL to give.
+  Future<void> _uploadCalendar() async {
+    final file = await pickFile(accept: '.ics,text/calendar');
+    if (file == null) return;
+    setState(() {
+      _working = true;
+      _status = null;
+    });
+    try {
+      final text = utf8.decode(file.bytes);
+      if (!text.contains('BEGIN:VCALENDAR')) {
+        setState(() => _status =
+            'That does not look like an .ics file — no BEGIN:VCALENDAR in it.');
+        return;
+      }
+      final name =
+          file.name.replaceAll(RegExp(r'\.ics$', caseSensitive: false), '');
+      final res =
+          await ref.read(systemDataApiProvider).uploadCalendar(text, name);
+      if (!mounted) return;
+      setState(() =>
+          _status = res.ok ? 'Added $name.' : 'Upload failed: ${res.detail}');
+      if (res.ok) ref.invalidate(calendarsProvider);
+    } catch (e) {
+      if (mounted) setState(() => _status = 'Upload failed: $e');
+    } finally {
+      if (mounted) setState(() => _working = false);
+    }
   }
 
   Future<void> _backup() async {

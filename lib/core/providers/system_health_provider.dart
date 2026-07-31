@@ -21,6 +21,20 @@ final systemStatusProvider = FutureProvider<Map<String, dynamic>>((ref) async {
   return Map<String, dynamic>.from(response.data as Map);
 });
 
+/// `GET /system/versions` — every component's version, not just core's.
+///
+/// The point of the component_versioning work: core, the SDK and each plugin
+/// carry their own SemVer, so "what is this house running" has more than one
+/// answer. In a container this is the BOM the image build wrote; a plain
+/// binary reports just its own version, which is honest — nothing else was
+/// packaged with it.
+final systemVersionsProvider =
+    FutureProvider<Map<String, dynamic>>((ref) async {
+  final client = ref.read(homecoreClientProvider);
+  final response = await client.dio.get('/system/versions');
+  return Map<String, dynamic>.from(response.data as Map);
+});
+
 /// `6211` → `1h 43m`. Uptime is read at a glance, so the seconds are noise and
 /// a bare count of them is not a duration anybody parses.
 String formatUptime(num seconds) {

@@ -2,14 +2,28 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/api/system_config_api.dart';
 import '../../core/devices/orphans.dart';
 import '../../core/models/device_state.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/providers/devices_provider.dart';
 import '../../core/providers/stale_refs_provider.dart';
+import '../../core/providers/system_config_provider.dart';
+import '../../core/text/humanize.dart';
 import '../../design/components/hc_surface.dart';
 import '../../design/tokens.dart';
 import '../../shared/widgets/section_scaffold.dart';
+
+/// `GET /devices/orphaned` — what each *running* plugin says it owns, against
+/// what core holds for it.
+///
+/// A different question from the unclaimed list below it, which is computed
+/// from the device list and finds the leavings of plugins that are gone. This
+/// one catches a device dropped by a plugin that is still running perfectly —
+/// a bulb unpaired at the bridge, a sensor removed from a hub — which nothing
+/// else in the app notices.
+final orphanReportProvider = FutureProvider.autoDispose(
+    (ref) async => ref.watch(systemDataApiProvider).orphanReport());
 
 class MaintenancePage extends ConsumerStatefulWidget {
   const MaintenancePage({super.key});
@@ -129,6 +143,35 @@ class _MaintenancePageState extends ConsumerState<MaintenancePage> {
               ],
             ),
           ],
+          SizedBox(height: t.space.lg),
+          const SectionLabel('Devices a running plugin no longer claims'),
+          Padding(
+            padding: EdgeInsets.only(bottom: t.space.sm),
+            child: Text(
+              'Core compares what it holds for each live plugin against what '
+              'that plugin reports owning. A gap means the hardware went away '
+              'while its plugin stayed up — a bulb unpaired at the bridge, a '
+              'sensor removed from a hub. Only plugins that are running and '
+              'answer the management protocol can be checked.',
+              style: TextStyle(fontSize: 12.5, color: t.surface.onBaseMuted),
+            ),
+          ),
+          ref.watch(orphanReportProvider).when(
+                loading: () => const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+                error: (e, _) => _Note('Could not check: $e'),
+                data: (report) => report.total == 0
+                    ? const _Clear(
+                        'Every plugin holds exactly what core holds for it.')
+                    : Column(
+                        children: [
+                          for (final p in report.plugins)
+                            if (p.suspects.isNotEmpty) _DriftRow(plugin: p),
+                        ],
+                      ),
+              ),
         ],
       ),
     );
@@ -178,6 +221,65 @@ class _MaintenancePageState extends ConsumerState<MaintenancePage> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+}
+
+/// One plugin whose device count disagrees with core's.
+class _DriftRow extends StatelessWidget {
+  const _DriftRow({required this.plugin});
+  final OrphanPlugin plugin;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Padding(
+      padding: EdgeInsets.only(bottom: t.space.sm),
+      child: HcSurface(
+        padding:
+            EdgeInsets.symmetric(horizontal: t.space.md, vertical: t.space.sm),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(humanize(plugin.pluginId),
+                      style: TextStyle(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w600,
+                          color: t.surface.onBase)),
+                ),
+                Text(
+                  'core holds ${plugin.coreHolds} · plugin reports '
+                  '${plugin.pluginReports}',
+                  style: TextStyle(fontSize: 12, color: t.surface.onBaseMuted),
+                ),
+              ],
+            ),
+            SizedBox(height: t.space.xs),
+            for (final d in plugin.suspects)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 1),
+                child: Text(
+                  d.staleSecs == null
+                      ? '· ${d.name ?? d.deviceId}'
+                      : '· ${d.name ?? d.deviceId}  — last seen '
+                          '${_ago(d.staleSecs!)} ago',
+                  style:
+                      TextStyle(fontSize: 12.5, color: t.surface.onBaseMuted),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static String _ago(int secs) {
+    if (secs >= 86400) return '${secs ~/ 86400}d';
+    if (secs >= 3600) return '${secs ~/ 3600}h';
+    if (secs >= 60) return '${secs ~/ 60}m';
+    return '${secs}s';
   }
 }
 
