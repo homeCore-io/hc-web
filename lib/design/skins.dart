@@ -10,9 +10,6 @@ enum HcShell {
 
   /// A panel bolted to a wall, read from across the room, often in the dark.
   wall,
-
-  /// The operator's desk. Dense, precise, information-first.
-  admin,
 }
 
 /// The available skins. A skin is a complete [HcTokens] set; the shell picks a
@@ -26,7 +23,6 @@ enum HcSkin {
 
   static HcSkin defaultFor(HcShell shell) => switch (shell) {
         HcShell.wall => HcSkin.ambientGlass,
-        HcShell.admin => HcSkin.controlRoom,
         // Dark by default. Soft Home is still here for anyone who wants a light
         // app, but the design was drawn dark and a warm halo on a light ground
         // has nothing to bleed into — the glow, which is the whole language,
