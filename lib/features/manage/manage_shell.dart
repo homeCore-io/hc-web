@@ -66,6 +66,10 @@ class ManageShell extends ConsumerWidget {
     ManageSection('logs', 'Logs', Icons.terminal_outlined),
   ];
 
+  /// The landing pane: Manage itself, which is inside the shell but is not one
+  /// of its sections.
+  static const landing = '/manage';
+
   /// The section the router is currently showing.
   ///
   /// Matched on the location rather than passed in, because with one
@@ -112,10 +116,18 @@ class ManageShell extends ConsumerWidget {
     return SectionScaffold(
       // The header names the half you are in, from the section's own group —
       // so a house section says Manage and a system one says Administration,
-      // without this widget knowing which sections exist.
-      breadcrumbs: const ['Manage'],
-      title: (current?.group ?? SectionGroup.system).title,
-      subtitle: current?.label,
+      // without this widget knowing which sections exist. On the landing there
+      // is no half yet, and no crumb either: you are already at Manage, and
+      // "Manage › Manage" is not a trail.
+      breadcrumbs: location == landing ? const [] : const ['Manage'],
+      // Up from a section is the overview; up from the overview is the house.
+      // SectionScaffold's default is /manage, which on the landing is a button
+      // that goes where you already are.
+      onBack: location == landing ? () => context.go('/') : null,
+      title: location == landing
+          ? 'Manage'
+          : (current?.group ?? SectionGroup.system).title,
+      subtitle: location == landing ? null : current?.label,
       stats: stats,
       child: LayoutBuilder(builder: (context, box) {
         // Below the breakpoint the rail becomes a scrolling strip above the

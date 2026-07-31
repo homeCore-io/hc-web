@@ -104,7 +104,6 @@ GoRouter _buildRouter(Ref ref) {
             builder: (_, state) =>
                 PageScreen(dashboardId: state.pathParameters['id']!),
           ),
-          GoRoute(path: '/manage', builder: (_, __) => const ManagePage()),
           // The old top-level paths for what are now Administration sections.
           // Kept as redirects rather than deleted: they were live, they are in
           // bookmarks and in the command palette, and a link that used to work
@@ -203,6 +202,9 @@ GoRouter _buildRouter(Ref ref) {
           ShellRoute(
             builder: (context, state, child) => ManageShell(child: child),
             routes: [
+              // The landing. Not a section — it has no rail entry, because the
+              // rail is how you leave it and the nav rail already points here.
+              GoRoute(path: '/manage', builder: (_, __) => const ManagePage()),
               GoRoute(
                   path: '/automations',
                   builder: (_, __) => const AutomationListPage()),
