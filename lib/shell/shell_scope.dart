@@ -4,16 +4,17 @@ import 'package:go_router/go_router.dart';
 
 import '../design/skins.dart';
 import '../design/hc_icons.dart';
-import 'admin_chrome.dart';
+import 'command_palette.dart';
 import 'touch_chrome.dart';
 import 'wall_chrome.dart';
 
 /// The user's skin choice, or null to let each shell pick its own.
 ///
-/// The shells are opinionated by default — Control Room for admin, Ambient Glass
-/// on the wall, Soft Home in the hand — but none of that is hard-coded into a
-/// widget, so overriding it here re-skins the whole app without touching a
-/// single component.
+/// The shells are opinionated by default — Ambient Glass on the wall, Midnight
+/// in the hand — but none of that is hard-coded into a widget, so overriding it
+/// here re-skins the whole app without touching a single component. Control
+/// Room is still reachable this way; it simply is not anyone's default now that
+/// the admin portal it belonged to is part of the app.
 final skinOverrideProvider = StateProvider<HcSkin?>((ref) => null);
 
 /// Which surface a route belongs to.
@@ -23,7 +24,15 @@ final skinOverrideProvider = StateProvider<HcSkin?>((ref) => null);
 /// *for*, not how big it is.
 HcShell shellFor(String location) {
   if (location.startsWith('/wall')) return HcShell.wall;
-  if (location.startsWith('/admin')) return HcShell.admin;
+  // `/admin/*` is NOT its own surface. It was, when Administration was a
+  // separate portal — Control Room's skin, its own chrome, its own top bar. It
+  // is not one any more: System, Configuration, Logs and the rest are sections
+  // of Manage, sitting in the same ManageShell as Automations and Devices.
+  //
+  // Leaving this branch in meant the inner shell was shared and the outer one
+  // was not, so /automations rendered in Midnight under the nav rail while
+  // /admin/system rendered in Control Room under a top bar — same rail, same
+  // header, two different applications, one click apart.
   return HcShell.touch;
 }
 
@@ -31,8 +40,7 @@ HcShell shellFor(String location) {
 /// chrome around the page.
 ///
 /// The pages themselves know nothing about any of this. A device list is a
-/// device list; it just happens to be dense and hairlined under `/admin`, and
-/// large and frosted under `/wall`.
+/// device list; it just happens to be large and frosted under `/wall`.
 class ShellScope extends ConsumerWidget {
   const ShellScope({super.key, required this.child});
 
@@ -49,19 +57,25 @@ class ShellScope extends ConsumerWidget {
     return Theme(
       data: hcTheme(skin, reduceMotion: reduceMotion),
       // The theme must be applied *above* the chrome, or the chrome would draw
-      // itself in the previous shell's skin for one frame on every navigation.
+      // itself in the previous skin for one frame on every navigation.
       child: Builder(
         builder: (context) => switch (shell) {
           HcShell.wall => WallChrome(child: child),
-          HcShell.admin => AdminChrome(child: child),
-          HcShell.touch => TouchChrome(child: child),
+          // The palette lives here rather than in a chrome because it is how you
+          // navigate — three letters beats a rail that cannot list eighteen
+          // sections. It used to be mounted only inside AdminChrome, so ⌘K
+          // worked on /admin/* and nowhere else: the one part of the app whose
+          // rail already showed you everything. Not on the wall, which is a
+          // kiosk and has no keyboard.
+          HcShell.touch =>
+            CommandPaletteScope(child: TouchChrome(child: child)),
         },
       ),
     );
   }
 }
 
-/// The destinations shared by the touch and admin chromes.
+/// A place the chrome can send you.
 class NavItem {
   const NavItem(this.route, this.label, this.icon, {this.adminOnly = false});
 

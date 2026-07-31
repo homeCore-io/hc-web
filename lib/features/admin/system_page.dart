@@ -6,7 +6,8 @@ import '../../core/providers/auth_provider.dart';
 import '../../core/providers/system_health_provider.dart';
 import '../../core/text/humanize.dart';
 import '../../core/providers/time_display_provider.dart';
-import '../../design/components/hc_surface.dart';
+import '../../design/components/hc_controls.dart';
+import '../../design/components/hc_rows.dart';
 import '../../design/tokens.dart';
 import '../../shared/widgets/section_scaffold.dart';
 
@@ -63,17 +64,14 @@ class _SystemPageState extends ConsumerState<SystemPage> {
       title: 'System',
       stats: [if (statusStat != null) statusStat],
       actions: [
-        Builder(builder: (context) {
-          final tk = HcTokens.of(context);
-          return IconButton(
-            icon: Icon(Icons.refresh, color: tk.surface.onBaseMuted),
-            tooltip: 'Refresh',
-            onPressed: () {
-              ref.invalidate(systemHealthProvider);
-              ref.invalidate(systemStatusProvider);
-            },
-          );
-        }),
+        HcIconButton(
+          icon: Icons.refresh,
+          tooltip: 'Refresh',
+          onPressed: () {
+            ref.invalidate(systemHealthProvider);
+            ref.invalidate(systemStatusProvider);
+          },
+        ),
       ],
       child: ListView(
         padding: EdgeInsets.all(t.space.lg),
@@ -89,8 +87,9 @@ class _SystemPageState extends ConsumerState<SystemPage> {
           // ── detailed status ──
           const SectionLabel('Runtime'),
           statusAsync.when(
-            loading: () => const _Loading(),
-            error: (e, _) => _ErrorSurface('Status unavailable', '$e'),
+            loading: () => const HcRowsLoading(rows: 7),
+            error: (e, _) =>
+                HcRowsNotice.error(title: 'Status unavailable', detail: '$e'),
             data: (status) {
               final rows = <(IconData, String, String)>[
                 (Icons.rule_outlined, 'Rules', _count(status['rules_total'])),
@@ -119,9 +118,9 @@ class _SystemPageState extends ConsumerState<SystemPage> {
                 ),
                 (Icons.schedule, 'Timezone', '${status['timezone'] ?? '—'}'),
               ];
-              return _RowsSurface([
+              return HcRows([
                 for (final r in rows)
-                  _KvRow(icon: r.$1, label: r.$2, value: r.$3),
+                  HcKvRow(icon: r.$1, label: r.$2, value: r.$3),
               ]);
             },
           ),
@@ -130,8 +129,9 @@ class _SystemPageState extends ConsumerState<SystemPage> {
           // ── what this house is actually running ──
           const SectionLabel('Versions'),
           ref.watch(systemVersionsProvider).when(
-                loading: () => const _Loading(),
-                error: (e, _) => _ErrorSurface('Versions unavailable', '$e'),
+                loading: () => const HcRowsLoading(rows: 2),
+                error: (e, _) => HcRowsNotice.error(
+                    title: 'Versions unavailable', detail: '$e'),
                 data: (versions) {
                   // Whatever core reports, in the order it reports it. A
                   // container image writes a bill of materials here — core, the
@@ -140,12 +140,14 @@ class _SystemPageState extends ConsumerState<SystemPage> {
                   // than a gap.
                   final entries = versions.entries.toList();
                   if (entries.isEmpty) {
-                    return const _ErrorSurface(
-                        'No versions reported', 'core returned an empty set');
+                    return const HcRowsNotice(
+                      title: 'No versions reported',
+                      detail: 'core returned an empty set',
+                    );
                   }
-                  return _RowsSurface([
+                  return HcRows([
                     for (final e in entries)
-                      _KvRow(
+                      HcKvRow(
                         icon: Icons.inventory_2_outlined,
                         label: humanize(e.key),
                         value: '${e.value}',
@@ -157,8 +159,8 @@ class _SystemPageState extends ConsumerState<SystemPage> {
 
           // ── this session ──
           const SectionLabel('Signed in as'),
-          _RowsSurface([
-            _KvRow(
+          HcRows([
+            HcKvRow(
               icon: Icons.account_circle_outlined,
               label: currentUser?['username'] as String? ?? '—',
               value: _displayRole(currentUser?['role'] as String? ?? ''),
@@ -168,24 +170,15 @@ class _SystemPageState extends ConsumerState<SystemPage> {
 
           // ── display preference ──
           const SectionLabel('Display'),
-          HcSurface(
-            padding: EdgeInsets.symmetric(
-                horizontal: t.space.md, vertical: t.space.xs),
-            child: SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              secondary: Icon(Icons.access_time_outlined,
-                  color: t.surface.onBaseMuted),
-              title: Text('Show times in UTC',
-                  style: TextStyle(color: t.surface.onBase)),
-              subtitle: Text(
-                isUtc ? 'Timestamps shown as UTC (Z)' : 'Local time',
-                style: TextStyle(color: t.surface.onBaseMuted, fontSize: 12.5),
-              ),
-              activeThumbColor: t.accent.active,
+          HcRows([
+            HcToggleRow(
+              icon: Icons.access_time_outlined,
+              label: 'Show times in UTC',
+              subtitle: isUtc ? 'Timestamps shown as UTC (Z)' : 'Local time',
               value: isUtc,
               onChanged: (_) => ref.read(timeUtcProvider.notifier).toggle(),
             ),
-          ),
+          ]),
         ],
       ),
     );
@@ -217,88 +210,4 @@ class _SystemPageState extends ConsumerState<SystemPage> {
         'service_operator' => 'Service Operator',
         _ => role,
       };
-}
-
-class _RowsSurface extends StatelessWidget {
-  const _RowsSurface(this.rows);
-  final List<Widget> rows;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = HcTokens.of(context);
-    return HcSurface(
-      padding: EdgeInsets.symmetric(horizontal: t.space.md),
-      child: Column(children: [
-        for (var i = 0; i < rows.length; i++) ...[
-          if (i > 0) Divider(height: 1, color: t.stroke.hairline),
-          rows[i],
-        ],
-      ]),
-    );
-  }
-}
-
-class _KvRow extends StatelessWidget {
-  const _KvRow({required this.icon, required this.label, required this.value});
-  final IconData icon;
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = HcTokens.of(context);
-    return Padding(
-      padding: EdgeInsets.symmetric(vertical: t.space.md),
-      child: Row(children: [
-        Icon(icon, size: 18, color: t.surface.onBaseMuted),
-        SizedBox(width: t.space.md),
-        Expanded(child: Text(label, style: TextStyle(color: t.surface.onBase))),
-        Text(value,
-            style: TextStyle(
-                color: t.surface.onBaseMuted,
-                fontFeatures: t.numericFontFeatures)),
-      ]),
-    );
-  }
-}
-
-class _Loading extends StatelessWidget {
-  const _Loading();
-  @override
-  Widget build(BuildContext context) {
-    final t = HcTokens.of(context);
-    return HcSurface(
-      padding: EdgeInsets.all(t.space.lg),
-      child: const Center(child: CircularProgressIndicator()),
-    );
-  }
-}
-
-class _ErrorSurface extends StatelessWidget {
-  const _ErrorSurface(this.title, this.detail);
-  final String title;
-  final String detail;
-  @override
-  Widget build(BuildContext context) {
-    final t = HcTokens.of(context);
-    return HcSurface(
-      padding: EdgeInsets.all(t.space.md),
-      child: Row(children: [
-        Icon(Icons.error_outline, color: t.accent.danger, size: 18),
-        SizedBox(width: t.space.md),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title, style: TextStyle(color: t.surface.onBase)),
-              Text(detail,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: t.surface.onBaseMuted, fontSize: 12)),
-            ],
-          ),
-        ),
-      ]),
-    );
-  }
 }

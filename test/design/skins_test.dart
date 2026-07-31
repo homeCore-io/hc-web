@@ -31,11 +31,13 @@ void main() {
         for (final s in HcShell.values) s: HcSkin.defaultFor(s),
       };
       expect(skins[HcShell.wall], HcSkin.ambientGlass);
-      expect(skins[HcShell.admin], HcSkin.controlRoom);
       // Dark by default: a warm halo on a light ground has nothing to bleed
       // into, and the glow is the whole language.
       expect(skins[HcShell.touch], HcSkin.midnight);
-      expect(skins.values.toSet(), hasLength(3));
+      // Two surfaces, two defaults. Control Room is still a skin anyone can
+      // choose through skinOverrideProvider; it is no longer a *default*,
+      // because the admin portal it was the default for is now part of the app.
+      expect(skins.values.toSet(), hasLength(2));
     });
 
     test('only the wall skin frosts; the flat skins opt out via blur = 0', () {

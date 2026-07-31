@@ -8,7 +8,9 @@ import '../../core/providers/automations_provider.dart';
 import '../../core/providers/scenes_provider.dart';
 import '../../core/providers/system_config_provider.dart';
 import '../../core/web/browser_files.dart';
-import '../../design/components/hc_surface.dart';
+import '../../design/components/hc_controls.dart';
+import '../../design/components/hc_dialog.dart';
+import '../../design/components/hc_rows.dart';
 import '../../core/providers/system_health_provider.dart';
 import '../../design/tokens.dart';
 import '../../shared/widgets/section_scaffold.dart';
@@ -28,6 +30,9 @@ class _DataPageState extends ConsumerState<DataPage> {
   bool _working = false;
   String? _status;
 
+  /// Every failure path writes "<verb> failed: …"; nothing else does.
+  bool get _failed => _status?.contains('failed') ?? false;
+
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
@@ -40,32 +45,42 @@ class _DataPageState extends ConsumerState<DataPage> {
         padding: EdgeInsets.all(t.space.lg),
         children: [
           if (_status != null) ...[
-            _Note(_status!),
+            HcRowsNotice(
+              title: _status!,
+              icon: _failed ? Icons.error_outline : Icons.check_circle_outline,
+              danger: _failed,
+            ),
             SizedBox(height: t.space.md),
           ],
           const SectionLabel('Backup'),
-          _Card(
-            title: 'Download a backup',
-            body: 'Both databases, homecore.toml, modes and every rule, as one '
-                'zip. The history database is nearly all of the size.'
-                '${_lastBackupSentence(ref)}',
-            action: FilledButton(
-              onPressed: _working ? null : _backup,
-              child: Text(_working ? 'Working…' : 'Download'),
+          HcRows([
+            HcRow(
+              icon: Icons.archive_outlined,
+              label: 'Download a backup',
+              subtitle:
+                  'Both databases, homecore.toml, modes and every rule, as one '
+                  'zip. The history database is nearly all of the size.'
+                  '${_lastBackupSentence(ref)}',
+              trailing: HcButton(
+                label: _working ? 'Working…' : 'Download',
+                kind: HcButtonKind.primary,
+                onPressed: _working ? null : _backup,
+              ),
             ),
-          ),
-          SizedBox(height: t.space.sm),
-          _Card(
-            title: 'Restore from a backup',
-            body: 'Replaces the devices, rules, scenes, areas, users and '
-                'configuration in this house with the contents of the file. '
-                'Core needs a restart afterwards to run on them.',
-            danger: true,
-            action: OutlinedButton(
-              onPressed: _working ? null : _restore,
-              child: const Text('Choose file…'),
+            HcRow(
+              icon: Icons.settings_backup_restore,
+              label: 'Restore from a backup',
+              subtitle: 'Replaces the devices, rules, scenes, areas, users and '
+                  'configuration in this house with the contents of the file. '
+                  'Core needs a restart afterwards to run on them.',
+              danger: true,
+              trailing: HcButton(
+                label: 'Choose file…',
+                kind: HcButtonKind.danger,
+                onPressed: _working ? null : _restore,
+              ),
             ),
-          ),
+          ]),
           SizedBox(height: t.space.lg),
           const SectionLabel('Automations & scenes'),
           Padding(
@@ -77,57 +92,67 @@ class _DataPageState extends ConsumerState<DataPage> {
               style: TextStyle(fontSize: 12.5, color: t.surface.onBaseMuted),
             ),
           ),
-          _Card(
-            title: 'Export automations',
-            body: 'Every rule as core holds it. Keep it, diff it, or load it '
-                'into another house.',
-            action: OutlinedButton(
-              onPressed: _working ? null : () => _export(scenes: false),
-              child: const Text('Export'),
+          HcRows([
+            HcRow(
+              icon: Icons.rule_outlined,
+              label: 'Export automations',
+              subtitle: 'Every rule as core holds it. Keep it, diff it, or '
+                  'load it into another house.',
+              trailing: HcButton(
+                label: 'Export',
+                kind: HcButtonKind.ghost,
+                onPressed: _working ? null : () => _export(scenes: false),
+              ),
             ),
-          ),
-          SizedBox(height: t.space.sm),
-          _Card(
-            title: 'Import automations',
-            body: 'Adds the rules in the file — it does not replace what is '
-                'here. Core gives each one a new id, so importing this '
-                "house's own export leaves you with two of everything. A rule "
-                'naming a device that does not exist is refused.',
-            action: OutlinedButton(
-              onPressed: _working ? null : () => _import(scenes: false),
-              child: const Text('Choose file…'),
+            HcRow(
+              icon: Icons.file_download_outlined,
+              label: 'Import automations',
+              subtitle: 'Adds the rules in the file — it does not replace what '
+                  'is here. Core gives each one a new id, so importing this '
+                  "house's own export leaves you with two of everything. A "
+                  'rule naming a device that does not exist is refused.',
+              trailing: HcButton(
+                label: 'Choose file…',
+                kind: HcButtonKind.ghost,
+                onPressed: _working ? null : () => _import(scenes: false),
+              ),
             ),
-          ),
-          SizedBox(height: t.space.sm),
-          _Card(
-            title: 'Export scenes',
-            body: 'Every scene and the device states it sets.',
-            action: OutlinedButton(
-              onPressed: _working ? null : () => _export(scenes: true),
-              child: const Text('Export'),
+            HcRow(
+              icon: Icons.palette_outlined,
+              label: 'Export scenes',
+              subtitle: 'Every scene and the device states it sets.',
+              trailing: HcButton(
+                label: 'Export',
+                kind: HcButtonKind.ghost,
+                onPressed: _working ? null : () => _export(scenes: true),
+              ),
             ),
-          ),
-          SizedBox(height: t.space.sm),
-          _Card(
-            title: 'Import scenes',
-            body: 'Adds, like automations — new ids, nothing replaced.',
-            action: OutlinedButton(
-              onPressed: _working ? null : () => _import(scenes: true),
-              child: const Text('Choose file…'),
+            HcRow(
+              icon: Icons.file_download_outlined,
+              label: 'Import scenes',
+              subtitle: 'Adds, like automations — new ids, nothing replaced.',
+              trailing: HcButton(
+                label: 'Choose file…',
+                kind: HcButtonKind.ghost,
+                onPressed: _working ? null : () => _import(scenes: true),
+              ),
             ),
-          ),
+          ]),
           SizedBox(height: t.space.lg),
           Row(
             children: [
               const Expanded(child: SectionLabel('Calendars')),
-              TextButton.icon(
-                icon: const Icon(Icons.upload_file, size: 16),
-                label: const Text('Upload .ics'),
+              HcButton(
+                label: 'Upload .ics',
+                icon: Icons.upload_file,
+                kind: HcButtonKind.ghost,
                 onPressed: _working ? null : _uploadCalendar,
               ),
-              TextButton.icon(
-                icon: const Icon(Icons.add, size: 16),
-                label: const Text('Add calendar'),
+              SizedBox(width: t.space.sm),
+              HcButton(
+                label: 'Add calendar',
+                icon: Icons.add,
+                kind: HcButtonKind.ghost,
                 onPressed: _working ? null : _addCalendar,
               ),
             ],
@@ -141,23 +166,22 @@ class _DataPageState extends ConsumerState<DataPage> {
             ),
           ),
           calendars.when(
-            loading: () => const Padding(
-              padding: EdgeInsets.all(16),
-              child: Center(child: CircularProgressIndicator()),
-            ),
-            error: (e, _) => _Note('Calendars unavailable: $e'),
+            loading: () => const HcRowsLoading(rows: 2),
+            error: (e, _) => HcRowsNotice.error(
+                title: 'Calendars unavailable', detail: '$e'),
             data: (list) => list.isEmpty
-                ? const _Note(
-                    'No calendars. Add one by URL — an .ics or webcal feed.')
-                : Column(
-                    children: [
-                      for (final c in list)
-                        _CalendarRow(
-                          calendar: c,
-                          onDelete: () => _deleteCalendar('${c['id']}'),
-                        ),
-                    ],
-                  ),
+                ? const HcRowsNotice(
+                    icon: Icons.event_outlined,
+                    title: 'No calendars',
+                    detail: 'Add one by URL — an .ics or webcal feed.',
+                  )
+                : HcRows([
+                    for (final c in list)
+                      _CalendarRow(
+                        calendar: c,
+                        onDelete: () => _deleteCalendar('${c['id']}'),
+                      ),
+                  ]),
           ),
         ],
       ),
@@ -426,52 +450,6 @@ class _DataPageState extends ConsumerState<DataPage> {
       : '${(bytes / 1024).toStringAsFixed(0)} KB';
 }
 
-class _Card extends StatelessWidget {
-  const _Card({
-    required this.title,
-    required this.body,
-    required this.action,
-    this.danger = false,
-  });
-
-  final String title;
-  final String body;
-  final Widget action;
-  final bool danger;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = HcTokens.of(context);
-    return HcSurface(
-      padding: EdgeInsets.all(t.space.md),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: danger ? t.accent.danger : t.surface.onBase,
-                    )),
-                const SizedBox(height: 4),
-                Text(body,
-                    style: TextStyle(
-                        fontSize: 12.5, color: t.surface.onBaseMuted)),
-              ],
-            ),
-          ),
-          SizedBox(width: t.space.md),
-          action,
-        ],
-      ),
-    );
-  }
-}
-
 class _CalendarRow extends StatelessWidget {
   const _CalendarRow({required this.calendar, required this.onDelete});
 
@@ -480,66 +458,20 @@ class _CalendarRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final t = HcTokens.of(context);
     final upcoming = calendar['upcoming_count'] ?? 0;
     final total = calendar['event_count'] ?? 0;
 
-    return Padding(
-      padding: EdgeInsets.only(bottom: t.space.sm),
-      child: HcSurface(
-        padding:
-            EdgeInsets.symmetric(horizontal: t.space.md, vertical: t.space.sm),
-        child: Row(
-          children: [
-            Icon(Icons.event_outlined, size: 18, color: t.surface.onBaseMuted),
-            SizedBox(width: t.space.md),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('${calendar['id']}',
-                      style: const TextStyle(
-                          fontSize: 14, fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 2),
-                  Text(
-                    '$upcoming upcoming · $total events'
-                    '${calendar['source_url'] != null ? ' · fetched from a URL' : ''}',
-                    style:
-                        TextStyle(fontSize: 12.5, color: t.surface.onBaseMuted),
-                  ),
-                ],
-              ),
-            ),
-            IconButton(
-              icon:
-                  Icon(Icons.delete_outline, size: 18, color: t.accent.danger),
-              tooltip: 'Remove',
-              onPressed: onDelete,
-            ),
-          ],
-        ),
+    return HcRow(
+      icon: Icons.event_outlined,
+      label: '${calendar['id']}',
+      subtitle: '$upcoming upcoming · $total events'
+          '${calendar['source_url'] != null ? ' · fetched from a URL' : ''}',
+      trailing: HcIconButton(
+        icon: Icons.delete_outline,
+        tooltip: 'Remove',
+        danger: true,
+        onPressed: onDelete,
       ),
-    );
-  }
-}
-
-class _Note extends StatelessWidget {
-  const _Note(this.text);
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = HcTokens.of(context);
-    return Container(
-      padding:
-          EdgeInsets.symmetric(horizontal: t.space.md, vertical: t.space.sm),
-      decoration: BoxDecoration(
-        color: t.surface.raised,
-        border: Border.all(color: t.stroke.hairline),
-        borderRadius: BorderRadius.circular(t.radius.md),
-      ),
-      child: SelectableText(text,
-          style: TextStyle(fontSize: 12.5, color: t.surface.onBaseMuted)),
     );
   }
 }

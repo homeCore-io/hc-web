@@ -8,6 +8,7 @@ import '../core/providers/dashboards_provider.dart';
 import '../core/providers/nav_prefs_provider.dart';
 import '../design/hc_icons.dart';
 import '../design/tokens.dart';
+import 'command_palette.dart';
 import 'hub_launcher.dart';
 import 'session_status.dart';
 
@@ -51,6 +52,23 @@ class HcNavRail extends ConsumerWidget {
           _RailToggle(
             expanded: expanded,
             onTap: () => ref.read(navRailExpandedProvider.notifier).toggle(),
+          ),
+          _Divider(expanded: expanded, t: t),
+          // The palette, advertised rather than left to be guessed.
+          //
+          // The rail lists two destinations on purpose; the palette is how you
+          // reach the other sixteen. That only works if you know it exists —
+          // and until now the only thing that said so was a "Jump to… ⌘K"
+          // button inside the admin chrome, i.e. on the one surface whose rail
+          // already showed you everything. When that chrome went, so did the
+          // only hint. It belongs here, above Home, on every screen.
+          _RailItem(
+            icon: Icons.search_rounded,
+            label: 'Jump to…',
+            trailing: '⌘K',
+            expanded: expanded,
+            selected: false,
+            onTap: () => showCommandPalette(context, ref),
           ),
           _Divider(expanded: expanded, t: t),
           _RailItem(
@@ -164,6 +182,7 @@ class _RailItem extends StatelessWidget {
     required this.expanded,
     required this.selected,
     required this.onTap,
+    this.trailing,
   });
 
   final IconData icon;
@@ -171,6 +190,10 @@ class _RailItem extends StatelessWidget {
   final bool expanded;
   final bool selected;
   final VoidCallback onTap;
+
+  /// A hint shown after the label when the rail is open — the palette's ⌘K.
+  /// Collapsed, there is no room and the tooltip carries it instead.
+  final String? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -217,6 +240,33 @@ class _RailItem extends StatelessWidget {
                     ),
                   ),
                 ),
+                // Flexible + ClipRect, and gated on `expanded` rather than
+                // faded. Two separate ways this overflowed the row: an opacity
+                // of zero still occupies its width (20px of invisible "⌘K" in a
+                // 64px collapsed rail), and `expanded` flips a frame before the
+                // AnimatedContainer has finished widening, so even gated it is
+                // briefly asked to fit a rail that is still narrow. Flexible
+                // bounds it to the space that exists and ClipRect trims the
+                // rest, which is what the label already does one child over.
+                if (trailing != null && expanded)
+                  Flexible(
+                    child: ClipRect(
+                      child: Padding(
+                        padding: EdgeInsets.only(right: t.space.sm),
+                        child: Text(
+                          trailing!,
+                          maxLines: 1,
+                          softWrap: false,
+                          overflow: TextOverflow.clip,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: t.surface.onBaseMuted,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -224,8 +274,15 @@ class _RailItem extends StatelessWidget {
       ),
     );
     // Collapsed: the label is hidden, so a tooltip keeps it one hover away
-    // (without widening the rail). Expanded: the label is already visible.
-    return expanded ? item : Tooltip(message: label, child: item);
+    // (without widening the rail). It carries the shortcut too — a collapsed
+    // rail is just a column of icons, and a search glyph does not tell anyone
+    // that ⌘K opens it. Expanded: both are already on the row.
+    return expanded
+        ? item
+        : Tooltip(
+            message: trailing == null ? label : '$label  $trailing',
+            child: item,
+          );
   }
 }
 
