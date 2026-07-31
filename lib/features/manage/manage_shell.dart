@@ -3,17 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/providers/system_health_provider.dart';
+import '../../design/hc_icons.dart';
 import '../../design/tokens.dart';
 import '../../shared/widgets/section_scaffold.dart';
-import '../settings/data_page.dart';
-import '../settings/maintenance_page.dart';
-import '../settings/notifications_page.dart';
-import '../settings/system_config_page.dart';
-import '../admin/areas_page.dart';
-import '../admin/audit_page.dart';
-import '../admin/logs_page.dart';
-import '../admin/system_page.dart';
-import '../admin/users_page.dart';
 
 /// Administration, as one application surface.
 ///
@@ -32,11 +24,34 @@ import '../admin/users_page.dart';
 /// The section is in the URL rather than in a field, so a deep link, a browser
 /// reload and the command palette all land in the same place.
 class ManageShell extends ConsumerWidget {
-  const ManageShell({super.key, required this.section});
+  const ManageShell({super.key, required this.child});
 
-  final String section;
+  /// The pane, supplied by the router. The shell does not know which page it
+  /// is — that is what lets the house sections join without this file learning
+  /// about nine more widgets.
+  final Widget child;
 
   static const sections = <ManageSection>[
+    // ── the house ────────────────────────────────────────────────────────
+    ManageSection('automations', 'Automations', HcIcons.automations,
+        group: SectionGroup.house, path: '/automations'),
+    ManageSection('devices', 'Devices', HcIcons.devices,
+        group: SectionGroup.house, path: '/devices'),
+    ManageSection('scenes', 'Scenes', HcIcons.scenes,
+        group: SectionGroup.house, path: '/scenes'),
+    ManageSection('modes', 'Modes', HcIcons.modes,
+        group: SectionGroup.house, path: '/modes'),
+    ManageSection('helpers', 'Helpers', Icons.tune,
+        group: SectionGroup.house, path: '/helpers'),
+    ManageSection('media', 'Media', HcIcons.media,
+        group: SectionGroup.house, path: '/media'),
+    ManageSection('cameras', 'Cameras', HcIcons.camera,
+        group: SectionGroup.house, path: '/cameras'),
+    ManageSection('events', 'Events', HcIcons.events,
+        group: SectionGroup.house, path: '/events'),
+
+    // ── the system ───────────────────────────────────────────────────────
+    ManageSection('plugins', 'Plugins', HcIcons.plugins, path: '/plugins'),
     ManageSection('system', 'System', Icons.monitor_heart_outlined),
     ManageSection('config', 'Configuration', Icons.tune_rounded),
     ManageSection(
@@ -50,26 +65,24 @@ class ManageShell extends ConsumerWidget {
     ManageSection('logs', 'Logs', Icons.terminal_outlined),
   ];
 
-  static ManageSection resolve(String id) => sections.firstWhere(
-        (s) => s.id == id,
-        orElse: () => sections.first,
-      );
-
-  Widget _paneFor(String id) => switch (id) {
-        'config' => const SystemConfigPage(),
-        'notifications' => const NotificationsPage(),
-        'users' => const UsersPage(),
-        'areas' => const AreasPage(),
-        'data' => const DataPage(),
-        'maintenance' => const MaintenancePage(),
-        'audit' => const AuditPage(),
-        'logs' => const LogsPage(),
-        _ => const SystemPage(),
-      };
+  /// The section the router is currently showing.
+  ///
+  /// Matched on the location rather than passed in, because with one
+  /// `ShellRoute` the shell is built once and the router hands it a different
+  /// child per section — there is no per-section constructor call left to put
+  /// an id in. An unmatched location (a detail page that slipped into the
+  /// shell) selects nothing rather than lighting up the wrong entry.
+  static ManageSection? resolveLocation(String location) {
+    for (final s in sections) {
+      if (s.route == location) return s;
+    }
+    return null;
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final current = resolve(section);
+    final location = GoRouterState.of(context).matchedLocation;
+    final current = resolveLocation(location);
     final health = ref.watch(systemHealthProvider);
     final status = ref.watch(systemStatusProvider).valueOrNull;
 
@@ -100,8 +113,8 @@ class ManageShell extends ConsumerWidget {
       // so a house section says Manage and a system one says Administration,
       // without this widget knowing which sections exist.
       breadcrumbs: const ['Manage'],
-      title: current.group.title,
-      subtitle: current.label,
+      title: (current?.group ?? SectionGroup.system).title,
+      subtitle: current?.label,
       stats: stats,
       child: LayoutBuilder(builder: (context, box) {
         // Below the breakpoint the rail becomes a scrolling strip above the
@@ -109,15 +122,13 @@ class ManageShell extends ConsumerWidget {
         // sections is the only way across, and a hamburger inside a shell that
         // is already inside a nav rail is one drawer too many.
         final narrow = box.maxWidth < 720;
-        final nav = _SectionNav(current: current.id, horizontal: narrow);
+        final nav = _SectionNav(current: current?.id, horizontal: narrow);
+        // The router's child, told to draw itself as a pane. Keyed by location
+        // so two sections whose pages share a widget type cannot inherit each
+        // other's state — Logs picking up Audit's scroll position was the
+        // shape of that bug.
         final pane = SectionShellScope(
-          // Keyed by section so switching panes rebuilds from scratch: two
-          // screens with the same widget type would otherwise have their state
-          // reused, and Logs would inherit Audit's scroll position.
-          child: KeyedSubtree(
-            key: ValueKey('admin-pane-${current.id}'),
-            child: _paneFor(current.id),
-          ),
+          child: KeyedSubtree(key: ValueKey(location), child: child),
         );
         final t = HcTokens.of(context);
 
@@ -180,7 +191,7 @@ class ManageSection {
 class _SectionNav extends StatelessWidget {
   const _SectionNav({required this.current, required this.horizontal});
 
-  final String current;
+  final String? current;
   final bool horizontal;
 
   @override

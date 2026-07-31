@@ -64,6 +64,16 @@ void main() {
       hasLength(total - ctor),
       reason: 'parsed fewer sections than manage_shell.dart declares',
     );
+    // The invariant this actually guards now: the rail is a hand-written list
+    // and the routes are hand-written too, so a section can be added to one
+    // and not the other. A rail entry with no route is a dead menu row — the
+    // exact bug this file was written for, one level up.
+    expect(
+      adminSections.difference(defined),
+      isEmpty,
+      reason: 'manage_shell.dart lists these sections and app.dart defines no '
+          'route for them; the rail entry will dead-end',
+    );
     defined.addAll(adminSections);
 
     // If either regex stops matching — someone reformats the entries, or

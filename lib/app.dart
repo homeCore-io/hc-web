@@ -3,6 +3,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'core/providers/auth_provider.dart';
+import 'features/admin/areas_page.dart';
+import 'features/admin/audit_page.dart';
+import 'features/admin/logs_page.dart';
+import 'features/admin/system_page.dart';
+import 'features/admin/users_page.dart';
+import 'features/settings/data_page.dart';
+import 'features/settings/maintenance_page.dart';
+import 'features/settings/notifications_page.dart';
+import 'features/settings/system_config_page.dart';
 import 'features/manage/manage_shell.dart';
 import 'design/skins.dart';
 import 'features/plugins/config_descriptor/config_preview_page.dart';
@@ -112,7 +121,6 @@ GoRouter _buildRouter(Ref ref) {
           GoRoute(
               path: '/dev/config',
               builder: (_, __) => const ConfigPreviewPage()),
-          GoRoute(path: '/cameras', builder: (_, __) => const CamerasPage()),
           GoRoute(
             path: '/dashboard',
             builder: (_, __) => const DashboardPage(),
@@ -136,20 +144,6 @@ GoRouter _buildRouter(Ref ref) {
                 DashboardEditorPage(dashboardId: state.pathParameters['id']!),
           ),
           GoRoute(
-              path: '/devices',
-              builder: (_, state) {
-                // `?plugin=<id>` scopes the list to that plugin (a plugin's
-                // "View all"). Key on it so a new scope remounts + re-seeds.
-                final plugin = state.uri.queryParameters['plugin'];
-                return DeviceListPage(
-                  key: ValueKey('devices-${plugin ?? 'all'}'),
-                  pluginId: plugin,
-                );
-              }),
-          GoRoute(
-              path: '/automations',
-              builder: (_, __) => const AutomationListPage()),
-          GoRoute(
               path: '/automations/groups',
               builder: (_, __) => const AutomationGroupsPage()),
           GoRoute(
@@ -159,7 +153,6 @@ GoRouter _buildRouter(Ref ref) {
               path: '/automations/:id',
               builder: (_, state) =>
                   AutomationEditorPage(ruleId: state.pathParameters['id'])),
-          GoRoute(path: '/scenes', builder: (_, __) => const ScenesPage()),
           GoRoute(
               path: '/scenes/new',
               builder: (_, __) => const SceneEditorPage(sceneId: 'new')),
@@ -167,11 +160,6 @@ GoRouter _buildRouter(Ref ref) {
               path: '/scenes/:id',
               builder: (_, state) =>
                   SceneEditorPage(sceneId: state.pathParameters['id'])),
-          GoRoute(path: '/modes', builder: (_, __) => const ModesPage()),
-          GoRoute(path: '/helpers', builder: (_, __) => const GluePage()),
-          GoRoute(path: '/events', builder: (_, __) => const EventsPage()),
-          GoRoute(path: '/media', builder: (_, __) => const MediaPage()),
-          GoRoute(path: '/plugins', builder: (_, __) => const PluginsPage()),
           GoRoute(
             path: '/plugins/:id',
             builder: (_, state) =>
@@ -190,11 +178,75 @@ GoRouter _buildRouter(Ref ref) {
           // Deliberately not `/admin/:section`, which would swallow a typo and
           // quietly render System for a path nobody defined.
           GoRoute(path: '/admin', redirect: (_, __) => '/admin/system'),
-          for (final s in ManageShell.sections)
-            GoRoute(
-              path: s.route,
-              builder: (_, __) => ManageShell(section: s.id),
-            ),
+
+          // Every Manage section, in one shell.
+          //
+          // The shell is built once and the router swaps the child, so moving
+          // between sections no longer rebuilds the rail and header — which is
+          // what made it feel like a page load even within Administration.
+          //
+          // A list is a pane; a thing you open is a page. So the detail and
+          // editor routes are deliberately NOT in here: /automations/:id,
+          // /devices/:id, /scenes/:id and /plugins/:id stay full-bleed
+          // siblings. The Studio is the case that proves the rule — it has its
+          // own rail, and a rail inside a rail is the thing to avoid.
+          //
+          // Written out rather than generated from `ManageShell.sections`,
+          // because these builders are not uniform: /devices keys itself on a
+          // query parameter, and the section list has no business knowing
+          // which widget renders it. manage_routes_test asserts every section
+          // in that list has a route here.
+          ShellRoute(
+            builder: (context, state, child) => ManageShell(child: child),
+            routes: [
+              GoRoute(
+                  path: '/automations',
+                  builder: (_, __) => const AutomationListPage()),
+              GoRoute(
+                  path: '/devices',
+                  builder: (_, state) {
+                    // `?plugin=<id>` scopes the list to that plugin (a
+                    // plugin's "View all"). Key on it so a new scope remounts
+                    // + re-seeds.
+                    final plugin = state.uri.queryParameters['plugin'];
+                    return DeviceListPage(
+                      key: ValueKey('devices-${plugin ?? 'all'}'),
+                      pluginId: plugin,
+                    );
+                  }),
+              GoRoute(path: '/scenes', builder: (_, __) => const ScenesPage()),
+              GoRoute(path: '/modes', builder: (_, __) => const ModesPage()),
+              GoRoute(path: '/helpers', builder: (_, __) => const GluePage()),
+              GoRoute(path: '/media', builder: (_, __) => const MediaPage()),
+              GoRoute(
+                  path: '/cameras', builder: (_, __) => const CamerasPage()),
+              GoRoute(path: '/events', builder: (_, __) => const EventsPage()),
+              GoRoute(
+                  path: '/plugins', builder: (_, __) => const PluginsPage()),
+              GoRoute(
+                  path: '/admin/system',
+                  builder: (_, __) => const SystemPage()),
+              GoRoute(
+                  path: '/admin/config',
+                  builder: (_, __) => const SystemConfigPage()),
+              GoRoute(
+                  path: '/admin/notifications',
+                  builder: (_, __) => const NotificationsPage()),
+              GoRoute(
+                  path: '/admin/users', builder: (_, __) => const UsersPage()),
+              GoRoute(
+                  path: '/admin/areas', builder: (_, __) => const AreasPage()),
+              GoRoute(
+                  path: '/admin/data', builder: (_, __) => const DataPage()),
+              GoRoute(
+                  path: '/admin/maintenance',
+                  builder: (_, __) => const MaintenancePage()),
+              GoRoute(
+                  path: '/admin/audit', builder: (_, __) => const AuditPage()),
+              GoRoute(
+                  path: '/admin/logs', builder: (_, __) => const LogsPage()),
+            ],
+          ),
         ],
       ),
     ],
