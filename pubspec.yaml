@@ -6,7 +6,7 @@ publish_to: 'none'
 # release workflow publishes ghcr.io/homecore-io/hc-web:<version> from `v<version>`.
 # It read 1.0.0+1 from `flutter create` and had never been touched, which would
 # have made the first release's image tag disagree with the app it contains.
-version: 0.1.18+1
+version: 0.1.19+1
 
 environment:
   sdk: '>=3.3.0 <4.0.0'
@@ -33,6 +33,8 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.0
+  # Lets the plugin-poll test elapse its 10s timer without the suite waiting.
+  fake_async: ^1.3.3
   build_runner: ^2.4.8
   riverpod_generator: ^2.4.0
   freezed: ^2.4.7

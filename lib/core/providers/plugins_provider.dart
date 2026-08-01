@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../api/plugins_api.dart';
 import '../models/plugin_entry.dart';
@@ -56,6 +58,20 @@ class PluginsNotifier extends AsyncNotifier<List<PluginEntry>> {
     return raw.map(PluginEntry.fromJson).toList();
   }
 
+  /// Refetch in the background, without flipping the page to a loading state.
+  ///
+  /// A poll must never be able to blank a working page: on failure the last
+  /// good list stays put and the next tick tries again. That is the difference
+  /// between this and `invalidateSelf`, which surfaces the error.
+  Future<void> refresh() async {
+    try {
+      final raw = await ref.read(pluginsApiProvider).listPlugins();
+      state = AsyncData(raw.map(PluginEntry.fromJson).toList());
+    } catch (_) {
+      // Keep what we have. A transient 502 or a dropped link is not news.
+    }
+  }
+
   /// Ask [pluginId] to change its live log filter, then refetch.
   ///
   /// Refetch rather than patch the record locally: core echoes back what it
@@ -102,3 +118,27 @@ class PluginsNotifier extends AsyncNotifier<List<PluginEntry>> {
 final pluginsProvider =
     AsyncNotifierProvider<PluginsNotifier, List<PluginEntry>>(
         PluginsNotifier.new);
+
+/// How often a visible plugin view re-reads `GET /plugins`.
+const _pluginPollInterval = Duration(seconds: 10);
+
+/// Keeps [pluginsProvider] current while a plugin view is on screen.
+///
+/// Watch this from any page that shows live plugin state; the timer starts
+/// with the first watcher and auto-disposes with the last, so nothing polls
+/// while the user is elsewhere in the app.
+///
+/// This exists because the WS stream cannot carry the fields these pages
+/// display. `plugin_registered` and `plugin_offline` patch `status` and
+/// nothing else, so `deviceCount`, `notices`, `restartCount`, `uptimeStarted`
+/// and the version fields were frozen at whatever they were when the provider
+/// first built — a plugin could pick up nine devices and the page would still
+/// read zero until a manual browser reload. The event that *does* carry fresh
+/// per-plugin state, `plugin_heartbeat`, is dropped by core for any client
+/// that has not named it in an `event_types` filter, and naming it would mean
+/// receiving *only* heartbeats and losing every device event. So: poll.
+final pluginsAutoRefreshProvider = Provider.autoDispose<void>((ref) {
+  final timer = Timer.periodic(
+      _pluginPollInterval, (_) => ref.read(pluginsProvider.notifier).refresh());
+  ref.onDispose(timer.cancel);
+});
