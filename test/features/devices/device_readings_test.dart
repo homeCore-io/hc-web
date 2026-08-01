@@ -233,4 +233,53 @@ void main() {
       expect(formatReading(_d({'leak': true}), 'leak'), 'Detected');
     });
   });
+
+  group('one reading, one row', () {
+    // The live Hue motion sensor, verbatim. It publishes the display-unit
+    // value AND both fixed-unit copies, so the sheet listed "Temperature"
+    // three times — 71.58°F, then a bare 21.99 and a bare 71.58 — and
+    // "Illuminance 29.87 lux" twice.
+    const hueMotion = <String, dynamic>{
+      'illuminance': 29.87,
+      'illuminance_lux': 29.87,
+      'illuminance_raw': 14753.0,
+      'illuminance_unit': 'lux',
+      'illuminance_valid': true,
+      'motion': false,
+      'temperature': 71.582,
+      'temperature_c': 21.99,
+      'temperature_f': 71.582,
+      'temperature_unit': 'F',
+      'temperature_valid': true,
+    };
+
+    test('the fixed-unit copies do not each get a row', () {
+      expect(isUnitTwin('temperature_c', hueMotion), isTrue);
+      expect(isUnitTwin('temperature_f', hueMotion), isTrue);
+      expect(isUnitTwin('illuminance_lux', hueMotion), isTrue);
+    });
+
+    test('the reading they are copies of survives', () {
+      expect(isUnitTwin('temperature', hueMotion), isFalse);
+      expect(isUnitTwin('illuminance', hueMotion), isFalse);
+    });
+
+    test('a raw count is not a copy — it is a different number', () {
+      expect(isUnitTwin('illuminance_raw', hueMotion), isFalse);
+    });
+
+    test('nothing is hidden when the plain reading is absent', () {
+      // A plugin that publishes only `temperature_f` must still show it,
+      // or suppressing duplicates would suppress the only copy.
+      const onlyF = <String, dynamic>{'temperature_f': 71.582};
+      expect(isUnitTwin('temperature_f', onlyF), isFalse);
+    });
+
+    test('a raw sensor count is not labelled lux', () {
+      // 14753 is the sensor's own count. Calling it lux states a measurement
+      // the device never made, beside a real lux figure 500x smaller.
+      expect(formatReading(_d(hueMotion), 'illuminance_raw'), '14753');
+      expect(formatReading(_d(hueMotion), 'illuminance'), '29.87 lux');
+    });
+  });
 }
