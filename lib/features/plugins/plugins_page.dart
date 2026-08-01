@@ -246,14 +246,43 @@ class _PluginCard extends StatelessWidget {
           const SizedBox(height: 10),
           Divider(height: 1, color: t.stroke.hairline.withValues(alpha: 0.6)),
           const SizedBox(height: 9),
-          Text(
-            _healthLine(p),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-                color: p.isOffline ? t.accent.danger : t.surface.onBaseMuted,
-                fontSize: 12.5),
-          ),
+          // A plugin reporting a problem says so here, in place of the health
+          // line. Without this the card reads "Active · up 10m" while the
+          // plugin is telling us it cannot receive anything — which is exactly
+          // how hc-ecowitt looked on the live box with 0 devices and a
+          // receiver nothing can reach.
+          if (p.hasProblems)
+            Row(children: [
+              Icon(HcIcons.warning,
+                  size: 13,
+                  color: p.problems.any((n) => n.isError)
+                      ? t.accent.danger
+                      : t.accent.warn),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  p.problems.length == 1
+                      ? p.problems.first.message
+                      : '${p.problems.length} problems reported',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      color: p.problems.any((n) => n.isError)
+                          ? t.accent.danger
+                          : t.accent.warn,
+                      fontSize: 12.5),
+                ),
+              ),
+            ])
+          else
+            Text(
+              _healthLine(p),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                  color: p.isOffline ? t.accent.danger : t.surface.onBaseMuted,
+                  fontSize: 12.5),
+            ),
         ],
       ),
     );
