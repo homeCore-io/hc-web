@@ -52,6 +52,42 @@ class PluginsApi {
     return List<Map<String, dynamic>>.from(response.data as List);
   }
 
+  /// The volatile subset of the plugin list — core 0.1.16 and later.
+  ///
+  /// Same records minus `capabilities`, `config_schema` and
+  /// `config_descriptor`, which never change and each have their own endpoint.
+  /// On an 11-plugin house that is 5 KB instead of 127 KB.
+  Future<List<Map<String, dynamic>>> listPluginStatus() async {
+    final response = await client.dio.get('/plugins/status');
+    return List<Map<String, dynamic>>.from(response.data as List);
+  }
+
+  /// null until probed, then true/false for the life of this client.
+  bool? _slimSupported;
+
+  /// The list as a live view should fetch it: slim where core offers it.
+  ///
+  /// [PluginEntry] reads none of the heavy fields, so nothing is lost by
+  /// preferring the slim route. An older core answers 404, and we fall back
+  /// **permanently** rather than per-call: this is polled every few seconds,
+  /// and a fallback that re-probed would spend a 404 on every tick forever.
+  Future<List<Map<String, dynamic>>> listPluginsLive() async {
+    if (_slimSupported != false) {
+      try {
+        final rows = await listPluginStatus();
+        _slimSupported = true;
+        return rows;
+      } on DioException catch (e) {
+        // Only a missing route means "old core". Anything else — 401, 500, a
+        // dropped connection — is a real failure and must not be papered over
+        // by silently asking a different endpoint.
+        if (e.response?.statusCode != 404) rethrow;
+        _slimSupported = false;
+      }
+    }
+    return listPlugins();
+  }
+
   /// Uninstall a plugin.
   ///
   /// Core purges the config file and the installed binaries by default. Both

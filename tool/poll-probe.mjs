@@ -65,8 +65,10 @@ ws.onmessage = (e) => {
   }
   if (m.method === 'Network.requestWillBeSent') {
     const u = m.params.request.url;
-    // The list endpoint only — not /plugins/:id/config and friends.
-    if (/\/api\/v1\/plugins(\?|$)/.test(u)) polls.push(Date.now() - t0);
+    // The list endpoints only — not /plugins/:id/config and friends. Both are
+    // tracked so it is visible WHICH one a build actually polls.
+    const hit = /\/api\/v1\/(plugins\/status|plugins)(\?|$)/.exec(u);
+    if (hit) polls.push(`${hit[1]}@${Date.now() - t0}`);
   }
 };
 
@@ -107,7 +109,7 @@ if (MUTATE) {
 await sleep(DWELL);
 await shot(after);
 
-console.log(`GET /plugins at ms: ${polls.join(', ')}`);
+console.log(`list fetches: ${polls.join(', ')}`);
 console.log(`polls before capture 1: ${pollsAtBefore}, during dwell: ${
     polls.length - pollsAtBefore}`);
 
