@@ -10,6 +10,7 @@ import '../../design/components/hc_dialog.dart';
 
 import '../../core/dashboard/widget_registry.dart';
 import '../../core/models/device_state.dart';
+import '../../core/models/plugin_notice.dart';
 import 'config_descriptor/descriptor_config_pane.dart';
 import 'config_descriptor/descriptor_validation.dart';
 import 'config_descriptor/descriptor_provider.dart';
@@ -564,6 +565,99 @@ class _PaneScaffold extends StatelessWidget {
   }
 }
 
+// ── Notices ─────────────────────────────────────────────────────────────────
+
+/// Conditions the plugin reports about itself, rendered at the top of Overview.
+///
+/// `status` answers "is the process alive". This answers "can it do its job",
+/// and nothing else on this page distinguishes the two — a plugin that starts
+/// cleanly and cannot function reads as healthy on every tile.
+///
+/// Renders nothing when there is nothing to report, so plugins on SDKs without
+/// notices look exactly as they did.
+class _NoticesBand extends StatelessWidget {
+  const _NoticesBand({required this.plugin});
+  final PluginEntry plugin;
+
+  @override
+  Widget build(BuildContext context) {
+    // Severity reads top-down.
+    final ordered = [
+      ...plugin.notices.where((n) => n.isError),
+      ...plugin.notices.where((n) => !n.isError && !n.isInfo),
+      ...plugin.notices.where((n) => n.isInfo),
+    ];
+    if (ordered.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [for (final n in ordered) _NoticeCard(notice: n)],
+      ),
+    );
+  }
+}
+
+class _NoticeCard extends StatelessWidget {
+  const _NoticeCard({required this.notice});
+  final PluginNotice notice;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    final tone = notice.isError
+        ? t.accent.danger
+        : notice.isInfo
+            ? t.accent.active
+            : t.accent.warn;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: tone.withValues(alpha: 0.12),
+        borderRadius: t.radius.smR,
+        border: Border.all(color: tone.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Only problems get the glyph — there is no info icon in the set, and
+          // a warning triangle on an informational line would overstate it.
+          if (!notice.isInfo) ...[
+            Padding(
+              padding: const EdgeInsets.only(top: 1),
+              child: Icon(HcIcons.warning, size: 16, color: tone),
+            ),
+            const SizedBox(width: 10),
+          ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(notice.message,
+                    style: TextStyle(
+                        color: t.surface.onBase,
+                        fontWeight: FontWeight.w600,
+                        height: 1.35)),
+                if (notice.remedy != null && notice.remedy!.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(notice.remedy!,
+                      style: TextStyle(
+                          color: t.surface.onBaseMuted,
+                          fontSize: 12.5,
+                          height: 1.4)),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 // ── Overview pane ───────────────────────────────────────────────────────────
 class _OverviewPane extends ConsumerWidget {
   const _OverviewPane(
@@ -613,6 +707,14 @@ class _OverviewPane extends ConsumerWidget {
       title: 'Overview',
       subtitle: 'Live status and everything you can do with this plugin.',
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        // ── what the plugin says is wrong with it ──
+        //
+        // Above the stat cards on purpose. "Active" is the first thing the eye
+        // lands on and it is reassuring; when the plugin is simultaneously
+        // reporting it cannot receive data, that reassurance is the problem.
+        // hc-ecowitt on a default config sits at Active · 0 devices · heartbeat
+        // healthy, and every one of those is true while it cannot work.
+        _NoticesBand(plugin: plugin),
         // ── stat cards ──
         LayoutBuilder(builder: (context, c) {
           final cols = c.maxWidth > 720 ? 4 : 2;
