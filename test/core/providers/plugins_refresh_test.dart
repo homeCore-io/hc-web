@@ -14,8 +14,10 @@ class _FakePluginsApi extends PluginsApi {
   Object? failWith;
   int calls = 0;
 
+  // The notifier fetches via listPluginsLive; route choice is covered
+  // separately in test/core/api/plugins_live_list_test.dart.
   @override
-  Future<List<Map<String, dynamic>>> listPlugins() async {
+  Future<List<Map<String, dynamic>>> listPluginsLive() async {
     calls++;
     if (failWith case final e?) throw e;
     return rows;

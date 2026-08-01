@@ -54,7 +54,7 @@ class PluginsNotifier extends AsyncNotifier<List<PluginEntry>> {
       });
     });
 
-    final raw = await ref.read(pluginsApiProvider).listPlugins();
+    final raw = await ref.read(pluginsApiProvider).listPluginsLive();
     return raw.map(PluginEntry.fromJson).toList();
   }
 
@@ -65,7 +65,7 @@ class PluginsNotifier extends AsyncNotifier<List<PluginEntry>> {
   /// between this and `invalidateSelf`, which surfaces the error.
   Future<void> refresh() async {
     try {
-      final raw = await ref.read(pluginsApiProvider).listPlugins();
+      final raw = await ref.read(pluginsApiProvider).listPluginsLive();
       state = AsyncData(raw.map(PluginEntry.fromJson).toList());
     } catch (_) {
       // Keep what we have. A transient 502 or a dropped link is not news.
@@ -79,7 +79,7 @@ class PluginsNotifier extends AsyncNotifier<List<PluginEntry>> {
   /// record of the request rather than the client's memory of one.
   Future<void> setLogLevel(String pluginId, String directive) async {
     await ref.read(pluginsApiProvider).setLogLevel(pluginId, directive);
-    final raw = await ref.read(pluginsApiProvider).listPlugins();
+    final raw = await ref.read(pluginsApiProvider).listPluginsLive();
     state = AsyncData(raw.map(PluginEntry.fromJson).toList());
   }
 
