@@ -48,6 +48,7 @@ class _DeviceReadingsBlockState extends State<DeviceReadingsBlock> {
       // The raw twin of a percentage: a light reports `brightness` and
       // `brightness_pct`; keep the one with a unit.
       if (!k.endsWith('_pct') && s.containsKey('${k}_pct')) return false;
+      if (isUnitTwin(k, s)) return false;
       return true;
     }).toList();
 
@@ -203,6 +204,34 @@ const _groups = <String, String>{
 };
 
 String readingGroup(String attr) => _groups[attr] ?? 'Other';
+
+/// Suffixes that mark a fixed-unit copy of a reading the device also publishes
+/// under its plain name.
+///
+/// `_raw` is not here on purpose: `illuminance_raw` is the sensor's own count,
+/// a different number from the lux figure rather than the same one restated.
+const _unitTwinSuffixes = <String>['_c', '_f', '_lux'];
+
+/// True when [attr] is a fixed-unit copy of another attribute in [state].
+///
+/// A Hue motion sensor publishes `temperature` in whatever unit the plugin is
+/// configured to display, *and* `temperature_c`, *and* `temperature_f` — so a
+/// rule can pin a unit no matter how the display is set. All three are one
+/// reading. Rendering all three listed "Temperature" three times, twice with
+/// no unit at all, so 21.99 and 71.58 read as two different measurements of
+/// the same room. Same for `illuminance` beside `illuminance_lux`.
+///
+/// The twins stay in the payload for rules; they just do not each get a row.
+bool isUnitTwin(String attr, Map<String, dynamic> state) {
+  final k = attr.toLowerCase();
+  for (final suffix in _unitTwinSuffixes) {
+    if (!k.endsWith(suffix)) continue;
+    final base = k.substring(0, k.length - suffix.length);
+    // Only a twin if the plain reading is actually there to stand in for it.
+    if (base.isNotEmpty && state.containsKey(base)) return true;
+  }
+  return false;
+}
 
 /// Bookkeeping, or a qualifier that belongs *on* the value it describes rather
 /// than in a row of its own.
@@ -364,6 +393,9 @@ String _unitFor(DeviceState d, String attr) {
   final a = attr.toLowerCase();
   if (a.endsWith('_pct') || a.contains('humid')) return '%';
   if (a.endsWith('_secs')) return ' s';
+  // `illuminance_raw` is the sensor's own count, not a lux figure — labelling
+  // 14753 as lux states a measurement the device never made.
+  if (a.endsWith('_raw')) return '';
   if (a.contains('lux') || a.contains('illumin')) return ' lux';
   return '';
 }
