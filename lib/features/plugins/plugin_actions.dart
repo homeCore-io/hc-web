@@ -270,13 +270,47 @@ Future<void> runPluginAction(
 
   final api = ref.read(pluginsApiProvider);
 
+  // Say something immediately. These actions are synchronous over the
+  // management channel and several are slow by nature — Ecowitt's gateway
+  // discovery waits three seconds for UDP replies before it can know it found
+  // nothing, and probes each configured host on top. Without this the button
+  // click produced no feedback whatsoever until the result landed, which reads
+  // as a dead control rather than a slow one.
+  //
+  // Held open by a long duration and dismissed explicitly on every exit path,
+  // rather than timed — the action decides when it is done, not a guess.
+  //
+  // Captured before the invoke: `context` may be gone by the time we come back,
+  // and the messenger outlives it. Guarded first because the param dialog above
+  // is itself an await — the page can be gone before we ever get here.
+  if (!context.mounted) return;
+  final messenger = ScaffoldMessenger.of(context);
+  messenger.showSnackBar(
+    SnackBar(
+      duration: const Duration(minutes: 10),
+      content: Row(
+        children: [
+          const SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          const SizedBox(width: 12),
+          Expanded(child: Text('${action.label}…')),
+        ],
+      ),
+    ),
+  );
+
   final CommandOutcome outcome;
   try {
     outcome = await api.invoke(pluginId, action, params);
   } catch (e) {
+    messenger.hideCurrentSnackBar();
     if (context.mounted) _toast(context, 'Failed: $e');
     return;
   }
+  messenger.hideCurrentSnackBar();
 
   if (!context.mounted) return;
 
@@ -377,6 +411,13 @@ String _summarise(Object? data) {
       return 'Failed: ${data['error'] ?? data['message'] ?? 'unknown error'}';
     }
     if (data['message'] != null) return '${data['message']}';
+    // A discovery that ran and found nothing. Without this the fallback
+    // stringifies the whole map — `{status: ok, discovered: [], count: 0, ...}`
+    // — which looks like a malfunction rather than an answer. A plugin that
+    // sends its own `message` is preferred and handled above; this is the
+    // floor for one that does not.
+    final disc = data['discovered'];
+    if (disc is List && disc.isEmpty) return 'Nothing found.';
   }
   final s = '$data';
   return s.length > 160 ? '${s.substring(0, 157)}…' : s;
