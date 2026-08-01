@@ -100,6 +100,7 @@ class _PluginStudioPageState extends ConsumerState<PluginStudioPage> {
       data: hcTheme(HcSkin.midnight),
       child: Builder(builder: (context) {
         final t = HcTokens.of(context);
+        ref.watch(pluginsAutoRefreshProvider);
         final plugin = ref.watch(pluginsProvider).valueOrNull?.firstWhere(
               (p) => p.pluginId == widget.pluginId,
               orElse: () => PluginEntry(

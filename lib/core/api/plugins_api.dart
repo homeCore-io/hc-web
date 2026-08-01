@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
 import '../models/plugin_config.dart';
 import '../models/registry_plugin.dart';
@@ -33,8 +34,18 @@ class CommandBusy extends CommandOutcome {
 }
 
 class PluginsApi {
-  final HomecoreClient client;
+  late final HomecoreClient client;
   PluginsApi(this.client);
+
+  /// For fakes that override the methods they need and never reach the wire.
+  ///
+  /// [HomecoreClient] cannot be built under the Dart VM at all — dio rejects
+  /// its relative `/api/v1` base URL off-web — so a test double has no real
+  /// client to pass up. Leaving [client] uninitialised is deliberate: a fake
+  /// that falls through to an un-overridden method should fail loudly rather
+  /// than quietly attempt a request.
+  @visibleForTesting
+  PluginsApi.fake();
 
   Future<List<Map<String, dynamic>>> listPlugins() async {
     final response = await client.dio.get('/plugins');

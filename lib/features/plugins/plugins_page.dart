@@ -20,6 +20,7 @@ class PluginsPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    ref.watch(pluginsAutoRefreshProvider);
     final async = ref.watch(pluginsProvider);
     final plugins = async.valueOrNull ?? const <PluginEntry>[];
     final running = plugins.where((p) => p.isActive).length;
@@ -276,7 +277,7 @@ class _PluginCard extends StatelessWidget {
             ])
           else
             Text(
-              _healthLine(p),
+              pluginHealthLine(p),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
@@ -287,15 +288,24 @@ class _PluginCard extends StatelessWidget {
       ),
     );
   }
+}
 
-  String _healthLine(PluginEntry p) {
-    if (p.isOffline) return 'Offline — ${p.deviceCount} devices frozen';
-    if (p.isActive) {
-      final up = p.uptime;
-      return up == null ? 'Active' : 'Active · up $up';
-    }
-    return p.enabled ? 'Starting…' : 'Disabled';
+/// The one-line state a plugin card shows when it has no problems to report.
+///
+/// Top-level and public so it can be tested without standing up the page: this
+/// is the sentence a user reads to decide whether a plugin is healthy, and it
+/// was wrong for one of the states it covers.
+String pluginHealthLine(PluginEntry p) {
+  if (p.isOffline) return 'Offline — ${p.deviceCount} devices frozen';
+  if (p.isActive) {
+    final up = p.uptime;
+    return up == null ? 'Active' : 'Active · up $up';
   }
+  // 'stopped' and 'starting' are different facts and were both reported as
+  // "Starting…" — so a plugin someone had deliberately stopped sat there
+  // claiming to be on its way up, forever.
+  if (p.status == 'stopped') return 'Stopped';
+  return p.enabled ? 'Starting…' : 'Disabled';
 }
 
 Color _statusColor(HcTokens t, PluginEntry p) {
