@@ -170,4 +170,85 @@ void main() {
       expect(next.supportsManagement, isTrue);
     });
   });
+
+  group('PluginEntry notices', () {
+    test('absent notices field yields an empty list, not a crash', () {
+      // Every plugin on an SDK without notices sends no field at all. That has
+      // to read as "nothing to report", never as an error.
+      final p = PluginEntry.fromJson({
+        'plugin_id': 'plugin.hue',
+        'status': 'active',
+        'registered_at': '2026-08-01T08:00:00Z',
+      });
+      expect(p.notices, isEmpty);
+      expect(p.hasProblems, isFalse);
+    });
+
+    test('parses level, code, message and optional remedy', () {
+      final p = PluginEntry.fromJson({
+        'plugin_id': 'plugin.ecowitt',
+        'status': 'active',
+        'registered_at': '2026-08-01T08:00:00Z',
+        'notices': [
+          {
+            'level': 'error',
+            'code': 'no_reports_received',
+            'message': 'No gateway upload has ever arrived.',
+            'remedy': 'Set bind_addr = "0.0.0.0".',
+          },
+          {
+            'level': 'info',
+            'code': 'polling_mode',
+            'message': 'Polling the gateway directly.',
+          },
+        ],
+      });
+
+      expect(p.notices, hasLength(2));
+      expect(p.notices.first.isError, isTrue);
+      expect(p.notices.first.code, 'no_reports_received');
+      expect(p.notices.first.remedy, 'Set bind_addr = "0.0.0.0".');
+      expect(p.notices.last.remedy, isNull);
+    });
+
+    test('active with an error notice still counts as a problem', () {
+      // The exact state this mechanism exists for: the status says active and
+      // is not wrong, while the plugin cannot do its job.
+      final p = PluginEntry.fromJson({
+        'plugin_id': 'plugin.ecowitt',
+        'status': 'active',
+        'registered_at': '2026-08-01T08:00:00Z',
+        'device_count': 0,
+        'notices': [
+          {'level': 'error', 'code': 'x', 'message': 'm'},
+          {'level': 'info', 'code': 'y', 'message': 'm'},
+        ],
+      });
+      expect(p.isActive, isTrue);
+      expect(p.hasProblems, isTrue);
+      expect(p.problems, hasLength(1), reason: 'info is not a problem');
+    });
+
+    test('malformed entries in the list do not take the plugin down', () {
+      final p = PluginEntry.fromJson({
+        'plugin_id': 'plugin.ecowitt',
+        'status': 'active',
+        'registered_at': '2026-08-01T08:00:00Z',
+        'notices': ['not-an-object', 42, null],
+      });
+      expect(p.notices, isEmpty);
+    });
+
+    test('copyWith preserves notices', () {
+      final p = PluginEntry.fromJson({
+        'plugin_id': 'plugin.ecowitt',
+        'status': 'active',
+        'registered_at': '2026-08-01T08:00:00Z',
+        'notices': [
+          {'level': 'warning', 'code': 'c', 'message': 'm'}
+        ],
+      });
+      expect(p.copyWith(status: 'offline').notices, hasLength(1));
+    });
+  });
 }

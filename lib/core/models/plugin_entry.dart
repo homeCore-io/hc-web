@@ -1,4 +1,5 @@
 import '../text/humanize.dart';
+import 'plugin_notice.dart';
 import 'registry_plugin.dart';
 
 /// A registered plugin, as returned by `GET /plugins` (a `PluginRecord`).
@@ -17,6 +18,7 @@ class PluginEntry {
     this.configPath,
     this.supportsManagement = false,
     this.logLevel,
+    this.notices = const [],
   });
 
   final String pluginId;
@@ -53,6 +55,12 @@ class PluginEntry {
   /// the plugin re-registers, which is what a plugin restart does.
   final String? logLevel;
 
+  /// Conditions the plugin is currently reporting about itself.
+  ///
+  /// Empty for a plugin on an SDK without notices, which is the same shape as
+  /// "nothing to report" — so no distinction is drawn between the two.
+  final List<PluginNotice> notices;
+
   factory PluginEntry.fromJson(Map<String, dynamic> json) => PluginEntry(
         pluginId: json['plugin_id'] as String,
         status: json['status'] as String? ?? 'unknown',
@@ -67,6 +75,11 @@ class PluginEntry {
         configPath: json['config_path'] as String?,
         supportsManagement: json['supports_management'] as bool? ?? false,
         logLevel: json['log_level'] as String?,
+        notices: (json['notices'] as List<dynamic>?)
+                ?.whereType<Map<String, dynamic>>()
+                .map(PluginNotice.fromJson)
+                .toList() ??
+            const [],
       );
 
   PluginEntry copyWith({String? status, bool? enabled}) => PluginEntry(
@@ -83,7 +96,18 @@ class PluginEntry {
         configPath: configPath,
         supportsManagement: supportsManagement,
         logLevel: logLevel,
+        notices: notices,
       );
+
+  /// Notices worth interrupting for — everything except `info`.
+  ///
+  /// Split out because "active with 0 devices and an error notice" is the state
+  /// this whole mechanism exists to make visible, and it should not be buried
+  /// among informational lines.
+  List<PluginNotice> get problems =>
+      notices.where((n) => !n.isInfo).toList();
+
+  bool get hasProblems => problems.isNotEmpty;
 
   bool get isActive => status == 'active';
   bool get isOffline => status == 'offline';
