@@ -11,13 +11,16 @@ class LogsApi {
       StreamController<bool>.broadcast();
 
   String _level = 'debug';
+  String? _pluginId;
   String? _target;
 
   Stream<bool> get connectionState => _connectedController.stream;
 
-  Stream<LogEntry> connect({String level = 'debug', String? target}) {
+  Stream<LogEntry> connect(
+      {String level = 'debug', String? target, String? pluginId}) {
     _level = level;
     _target = target;
+    _pluginId = pluginId;
     _controller?.close();
     _controller = StreamController<LogEntry>.broadcast();
     _reconnect();
@@ -32,6 +35,11 @@ class LogsApi {
     final wsScheme = Uri.base.scheme == 'https' ? 'wss' : 'ws';
     var path = '/api/v1/logs/stream?token=$token&level=$_level&history=100';
     if (_target != null) path += '&target=${Uri.encodeComponent(_target!)}';
+    // Filtered server-side: a plugin pane should not pull the whole house's
+    // log stream and discard most of it in the browser.
+    if (_pluginId != null) {
+      path += '&plugin_id=${Uri.encodeComponent(_pluginId!)}';
+    }
     final uri = Uri.parse('$wsScheme://${Uri.base.host}:${Uri.base.port}$path');
 
     try {

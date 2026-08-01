@@ -41,8 +41,23 @@ class PluginsApi {
     return List<Map<String, dynamic>>.from(response.data as List);
   }
 
-  Future<void> deregister(String id) async {
-    await client.dio.delete('/plugins/$id');
+  /// Uninstall a plugin.
+  ///
+  /// Core purges the config file and the installed binaries by default. Both
+  /// used to survive an uninstall, so a reinstall silently adopted the removed
+  /// plugin's host, credentials and device rows.
+  ///
+  /// [keepConfig] is for the case where reinstalling *is* the fix and the
+  /// config is the part worth keeping. Binaries always go — they are a signed
+  /// download and cost nothing to fetch again.
+  Future<Map<String, dynamic>> deregister(String id,
+      {bool keepConfig = false}) async {
+    final response = await client.dio.delete(
+      '/plugins/$id',
+      queryParameters: keepConfig ? {'keep_config': true} : null,
+    );
+    final data = response.data;
+    return data is Map ? Map<String, dynamic>.from(data) : <String, dynamic>{};
   }
 
   /// Browse the remote registry. 503 (no registry configured) surfaces as an

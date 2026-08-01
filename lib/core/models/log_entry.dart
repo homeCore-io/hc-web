@@ -5,6 +5,14 @@ class LogEntry {
   final String message;
   final Map<String, dynamic> fields;
 
+  /// Which plugin emitted this, or null for core's own logging.
+  ///
+  /// Core stamps it from the MQTT topic into `fields`. It is not derivable from
+  /// [target]: a plugin process emits under its own modules, the SDK's and its
+  /// dependencies', so matching on target name catches some of a plugin's lines
+  /// and quietly drops the rest.
+  String? get pluginId => fields['plugin_id'] as String?;
+
   LogEntry({
     required this.timestamp,
     required this.level,
