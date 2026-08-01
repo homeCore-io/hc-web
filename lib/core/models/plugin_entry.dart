@@ -104,8 +104,7 @@ class PluginEntry {
   /// Split out because "active with 0 devices and an error notice" is the state
   /// this whole mechanism exists to make visible, and it should not be buried
   /// among informational lines.
-  List<PluginNotice> get problems =>
-      notices.where((n) => !n.isInfo).toList();
+  List<PluginNotice> get problems => notices.where((n) => !n.isInfo).toList();
 
   bool get hasProblems => problems.isNotEmpty;
 
