@@ -3,6 +3,7 @@ import 'package:web/web.dart' as web;
 
 import '../../../core/text/humanize.dart';
 import '../../../design/tokens.dart';
+import 'attention_banner.dart';
 import 'descriptor.dart';
 import 'import_merge.dart';
 import 'descriptor_validation.dart' as v;
@@ -806,14 +807,8 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
 
   /// Does this row still want attention — any column declaring
   /// `prompt_when_empty` that has no value?
-  bool _rowNeedsAttention(CfgField f, Map<String, dynamic> row) {
-    for (final c in f.itemFields ?? const <CfgField>[]) {
-      if (!c.promptWhenEmpty || c.key == null) continue;
-      final v = row[c.key];
-      if (v == null || (v is String && v.isEmpty)) return true;
-    }
-    return false;
-  }
+  bool _rowNeedsAttention(CfgField f, Map<String, dynamic> row) =>
+      AttentionBanner.rowNeedsAttention(f, row);
 
   String _cellText(CfgField c, Object? v) {
     if (v == null || (v is String && v.isEmpty)) return '';
@@ -882,6 +877,8 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
           SizedBox(height: t.space.sm),
           if (all.length > 4 || attentionCount > 0)
             _listToolbar(t, f, all.length, attentionCount),
+          if (attentionCount > 0)
+            AttentionBanner(field: f, count: attentionCount),
           if (selected.isNotEmpty) _bulkBar(t, f, all, selected),
           Container(
             decoration: BoxDecoration(

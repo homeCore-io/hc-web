@@ -1,6 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'dart:async';
+import '../../core/api/logs_api.dart';
+import '../../core/models/log_entry.dart';
+import '../../design/components/hc_controls.dart';
 import 'package:go_router/go_router.dart';
+import '../../design/components/hc_rows.dart';
+import '../../design/components/hc_dialog.dart';
 
 import '../../core/dashboard/widget_registry.dart';
 import '../../core/models/device_state.dart';
@@ -233,6 +239,7 @@ class _PluginStudioPageState extends ConsumerState<PluginStudioPage> {
     return [
       const _NavItem('overview', 'Overview', HcIcons.plugins, group: 'Plugin'),
       const _NavItem('actions', 'Actions', Icons.bolt_rounded, group: 'Plugin'),
+      const _NavItem('logs', 'Logs', Icons.terminal_rounded, group: 'Plugin'),
       ...configNav,
       const _NavItem('enabled', 'Enabled', Icons.power_settings_new_rounded,
           group: 'Manage'),
@@ -289,6 +296,7 @@ class _PluginStudioPageState extends ConsumerState<PluginStudioPage> {
       return _UpdatePane(plugin: p, version: update);
     }
     if (selected == 'enabled') return _EnablePane(plugin: p);
+    if (selected == 'logs') return _LogsPane(plugin: p);
     if (selected == 'uninstall') return _UninstallPane(plugin: p);
     return const SizedBox.shrink();
   }
@@ -1673,56 +1681,354 @@ class _UpdatePane extends ConsumerWidget {
   }
 }
 
-class _UninstallPane extends ConsumerWidget {
+/// What this plugin is saying, on its own.
+///
+/// The lines were always in /logs/stream, mixed into everything core and every
+/// other plugin emitted, and findable only by guessing a module name. Core
+/// stamps the plugin id now, so this asks for exactly one plugin's output.
+///
+/// This is the view the Caséta import needed: the plugin logged "Skipping
+/// device with no kind set" for every unclassified row and nothing could show
+/// it, so an import that worked looked like an import that lost devices.
+class _LogsPane extends ConsumerStatefulWidget {
+  const _LogsPane({required this.plugin});
+  final PluginEntry plugin;
+
+  @override
+  ConsumerState<_LogsPane> createState() => _LogsPaneState();
+}
+
+class _LogsPaneState extends ConsumerState<_LogsPane> {
+  static const _levels = ['debug', 'info', 'warn', 'error'];
+
+  final _lines = <LogEntry>[];
+  final _scroll = ScrollController();
+  StreamSubscription<LogEntry>? _sub;
+  LogsApi? _api;
+  String _level = 'debug';
+  bool _follow = true;
+  bool _connected = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _connect();
+  }
+
+  void _connect() {
+    _sub?.cancel();
+    _api?.dispose();
+    final api = LogsApi();
+    _api = api;
+    api.connectionState.listen((up) {
+      if (mounted) setState(() => _connected = up);
+    });
+    _sub = api
+        .connect(level: _level, pluginId: widget.plugin.pluginId)
+        .listen((e) {
+      if (!mounted) return;
+      setState(() {
+        _lines.add(e);
+        // Bounded: a debug-level plugin can outrun any UI, and an unbounded
+        // list in a pane that stays mounted is a slow leak.
+        if (_lines.length > 2000) _lines.removeRange(0, _lines.length - 2000);
+      });
+      if (_follow && _scroll.hasClients) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (_scroll.hasClients) {
+            _scroll.jumpTo(_scroll.position.maxScrollExtent);
+          }
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _sub?.cancel();
+    _api?.dispose();
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: EdgeInsets.fromLTRB(
+              t.space.lg, t.space.lg, t.space.lg, t.space.sm),
+          child: Row(
+            children: [
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: _connected ? t.accent.active : t.accent.offline,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              SizedBox(width: t.space.sm),
+              Text(_connected ? 'Live' : 'Reconnecting…',
+                  style:
+                      TextStyle(color: t.surface.onBaseMuted, fontSize: 12.5)),
+              const Spacer(),
+              for (final l in _levels) ...[
+                _LogLevelPick(
+                  label: l.toUpperCase(),
+                  selected: _level == l,
+                  onTap: () {
+                    setState(() {
+                      _level = l;
+                      _lines.clear();
+                    });
+                    _connect();
+                  },
+                ),
+                SizedBox(width: t.space.xs),
+              ],
+              SizedBox(width: t.space.sm),
+              HcIconButton(
+                icon: _follow
+                    ? Icons.vertical_align_bottom_rounded
+                    : Icons.pause_rounded,
+                tooltip: _follow ? 'Following' : 'Paused — tap to follow',
+                onPressed: () => setState(() => _follow = !_follow),
+              ),
+              HcIconButton(
+                icon: Icons.delete_sweep_outlined,
+                tooltip: 'Clear',
+                onPressed: () => setState(_lines.clear),
+              ),
+            ],
+          ),
+        ),
+        Divider(height: 1, color: t.stroke.hairline),
+        Expanded(
+          child: _lines.isEmpty
+              ? Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(t.space.lg),
+                    child: Text(
+                      _connected
+                          ? '${widget.plugin.displayName} has not logged anything yet.\n'
+                              'Only what it forwards to core appears here — see '
+                              'Logging in its configuration.'
+                          : 'Waiting for the log stream…',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                          color: t.surface.onBaseMuted, fontSize: 12.5),
+                    ),
+                  ),
+                )
+              : ListView.builder(
+                  controller: _scroll,
+                  padding: EdgeInsets.symmetric(
+                      horizontal: t.space.lg, vertical: t.space.sm),
+                  itemCount: _lines.length,
+                  itemBuilder: (_, i) => _LogRow(entry: _lines[i]),
+                ),
+        ),
+      ],
+    );
+  }
+}
+
+/// One log line: time, level, message. Monospace, because these are read by
+/// scanning a column, not by reading prose.
+class _LogRow extends StatelessWidget {
+  const _LogRow({required this.entry});
+  final LogEntry entry;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    final colour = switch (entry.level) {
+      'ERROR' => t.accent.danger,
+      'WARN' => t.accent.warn,
+      'DEBUG' || 'TRACE' => t.surface.onBaseMuted,
+      _ => t.accent.success,
+    };
+    final ts = entry.timestamp.toLocal();
+    String two(int v) => v.toString().padLeft(2, '0');
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('${two(ts.hour)}:${two(ts.minute)}:${two(ts.second)}',
+              style: TextStyle(
+                  color: t.surface.onBaseMuted,
+                  fontSize: 11.5,
+                  fontFamily: 'monospace',
+                  fontFeatures: t.numericFontFeatures)),
+          SizedBox(width: t.space.sm),
+          SizedBox(
+            width: 46,
+            child: Text(entry.level,
+                style: TextStyle(
+                    color: colour,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    fontFamily: 'monospace')),
+          ),
+          Expanded(
+            child: SelectableText(
+              entry.message,
+              style: TextStyle(
+                  color: t.surface.onBase,
+                  fontSize: 12,
+                  fontFamily: 'monospace',
+                  height: 1.35),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A level pill. Local to this pane rather than shared with the Logs section:
+/// that one carries module filtering and a client-errors tab this does not.
+class _LogLevelPick extends StatelessWidget {
+  const _LogLevelPick(
+      {required this.label, required this.selected, required this.onTap});
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: t.space.sm, vertical: 4),
+        decoration: BoxDecoration(
+          color: selected
+              ? t.accent.active.withValues(alpha: 0.14)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(t.radius.pill),
+          border:
+              Border.all(color: selected ? t.accent.active : t.stroke.hairline),
+        ),
+        child: Text(label,
+            style: TextStyle(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w700,
+                color: selected ? t.accent.active : t.surface.onBaseMuted)),
+      ),
+    );
+  }
+}
+
+class _UninstallPane extends ConsumerStatefulWidget {
   const _UninstallPane({required this.plugin});
   final PluginEntry plugin;
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_UninstallPane> createState() => _UninstallPaneState();
+}
+
+class _UninstallPaneState extends ConsumerState<_UninstallPane> {
+  /// Off by default: core purges unless asked not to.
+  ///
+  /// This pane used to promise "its saved configuration is kept", which was
+  /// true and was the problem — a removed plugin held on to its host, its
+  /// credentials and every device row, and reinstalling adopted them silently.
+  bool _keepConfig = false;
+  bool _working = false;
+
+  @override
+  Widget build(BuildContext context) {
     final t = HcTokens.of(context);
+    final p = widget.plugin;
     return _PaneScaffold(
       title: 'Uninstall',
-      subtitle: 'Stop the plugin and remove its devices from homeCore.',
+      subtitle: 'Stop the plugin and remove it from homeCore.',
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(
-            'Stops ${plugin.displayName}${plugin.deviceCount > 0 ? ', removes its ${plugin.deviceCount} devices' : ''}, '
-            'and clears its learned state. Its saved configuration is kept.',
-            style: TextStyle(color: t.surface.onBaseMuted, fontSize: 13.5)),
+          'Stops ${p.displayName}'
+          '${p.deviceCount > 0 ? ', removes its ${p.deviceCount} device${p.deviceCount == 1 ? '' : 's'}' : ''}, '
+          'and clears its learned state. Its configuration and installed files '
+          'are deleted too, unless you keep them below.',
+          style: TextStyle(color: t.surface.onBaseMuted, fontSize: 13.5),
+        ),
+        const SizedBox(height: 14),
+        HcRows([
+          HcToggleRow(
+            icon: Icons.description_outlined,
+            label: 'Keep configuration',
+            subtitle: _keepConfig
+                ? 'The config file stays, and reinstalling picks it back up.'
+                : 'The config file is deleted with the plugin.',
+            value: _keepConfig,
+            onChanged: _working ? null : (v) => setState(() => _keepConfig = v),
+          ),
+        ]),
         const SizedBox(height: 16),
-        OutlinedButton.icon(
-          onPressed: () => _confirm(context, ref),
-          icon: Icon(HcIcons.trash, size: 15, color: t.accent.danger),
-          label: Text('Uninstall plugin',
-              style: TextStyle(color: t.accent.danger)),
-          style: OutlinedButton.styleFrom(
-              side: BorderSide(color: t.accent.danger.withValues(alpha: 0.5))),
+        HcButton(
+          label: _working ? 'Uninstalling…' : 'Uninstall plugin',
+          icon: HcIcons.trash,
+          kind: HcButtonKind.danger,
+          onPressed: _working ? null : _confirm,
         ),
       ]),
     );
   }
 
-  Future<void> _confirm(BuildContext context, WidgetRef ref) async {
-    final t = HcTokens.of(context);
+  Future<void> _confirm() async {
+    final p = widget.plugin;
     final ok = await showDialog<bool>(
       context: context,
-      builder: (c) => AlertDialog(
-        title: const Text('Uninstall plugin?'),
-        content: Text(
-            'Stops ${plugin.displayName} and removes its devices. Its config is kept.'),
+      builder: (c) => HcDialog(
+        title: 'Uninstall ${p.displayName}?',
+        description: _keepConfig
+            ? 'Stops it and removes its devices and installed files. The '
+                'configuration is kept, so reinstalling restores this setup.'
+            : 'Stops it and removes its devices, its installed files and its '
+                'configuration. Anything set up here — addresses, credentials, '
+                'device mappings — is gone.',
         actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(c, false),
-              child: const Text('Cancel')),
-          TextButton(
-              onPressed: () => Navigator.pop(c, true),
-              child:
-                  Text('Uninstall', style: TextStyle(color: t.accent.danger))),
+          HcButton(label: 'Cancel', onPressed: () => Navigator.pop(c, false)),
+          HcButton(
+            label: 'Uninstall',
+            kind: HcButtonKind.danger,
+            onPressed: () => Navigator.pop(c, true),
+          ),
         ],
+        child: const SizedBox.shrink(),
       ),
     );
-    if (ok == true) {
-      await ref.read(pluginsApiProvider).deregister(plugin.pluginId);
+    if (ok != true) return;
+
+    if (!mounted) return;
+    setState(() => _working = true);
+    final messenger = ScaffoldMessenger.of(context);
+    final router = GoRouter.of(context);
+    try {
+      // Report what core actually deleted rather than what was asked for: the
+      // handler removes what it can and says so, so a config it could not
+      // unlink is visible here instead of assumed gone.
+      final result = await ref
+          .read(pluginsApiProvider)
+          .deregister(p.pluginId, keepConfig: _keepConfig);
       ref.invalidate(pluginsProvider);
-      if (context.mounted) context.go('/plugins');
+      final kept = result['config_removed'] == false && !_keepConfig;
+      messenger.showSnackBar(SnackBar(
+        content: Text(kept
+            ? '${p.displayName} uninstalled — its config file could not be removed.'
+            : '${p.displayName} uninstalled.'),
+      ));
+      router.go('/plugins');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _working = false);
+      messenger.showSnackBar(SnackBar(content: Text('Uninstall failed: $e')));
     }
   }
 }
