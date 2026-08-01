@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/models/plugin_config.dart';
 import '../../core/models/plugin_entry.dart';
+import '../../core/models/plugin_notice.dart';
 import '../../core/providers/plugin_config_provider.dart';
 import '../../core/providers/plugins_provider.dart';
 import '../../core/schema/plugin_config_schema.dart';
@@ -101,6 +102,7 @@ class _PluginSheet extends ConsumerWidget {
             padding: EdgeInsets.fromLTRB(
                 t.space.md, t.space.sm, t.space.md, t.space.lg),
             children: [
+              _NoticesBand(plugin: plugin),
               _StatusBand(plugin: plugin, color: color),
               _ConfigSection(plugin: plugin),
               _ActionsSection(pluginId: pluginId),
@@ -111,6 +113,107 @@ class _PluginSheet extends ConsumerWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// What the plugin says is wrong with it, above everything else in the sheet.
+///
+/// Placed before the status band deliberately. "active" is the first thing the
+/// eye lands on and it is reassuring; when the plugin is simultaneously telling
+/// us it cannot receive data, that reassurance is the problem. The diagnosis
+/// goes first.
+///
+/// Renders nothing when there is nothing to say, so plugins that never raise a
+/// notice — every plugin on an older SDK — look exactly as they did.
+class _NoticesBand extends StatelessWidget {
+  const _NoticesBand({required this.plugin});
+  final PluginEntry plugin;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    // Problems first, then anything informational, so severity reads top-down.
+    final ordered = [
+      ...plugin.notices.where((n) => n.isError),
+      ...plugin.notices.where((n) => !n.isError && !n.isInfo),
+      ...plugin.notices.where((n) => n.isInfo),
+    ];
+    if (ordered.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: t.space.sm),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final n in ordered) _NoticeCard(notice: n),
+        ],
+      ),
+    );
+  }
+}
+
+class _NoticeCard extends StatelessWidget {
+  const _NoticeCard({required this.notice});
+  final PluginNotice notice;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    final tone = notice.isError
+        ? t.accent.danger
+        : notice.isInfo
+            ? t.accent.active
+            : t.accent.warn;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: tone.withValues(alpha: 0.12),
+        borderRadius: t.radius.smR,
+        border: Border.all(color: tone.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Only problems get the glyph. There is no info icon in the set,
+          // and a warning triangle on an informational line would overstate it.
+          if (!notice.isInfo) ...[
+            Padding(
+              padding: const EdgeInsets.only(top: 1),
+              child: Icon(HcIcons.warning, size: 15, color: tone),
+            ),
+            const SizedBox(width: 9),
+          ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  notice.message,
+                  style: TextStyle(
+                    color: t.surface.onBase,
+                    fontWeight: FontWeight.w600,
+                    height: 1.35,
+                  ),
+                ),
+                if (notice.remedy != null && notice.remedy!.isNotEmpty) ...[
+                  const SizedBox(height: 5),
+                  Text(
+                    notice.remedy!,
+                    style: TextStyle(
+                      color: t.surface.onBaseMuted,
+                      fontSize: 12.5,
+                      height: 1.35,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
