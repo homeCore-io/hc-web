@@ -4,6 +4,19 @@ import 'package:dio/dio.dart';
 
 import 'homecore_client.dart';
 
+/// Content-Type for a request body that is a bare JSON array.
+///
+/// dio only *infers* `application/json` for `Map`, `String`, and `List<Map>`
+/// — and `jsonDecode` returns `List<dynamic>`, which matches none of them
+/// (`List<dynamic> is List<Map>` is false). dio then sends the body with no
+/// Content-Type at all, and axum's `Json` extractor rejects it with **415**
+/// before the handler is ever reached. It logs a warning and carries on, so
+/// the only symptom is a 415 that looks like a server fault.
+///
+/// Every import endpoint takes a top-level array, so state it rather than
+/// hoping the inference covers whatever the caller happened to pass.
+final _jsonBody = Options(contentType: Headers.jsonContentType);
+
 /// `homecore.toml` as core serves it: the file itself, a parsed view to bind
 /// controls against, and where it lives on disk.
 class SystemConfig {
@@ -314,7 +327,8 @@ class SystemDataApi {
   Future<({bool ok, int imported, String detail})> importAutomations(
       List<dynamic> rules) async {
     try {
-      final res = await client.dio.post('/automations/import', data: rules);
+      final res = await client.dio
+          .post('/automations/import', data: rules, options: _jsonBody);
       final body = Map<String, dynamic>.from(res.data as Map);
       final n = (body['imported'] as num?)?.toInt() ?? rules.length;
       return (ok: true, imported: n, detail: 'Imported $n.');
@@ -336,7 +350,8 @@ class SystemDataApi {
   Future<({bool ok, int imported, String detail})> importScenes(
       List<dynamic> scenes) async {
     try {
-      final res = await client.dio.post('/scenes/import', data: scenes);
+      final res = await client.dio
+          .post('/scenes/import', data: scenes, options: _jsonBody);
       final body = Map<String, dynamic>.from(res.data as Map);
       final n = (body['imported'] as num?)?.toInt() ?? scenes.length;
       return (ok: true, imported: n, detail: 'Imported $n.');
