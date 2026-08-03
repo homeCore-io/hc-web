@@ -66,7 +66,7 @@
 # that actually ships. Bump the two together, deliberately.
 FROM debian:bookworm-slim AS builder
 
-ARG FLUTTER_VERSION=3.44.4
+ARG FLUTTER_VERSION=3.44.8
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates curl git xz-utils \
