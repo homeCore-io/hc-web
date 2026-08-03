@@ -75,6 +75,16 @@ class _CameraViewState extends State<CameraView> {
     ..style.height = '100%'
     ..style.border = 'none'
     ..style.display = 'block'
+    // A platform view is a real DOM element in the page, so the browser routes
+    // clicks over it to the element and Flutter never sees them — even though
+    // Flutter draws on top. Anything over a live camera then looks clickable
+    // and isn't: the Add camera dialog is unreachable once one camera is
+    // streaming behind it, and the taps this view is wrapped in (Home's card
+    // navigating to /cameras, the wall's stills) never fire either.
+    //
+    // The camera is a picture, not a control surface, so give the clicks back.
+    // Nothing is lost — no code here reaches go2rtc's own player controls.
+    ..style.pointerEvents = 'none'
     // WebRTC autoplays muted video; without this some browsers block it.
     ..allow = 'autoplay; fullscreen; picture-in-picture';
 
@@ -85,7 +95,10 @@ class _CameraViewState extends State<CameraView> {
       // The frame decides the aspect; the camera fills it. `contain` would
       // letterbox a security wall into uselessness.
       ..style.objectFit = 'cover'
-      ..style.display = 'block';
+      ..style.display = 'block'
+      // Same reason as the iframe: a still is a picture, and clicks over it
+      // belong to whatever Flutter drew there.
+      ..style.pointerEvents = 'none';
     img.onError.listen((_) => widget.onError?.call());
     return img;
   }
