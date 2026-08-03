@@ -1,0 +1,268 @@
+{
+  "$defs": {
+    "BridgeConfig": {
+      "properties": {
+        "allow_self_signed": {
+          "default": true,
+          "type": "boolean"
+        },
+        "app_key": {
+          "default": "",
+          "type": "string"
+        },
+        "bridge_id": {
+          "default": "",
+          "type": "string"
+        },
+        "host": {
+          "default": "",
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "verify_tls": {
+          "default": true,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "HomecoreConfig": {
+      "properties": {
+        "broker_host": {
+          "default": "127.0.0.1",
+          "type": "string"
+        },
+        "broker_port": {
+          "default": 1883,
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "password": {
+          "default": "",
+          "type": "string"
+        },
+        "plugin_id": {
+          "default": "plugin.hue",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "HueConfig": {
+      "properties": {
+        "compact_motion_facets": {
+          "default": true,
+          "type": "boolean"
+        },
+        "discovery_cloud_fallback": {
+          "default": true,
+          "type": "boolean"
+        },
+        "discovery_enabled": {
+          "default": true,
+          "type": "boolean"
+        },
+        "discovery_timeout_secs": {
+          "default": 5,
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "display": {
+          "$ref": "#/$defs/HueDisplayConfig",
+          "default": {
+            "illuminance_display": "lux",
+            "temperature_unit": "c"
+          }
+        },
+        "eventstream_enabled": {
+          "default": true,
+          "type": "boolean"
+        },
+        "eventstream_reconnect_secs": {
+          "default": 3,
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "heartbeat_secs": {
+          "default": 30,
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "publish_bridge_home": {
+          "default": false,
+          "type": "boolean"
+        },
+        "publish_entertainment_configurations": {
+          "default": false,
+          "type": "boolean"
+        },
+        "publish_grouped_lights": {
+          "default": false,
+          "type": "boolean"
+        },
+        "publish_grouped_lights_for": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "resync_interval_secs": {
+          "default": 60,
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "skip_grouped_lights_for": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "HueDisplayConfig": {
+      "properties": {
+        "illuminance_display": {
+          "$ref": "#/$defs/IlluminanceDisplay",
+          "default": "lux"
+        },
+        "temperature_unit": {
+          "$ref": "#/$defs/TemperatureUnit",
+          "default": "c"
+        }
+      },
+      "type": "object"
+    },
+    "IlluminanceDisplay": {
+      "enum": [
+        "lux",
+        "raw"
+      ],
+      "type": "string"
+    },
+    "LoggingConfig": {
+      "description": "`[logging]` section in `config/config.toml`.",
+      "properties": {
+        "compress": {
+          "default": true,
+          "description": "Gzip-compress rotated files in a background thread.",
+          "type": "boolean"
+        },
+        "level": {
+          "default": "info",
+          "description": "Stderr log level when `RUST_LOG` is not set.\nAccepts any `tracing` filter directive, e.g. `\"debug\"` or `\"hc_hue=debug,rumqttc=warn\"`.",
+          "type": "string"
+        },
+        "log_forward_level": {
+          "default": "info",
+          "description": "Minimum log level forwarded to the HomeCore broker over MQTT.\nLogs below this level are only written to the local file / stderr.\n\"info\" (default) | \"warn\" | \"debug\" | \"error\" | \"off\"",
+          "type": "string"
+        },
+        "max_size_mb": {
+          "default": 100,
+          "description": "Rotate the active log file when it exceeds this many megabytes.\nCombined with `rotation` as \"whichever comes first\".\nSet to `0` to disable size-based rotation.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "prune_after_days": {
+          "default": 0,
+          "description": "Delete rotated log files older than this many days.  0 = never prune.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "rotation": {
+          "$ref": "#/$defs/RotationStrategy",
+          "default": "daily",
+          "description": "Time-based rotation strategy: `daily` (default), `hourly`, `weekly`, or `never`."
+        }
+      },
+      "type": "object"
+    },
+    "RotationStrategy": {
+      "description": "Rotation strategy for the log file.",
+      "enum": [
+        "daily",
+        "hourly",
+        "weekly",
+        "never"
+      ],
+      "type": "string"
+    },
+    "TemperatureUnit": {
+      "enum": [
+        "c",
+        "f"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "bridges": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/BridgeConfig"
+      },
+      "type": "array"
+    },
+    "homecore": {
+      "$ref": "#/$defs/HomecoreConfig",
+      "default": {
+        "broker_host": "127.0.0.1",
+        "broker_port": 1883,
+        "password": "",
+        "plugin_id": "plugin.hue"
+      }
+    },
+    "hue": {
+      "$ref": "#/$defs/HueConfig",
+      "default": {
+        "compact_motion_facets": true,
+        "discovery_cloud_fallback": true,
+        "discovery_enabled": true,
+        "discovery_timeout_secs": 5,
+        "display": {
+          "illuminance_display": "lux",
+          "temperature_unit": "c"
+        },
+        "eventstream_enabled": true,
+        "eventstream_reconnect_secs": 3,
+        "heartbeat_secs": 30,
+        "publish_bridge_home": false,
+        "publish_entertainment_configurations": false,
+        "publish_grouped_lights": false,
+        "publish_grouped_lights_for": [],
+        "resync_interval_secs": 60,
+        "skip_grouped_lights_for": []
+      }
+    },
+    "logging": {
+      "$ref": "#/$defs/LoggingConfig",
+      "default": {
+        "compress": true,
+        "level": "info",
+        "log_forward_level": "info",
+        "max_size_mb": 100,
+        "prune_after_days": 0,
+        "rotation": "daily"
+      }
+    }
+  },
+  "title": "HuePluginConfig",
+  "type": "object"
+}
