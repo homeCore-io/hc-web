@@ -58,9 +58,32 @@ bool isBootstrapConfigKey(String dotted) =>
 /// write tells core to keep the stored value.
 const redactedSentinel = '__redacted__';
 
+/// Where a JSON Schema keeps its reusable subschemas.
+///
+/// schemars 0.8 emitted draft-07 and called it `definitions`; schemars 1.x
+/// emits draft 2020-12 and calls it `$defs`. Both are accepted, permanently
+/// and not as a migration window: plugins are installed from the registry
+/// independently of this app, every version ever published stays installable,
+/// and a box can be running a 0.8-era plugin next to a 1.x-era one. Reading
+/// only one of these spelling renders an empty form for half the fleet.
+Map<String, dynamic> schemaDefinitions(Map<String, dynamic> schema) => {
+      ...?(schema['definitions'] as Map?)?.cast<String, dynamic>(),
+      ...?(schema[r'$defs'] as Map?)?.cast<String, dynamic>(),
+    };
+
+/// The definition name a local `$ref` points at, for either spelling, or null
+/// if [ref] isn't a local reference we can resolve.
+String? defNameFromRef(Object? ref) {
+  if (ref is! String) return null;
+  for (final prefix in const ['#/definitions/', r'#/$defs/']) {
+    if (ref.startsWith(prefix)) return ref.substring(prefix.length);
+  }
+  return null;
+}
+
 /// Translate [schema] into flat form fields + metadata.
 SchemaFields translateSchema(Map<String, dynamic> schema) {
-  final defs = (schema['definitions'] as Map?)?.cast<String, dynamic>() ?? {};
+  final defs = schemaDefinitions(schema);
   final b = _Builder(defs);
   b.walkObject(schema, prefix: '', section: null);
   return SchemaFields(
@@ -138,11 +161,15 @@ class _Builder {
   final objectArrays = <String>[];
   final sectionOf = <String, String>{};
 
-  /// Follow a `$ref` (`#/definitions/Foo`) to its definition, merging in the
-  /// referencing site's own keywords (`default`, `description`). schemars wraps
-  /// a `$ref` in a single-element `allOf` whenever it also emits a sibling like
-  /// `default` — `{allOf:[{$ref}], default:…}` — so unwrap that first. Returns
-  /// the node unchanged when it isn't a ref.
+  /// Follow a `$ref` to its definition, merging in the referencing site's own
+  /// keywords (`default`, `description`). Returns the node unchanged when it
+  /// isn't a ref.
+  ///
+  /// Two shapes, because two schemars generations are in flight at once —
+  /// see [defNameFromRef]. schemars 0.8 wraps a `$ref` in a single-element
+  /// `allOf` whenever it also emits a sibling like `default`
+  /// (`{allOf:[{$ref}], default:…}`), so unwrap that first; 1.x puts the
+  /// sibling next to the `$ref` directly, which draft 2020-12 permits.
   Map<String, dynamic> resolve(Map<String, dynamic> node) {
     var n = node;
     final allOf = n['allOf'];
@@ -150,9 +177,9 @@ class _Builder {
       n = {...n}..remove('allOf');
       (allOf.first as Map).forEach((k, v) => n[k.toString()] = v);
     }
-    final ref = n[r'$ref'];
-    if (ref is String && ref.startsWith('#/definitions/')) {
-      final def = defs[ref.substring('#/definitions/'.length)];
+    final name = defNameFromRef(n[r'$ref']);
+    if (name != null) {
+      final def = defs[name];
       if (def is Map) {
         final merged =
             def.cast<String, dynamic>().map((k, v) => MapEntry(k, v));
