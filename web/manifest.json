@@ -3,8 +3,8 @@
     "short_name": "HomeCore",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#1a1a2e",
-    "theme_color": "#1a1a2e",
+    "background_color": "#0B0E13",
+    "theme_color": "#0B0E13",
     "description": "HomeCore home automation dashboard",
     "prefer_related_applications": false,
     "icons": [
