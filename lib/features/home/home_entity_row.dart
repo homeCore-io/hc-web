@@ -5,6 +5,7 @@ import '../../core/devices/presentation.dart';
 import '../../core/models/device_state.dart';
 import '../../core/providers/devices_provider.dart';
 import '../../core/schema/attribute_policy.dart';
+import '../../design/components/hc_dialog.dart';
 import '../../design/components/hc_tile.dart' show summarise;
 import '../../design/hc_icons.dart';
 import '../../design/tokens.dart';
@@ -42,13 +43,20 @@ class _HomeEntityRowState extends ConsumerState<HomeEntityRow> {
     final on = !offline && isOn(device);
     final alert = _alerting(device, offline);
 
+    // A lock borrows neither the lamp's control nor the lamp's colour. `on` for
+    // a lock means *unlocked*, so the default rule below would paint an open
+    // exterior door in `accent.active` — the same amber as a light someone
+    // deliberately left on. Unlocked is a state to notice, not a state to be
+    // pleased about, so it gets `accent.danger` and locked stays quiet.
     final iconColour = offline
         ? t.accent.offline
         : alert
             ? t.accent.danger
-            : on
-                ? (lightColorOf(device) ?? t.accent.active)
-                : t.surface.onBaseMuted;
+            : facet == DeviceFacet.lock
+                ? (on ? t.accent.danger : t.surface.onBaseMuted)
+                : on
+                    ? (lightColorOf(device) ?? t.accent.active)
+                    : t.surface.onBaseMuted;
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hover = true),
@@ -157,6 +165,11 @@ class _HomeEntityRowState extends ConsumerState<HomeEntityRow> {
       );
     }
 
+    // A lock is not a switch, and must not borrow one. See [_LockControl].
+    if (facet == DeviceFacet.lock) {
+      return _LockControl(device: device, notifier: notifier);
+    }
+
     // Anything you switch, dim, open, lock: a toggle, with a level if it dims.
     if (facet.isActuator && facet != DeviceFacet.scene) {
       final level = levelOf(device);
@@ -212,6 +225,171 @@ class _HomeEntityRowState extends ConsumerState<HomeEntityRow> {
     if ((s['leak'] ?? s['water_detected']) == true) return true;
     if (s['smoke'] == true) return true;
     return false;
+  }
+}
+
+/// A lock's state and its next move — never a switch.
+///
+/// A switch has a natural direction and a lock does not: nothing about a track
+/// with a knob on it says which end is safe. Worse, the generic actuator branch
+/// drives that switch from [isOn], which for a lock reports `!locked` — so the
+/// bright, satisfied, "this is on" amber fired on **unlocked**, and the one row
+/// on the page worth worrying about looked exactly like a lamp left on.
+///
+/// That branch also commanded `{'on': !on}`. Every lock plugin wants
+/// `{'locked': bool}` (hc-yolink's `translate_command` errors with "cmd missing
+/// boolean 'locked' field" on anything else), so the control was not merely
+/// ambiguous, it was inert.
+///
+/// So: the state is a word, coloured by risk, and the button names the thing
+/// that will happen rather than a control to be decoded. The loud filled button
+/// is always the *safe* direction, and unlocking — the only action here that
+/// matters to someone who merely has this tab open — asks first.
+///
+/// [DeviceFacet.lock] is reached whenever the device carries a `locked`
+/// attribute, so this covers hc-isy and hc-zwave locks as well.
+class _LockControl extends StatelessWidget {
+  const _LockControl({required this.device, required this.notifier});
+
+  final DeviceState device;
+  final DevicesNotifier notifier;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+
+    // Deliberately nullable. A lock that reports neither — jammed, mid-cycle,
+    // never polled — used to render as a confident "unlocked", because a
+    // missing bool is not `true`.
+    final locked =
+        device.state['locked'] is bool ? device.state['locked'] as bool : null;
+
+    final (String label, Color tone) = switch (locked) {
+      true => ('Locked', t.surface.onBaseMuted),
+      false => ('Unlocked', t.accent.danger),
+      null => ('Unknown', t.surface.onBaseMuted),
+    };
+
+    // Locking is safe from anywhere, so it stays one tap and wears the filled
+    // button. Unlocking is the one thing here worth stealing, so it is the
+    // quiet outlined one and it confirms.
+    final lockNext = locked != true;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _Pill(label: label, tone: tone, filled: locked == false),
+        SizedBox(width: t.space.sm),
+        _LockButton(
+          label: lockNext ? 'Lock' : 'Unlock',
+          tone: locked == false ? t.accent.danger : t.surface.onBaseMuted,
+          filled: locked == false,
+          onTap: () => _command(context, lock: lockNext),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _command(BuildContext context, {required bool lock}) async {
+    if (!lock && !await _confirmUnlock(context)) return;
+    notifier.command(device.id, {'locked': lock});
+  }
+
+  Future<bool> _confirmUnlock(BuildContext context) async {
+    final t = HcTokens.of(context);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => HcDialog(
+        title: 'Unlock ${device.displayName}?',
+        description: 'This physically unlocks the door. There is no undo, and '
+            'nothing else will lock it again.',
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: TextButton.styleFrom(foregroundColor: t.accent.danger),
+            child: const Text('Unlock'),
+          ),
+        ],
+        child: const SizedBox.shrink(),
+      ),
+    );
+    return ok ?? false;
+  }
+}
+
+/// The state word, as a pill so it reads as a status and not as a button.
+class _Pill extends StatelessWidget {
+  const _Pill({required this.label, required this.tone, required this.filled});
+
+  final String label;
+  final Color tone;
+  final bool filled;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: t.space.sm, vertical: 3),
+      decoration: BoxDecoration(
+        color: filled ? tone.withValues(alpha: 0.14) : Colors.transparent,
+        borderRadius: BorderRadius.circular(t.radius.pill),
+        border: Border.all(
+          color: filled ? tone.withValues(alpha: 0.45) : t.stroke.hairline,
+        ),
+      ),
+      child: Text(
+        label.toUpperCase(),
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.6,
+          color: tone,
+        ),
+      ),
+    );
+  }
+}
+
+/// The next move, named. Filled means "this is the safe direction".
+class _LockButton extends StatelessWidget {
+  const _LockButton({
+    required this.label,
+    required this.tone,
+    required this.filled,
+    required this.onTap,
+  });
+
+  final String label;
+  final Color tone;
+  final bool filled;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: t.space.sm + 2, vertical: 5),
+        decoration: BoxDecoration(
+          color: filled ? tone : Colors.transparent,
+          borderRadius: t.radius.smR,
+          border: Border.all(color: filled ? tone : t.stroke.hairline),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 11.5,
+            fontWeight: FontWeight.w700,
+            color: filled ? t.surface.base : tone,
+          ),
+        ),
+      ),
+    );
   }
 }
 
