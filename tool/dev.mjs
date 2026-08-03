@@ -1,7 +1,7 @@
 // A dev server for hc-web: hot restart, and a same-origin API.
 //
-//   node tool/dev.mjs                       # -> http://localhost:3001
-//   HOMECORE_URL=http://10.0.10.150:8080 node tool/dev.mjs
+//   node tool/dev.mjs                       # -> http://localhost:3001, sandbox API
+//   HOMECORE_URL=http://10.0.10.150:8080 node tool/dev.mjs   # the real house
 //
 // Then, in another terminal:
 //   flutter run -d web-server --web-port 5001 --web-hostname 127.0.0.1
@@ -26,7 +26,25 @@ import {URL} from 'node:url';
 
 const PORT = Number(process.env.PORT ?? 3001);
 const FLUTTER = process.env.FLUTTER_URL ?? 'http://127.0.0.1:5001';
-const CORE = process.env.HOMECORE_URL ?? 'http://10.0.10.150:8080';
+
+// The sandbox, not the house.
+//
+// This defaulted to http://10.0.10.150:8080 — the live install — so a bare
+// `node tool/dev.mjs` served the real house behind a localhost URL, looking
+// exactly like a local dev session. The tell was almost nothing: the sandbox
+// and live report the same version string, so the page looks identical until
+// something you click changes a real light. It cost an afternoon once by
+// silently rejecting the sandbox's admin password against live, which reads as
+// "the password is broken" rather than "you are on the wrong machine".
+//
+// Reaching production should be a thing you type, not a thing you forget.
+const CORE = process.env.HOMECORE_URL ?? 'http://127.0.0.1:8080';
+
+/// Anything not on this machine is somebody's real house until proven otherwise.
+const isLocal = (() => {
+  const h = new URL(CORE).hostname;
+  return h === '127.0.0.1' || h === 'localhost' || h === '::1' || h === '[::1]';
+})();
 
 const target = (req) =>
     req.url.startsWith('/api/') ? new URL(CORE) : new URL(FLUTTER);
@@ -81,7 +99,12 @@ server.on('upgrade', (req, socket, head) => {
 server.listen(PORT, () => {
   console.log(`hc-web dev  →  http://localhost:${PORT}`);
   console.log(`  app  ${FLUTTER}`);
-  console.log(`  api  ${CORE}`);
+  // Say it loudly when it is not the sandbox. A localhost address in the
+  // browser is not evidence of a local backend, and every control on the page
+  // is live.
+  console.log(
+      isLocal ? `  api  ${CORE}` :
+                `  api  ${CORE}   ⚠  NOT LOCAL — commands here change real devices`);
   console.log(`\nstart the app with:`);
   console.log(
       `  flutter run -d web-server --web-port 5001 --web-hostname 127.0.0.1`);
