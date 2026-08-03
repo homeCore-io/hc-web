@@ -477,6 +477,32 @@ ThemeData hcTheme(HcSkin skin, {bool reduceMotion = false}) {
               : t.accent.inactive),
       trackOutlineColor: WidgetStatePropertyAll(t.stroke.hairline),
     ),
+    // Selection controls and tabs, for the same reason as the switch above.
+    // Left unthemed they resolve to `colorScheme.primary` — the blue #7CC4FF
+    // this app uses for links — so Maintenance's checkbox and the Logs tab
+    // indicator came out blue beside amber switches and amber progress bars,
+    // which is what makes Administration look like two designs.
+    checkboxTheme: CheckboxThemeData(
+      fillColor: WidgetStateProperty.resolveWith((states) =>
+          states.contains(WidgetState.selected)
+              ? t.accent.active
+              : Colors.transparent),
+      checkColor: WidgetStatePropertyAll(t.accent.onPrimary),
+      side: BorderSide(color: t.surface.onBaseMuted, width: 1.5),
+      shape: RoundedRectangleBorder(borderRadius: t.radius.smR),
+    ),
+    radioTheme: RadioThemeData(
+      fillColor: WidgetStateProperty.resolveWith((states) =>
+          states.contains(WidgetState.selected)
+              ? t.accent.active
+              : t.surface.onBaseMuted),
+    ),
+    tabBarTheme: TabBarThemeData(
+      labelColor: t.accent.active,
+      unselectedLabelColor: t.surface.onBaseMuted,
+      indicatorColor: t.accent.active,
+      dividerColor: t.stroke.hairline,
+    ),
     dialogTheme: DialogThemeData(
       backgroundColor: t.surface.raised,
       surfaceTintColor: Colors.transparent,

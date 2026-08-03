@@ -359,7 +359,12 @@ class _NavEntry extends StatelessWidget {
               Icon(
                 section.icon,
                 size: 17,
-                color: selected ? t.accent.primary : t.surface.onBaseMuted,
+                // `active`, not `primary`: primary is the blue used for links,
+                // and a selected section is the same "this is the one that is
+                // on" state that switches, progress and primary actions all
+                // wear in amber. Using primary here left the rail as the one
+                // piece of chrome disagreeing with everything around it.
+                color: selected ? t.accent.active : t.surface.onBaseMuted,
               ),
               SizedBox(width: t.space.sm),
               Text(
