@@ -20,8 +20,7 @@ ConfigDescriptor autoDeriveDescriptor(
   Map<String, dynamic> rawSchema,
 ) {
   final sf = translateSchema(rawSchema);
-  final defs =
-      (rawSchema['definitions'] as Map?)?.cast<String, dynamic>() ?? const {};
+  final defs = schemaDefinitions(rawSchema);
 
   // Preserve first-seen section order; bootstrap ([homecore]) keys are pushed
   // into a hidden section so they stay editable but out of the way.
@@ -174,15 +173,16 @@ String _columnKind(Map<String, dynamic> prop, String name) {
   return 'text';
 }
 
-/// Unwrap `$ref` and schemars' `allOf: [{$ref}]` wrapping.
+/// Unwrap `$ref` (either schemars dialect — see [defNameFromRef]) and
+/// schemars 0.8's `allOf: [{$ref}]` wrapping.
 Map<String, dynamic>? _deref(
     Map<String, dynamic>? node, Map<String, dynamic> defs) {
   if (node == null) return null;
   var n = node;
   for (var i = 0; i < 4; i++) {
-    final ref = n[r'$ref'] as String?;
-    if (ref != null && ref.startsWith('#/definitions/')) {
-      final target = defs[ref.substring('#/definitions/'.length)];
+    final name = defNameFromRef(n[r'$ref']);
+    if (name != null) {
+      final target = defs[name];
       if (target is Map) {
         n = target.cast<String, dynamic>();
         continue;
