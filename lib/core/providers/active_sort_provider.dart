@@ -1,4 +1,4 @@
-import 'package:flutter_riverpod/legacy.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 const _kActiveSortKey = 'home_sort_active_first';
@@ -16,15 +16,17 @@ const _kActiveSortKey = 'home_sort_active_first';
 /// shared house layout.
 ///
 /// Off falls back to A–Z, which is stable by construction.
-class ActiveSortNotifier extends StateNotifier<bool> {
-  ActiveSortNotifier() : super(true) {
+class ActiveSortNotifier extends Notifier<bool> {
+  @override
+  bool build() {
     _load();
+    return true;
   }
 
   Future<void> _load() async {
     final p = await SharedPreferences.getInstance();
     // Absent means never chosen, and the default is on.
-    if (mounted) state = p.getBool(_kActiveSortKey) ?? true;
+    if (ref.mounted) state = p.getBool(_kActiveSortKey) ?? true;
   }
 
   Future<void> toggle() async {
@@ -34,6 +36,6 @@ class ActiveSortNotifier extends StateNotifier<bool> {
   }
 }
 
-final activeSortProvider = StateNotifierProvider<ActiveSortNotifier, bool>(
-  (ref) => ActiveSortNotifier(),
+final activeSortProvider = NotifierProvider<ActiveSortNotifier, bool>(
+  ActiveSortNotifier.new,
 );
