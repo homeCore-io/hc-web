@@ -1,4 +1,4 @@
-import 'package:flutter_riverpod/legacy.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class ApiErrorEntry {
   final DateTime timestamp;
@@ -16,10 +16,11 @@ class ApiErrorEntry {
   });
 }
 
-class ClientErrorLogNotifier extends StateNotifier<List<ApiErrorEntry>> {
+class ClientErrorLogNotifier extends Notifier<List<ApiErrorEntry>> {
   static const _maxEntries = 100;
 
-  ClientErrorLogNotifier() : super(const []);
+  @override
+  List<ApiErrorEntry> build() => const [];
 
   void add(ApiErrorEntry entry) {
     final updated = [...state, entry];
@@ -32,6 +33,6 @@ class ClientErrorLogNotifier extends StateNotifier<List<ApiErrorEntry>> {
 }
 
 final clientErrorLogProvider =
-    StateNotifierProvider<ClientErrorLogNotifier, List<ApiErrorEntry>>(
-  (ref) => ClientErrorLogNotifier(),
+    NotifierProvider<ClientErrorLogNotifier, List<ApiErrorEntry>>(
+  ClientErrorLogNotifier.new,
 );
