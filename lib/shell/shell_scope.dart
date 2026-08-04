@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/legacy.dart';
 import 'package:go_router/go_router.dart';
 
 import '../design/skins.dart';
@@ -16,7 +15,19 @@ import 'wall_chrome.dart';
 /// here re-skins the whole app without touching a single component. Control
 /// Room is still reachable this way; it simply is not anyone's default now that
 /// the admin portal it belonged to is part of the app.
-final skinOverrideProvider = StateProvider<HcSkin?>((ref) => null);
+class SkinOverrideNotifier extends Notifier<HcSkin?> {
+  @override
+  HcSkin? build() => null;
+
+  /// Pick a skin for the whole app, or pass null to hand each shell back its
+  /// own default. Nothing in the app calls this yet — the choice is made by
+  /// overriding the provider — but it stays mutable because choosing a skin is
+  /// what this exists for.
+  void choose(HcSkin? skin) => state = skin;
+}
+
+final skinOverrideProvider =
+    NotifierProvider<SkinOverrideNotifier, HcSkin?>(SkinOverrideNotifier.new);
 
 /// Which surface a route belongs to.
 ///

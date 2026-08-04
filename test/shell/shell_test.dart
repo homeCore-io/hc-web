@@ -111,7 +111,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            skinOverrideProvider.overrideWith((ref) => HcSkin.controlRoom),
+            skinOverrideProvider.overrideWith(_FixedSkin.new),
           ],
           child: Builder(builder: (_) => _app(at: '/wall')),
         ),
@@ -287,4 +287,12 @@ void main() {
       expect(find.byType(NavigationBar), findsOneWidget);
     });
   });
+}
+
+/// A skin override pinned from the outside, standing in for the user having
+/// chosen one. NotifierProvider.overrideWith takes a notifier factory rather
+/// than a value, so the choice is expressed by overriding build().
+class _FixedSkin extends SkinOverrideNotifier {
+  @override
+  HcSkin? build() => HcSkin.controlRoom;
 }
