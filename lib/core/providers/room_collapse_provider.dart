@@ -19,7 +19,9 @@ class RoomCollapseNotifier extends Notifier<Set<String>> {
 
   Future<void> _load() async {
     final p = await SharedPreferences.getInstance();
-    if (ref.mounted) state = (p.getStringList(_kCollapsedKey) ?? const []).toSet();
+    if (ref.mounted) {
+      state = (p.getStringList(_kCollapsedKey) ?? const []).toSet();
+    }
   }
 
   Future<void> toggle(String key) async {
