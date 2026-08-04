@@ -1,4 +1,4 @@
-import 'package:flutter_riverpod/legacy.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 const _kLargeKey = 'thermostat_large';
@@ -9,14 +9,16 @@ const _kLargeKey = 'thermostat_large';
 /// Every thermostat starts compact; tapping it expands to the dial and pins the
 /// choice, collapsing it puts it back. Persisted, because a thermostat you like
 /// big is a lasting preference, not a per-visit one.
-class ThermostatLargeNotifier extends StateNotifier<Set<String>> {
-  ThermostatLargeNotifier() : super(const {}) {
+class ThermostatLargeNotifier extends Notifier<Set<String>> {
+  @override
+  Set<String> build() {
     _load();
+    return const {};
   }
 
   Future<void> _load() async {
     final p = await SharedPreferences.getInstance();
-    if (mounted) state = (p.getStringList(_kLargeKey) ?? const []).toSet();
+    if (ref.mounted) state = (p.getStringList(_kLargeKey) ?? const []).toSet();
   }
 
   Future<void> setLarge(String id, bool large) async {
@@ -27,6 +29,6 @@ class ThermostatLargeNotifier extends StateNotifier<Set<String>> {
 }
 
 final thermostatLargeProvider =
-    StateNotifierProvider<ThermostatLargeNotifier, Set<String>>(
-  (ref) => ThermostatLargeNotifier(),
+    NotifierProvider<ThermostatLargeNotifier, Set<String>>(
+  ThermostatLargeNotifier.new,
 );
