@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/legacy.dart';
 import '../../core/api/events_history_api.dart';
 import '../../core/models/event_entry.dart';
 import '../../core/providers/auth_provider.dart';
@@ -13,20 +12,70 @@ import '../../design/tokens.dart';
 import '../../shared/widgets/section_scaffold.dart';
 import '../../shared/widgets/section_toolbar.dart';
 
-// Rolling live events list
-final _liveEventsProvider = StateProvider<List<HcEvent>>((ref) => []);
+/// Rolling live events buffer, newest first.
+///
+/// Capped, because this fills from the WebSocket for as long as the page is
+/// open and a busy house will happily produce thousands. The cap lives here
+/// rather than at the call site that pushes into it — it is a property of the
+/// buffer, not of whoever happens to be feeding it.
+class _LiveEvents extends Notifier<List<HcEvent>> {
+  static const _max = 200;
 
-// Selected type filters for live tab
-final _liveTypeFilterProvider = StateProvider<Set<String>>((ref) => {});
+  @override
+  List<HcEvent> build() => const [];
 
-// History limit
-final _historyLimitProvider = StateProvider<int>((ref) => 100);
+  void push(HcEvent event) {
+    final updated = [event, ...state];
+    state = updated.length > _max ? updated.sublist(0, _max) : updated;
+  }
 
-// History type filter
-final _historyTypeFilterProvider = StateProvider<Set<String>>((ref) => {});
+  void clear() => state = const [];
+}
 
-// History device search
-final _historyDeviceSearchProvider = StateProvider<String>((ref) => '');
+final _liveEventsProvider =
+    NotifierProvider<_LiveEvents, List<HcEvent>>(_LiveEvents.new);
+
+/// The set of event types a tab is filtered to; empty means show everything.
+///
+/// One class, two providers — the live tab and the history tab filter
+/// independently and must not share a selection.
+class _TypeFilter extends Notifier<Set<String>> {
+  @override
+  Set<String> build() => const {};
+
+  void toggle(String type) {
+    state =
+        state.contains(type) ? (state.toSet()..remove(type)) : {...state, type};
+  }
+}
+
+final _liveTypeFilterProvider =
+    NotifierProvider<_TypeFilter, Set<String>>(_TypeFilter.new);
+
+final _historyTypeFilterProvider =
+    NotifierProvider<_TypeFilter, Set<String>>(_TypeFilter.new);
+
+/// How many historical events to ask the server for.
+class _HistoryLimit extends Notifier<int> {
+  @override
+  int build() => 100;
+
+  void set(int limit) => state = limit;
+}
+
+final _historyLimitProvider =
+    NotifierProvider<_HistoryLimit, int>(_HistoryLimit.new);
+
+/// Free-text device filter over the history tab.
+class _HistoryDeviceSearch extends Notifier<String> {
+  @override
+  String build() => '';
+
+  void set(String query) => state = query;
+}
+
+final _historyDeviceSearchProvider =
+    NotifierProvider<_HistoryDeviceSearch, String>(_HistoryDeviceSearch.new);
 
 // Historical events — family on limit so it re-fetches when limit changes
 final _historyEventsProvider = FutureProvider.autoDispose
@@ -260,10 +309,7 @@ class _EventsPageState extends ConsumerState<EventsPage> {
     // Accumulate live events regardless of which tab is shown.
     ref.listen(eventsStreamProvider, (_, next) {
       next.whenData((event) {
-        ref.read(_liveEventsProvider.notifier).update((list) {
-          final updated = [event, ...list];
-          return updated.length > 200 ? updated.sublist(0, 200) : updated;
-        });
+        ref.read(_liveEventsProvider.notifier).push(event);
       });
     });
 
@@ -523,8 +569,7 @@ class _LiveTabState extends ConsumerState<_LiveTab> {
                 icon: Icon(Icons.delete_sweep_outlined,
                     color: t.surface.onBaseMuted),
                 tooltip: 'Clear buffer',
-                onPressed: () =>
-                    ref.read(_liveEventsProvider.notifier).state = [],
+                onPressed: () => ref.read(_liveEventsProvider.notifier).clear(),
               ),
             ],
           ),
@@ -533,11 +578,8 @@ class _LiveTabState extends ConsumerState<_LiveTab> {
           padding: EdgeInsets.symmetric(horizontal: t.space.lg),
           child: _TypeChips(
             selected: typeFilter,
-            onToggle: (ty) {
-              final next = Set<String>.from(typeFilter);
-              next.contains(ty) ? next.remove(ty) : next.add(ty);
-              ref.read(_liveTypeFilterProvider.notifier).state = next;
-            },
+            onToggle: (ty) =>
+                ref.read(_liveTypeFilterProvider.notifier).toggle(ty),
           ),
         ),
         SizedBox(height: t.space.sm),
@@ -583,7 +625,7 @@ class _HistoryTabState extends ConsumerState<_HistoryTab> {
   void initState() {
     super.initState();
     _searchCtrl.addListener(() {
-      ref.read(_historyDeviceSearchProvider.notifier).state = _searchCtrl.text;
+      ref.read(_historyDeviceSearchProvider.notifier).set(_searchCtrl.text);
     });
   }
 
@@ -624,7 +666,7 @@ class _HistoryTabState extends ConsumerState<_HistoryTab> {
                   padding: const EdgeInsets.only(left: 6),
                   child: GestureDetector(
                     onTap: () =>
-                        ref.read(_historyLimitProvider.notifier).state = l,
+                        ref.read(_historyLimitProvider.notifier).set(l),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 11, vertical: 8),
@@ -661,11 +703,8 @@ class _HistoryTabState extends ConsumerState<_HistoryTab> {
           padding: EdgeInsets.symmetric(horizontal: t.space.lg),
           child: _TypeChips(
             selected: typeFilter,
-            onToggle: (ty) {
-              final next = Set<String>.from(typeFilter);
-              next.contains(ty) ? next.remove(ty) : next.add(ty);
-              ref.read(_historyTypeFilterProvider.notifier).state = next;
-            },
+            onToggle: (ty) =>
+                ref.read(_historyTypeFilterProvider.notifier).toggle(ty),
           ),
         ),
         SizedBox(height: t.space.sm),
