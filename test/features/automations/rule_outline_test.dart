@@ -8,8 +8,8 @@ import 'package:hc_web/features/automations/rule_outline.dart';
 /// nested inside a loop, with steps after the loop.
 ///
 ///   repeat 3 times
-///     if <expr>            → turn off All Lights, notify
-///     else if <expr>       → lock Front Door
+///     if `<expr>`          → turn off All Lights, notify
+///     else if `<expr>`     → lock Front Door
 ///     else                 → exit
 ///   wait 120s
 HcRule nestedRule() => HcRule(

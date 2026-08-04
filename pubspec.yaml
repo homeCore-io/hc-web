@@ -18,8 +18,8 @@ dependencies:
   flutter_riverpod: ^2.5.1
   go_router: ^13.2.0
   shared_preferences: ^2.2.2
-  web_socket_channel: ^2.4.0
-  fl_chart: ^0.67.0
+  web_socket_channel: ^3.0.0
+  fl_chart: ^1.2.0
   timeago: ^3.6.1
   json_annotation: ^4.9.0
   # EventSource, for streaming plugin actions. Dio's browser adapter buffers the
@@ -30,7 +30,7 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^3.0.0
+  flutter_lints: ^6.0.0
   # Lets the plugin-poll test elapse its 10s timer without the suite waiting.
   fake_async: ^1.3.3
 

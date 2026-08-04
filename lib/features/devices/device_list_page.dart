@@ -240,7 +240,7 @@ class _Tile extends ConsumerWidget {
   }
 }
 
-/// "Showing <plugin> devices ✕" — makes the plugin scope visible and, more
+/// "Showing `<plugin>` devices ✕" — makes the plugin scope visible and, more
 /// importantly, escapable, so arriving from a plugin's "View all" is never a
 /// one-way trip.
 class _ScopePill extends ConsumerWidget {

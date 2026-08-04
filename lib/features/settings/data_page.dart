@@ -30,7 +30,7 @@ class _DataPageState extends ConsumerState<DataPage> {
   bool _working = false;
   String? _status;
 
-  /// Every failure path writes "<verb> failed: …"; nothing else does.
+  /// Every failure path writes "`<verb>` failed: …"; nothing else does.
   bool get _failed => _status?.contains('failed') ?? false;
 
   @override
