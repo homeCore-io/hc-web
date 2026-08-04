@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/legacy.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/rules/rule.dart';
 import '../../core/rules/schema.dart';
@@ -50,9 +49,23 @@ class _AutomationFilter {
       );
 }
 
-final _filterProvider = StateProvider<_AutomationFilter>(
-  (_) => const _AutomationFilter(),
-);
+class _Filter extends Notifier<_AutomationFilter> {
+  @override
+  _AutomationFilter build() => const _AutomationFilter();
+
+  void setSearch(String text) => state = state.copyWith(search: text);
+  void setStatus(String status) => state = state.copyWith(status: status);
+  void setSort(String sort) => state = state.copyWith(sort: sort);
+
+  void toggleTriggerType(String category) {
+    final next = Set<String>.from(state.triggerTypes);
+    next.contains(category) ? next.remove(category) : next.add(category);
+    state = state.copyWith(triggerTypes: next);
+  }
+}
+
+final _filterProvider =
+    NotifierProvider<_Filter, _AutomationFilter>(_Filter.new);
 
 const _sortLabels = {
   'priority_desc': 'Priority ↓',
@@ -63,7 +76,20 @@ const _sortLabels = {
 
 // ── Bulk selection state ─────────────────────────────────────────────────────
 
-final _selectionProvider = StateProvider<Set<String>>((_) => {});
+/// Which automations are picked for a bulk action. Empty means not in bulk
+/// mode at all — the toolbar keys off that rather than a separate flag.
+class _Selection extends Notifier<Set<String>> {
+  @override
+  Set<String> build() => const {};
+
+  void clear() => state = const {};
+  void add(String id) => state = {...state, id};
+  void toggle(String id) =>
+      state = state.contains(id) ? (state.toSet()..remove(id)) : {...state, id};
+}
+
+final _selectionProvider =
+    NotifierProvider<_Selection, Set<String>>(_Selection.new);
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 
@@ -81,9 +107,7 @@ class _AutomationListPageState extends ConsumerState<AutomationListPage> {
   void initState() {
     super.initState();
     _searchCtrl.addListener(() {
-      ref
-          .read(_filterProvider.notifier)
-          .update((f) => f.copyWith(search: _searchCtrl.text));
+      ref.read(_filterProvider.notifier).setSearch(_searchCtrl.text);
     });
   }
 
@@ -176,7 +200,7 @@ class _AutomationListPageState extends ConsumerState<AutomationListPage> {
                   await ref
                       .read(automationsProvider.notifier)
                       .bulkSetEnabled(selection.toList(), true);
-                  ref.read(_selectionProvider.notifier).state = {};
+                  ref.read(_selectionProvider.notifier).clear();
                 },
               ),
               _GhostAction(
@@ -185,14 +209,13 @@ class _AutomationListPageState extends ConsumerState<AutomationListPage> {
                   await ref
                       .read(automationsProvider.notifier)
                       .bulkSetEnabled(selection.toList(), false);
-                  ref.read(_selectionProvider.notifier).state = {};
+                  ref.read(_selectionProvider.notifier).clear();
                 },
               ),
               IconButton(
                 icon: const Icon(Icons.close),
                 tooltip: 'Clear selection',
-                onPressed: () =>
-                    ref.read(_selectionProvider.notifier).state = {},
+                onPressed: () => ref.read(_selectionProvider.notifier).clear(),
               ),
             ]
           : [
@@ -232,9 +255,8 @@ class _AutomationListPageState extends ConsumerState<AutomationListPage> {
                   trailing: [
                     _SortMenu(
                       value: filter.sort,
-                      onPick: (v) => ref
-                          .read(_filterProvider.notifier)
-                          .update((f) => f.copyWith(sort: v)),
+                      onPick: (v) =>
+                          ref.read(_filterProvider.notifier).setSort(v),
                     ),
                   ],
                   chips: [
@@ -247,24 +269,17 @@ class _AutomationListPageState extends ConsumerState<AutomationListPage> {
                       SectionChip(
                         label: s.$2,
                         selected: filter.status == s.$1,
-                        onTap: () => ref
-                            .read(_filterProvider.notifier)
-                            .update((f) => f.copyWith(status: s.$1)),
+                        onTap: () =>
+                            ref.read(_filterProvider.notifier).setStatus(s.$1),
                       ),
                     // One chip per trigger category, straight from the schema.
                     for (final category in kTriggerCategories)
                       SectionChip(
                         label: category,
                         selected: filter.triggerTypes.contains(category),
-                        onTap: () {
-                          final next = Set<String>.from(filter.triggerTypes);
-                          next.contains(category)
-                              ? next.remove(category)
-                              : next.add(category);
-                          ref
-                              .read(_filterProvider.notifier)
-                              .update((f) => f.copyWith(triggerTypes: next));
-                        },
+                        onTap: () => ref
+                            .read(_filterProvider.notifier)
+                            .toggleTriggerType(category),
                       ),
                   ],
                 ),
@@ -329,16 +344,9 @@ class _AutomationListPageState extends ConsumerState<AutomationListPage> {
             deviceResolver: deviceResolver,
             modeResolver: modeResolver,
             selected: selection.contains(r.id),
-            onLongPress: () => ref
-                .read(_selectionProvider.notifier)
-                .update((s) => {...s, r.id}),
-            onToggleSelect: (id) {
-              ref.read(_selectionProvider.notifier).update((s) {
-                final next = Set<String>.from(s);
-                next.contains(id) ? next.remove(id) : next.add(id);
-                return next;
-              });
-            },
+            onLongPress: () => ref.read(_selectionProvider.notifier).add(r.id),
+            onToggleSelect: (id) =>
+                ref.read(_selectionProvider.notifier).toggle(id),
           ));
         }
       }
