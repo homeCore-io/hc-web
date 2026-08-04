@@ -3,7 +3,6 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/legacy.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/providers/events_provider.dart';
@@ -15,7 +14,17 @@ import 'session_status.dart';
 /// Pages read this to suppress anything destructive: nobody wants a guest to
 /// lean on the panel and delete a rule. It is a *presentation* guard, not a
 /// security control — core's roles are the real boundary.
-final kioskProvider = StateProvider<bool>((ref) => false);
+class KioskNotifier extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  /// One-way: the wall panel sets this when it mounts and nothing clears it.
+  /// Navigating off /wall within the same session deliberately leaves the
+  /// guard on rather than briefly re-arming the destructive actions.
+  void enter() => state = true;
+}
+
+final kioskProvider = NotifierProvider<KioskNotifier, bool>(KioskNotifier.new);
 
 /// How long without a touch before the panel dims, then sleeps.
 const _dimAfter = Duration(minutes: 2);
@@ -60,7 +69,7 @@ class _WallChromeState extends ConsumerState<WallChrome> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(kioskProvider.notifier).state = true;
+      ref.read(kioskProvider.notifier).enter();
     });
 
     _wake();
