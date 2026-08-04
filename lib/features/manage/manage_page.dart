@@ -40,17 +40,17 @@ class ManagePage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final t = HcTokens.of(context);
 
-    final devices = ref.watch(devicesProvider).valueOrNull;
-    final rules = ref.watch(automationsProvider).valueOrNull;
-    final plugins = ref.watch(pluginsProvider).valueOrNull;
-    final scenes = ref.watch(scenesProvider).valueOrNull;
-    final helpers = ref.watch(glueProvider).valueOrNull;
-    final areas = ref.watch(areasProvider).valueOrNull;
-    final users = ref.watch(usersProvider).valueOrNull;
-    final modes = ref.watch(modesProvider).valueOrNull;
-    final cameras = ref.watch(camerasProvider).valueOrNull;
-    final health = ref.watch(systemHealthProvider).valueOrNull;
-    final status = ref.watch(systemStatusProvider).valueOrNull;
+    final devices = ref.watch(devicesProvider).value;
+    final rules = ref.watch(automationsProvider).value;
+    final plugins = ref.watch(pluginsProvider).value;
+    final scenes = ref.watch(scenesProvider).value;
+    final helpers = ref.watch(glueProvider).value;
+    final areas = ref.watch(areasProvider).value;
+    final users = ref.watch(usersProvider).value;
+    final modes = ref.watch(modesProvider).value;
+    final cameras = ref.watch(camerasProvider).value;
+    final health = ref.watch(systemHealthProvider).value;
+    final status = ref.watch(systemStatusProvider).value;
 
     final broken = rules?.where((r) => r.hasError).length ?? 0;
     final disabled = rules?.where((r) => !r.enabled).length ?? 0;

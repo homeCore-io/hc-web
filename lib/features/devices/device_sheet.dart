@@ -54,7 +54,7 @@ class _DevicePanelState extends ConsumerState<DevicePanel> {
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
-    final devices = ref.watch(devicesProvider).valueOrNull ?? const [];
+    final devices = ref.watch(devicesProvider).value ?? const [];
     final device = devices
         .where((d) => d.id == widget.deviceId)
         .cast<DeviceState?>()
@@ -780,8 +780,8 @@ class _InfoTabState extends ConsumerState<_InfoTab> {
     // Declared rooms as well as occupied ones — reading only the devices, which
     // is what this did, hid every empty room the Areas manager had just made.
     final areas = roomOptions(
-      registered: ref.watch(areasProvider).valueOrNull ?? const [],
-      devices: ref.watch(devicesProvider).valueOrNull ?? const [],
+      registered: ref.watch(areasProvider).value ?? const [],
+      devices: ref.watch(devicesProvider).value ?? const [],
     );
 
     return Padding(
@@ -860,8 +860,8 @@ class _UsedBy extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = HcTokens.of(context);
-    final rules = ref.watch(automationsProvider).valueOrNull ?? const [];
-    final all = ref.watch(devicesProvider).valueOrNull ?? const <DeviceState>[];
+    final rules = ref.watch(automationsProvider).value ?? const [];
+    final all = ref.watch(devicesProvider).value ?? const <DeviceState>[];
 
     final names = <String, String>{
       for (final d in all) ...{

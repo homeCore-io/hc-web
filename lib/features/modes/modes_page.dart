@@ -19,7 +19,7 @@ class ModesPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final modesAsync = ref.watch(modesProvider);
-    final modes = modesAsync.valueOrNull ?? const <ModeState>[];
+    final modes = modesAsync.value ?? const <ModeState>[];
     final on = modes.where((m) => m.on).length;
 
     return SectionScaffold(
@@ -88,8 +88,7 @@ class ModesPage extends ConsumerWidget {
     // Ids already taken, so a clash is refused here rather than by the API
     // after the dialog has closed.
     final taken = {
-      for (final m
-          in ref.read(modesProvider).valueOrNull ?? const <ModeState>[])
+      for (final m in ref.read(modesProvider).value ?? const <ModeState>[])
         m.id,
     };
 

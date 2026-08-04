@@ -231,6 +231,6 @@ final camerasProvider =
 /// The subset of the wall the user has chosen to surface on Home. The Home
 /// cameras area watches this; the Cameras page and kiosk watch the full wall.
 final homeCamerasProvider = Provider<List<Camera>>((ref) {
-  final all = ref.watch(camerasProvider).valueOrNull ?? const <Camera>[];
+  final all = ref.watch(camerasProvider).value ?? const <Camera>[];
   return all.where((c) => c.showOnHome).toList();
 });

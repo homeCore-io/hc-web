@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/rules/rule.dart';
 import '../../core/rules/schema.dart';
@@ -136,7 +137,7 @@ class _AutomationListPageState extends ConsumerState<AutomationListPage> {
 
     // Header stats read from the loaded list (empty while it loads), the same
     // shape Devices uses — the body still renders via `.when` below.
-    final rules = rulesAsync.valueOrNull ?? const <HcRule>[];
+    final rules = rulesAsync.value ?? const <HcRule>[];
     final enabledCount = rules.where((r) => r.enabled).length;
     final brokenCount = rules.where((r) => r.hasError).length;
 

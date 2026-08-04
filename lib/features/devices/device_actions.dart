@@ -760,7 +760,7 @@ class _ParamDialogState extends ConsumerState<_ParamDialog> {
         ];
 
       case DevicesSource(excludeSelf: final excludeSelf, facet: final facet):
-        final all = ref.watch(devicesProvider).valueOrNull ?? const [];
+        final all = ref.watch(devicesProvider).value ?? const [];
         return [
           for (final d in all)
             if (!(excludeSelf && d.id == widget.device.id) &&

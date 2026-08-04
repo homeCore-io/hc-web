@@ -42,7 +42,7 @@ class _AuditPageState extends ConsumerState<AuditPage> {
   Widget build(BuildContext context) {
     final async = ref.watch(auditProvider);
     final filter = ref.read(auditProvider.notifier).filter;
-    final all = async.valueOrNull ?? const <AuditEntry>[];
+    final all = async.value ?? const <AuditEntry>[];
     final shown = _apply(all);
     final denied = all.where((e) => e.denied).length;
 

@@ -66,7 +66,7 @@ class _RegistrySheetState extends ConsumerState<_RegistrySheet> {
     // that is already there, so the list waits for the real answer.
     final installed = ref.watch(pluginsProvider);
     final installedVersions = <String, String?>{
-      for (final p in (installed.valueOrNull ?? const []))
+      for (final p in (installed.value ?? const []))
         p.pluginId: p.installedVersion,
     };
 

@@ -21,10 +21,9 @@ class UsersPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final usersAsync = ref.watch(usersProvider);
-    final currentId =
-        ref.watch(currentUserProvider).valueOrNull?['id'] as String?;
+    final currentId = ref.watch(currentUserProvider).value?['id'] as String?;
 
-    final users = usersAsync.valueOrNull ?? const [];
+    final users = usersAsync.value ?? const [];
     final admins = users.where((u) => u.role == 'admin').length;
 
     return SectionScaffold(
@@ -551,7 +550,7 @@ class _RoleSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = HcTokens.of(context);
-    final roles = ref.watch(rolesProvider).valueOrNull ?? const [];
+    final roles = ref.watch(rolesProvider).value ?? const [];
     final scopes = roles
         .firstWhere((r) => r.role == user.role,
             orElse: () => RoleInfo(role: user.role, scopes: const []))
@@ -769,7 +768,7 @@ class _AccessKeysSection extends ConsumerWidget {
   }
 
   Future<void> _createKey(BuildContext context, WidgetRef ref) async {
-    final roles = ref.read(rolesProvider).valueOrNull ?? const [];
+    final roles = ref.read(rolesProvider).value ?? const [];
     final ownerScopes = roles
         .firstWhere((r) => r.role == user.role,
             orElse: () => RoleInfo(role: user.role, scopes: const []))

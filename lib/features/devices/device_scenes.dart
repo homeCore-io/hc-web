@@ -29,7 +29,7 @@ class DeviceScenesBlock extends ConsumerWidget {
     final t = HcTokens.of(context);
     final scenes = scenesForDevice(
       device,
-      ref.watch(devicesProvider).valueOrNull ?? const [],
+      ref.watch(devicesProvider).value ?? const [],
     );
     if (scenes.isEmpty) return const SizedBox.shrink();
 

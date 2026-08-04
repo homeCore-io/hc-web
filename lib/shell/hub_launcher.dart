@@ -94,9 +94,9 @@ class _HubLauncher extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = HcTokens.of(context);
-    final devices = ref.watch(devicesProvider).valueOrNull ?? const [];
-    final dashboards = ref.watch(dashboardsProvider).valueOrNull ??
-        const <DashboardDefinition>[];
+    final devices = ref.watch(devicesProvider).value ?? const [];
+    final dashboards =
+        ref.watch(dashboardsProvider).value ?? const <DashboardDefinition>[];
 
     final on = devices.where(isOn).length;
     final problems = problemsIn(devices).length;

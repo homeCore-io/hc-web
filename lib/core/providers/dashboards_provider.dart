@@ -36,7 +36,7 @@ class DashboardsNotifier extends AsyncNotifier<List<DashboardDefinition>> {
 
   Future<void> createDashboard(DashboardDefinition dashboard) async {
     if (!_dashboardApiAvailable) {
-      state = AsyncData([...(state.valueOrNull ?? const []), dashboard]);
+      state = AsyncData([...(state.value ?? const []), dashboard]);
       return;
     }
     await ref.read(dashboardsApiProvider).createDashboard(dashboard);
@@ -46,7 +46,7 @@ class DashboardsNotifier extends AsyncNotifier<List<DashboardDefinition>> {
   Future<void> updateDashboard(DashboardDefinition dashboard) async {
     if (!_dashboardApiAvailable) {
       state = AsyncData(
-        (state.valueOrNull ?? const [])
+        (state.value ?? const [])
             .map((item) => item.id == dashboard.id ? dashboard : item)
             .toList(),
       );
@@ -58,9 +58,8 @@ class DashboardsNotifier extends AsyncNotifier<List<DashboardDefinition>> {
 
   Future<void> deleteDashboard(String id) async {
     if (!_dashboardApiAvailable) {
-      final dashboards = (state.valueOrNull ?? const [])
-          .where((item) => item.id != id)
-          .toList();
+      final dashboards =
+          (state.value ?? const []).where((item) => item.id != id).toList();
       state = AsyncData(_normalizeDefault(dashboards));
       return;
     }
@@ -70,8 +69,7 @@ class DashboardsNotifier extends AsyncNotifier<List<DashboardDefinition>> {
 
   Future<void> duplicateDashboard(String id) async {
     if (!_dashboardApiAvailable) {
-      final existing =
-          (state.valueOrNull ?? []).firstWhere((item) => item.id == id);
+      final existing = (state.value ?? []).firstWhere((item) => item.id == id);
       final now = DateTime.now();
       final copy = existing.copyWith(
         id: 'dashboard_${now.microsecondsSinceEpoch}',
@@ -103,8 +101,7 @@ class DashboardsNotifier extends AsyncNotifier<List<DashboardDefinition>> {
 
   Future<DashboardDefinition> exportDashboard(String id) async {
     if (!_dashboardApiAvailable) {
-      return (state.valueOrNull ?? const [])
-          .firstWhere((item) => item.id == id);
+      return (state.value ?? const []).firstWhere((item) => item.id == id);
     }
     return ref.read(dashboardsApiProvider).exportDashboard(id);
   }
@@ -132,7 +129,7 @@ class DashboardsNotifier extends AsyncNotifier<List<DashboardDefinition>> {
   Future<void> setDefault(String id) async {
     if (!_dashboardApiAvailable) {
       state = AsyncData(
-        (state.valueOrNull ?? const [])
+        (state.value ?? const [])
             .map((item) => item.copyWith(
                   isDefault: item.id == id,
                   updatedAt: DateTime.now(),
@@ -156,7 +153,7 @@ class DashboardsNotifier extends AsyncNotifier<List<DashboardDefinition>> {
       );
       return;
     }
-    final existing = state.valueOrNull ?? const <DashboardDefinition>[];
+    final existing = state.value ?? const <DashboardDefinition>[];
     for (final dashboard in existing) {
       if (dashboard.ownerUserId == owner) {
         await ref.read(dashboardsApiProvider).deleteDashboard(dashboard.id);
@@ -271,7 +268,7 @@ final dashboardsProvider =
 );
 
 final defaultDashboardProvider = Provider<DashboardDefinition?>((ref) {
-  final dashboards = ref.watch(dashboardsProvider).valueOrNull ?? const [];
+  final dashboards = ref.watch(dashboardsProvider).value ?? const [];
   if (dashboards.isEmpty) return null;
   for (final dashboard in dashboards) {
     if (dashboard.isDefault) return dashboard;

@@ -18,7 +18,7 @@ class DevicesNotifier extends AsyncNotifier<List<DeviceState>> {
     // Listen for WebSocket events and update devices in-place
     ref.listen(eventsStreamProvider, (_, next) {
       next.whenData((event) {
-        final current = state.valueOrNull;
+        final current = state.value;
         if (current == null) return;
 
         if (event.type == 'device_state_changed' &&
@@ -109,7 +109,7 @@ class DevicesNotifier extends AsyncNotifier<List<DeviceState>> {
   /// through MQTT and back makes a light switch feel broken. If core rejects it,
   /// the next WS frame corrects us.
   Future<void> command(String id, Map<String, dynamic> patch) async {
-    final current = state.valueOrNull ?? [];
+    final current = state.value ?? [];
     state = AsyncData([
       for (final d in current)
         if (d.id == id)
@@ -123,7 +123,7 @@ class DevicesNotifier extends AsyncNotifier<List<DeviceState>> {
   Future<void> updateDevice(String id, Map<String, dynamic> body) async {
     final raw = await ref.read(devicesApiProvider).updateDevice(id, body);
     final updated = DeviceState.fromJson(raw);
-    final current = state.valueOrNull ?? [];
+    final current = state.value ?? [];
 
     state = AsyncData([
       for (final d in current)
@@ -139,7 +139,7 @@ class DevicesNotifier extends AsyncNotifier<List<DeviceState>> {
 
   Future<void> deleteDevice(String id) async {
     await ref.read(devicesApiProvider).deleteDevice(id);
-    final current = state.valueOrNull ?? [];
+    final current = state.value ?? [];
     state = AsyncData(current.where((d) => d.id != id).toList());
   }
 }

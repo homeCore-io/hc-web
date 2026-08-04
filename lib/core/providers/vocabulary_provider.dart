@@ -48,7 +48,7 @@ final vocabularyProvider = FutureProvider<Vocabulary?>((ref) async {
 ///
 /// Null when we could not ask (an older core). Empty when we asked and agree.
 final vocabularyDriftProvider = Provider<VocabularyDrift?>((ref) {
-  final vocab = ref.watch(vocabularyProvider).valueOrNull;
+  final vocab = ref.watch(vocabularyProvider).value;
   if (vocab == null) return null;
   return VocabularyDrift.between(vocab);
 });

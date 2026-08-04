@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/providers/events_provider.dart';
@@ -148,7 +149,7 @@ class _WallChromeState extends ConsumerState<WallChrome> {
 
   /// One line: the time, and whether anything on this screen can be believed.
   Widget _statusBar(BuildContext context, HcTokens t) {
-    final connected = ref.watch(wsConnectedProvider).valueOrNull ?? true;
+    final connected = ref.watch(wsConnectedProvider).value ?? true;
 
     return Padding(
       padding: EdgeInsets.fromLTRB(

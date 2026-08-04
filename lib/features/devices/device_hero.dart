@@ -595,7 +595,7 @@ class _SensorHero extends ConsumerWidget {
     final series = key == null
         ? const <HistoryEntry>[]
         : seriesFor(
-            ref.watch(deviceHistoryProvider(device.id)).valueOrNull ?? const [],
+            ref.watch(deviceHistoryProvider(device.id)).value ?? const [],
             key,
           );
     final trend = trendOf(series);

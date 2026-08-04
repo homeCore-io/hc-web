@@ -58,8 +58,8 @@ class _AssignRoomsState extends ConsumerState<_AssignRooms> {
   /// report would hide the empty room you made precisely so you could fill it.
   List<String> _rooms() {
     return roomOptions(
-      registered: ref.watch(areasProvider).valueOrNull ?? const [],
-      devices: ref.watch(devicesProvider).valueOrNull ?? const <DeviceState>[],
+      registered: ref.watch(areasProvider).value ?? const [],
+      devices: ref.watch(devicesProvider).value ?? const <DeviceState>[],
       extra: _assigned.values,
     );
   }

@@ -49,12 +49,12 @@ class _SceneEditorPageState extends ConsumerState<SceneEditorPage> {
     _initialized = true;
 
     if (widget.sceneId != null && widget.sceneId != 'new') {
-      final scenes = ref.read(scenesProvider).valueOrNull ?? [];
+      final scenes = ref.read(scenesProvider).value ?? [];
       final match = scenes.where((s) => s.id == widget.sceneId).toList();
       if (match.isNotEmpty) {
         final scene = match.first;
         _nameCtrl.text = scene.name;
-        final devices = ref.read(devicesProvider).valueOrNull ?? [];
+        final devices = ref.read(devicesProvider).value ?? [];
         for (final e in scene.states.entries) {
           final dev = devices.firstWhere((d) => d.id == e.key,
               orElse: () => DeviceState(
@@ -131,7 +131,7 @@ class _SceneEditorPageState extends ConsumerState<SceneEditorPage> {
   @override
   Widget build(BuildContext context) {
     final devicesAsync = ref.watch(devicesProvider);
-    final allDevices = devicesAsync.valueOrNull ?? [];
+    final allDevices = devicesAsync.value ?? [];
     // Exclude plugin scenes and already-added devices
     final addableDevices = allDevices
         .where((d) =>

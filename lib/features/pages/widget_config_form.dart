@@ -269,13 +269,13 @@ class _ConfigFormState extends ConsumerState<_ConfigForm> {
 
   Widget _area(WidgetConfigField f) {
     final areasAsync = ref.watch(areasProvider);
-    final devices = ref.watch(devicesProvider).valueOrNull ?? const [];
+    final devices = ref.watch(devicesProvider).value ?? const [];
     // The area catalog (GET /areas) is empty on a fresh system, so fall back to
     // the areas devices actually report. Matching on the device's effective
     // area is also what the widget filters on, so a device-derived name is
     // guaranteed to select something — a catalog-only name might not.
     final names = <String>{
-      for (final a in (areasAsync.valueOrNull ?? const []))
+      for (final a in (areasAsync.value ?? const []))
         (a['name'] ?? a['id'] ?? '').toString(),
       for (final d in devices)
         if ((d.effectiveArea ?? '').isNotEmpty) d.effectiveArea!,
@@ -328,7 +328,7 @@ class _ConfigFormState extends ConsumerState<_ConfigForm> {
 
   Widget _deviceRef(WidgetConfigField f) {
     final t = HcTokens.of(context);
-    final devices = ref.watch(devicesProvider).valueOrNull ?? const [];
+    final devices = ref.watch(devicesProvider).value ?? const [];
     final id = _config[f.name] as String?;
     final selected = devices.where((d) => d.id == id).firstOrNull;
     return Column(
@@ -359,7 +359,7 @@ class _ConfigFormState extends ConsumerState<_ConfigForm> {
 
   Widget _deviceRefs(WidgetConfigField f) {
     final t = HcTokens.of(context);
-    final devices = ref.watch(devicesProvider).valueOrNull ?? const [];
+    final devices = ref.watch(devicesProvider).value ?? const [];
     final ids =
         ((_config[f.name] as List?) ?? const []).map((e) => '$e').toSet();
     return Column(
@@ -388,7 +388,7 @@ class _ConfigFormState extends ConsumerState<_ConfigForm> {
 
   Widget _attribute(WidgetConfigField f) {
     // Attributes come from whichever device this widget points at.
-    final devices = ref.watch(devicesProvider).valueOrNull ?? const [];
+    final devices = ref.watch(devicesProvider).value ?? const [];
     final deviceId = _config['device_id'] as String?;
     final device = devices.where((d) => d.id == deviceId).firstOrNull;
     final attrs = <String>{

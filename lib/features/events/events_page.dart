@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 import '../../core/api/events_history_api.dart';
 import '../../core/models/event_entry.dart';
 import '../../core/providers/auth_provider.dart';
@@ -491,7 +492,7 @@ class _LiveTabState extends ConsumerState<_LiveTab> {
     final events = ref.watch(_liveEventsProvider);
     final typeFilter = ref.watch(_liveTypeFilterProvider);
     final byId = {
-      for (final d in ref.watch(devicesProvider).valueOrNull ?? const [])
+      for (final d in ref.watch(devicesProvider).value ?? const [])
         d.id: d.displayName
     };
     String? nameFor(String id) => byId[id];
@@ -601,7 +602,7 @@ class _HistoryTabState extends ConsumerState<_HistoryTab> {
     final typeFilter = ref.watch(_historyTypeFilterProvider);
     final deviceSearch = ref.watch(_historyDeviceSearchProvider);
     final byId = {
-      for (final d in ref.watch(devicesProvider).valueOrNull ?? const [])
+      for (final d in ref.watch(devicesProvider).value ?? const [])
         d.id: d.displayName
     };
     String? nameFor(String id) => byId[id];

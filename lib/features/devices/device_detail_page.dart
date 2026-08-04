@@ -17,8 +17,7 @@ class DeviceDetailPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final devices =
-        ref.watch(devicesProvider).valueOrNull ?? const <DeviceState>[];
+    final devices = ref.watch(devicesProvider).value ?? const <DeviceState>[];
     final device =
         devices.where((d) => d.id == deviceId).cast<DeviceState?>().firstOrNull;
 

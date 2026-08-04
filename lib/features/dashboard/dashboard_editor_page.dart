@@ -43,7 +43,7 @@ class _DashboardEditorPageState extends ConsumerState<DashboardEditorPage> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (_loaded != null) return;
-    final dashboards = ref.read(dashboardsProvider).valueOrNull ?? const [];
+    final dashboards = ref.read(dashboardsProvider).value ?? const [];
     final existing =
         dashboards.where((item) => item.id == widget.dashboardId).firstOrNull;
     _loaded = existing;
@@ -1350,19 +1350,18 @@ class _DashboardWidgetConfigEditorState
   Widget build(BuildContext context) {
     final type = widget.widgetModel.type;
     final devices = _sortedDevices(
-      ref.watch(devicesProvider).valueOrNull ?? const <DeviceState>[],
+      ref.watch(devicesProvider).value ?? const <DeviceState>[],
     );
     final areaNames = [
       ...{
-        ...((ref.watch(areasProvider).valueOrNull ??
-                const <Map<String, dynamic>>[])
+        ...((ref.watch(areasProvider).value ?? const <Map<String, dynamic>>[])
             .map((area) => area['name'] as String?)
             .whereType<String>()),
         ...devices.map((device) => device.effectiveArea).whereType<String>(),
       }
     ]..sort();
-    final dashboards = ref.watch(dashboardsProvider).valueOrNull ??
-        const <DashboardDefinition>[];
+    final dashboards =
+        ref.watch(dashboardsProvider).value ?? const <DashboardDefinition>[];
     final selectedManualIds = _csv(_deviceIdsCtrl).toSet();
     final selectedHistoryDevice = devices
         .where((device) => device.id == _historyDeviceCtrl.text.trim())

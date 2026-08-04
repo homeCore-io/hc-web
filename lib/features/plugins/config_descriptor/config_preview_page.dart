@@ -67,8 +67,7 @@ class _ConfigPreviewPageState extends ConsumerState<ConfigPreviewPage> {
                     Map<String, dynamic>.from(cfg?.config ?? const {});
                 // Resolve the descriptor's `sonos_devices` source from the live
                 // device registry — the Speakers table binds to it.
-                final devices =
-                    ref.watch(devicesProvider).valueOrNull ?? const [];
+                final devices = ref.watch(devicesProvider).value ?? const [];
                 final speakers = [
                   for (final d in devices)
                     if (d.id.startsWith('sonos_'))

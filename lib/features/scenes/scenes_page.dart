@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/models/device_state.dart';
 import '../../core/models/plugin_entry.dart';
@@ -229,12 +230,12 @@ class _ScenesPageState extends ConsumerState<ScenesPage> {
   Widget build(BuildContext context) {
     final nativeAsync = ref.watch(scenesProvider);
     final devicesAsync = ref.watch(devicesProvider);
-    final plugins = ref.watch(pluginsProvider).valueOrNull;
+    final plugins = ref.watch(pluginsProvider).value;
     final filter = ref.watch(_filterProvider);
 
     final loaded = nativeAsync.hasValue && devicesAsync.hasValue;
-    final native = nativeAsync.valueOrNull ?? const <SceneModel>[];
-    final devices = devicesAsync.valueOrNull ?? const <DeviceState>[];
+    final native = nativeAsync.value ?? const <SceneModel>[];
+    final devices = devicesAsync.value ?? const <DeviceState>[];
     final all = _display(native, devices);
 
     final roomCount =

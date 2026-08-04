@@ -31,7 +31,7 @@ class GluePage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(glueProvider);
-    final all = async.valueOrNull ?? const <DeviceState>[];
+    final all = async.value ?? const <DeviceState>[];
 
     return SectionScaffold(
       title: 'Helpers',
@@ -153,8 +153,7 @@ class GluePage extends ConsumerWidget {
 
     var type = kGlueTypes.first;
     final taken = {
-      for (final d
-          in ref.read(glueProvider).valueOrNull ?? const <DeviceState>[])
+      for (final d in ref.read(glueProvider).value ?? const <DeviceState>[])
         d.id,
     };
 

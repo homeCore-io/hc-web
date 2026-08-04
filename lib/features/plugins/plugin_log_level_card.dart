@@ -52,7 +52,7 @@ class _PluginLogLevelCardState extends ConsumerState<PluginLogLevelCard> {
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
-    final plugins = ref.watch(pluginsProvider).valueOrNull;
+    final plugins = ref.watch(pluginsProvider).value;
     if (plugins == null) return const SizedBox.shrink();
 
     final match = plugins.where((p) => p.pluginId == widget.pluginId);

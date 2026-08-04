@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 import '../api/scenes_api.dart';
 import '../models/scene.dart';
 import 'auth_provider.dart';

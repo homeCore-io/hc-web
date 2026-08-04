@@ -43,7 +43,7 @@ class PluginActions extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final caps = ref.watch(pluginCapabilitiesProvider(pluginId));
-    final role = ref.watch(currentUserProvider).valueOrNull?['role'] as String?;
+    final role = ref.watch(currentUserProvider).value?['role'] as String?;
 
     return caps.when(
       loading: () => const Padding(

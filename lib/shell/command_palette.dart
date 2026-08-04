@@ -31,8 +31,8 @@ class Command {
 /// 168 devices and 42 rules, typing three letters beats navigating to a list and
 /// filtering it, every time.
 List<Command> buildCommands(WidgetRef ref) {
-  final devices = ref.watch(devicesProvider).valueOrNull ?? const [];
-  final rules = ref.watch(automationsProvider).valueOrNull ?? const [];
+  final devices = ref.watch(devicesProvider).value ?? const [];
+  final rules = ref.watch(automationsProvider).value ?? const [];
 
   return [
     for (final i in kPlaces)

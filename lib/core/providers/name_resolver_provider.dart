@@ -48,7 +48,7 @@ class DeviceNameResolver {
 }
 
 final deviceNameResolverProvider = Provider<DeviceNameResolver>((ref) {
-  final devices = ref.watch(devicesProvider).valueOrNull ?? [];
+  final devices = ref.watch(devicesProvider).value ?? [];
   return DeviceNameResolver(devices);
 });
 
@@ -69,6 +69,6 @@ class ModeNameResolver {
 }
 
 final modeNameResolverProvider = Provider<ModeNameResolver>((ref) {
-  final modes = ref.watch(modesProvider).valueOrNull ?? [];
+  final modes = ref.watch(modesProvider).value ?? [];
   return ModeNameResolver(modes);
 });
