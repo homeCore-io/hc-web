@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/legacy.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/models/device_state.dart';
 import '../../core/models/plugin_entry.dart';
@@ -32,8 +31,16 @@ class _SceneFilter {
           descending: descending ?? this.descending);
 }
 
-final _filterProvider =
-    StateProvider<_SceneFilter>((_) => const _SceneFilter());
+class _Filter extends Notifier<_SceneFilter> {
+  @override
+  _SceneFilter build() => const _SceneFilter();
+
+  void setSearch(String text) => state = state.copyWith(search: text);
+  void setSource(String source) => state = state.copyWith(source: source);
+  void flipOrder() => state = state.copyWith(descending: !state.descending);
+}
+
+final _filterProvider = NotifierProvider<_Filter, _SceneFilter>(_Filter.new);
 
 // ── Display + group models ─────────────────────────────────────────────────────
 
@@ -128,9 +135,8 @@ class _ScenesPageState extends ConsumerState<ScenesPage> {
   @override
   void initState() {
     super.initState();
-    _searchCtrl.addListener(() => ref
-        .read(_filterProvider.notifier)
-        .update((f) => f.copyWith(search: _searchCtrl.text)));
+    _searchCtrl.addListener(
+        () => ref.read(_filterProvider.notifier).setSearch(_searchCtrl.text));
   }
 
   @override
@@ -314,23 +320,18 @@ class _ScenesPageState extends ConsumerState<ScenesPage> {
           SectionChip(
               label: 'All',
               selected: filter.source == 'all',
-              onTap: () => ref
-                  .read(_filterProvider.notifier)
-                  .update((f) => f.copyWith(source: 'all'))),
+              onTap: () => ref.read(_filterProvider.notifier).setSource('all')),
           if (customCount > 0)
             SectionChip(
                 label: 'Custom',
                 selected: filter.source == 'custom',
-                onTap: () => ref
-                    .read(_filterProvider.notifier)
-                    .update((f) => f.copyWith(source: 'custom'))),
+                onTap: () =>
+                    ref.read(_filterProvider.notifier).setSource('custom')),
           for (final src in pluginSources)
             SectionChip(
                 label: _sourceName(src, plugins),
                 selected: filter.source == src,
-                onTap: () => ref
-                    .read(_filterProvider.notifier)
-                    .update((f) => f.copyWith(source: src))),
+                onTap: () => ref.read(_filterProvider.notifier).setSource(src)),
         ];
 
         return ListView(
@@ -346,9 +347,7 @@ class _ScenesPageState extends ConsumerState<ScenesPage> {
                   icon: filter.descending
                       ? Icons.arrow_upward_rounded
                       : Icons.arrow_downward_rounded,
-                  onTap: () => ref
-                      .read(_filterProvider.notifier)
-                      .update((f) => f.copyWith(descending: !f.descending)),
+                  onTap: () => ref.read(_filterProvider.notifier).flipOrder(),
                 ),
               ],
               chips: sourceChips,
