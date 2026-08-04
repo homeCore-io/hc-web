@@ -67,7 +67,12 @@ final navRailExpandedProvider = NotifierProvider<NavRailExpandedNotifier, bool>(
   NavRailExpandedNotifier.new,
 );
 
-const _kLandingRouteKey = 'landing_route';
+/// Public because `app.dart` reads this key straight out of
+/// `SharedPreferences` in the router's redirect — it can `await`, and this
+/// provider cannot. Two readers, one constant: a second literal spelling of
+/// the key would desync the first time anyone renamed it, and the symptom
+/// would be a silently ignored Home page rather than an error.
+const kLandingRouteKey = 'landing_route';
 
 /// The route the app opens to on a fresh load — the house by default, or a page
 /// the user promoted with "Set as Home page".
@@ -85,13 +90,13 @@ class LandingRouteNotifier extends Notifier<String> {
 
   Future<void> _load() async {
     final p = await SharedPreferences.getInstance();
-    if (ref.mounted) state = p.getString(_kLandingRouteKey) ?? '/';
+    if (ref.mounted) state = p.getString(kLandingRouteKey) ?? '/';
   }
 
   Future<void> set(String route) async {
     state = route;
     final p = await SharedPreferences.getInstance();
-    await p.setString(_kLandingRouteKey, route);
+    await p.setString(kLandingRouteKey, route);
   }
 }
 
