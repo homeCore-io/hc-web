@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/legacy.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/text/humanize.dart';
@@ -19,7 +18,23 @@ import '../../shared/widgets/section_scaffold.dart';
 import 'device_query.dart';
 import 'device_sheet.dart';
 
-final _queryProvider = StateProvider<DeviceQuery>((_) => const DeviceQuery());
+/// Everything the list is currently filtered, searched and grouped by.
+class _Query extends Notifier<DeviceQuery> {
+  @override
+  DeviceQuery build() => const DeviceQuery();
+
+  void set(DeviceQuery query) => state = query;
+
+  /// Narrow to one plugin, or clear the scope when the route carries no id.
+  /// Landing on /devices with no param must drop a scope a previous visit set.
+  void scopeToPlugin(String? pluginId) {
+    state = pluginId == null
+        ? state.copyWith(clearPluginId: true)
+        : state.copyWith(pluginId: pluginId);
+  }
+}
+
+final _queryProvider = NotifierProvider<_Query, DeviceQuery>(_Query.new);
 
 /// The device list, at 167.
 ///
@@ -51,10 +66,7 @@ class _DeviceListPageState extends ConsumerState<DeviceListPage> {
     final plugin = widget.pluginId;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final notifier = ref.read(_queryProvider.notifier);
-      notifier.state = plugin == null
-          ? notifier.state.copyWith(clearPluginId: true)
-          : notifier.state.copyWith(pluginId: plugin);
+      ref.read(_queryProvider.notifier).scopeToPlugin(plugin);
     });
   }
 
@@ -294,7 +306,7 @@ class _Controls extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = HcTokens.of(context);
-    void update(DeviceQuery q) => ref.read(_queryProvider.notifier).state = q;
+    void update(DeviceQuery q) => ref.read(_queryProvider.notifier).set(q);
 
     return Row(
       children: [
@@ -474,8 +486,9 @@ class _Filters extends ConsumerWidget {
               // when unselected, so they can be found without being hunted.
               warn: e.key == DeviceFilter.offline ||
                   e.key == DeviceFilter.lowBattery,
-              onTap: () => ref.read(_queryProvider.notifier).state =
-                  query.copyWith(filter: e.key),
+              onTap: () => ref
+                  .read(_queryProvider.notifier)
+                  .set(query.copyWith(filter: e.key)),
             ),
         SizedBox(height: t.space.xs),
       ],
@@ -627,8 +640,9 @@ class _NeedsAttention extends ConsumerWidget {
             Padding(
               padding: EdgeInsets.only(top: t.space.xs),
               child: GestureDetector(
-                onTap: () => ref.read(_queryProvider.notifier).state =
-                    const DeviceQuery(filter: DeviceFilter.unassigned),
+                onTap: () => ref
+                    .read(_queryProvider.notifier)
+                    .set(const DeviceQuery(filter: DeviceFilter.unassigned)),
                 child: Row(
                   children: [
                     Icon(HcIcons.warning,
