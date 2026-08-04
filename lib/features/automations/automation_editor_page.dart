@@ -74,9 +74,8 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
             child: const Center(child: CircularProgressIndicator()),
           );
         }
-        final found = rulesAsync.valueOrNull
-            ?.where((r) => r.id == widget.ruleId)
-            .firstOrNull;
+        final found =
+            rulesAsync.value?.where((r) => r.id == widget.ruleId).firstOrNull;
         if (found == null) {
           return SectionScaffold(
             title: 'Automations',
@@ -709,7 +708,7 @@ class _MetaLine extends ConsumerWidget {
     // Thirty of thirty-four rules sat under "Untagged" because tagging a rule
     // meant editing its RON file by hand.
     final known = <String>{
-      for (final r in ref.watch(automationsProvider).valueOrNull ?? const [])
+      for (final r in ref.watch(automationsProvider).value ?? const [])
         ...r.tags,
     }.toList()
       ..sort();

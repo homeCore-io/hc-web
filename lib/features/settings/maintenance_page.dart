@@ -41,7 +41,7 @@ class _MaintenancePageState extends ConsumerState<MaintenancePage> {
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
     final stale = ref.watch(staleRefsProvider);
-    final devices = ref.watch(devicesProvider).valueOrNull ?? const [];
+    final devices = ref.watch(devicesProvider).value ?? const [];
     final orphans = orphanDevices(devices);
 
     return SectionScaffold(

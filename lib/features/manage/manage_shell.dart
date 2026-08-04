@@ -89,13 +89,13 @@ class ManageShell extends ConsumerWidget {
     final location = GoRouterState.of(context).matchedLocation;
     final current = resolveLocation(location);
     final health = ref.watch(systemHealthProvider);
-    final status = ref.watch(systemStatusProvider).valueOrNull;
+    final status = ref.watch(systemStatusProvider).value;
 
     // Core's standing, at the top of every section — the one fact that is true
     // of Administration as a whole rather than of any screen inside it.
-    final healthStatus = health.valueOrNull?['status'] as String? ?? '';
+    final healthStatus = health.value?['status'] as String? ?? '';
     final healthy = healthStatus == 'ok';
-    final version = health.valueOrNull?['version'] as String? ?? '';
+    final version = health.value?['version'] as String? ?? '';
     final uptime = status?['uptime_seconds'];
 
     final stats = <SectionStat>[

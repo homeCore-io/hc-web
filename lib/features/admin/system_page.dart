@@ -43,11 +43,11 @@ class _SystemPageState extends ConsumerState<SystemPage> {
     final t = HcTokens.of(context);
     final healthAsync = ref.watch(systemHealthProvider);
     final statusAsync = ref.watch(systemStatusProvider);
-    final currentUser = ref.watch(currentUserProvider).valueOrNull;
+    final currentUser = ref.watch(currentUserProvider).value;
     final isUtc = ref.watch(timeUtcProvider);
 
     // Headline health, mirroring the Status stat tile in the body.
-    final healthStatus = healthAsync.valueOrNull?['status'] as String? ?? '';
+    final healthStatus = healthAsync.value?['status'] as String? ?? '';
     final healthy = healthStatus == 'ok';
     final SectionStat? statusStat = healthAsync.hasError
         ? const SectionStat(

@@ -193,12 +193,12 @@ List<Attention> buildAttention({
 
 /// [buildAttention] over the live providers.
 List<Attention> attentionItems(WidgetRef ref) => buildAttention(
-      rules: ref.watch(automationsProvider).valueOrNull,
-      devices: ref.watch(devicesProvider).valueOrNull,
-      plugins: ref.watch(pluginsProvider).valueOrNull,
-      staleRefs: ref.watch(staleRefsProvider).valueOrNull?.length,
-      deniedToday: ref.watch(deniedTodayProvider).valueOrNull,
-      lastBackupAt: lastBackupAt(ref.watch(systemStatusProvider).valueOrNull),
+      rules: ref.watch(automationsProvider).value,
+      devices: ref.watch(devicesProvider).value,
+      plugins: ref.watch(pluginsProvider).value,
+      staleRefs: ref.watch(staleRefsProvider).value?.length,
+      deniedToday: ref.watch(deniedTodayProvider).value,
+      lastBackupAt: lastBackupAt(ref.watch(systemStatusProvider).value),
       backupKnown: ref.watch(systemStatusProvider).hasValue,
     );
 

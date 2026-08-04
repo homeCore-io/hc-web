@@ -23,11 +23,11 @@ class MediaPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final devicesAsync = ref.watch(devicesProvider);
-    final plugins = ref.watch(pluginsProvider).valueOrNull;
+    final plugins = ref.watch(pluginsProvider).value;
 
     // Header stats are per *group* — the same unit the cards render — so "2
     // playing" matches two cards, not four speakers.
-    final players = (devicesAsync.valueOrNull ?? const <DeviceState>[])
+    final players = (devicesAsync.value ?? const <DeviceState>[])
         .where((d) => facetOf(d, d.schema) == DeviceFacet.mediaPlayer)
         .toList();
     final groups = _groups(players);

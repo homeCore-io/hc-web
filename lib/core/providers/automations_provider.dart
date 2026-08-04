@@ -22,7 +22,7 @@ class AutomationsNotifier extends AsyncNotifier<List<HcRule>> {
   /// Applies [change] to the rule with [id] in place, leaving the rest alone.
   void _patchLocal(
       bool Function(HcRule) matches, void Function(HcRule) change) {
-    final current = state.valueOrNull ?? [];
+    final current = state.value ?? [];
     state = AsyncData([
       for (final r in current)
         if (matches(r)) (r.copy()..let(change)) else r,
@@ -36,7 +36,7 @@ class AutomationsNotifier extends AsyncNotifier<List<HcRule>> {
 
   Future<void> delete(String id) async {
     await ref.read(automationsApiProvider).deleteRule(id);
-    final current = state.valueOrNull ?? [];
+    final current = state.value ?? [];
     state = AsyncData(current.where((r) => r.id != id).toList());
   }
 
@@ -46,7 +46,7 @@ class AutomationsNotifier extends AsyncNotifier<List<HcRule>> {
         ? await api.createRule(rule)
         : await api.updateRule(rule);
 
-    final current = state.valueOrNull ?? [];
+    final current = state.value ?? [];
     final next = [...current];
     final existing = next.indexWhere((r) => r.id == saved.id);
     if (existing >= 0) {
@@ -60,7 +60,7 @@ class AutomationsNotifier extends AsyncNotifier<List<HcRule>> {
 
   Future<String> clone(String id) async {
     final cloned = await ref.read(automationsApiProvider).cloneRule(id);
-    final current = state.valueOrNull ?? [];
+    final current = state.value ?? [];
     state = AsyncData([...current, cloned]);
     return cloned.id;
   }

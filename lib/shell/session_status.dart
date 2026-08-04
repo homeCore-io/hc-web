@@ -61,7 +61,7 @@ class LiveDot extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = HcTokens.of(context);
-    final connected = ref.watch(wsConnectedProvider).valueOrNull ?? true;
+    final connected = ref.watch(wsConnectedProvider).value ?? true;
 
     final dot = AnimatedContainer(
       duration: t.motion.d(t.motion.base),

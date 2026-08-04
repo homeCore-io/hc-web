@@ -41,7 +41,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
     if (auth.hasError) {
       setState(() => _error = 'That username and password did not work.');
-    } else if (auth.valueOrNull == true && mounted) {
+    } else if (auth.value == true && mounted) {
       // Home, not '/dashboard' — the redirector that route pointed at is gone.
       context.go('/');
     }

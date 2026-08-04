@@ -49,7 +49,7 @@ class _EditorLoader extends ConsumerWidget {
       return _pad(Text('Could not load config: ${doc.error}',
           style: TextStyle(color: t.accent.danger)));
     }
-    final config = doc.valueOrNull;
+    final config = doc.value;
     if (config == null) {
       return _pad(Text('This plugin exposes no editable configuration.',
           style: TextStyle(color: t.surface.onBaseMuted)));
@@ -57,7 +57,7 @@ class _EditorLoader extends ConsumerWidget {
     return _ConfigForm(
       plugin: plugin,
       doc: config,
-      fields: fields.valueOrNull,
+      fields: fields.value,
     );
   }
 

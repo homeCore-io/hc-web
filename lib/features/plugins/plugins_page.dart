@@ -22,7 +22,7 @@ class PluginsPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     ref.watch(pluginsAutoRefreshProvider);
     final async = ref.watch(pluginsProvider);
-    final plugins = async.valueOrNull ?? const <PluginEntry>[];
+    final plugins = async.value ?? const <PluginEntry>[];
     final running = plugins.where((p) => p.isActive).length;
     final offline = plugins.where((p) => p.isOffline).length;
     final devices = plugins.fold<int>(0, (a, p) => a + p.deviceCount);
@@ -31,7 +31,7 @@ class PluginsPage extends ConsumerWidget {
     // and compared them nowhere, so a published update was invisible until
     // someone went looking in the registry sheet.
     final registry = {
-      for (final r in ref.watch(registryPluginsProvider).valueOrNull ??
+      for (final r in ref.watch(registryPluginsProvider).value ??
           const <RegistryPlugin>[])
         r.id: r,
     };

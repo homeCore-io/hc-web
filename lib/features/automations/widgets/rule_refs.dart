@@ -71,9 +71,9 @@ class RuleRefs {
 }
 
 final ruleRefsProvider = Provider<RuleRefs>((ref) {
-  final devices = ref.watch(devicesProvider).valueOrNull ?? const [];
-  final modes = ref.watch(modesProvider).valueOrNull ?? const [];
-  final scenes = ref.watch(scenesProvider).valueOrNull ?? const [];
+  final devices = ref.watch(devicesProvider).value ?? const [];
+  final modes = ref.watch(modesProvider).value ?? const [];
+  final scenes = ref.watch(scenesProvider).value ?? const [];
   // ModeState carries no display name of its own — it lives on the mode's
   // backing device, which is what the resolver reads.
   final modeNames = ref.watch(modeNameResolverProvider);

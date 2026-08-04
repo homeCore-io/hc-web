@@ -34,8 +34,8 @@ class HcNavRail extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final t = HcTokens.of(context);
     final location = GoRouterState.of(context).matchedLocation;
-    final dashboards = ref.watch(dashboardsProvider).valueOrNull ??
-        const <DashboardDefinition>[];
+    final dashboards =
+        ref.watch(dashboardsProvider).value ?? const <DashboardDefinition>[];
     final expanded = ref.watch(navRailExpandedProvider);
 
     return AnimatedContainer(

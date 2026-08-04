@@ -157,8 +157,8 @@ class _DescriptorConfigPaneState extends ConsumerState<DescriptorConfigPane> {
   /// (`sonos_devices` is kept as an alias so the local hand-authored fixture
   /// still resolves if the plugin-served descriptor is unavailable.)
   Map<String, List<Map<String, dynamic>>> _resolveSources() {
-    final devices = ref.watch(devicesProvider).valueOrNull ?? const [];
-    final areas = ref.watch(areasProvider).valueOrNull ?? const [];
+    final devices = ref.watch(devicesProvider).value ?? const [];
+    final areas = ref.watch(areasProvider).value ?? const [];
     // Each row carries the *effective* value plus the upstream one under
     // `<col>__source`. The renderer uses that to say "the bridge calls this X"
     // and to offer a revert — and because core treats "set it to the plugin's

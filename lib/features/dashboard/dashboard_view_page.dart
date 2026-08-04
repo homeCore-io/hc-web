@@ -39,7 +39,7 @@ class DashboardViewPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final dashboardsAsync = ref.watch(dashboardsProvider);
     final allDashboards =
-        dashboardsAsync.valueOrNull ?? const <DashboardDefinition>[];
+        dashboardsAsync.value ?? const <DashboardDefinition>[];
     final dashboard =
         allDashboards.where((item) => item.id == dashboardId).firstOrNull;
 
@@ -319,8 +319,7 @@ class _StatSummaryWidget extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final devices =
-        ref.watch(devicesProvider).valueOrNull ?? const <DeviceState>[];
+    final devices = ref.watch(devicesProvider).value ?? const <DeviceState>[];
     final metrics = ((widgetModel.config['metrics'] as List?) ?? const [])
         .whereType<String>()
         .toList();
@@ -414,7 +413,7 @@ class _DeviceGridWidget extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final devices = _selectDevices(
-      ref.watch(devicesProvider).valueOrNull ?? const <DeviceState>[],
+      ref.watch(devicesProvider).value ?? const <DeviceState>[],
       widgetModel.config,
     );
     return LayoutBuilder(
@@ -467,7 +466,7 @@ class _DeviceListWidget extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final devices = _selectDevices(
-      ref.watch(devicesProvider).valueOrNull ?? const <DeviceState>[],
+      ref.watch(devicesProvider).value ?? const <DeviceState>[],
       widgetModel.config,
     );
     final t = HcTokens.of(context);
@@ -489,7 +488,7 @@ class _DeviceTileWidget extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final devices = _selectDevices(
-      ref.watch(devicesProvider).valueOrNull ?? const <DeviceState>[],
+      ref.watch(devicesProvider).value ?? const <DeviceState>[],
       widgetModel.config,
     );
     final device = devices.firstOrNull;
@@ -517,7 +516,7 @@ class _ModeChipsWidget extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final modes = ref.watch(modesProvider).valueOrNull ?? const <ModeState>[];
+    final modes = ref.watch(modesProvider).value ?? const <ModeState>[];
     final t = HcTokens.of(context);
     return Wrap(
       spacing: t.space.sm,
@@ -541,8 +540,7 @@ class _SceneRowWidget extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final scenes =
-        ref.watch(scenesProvider).valueOrNull ?? const <SceneModel>[];
+    final scenes = ref.watch(scenesProvider).value ?? const <SceneModel>[];
     final t = HcTokens.of(context);
     return Wrap(
       spacing: t.space.sm,
@@ -681,8 +679,7 @@ class _EventFeedWidgetState extends ConsumerState<_EventFeedWidget> {
 
   @override
   Widget build(BuildContext context) {
-    final devices =
-        ref.watch(devicesProvider).valueOrNull ?? const <DeviceState>[];
+    final devices = ref.watch(devicesProvider).value ?? const <DeviceState>[];
     final deviceById = {for (final device in devices) device.id: device};
     final allowedTypes =
         ((widget.widgetModel.config['types'] as List?) ?? const [])
@@ -870,7 +867,7 @@ class _MediaPlayerDashboardWidget extends ConsumerWidget {
     final limit = widgetModel.config['limit'] as int?;
     final unlimited = {...widgetModel.config}..remove('limit');
     var devices = _selectDevices(
-      ref.watch(devicesProvider).valueOrNull ?? const <DeviceState>[],
+      ref.watch(devicesProvider).value ?? const <DeviceState>[],
       unlimited,
     ).where((device) => device.isMediaPlayer).toList();
     if (limit != null && devices.length > limit) {
@@ -1006,8 +1003,8 @@ class _DashboardLinkWidget extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final dashboards = ref.watch(dashboardsProvider).valueOrNull ??
-        const <DashboardDefinition>[];
+    final dashboards =
+        ref.watch(dashboardsProvider).value ?? const <DashboardDefinition>[];
     final configuredIds =
         ((widgetModel.config['dashboard_ids'] as List?) ?? const [])
             .whereType<String>()
@@ -1731,7 +1728,7 @@ class _HouseStatusHeroWidget extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = HcTokens.of(context);
-    final devices = ref.watch(devicesProvider).valueOrNull ?? const [];
+    final devices = ref.watch(devicesProvider).value ?? const [];
 
     final systems = ((config['systems'] as List?) ?? _defaultSystems)
         .map((s) => '$s')

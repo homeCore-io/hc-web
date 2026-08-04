@@ -24,7 +24,7 @@ class PluginsNotifier extends AsyncNotifier<List<PluginEntry>> {
     // Apply live WS updates for plugin status changes.
     ref.listen(eventsStreamProvider, (_, next) {
       next.whenData((event) {
-        final current = state.valueOrNull;
+        final current = state.value;
         if (current == null) return;
 
         if (event.type == 'plugin_registered') {
@@ -105,7 +105,7 @@ class PluginsNotifier extends AsyncNotifier<List<PluginEntry>> {
     for (final w in waits) {
       ref.invalidateSelf();
       await future;
-      final back = state.valueOrNull
+      final back = state.value
           ?.where((p) => p.pluginId == pluginId)
           .any((p) => p.isActive);
       if (back == true) return;

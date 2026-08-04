@@ -101,7 +101,7 @@ class _PluginStudioPageState extends ConsumerState<PluginStudioPage> {
       child: Builder(builder: (context) {
         final t = HcTokens.of(context);
         ref.watch(pluginsAutoRefreshProvider);
-        final plugin = ref.watch(pluginsProvider).valueOrNull?.firstWhere(
+        final plugin = ref.watch(pluginsProvider).value?.firstWhere(
               (p) => p.pluginId == widget.pluginId,
               orElse: () => PluginEntry(
                   pluginId: widget.pluginId,
@@ -168,7 +168,7 @@ class _PluginStudioPageState extends ConsumerState<PluginStudioPage> {
   /// or nobody knows. Collapsing them into "no newer version" is what let the
   /// Version tile read "up to date" for a plugin it had never checked.
   ({bool answered, String? newer}) _registryStanding(PluginEntry p) {
-    final reg = ref.watch(registryPluginsProvider).valueOrNull;
+    final reg = ref.watch(registryPluginsProvider).value;
     if (reg == null || p.installedVersion == null) {
       return (answered: false, newer: null);
     }
@@ -183,8 +183,7 @@ class _PluginStudioPageState extends ConsumerState<PluginStudioPage> {
     // Descriptor-driven config sections when a descriptor resolves (plugin's
     // own → local fixture → auto-derived from schema); otherwise the legacy
     // schema-derived sections.
-    final descriptor =
-        ref.watch(pluginDescriptorProvider(p.pluginId)).valueOrNull;
+    final descriptor = ref.watch(pluginDescriptorProvider(p.pluginId)).value;
     final configNav = <_NavItem>[];
     if (descriptor != null) {
       // Sections can be conditional on the config itself (YoLink shows cloud
@@ -200,8 +199,7 @@ class _PluginStudioPageState extends ConsumerState<PluginStudioPage> {
       // sections therefore wait for the config; unconditional ones are true
       // regardless and appear immediately, so the rail only ever grows.
       final cfg = ref.watch(pluginConfigProvider(p.pluginId));
-      final values =
-          Map<String, dynamic>.from(cfg.valueOrNull?.config ?? const {});
+      final values = Map<String, dynamic>.from(cfg.value?.config ?? const {});
       final sections = cfg.hasValue
           ? visibleSections(descriptor, values)
           : unconditionalSections(descriptor);
@@ -210,8 +208,7 @@ class _PluginStudioPageState extends ConsumerState<PluginStudioPage> {
             group: 'Configuration'));
       }
     } else {
-      final fields =
-          ref.watch(pluginConfigFieldsProvider(p.pluginId)).valueOrNull;
+      final fields = ref.watch(pluginConfigFieldsProvider(p.pluginId)).value;
       final sections = <String>[];
       if (fields != null) {
         for (final f in fields.fields) {
@@ -274,8 +271,7 @@ class _PluginStudioPageState extends ConsumerState<PluginStudioPage> {
     if (selected.startsWith('config')) {
       final section =
           selected == 'config' ? '' : selected.substring('config:'.length);
-      final descriptor =
-          ref.watch(pluginDescriptorProvider(p.pluginId)).valueOrNull;
+      final descriptor = ref.watch(pluginDescriptorProvider(p.pluginId)).value;
       if (descriptor != null) {
         return DescriptorConfigPane(
           pluginId: p.pluginId,
@@ -690,7 +686,7 @@ class _OverviewPane extends ConsumerWidget {
 
     final devices = ref
             .watch(devicesProvider)
-            .valueOrNull
+            .value
             ?.where((d) => d.pluginId == plugin.pluginId)
             .toList() ??
         const <DeviceState>[];
@@ -700,8 +696,7 @@ class _OverviewPane extends ConsumerWidget {
         : breakdown.take(3).map((e) => '${e.value} ${e.key}').join(' · ');
 
     final hb = plugin.heartbeatAgo;
-    final caps =
-        ref.watch(pluginCapabilitiesProvider(plugin.pluginId)).valueOrNull;
+    final caps = ref.watch(pluginCapabilitiesProvider(plugin.pluginId)).value;
     final hasActions = caps != null && caps.actions.isNotEmpty;
 
     return _PaneScaffold(
@@ -1142,12 +1137,12 @@ class _ConfigSectionPane extends ConsumerWidget {
     if (docA.isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
-    final doc = docA.valueOrNull;
+    final doc = docA.value;
     if (doc == null) {
       return _empty(
           t, 'Nothing to configure', 'This plugin exposes no editable config.');
     }
-    final schema = schemaA.valueOrNull;
+    final schema = schemaA.value;
     final fields = (schema != null && !schema.isEmpty)
         ? schema
         : (doc.config != null ? inferFieldsFromConfig(doc.config!) : null);

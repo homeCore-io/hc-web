@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/text/humanize.dart';
@@ -71,7 +72,7 @@ class _DeviceListPageState extends ConsumerState<DeviceListPage> {
     final collapsed = ref.watch(collapsedGroupsProvider);
 
     // Header stats mirror the scoped view (plugin scope included).
-    final allForStats = devicesAsync.valueOrNull ?? const <DeviceState>[];
+    final allForStats = devicesAsync.value ?? const <DeviceState>[];
     // Scenes live in their own section and are excluded from the grid, so keep
     // them out of the header count too — otherwise "N devices" overcounts the
     // grid by every scene.
@@ -253,10 +254,8 @@ class _ScopePill extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final t = HcTokens.of(context);
     // Prefer the plugin's own display name; fall back to a humanized id.
-    final match = ref
-        .watch(pluginsProvider)
-        .valueOrNull
-        ?.where((p) => p.pluginId == pluginId);
+    final match =
+        ref.watch(pluginsProvider).value?.where((p) => p.pluginId == pluginId);
     final name = (match != null && match.isNotEmpty)
         ? match.first.displayName
         : humanize(pluginId.replaceFirst('plugin.', ''));

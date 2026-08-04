@@ -172,7 +172,7 @@ class _HomePageState extends ConsumerState<HomePage> {
   Future<void> _save() async {
     final draft = _draft;
     final dashboard = ref.read(defaultDashboardProvider);
-    final devices = ref.read(devicesProvider).valueOrNull ?? const [];
+    final devices = ref.read(devicesProvider).value ?? const [];
     final homeCams = ref.read(homeCamerasProvider);
     if (draft == null || dashboard == null) {
       setState(() => _draft = null);
@@ -898,7 +898,7 @@ class _HouseHeader extends ConsumerWidget {
     final t = HcTokens.of(context);
     final on = devices.where(isOn).length;
     final offline = devices.where((d) => !d.available).length;
-    final modes = ref.watch(modesProvider).valueOrNull ?? const [];
+    final modes = ref.watch(modesProvider).value ?? const [];
     final active = modes
         .where((m) => m.on)
         .map((m) => humanize(m.id.replaceFirst('mode_', '')))

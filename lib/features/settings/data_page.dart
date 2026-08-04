@@ -195,7 +195,7 @@ class _DataPageState extends ConsumerState<DataPage> {
   /// "nothing on record" rather than "never" — and an empty string is better
   /// than a sentence asserting either.
   String _lastBackupSentence(WidgetRef ref) {
-    final status = ref.watch(systemStatusProvider).valueOrNull;
+    final status = ref.watch(systemStatusProvider).value;
     if (status == null) return '';
     final raw = status['last_backup_at'];
     if (raw is! String) return ' No backup on record for this house.';

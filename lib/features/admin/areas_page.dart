@@ -27,7 +27,7 @@ class _AreasPageState extends ConsumerState<AreasPage> {
   Widget build(BuildContext context) {
     final areasAsync = ref.watch(areasProvider);
 
-    final areas = areasAsync.valueOrNull ?? const [];
+    final areas = areasAsync.value ?? const [];
     final assigned = areas.fold<int>(
         0, (a, x) => a + ((x['device_ids'] as List?)?.length ?? 0));
 
@@ -259,7 +259,7 @@ class _AreaPaneState extends ConsumerState<_AreaPane> {
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
-    final devices = ref.watch(devicesProvider).valueOrNull ?? const [];
+    final devices = ref.watch(devicesProvider).value ?? const [];
     final byId = {for (final d in devices) d.id: d};
 
     final ids = _deviceIds;

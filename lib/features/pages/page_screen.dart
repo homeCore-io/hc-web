@@ -210,7 +210,7 @@ class _PageScreenState extends ConsumerState<PageScreen> {
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
-    final dashboards = ref.watch(dashboardsProvider).valueOrNull ?? const [];
+    final dashboards = ref.watch(dashboardsProvider).value ?? const [];
     final dashboard = dashboards
         .where((d) => d.id == widget.dashboardId)
         .cast<DashboardDefinition?>()

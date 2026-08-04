@@ -23,7 +23,7 @@ class NotificationsPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(systemConfigProvider);
-    final channels = channelsFrom(async.valueOrNull?.config.parsed ?? const {});
+    final channels = channelsFrom(async.value?.config.parsed ?? const {});
 
     return SectionScaffold(
       title: 'Notifications',

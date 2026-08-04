@@ -44,11 +44,11 @@ class _SystemConfigPageState extends ConsumerState<SystemConfigPage> {
 
     return SectionScaffold(
       title: 'Configuration',
-      subtitle: async.valueOrNull?.config.path,
+      subtitle: async.value?.config.path,
       stats: [
-        if (async.valueOrNull != null)
+        if (async.value != null)
           SectionStat(
-            value: '${async.valueOrNull!.descriptor.sections.length}',
+            value: '${async.value!.descriptor.sections.length}',
             label: 'sections',
           ),
         if (_restartRequired)

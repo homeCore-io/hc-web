@@ -127,7 +127,7 @@ class _LogLevelDialogState extends ConsumerState<_LogLevelDialog> {
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
-    final current = ref.watch(logLevelProvider).valueOrNull;
+    final current = ref.watch(logLevelProvider).value;
 
     // Seed once from what core reports, then leave the field alone — re-seeding
     // on every rebuild would fight the person typing in it.
@@ -355,7 +355,7 @@ class _PluginRowState extends ConsumerState<_PluginRow> {
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
-    final all = ref.watch(pluginsProvider).valueOrNull ?? const [];
+    final all = ref.watch(pluginsProvider).value ?? const [];
     final match = all.where((p) => p.pluginId == widget.pluginId);
     if (match.isEmpty) return const SizedBox.shrink();
     final p = match.first;
