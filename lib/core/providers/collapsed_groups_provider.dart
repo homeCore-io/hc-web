@@ -1,4 +1,4 @@
-import 'package:flutter_riverpod/legacy.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Which section groups the user has collapsed, remembered across sessions.
@@ -7,16 +7,18 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// Scenes collapse independently — e.g. `devices:kitchen`, `scenes:kitchen`.
 /// Everything starts expanded; only the ids the user has actively collapsed
 /// live in the set, so a brand-new group is open by default.
-class CollapsedGroupsNotifier extends StateNotifier<Set<String>> {
-  CollapsedGroupsNotifier() : super(const {}) {
-    _load();
-  }
-
+class CollapsedGroupsNotifier extends Notifier<Set<String>> {
   static const _key = 'collapsed_groups';
+
+  @override
+  Set<String> build() {
+    _load();
+    return const {};
+  }
 
   Future<void> _load() async {
     final p = await SharedPreferences.getInstance();
-    if (mounted) state = (p.getStringList(_key) ?? const []).toSet();
+    if (ref.mounted) state = (p.getStringList(_key) ?? const []).toSet();
   }
 
   Future<void> toggle(String id) async {
@@ -29,5 +31,5 @@ class CollapsedGroupsNotifier extends StateNotifier<Set<String>> {
 }
 
 final collapsedGroupsProvider =
-    StateNotifierProvider<CollapsedGroupsNotifier, Set<String>>(
-        (_) => CollapsedGroupsNotifier());
+    NotifierProvider<CollapsedGroupsNotifier, Set<String>>(
+        CollapsedGroupsNotifier.new);
