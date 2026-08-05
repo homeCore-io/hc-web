@@ -13,13 +13,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 /// What the locally-stored UI preferences must keep doing.
 ///
-/// These eight providers are the last `StateNotifier`s in the app and are next
-/// to be ported to `Notifier` (see `core/docs/riverpod-legacy-migration-plan.md`).
-/// They had no tests at all, which is the wrong state to start a migration in:
-/// every one of them shares a pattern the compiler cannot check — construct
-/// with a default, load asynchronously from `SharedPreferences`, assign `state`
-/// if still mounted, write through on mutation — and all of it is invisible to
-/// `flutter analyze`.
+/// Written to pin these providers through the port from `StateNotifier` to
+/// `Notifier` (see `core/docs/riverpod-legacy-migration-plan.md`), and kept
+/// because the behaviour is worth pinning regardless. They had no tests at all,
+/// which is the wrong state to start a migration in: every one of them shares a
+/// pattern the compiler cannot check — a default, an async load from
+/// `SharedPreferences`, a mounted guard, a write-through on mutation — and all
+/// of it is invisible to `flutter analyze`.
 ///
 /// The assertions that matter most are the **key literals**. These keys are
 /// live in browsers today. Renaming one, or changing the type it is stored
@@ -29,9 +29,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// providers — importing the constant would happily follow a rename and prove
 /// nothing.
 ///
-/// Written deliberately against the *current* `StateNotifier` implementation.
-/// The port must leave this file untouched; if it needs editing, behaviour
-/// changed.
+/// These assertions were written against the old `StateNotifier` code and
+/// survived the port to `Notifier` unedited, which is what the port had to
+/// prove. The ninth entry, `skin`, arrived afterwards with the picker.
 
 /// The `_load()` in each constructor is fire-and-forget across an async gap and
 /// nothing exposes when it lands, so tests poll for the value they expect.
