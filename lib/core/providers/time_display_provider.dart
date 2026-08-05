@@ -1,16 +1,18 @@
-import 'package:flutter_riverpod/legacy.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 const _kUtcKey = 'time_display_utc';
 
-class TimeDisplayNotifier extends StateNotifier<bool> {
-  TimeDisplayNotifier() : super(false) {
+class TimeDisplayNotifier extends Notifier<bool> {
+  @override
+  bool build() {
     _load();
+    return false;
   }
 
   Future<void> _load() async {
     final p = await SharedPreferences.getInstance();
-    if (mounted) state = p.getBool(_kUtcKey) ?? false;
+    if (ref.mounted) state = p.getBool(_kUtcKey) ?? false;
   }
 
   Future<void> toggle() async {
@@ -20,8 +22,8 @@ class TimeDisplayNotifier extends StateNotifier<bool> {
   }
 }
 
-final timeUtcProvider = StateNotifierProvider<TimeDisplayNotifier, bool>(
-  (ref) => TimeDisplayNotifier(),
+final timeUtcProvider = NotifierProvider<TimeDisplayNotifier, bool>(
+  TimeDisplayNotifier.new,
 );
 
 /// Format a DateTime for display. Pass [utc]=true for UTC, false for local.

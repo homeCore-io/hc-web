@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/models/registry_plugin.dart';
 import '../../core/providers/plugins_provider.dart';
 import '../../design/hc_icons.dart';
-import '../../design/skins.dart';
 import '../../design/tokens.dart';
 import '../../shell/hc_sheet.dart';
 
@@ -16,10 +15,7 @@ Future<void> showRegistrySheet(BuildContext context, WidgetRef ref) {
   return showHcSheet(
     context,
     title: 'Add plugin',
-    child: Theme(
-      data: hcTheme(HcSkin.midnight),
-      child: const _RegistrySheet(),
-    ),
+    child: const _RegistrySheet(),
   );
 }
 

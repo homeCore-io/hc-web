@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../design/skins.dart';
 import '../../design/tokens.dart';
 
 /// Marks everything below it as living inside a shell that already draws the
@@ -26,8 +25,10 @@ class SectionShellScope extends InheritedWidget {
 /// One header for every Manage section — house *and* admin.
 ///
 /// Reached on its own it is a page: back arrow → Manage, a title, optional
-/// inline stats and actions, in the Midnight skin the app-native surfaces use
-/// regardless of the shell around them. That arrow used to exist only on the
+/// inline stats and actions, in whatever skin the shell around it resolved.
+/// It used to pin Midnight here regardless of the shell, which meant a chosen
+/// skin stopped at the chrome and never reached the page. That arrow used to
+/// exist only on the
 /// admin pages (the old `AdminScaffold`) and was missing from studio surfaces
 /// like Plugins, which is how the app grew two header patterns where only one
 /// navigated.
@@ -66,95 +67,92 @@ class SectionScaffold extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (SectionShellScope.of(context)) return _pane(context);
-    return Theme(
-      data: hcTheme(HcSkin.midnight),
-      child: Builder(builder: (context) {
-        final t = HcTokens.of(context);
-        return ColoredBox(
-          color: t.surface.base,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              SafeArea(
-                bottom: false,
-                child: Padding(
-                  padding: EdgeInsets.fromLTRB(
-                      t.space.sm, t.space.md, t.space.lg, t.space.md),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      IconButton(
-                        icon: Icon(Icons.arrow_back_rounded,
-                            color: t.surface.onBaseMuted),
-                        tooltip: 'Manage',
-                        onPressed: onBack ?? () => context.go('/manage'),
-                      ),
-                      const SizedBox(width: 4),
-                      Flexible(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (breadcrumbs.isNotEmpty)
-                              Text(
-                                '${breadcrumbs.join('  ›  ')}  ›',
-                                style: TextStyle(
-                                  color: t.surface.onBaseMuted,
-                                  fontSize: 11.5,
-                                ),
-                              ),
-                            // One line, ellipsized. Squeezed between a back
-                            // arrow and the stats on a narrow window, the
-                            // default wrapping broke words down the middle —
-                            // "Administratio / n" — which reads as a rendering
-                            // fault rather than a long title.
+    return Builder(builder: (context) {
+      final t = HcTokens.of(context);
+      return ColoredBox(
+        color: t.surface.base,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(
+                    t.space.sm, t.space.md, t.space.lg, t.space.md),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    IconButton(
+                      icon: Icon(Icons.arrow_back_rounded,
+                          color: t.surface.onBaseMuted),
+                      tooltip: 'Manage',
+                      onPressed: onBack ?? () => context.go('/manage'),
+                    ),
+                    const SizedBox(width: 4),
+                    Flexible(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (breadcrumbs.isNotEmpty)
                             Text(
-                              title,
+                              '${breadcrumbs.join('  ›  ')}  ›',
+                              style: TextStyle(
+                                color: t.surface.onBaseMuted,
+                                fontSize: 11.5,
+                              ),
+                            ),
+                          // One line, ellipsized. Squeezed between a back
+                          // arrow and the stats on a narrow window, the
+                          // default wrapping broke words down the middle —
+                          // "Administratio / n" — which reads as a rendering
+                          // fault rather than a long title.
+                          Text(
+                            title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: t.surface.onBase,
+                              fontSize: 26,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: -0.4,
+                            ),
+                          ),
+                          if (subtitle != null)
+                            Text(
+                              subtitle!,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
-                                color: t.surface.onBase,
-                                fontSize: 26,
-                                fontWeight: FontWeight.w600,
-                                letterSpacing: -0.4,
+                                color: t.surface.onBaseMuted,
+                                fontSize: 12.5,
                               ),
                             ),
-                            if (subtitle != null)
-                              Text(
-                                subtitle!,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color: t.surface.onBaseMuted,
-                                  fontSize: 12.5,
-                                ),
-                              ),
-                          ],
+                        ],
+                      ),
+                    ),
+                    if (stats.isNotEmpty) ...[
+                      const SizedBox(width: 18),
+                      Flexible(
+                        child: Wrap(
+                          spacing: 16,
+                          runSpacing: 6,
+                          children: [for (final s in stats) _Stat(s)],
                         ),
                       ),
-                      if (stats.isNotEmpty) ...[
-                        const SizedBox(width: 18),
-                        Flexible(
-                          child: Wrap(
-                            spacing: 16,
-                            runSpacing: 6,
-                            children: [for (final s in stats) _Stat(s)],
-                          ),
-                        ),
-                      ],
-                      const Spacer(),
-                      ...actions,
                     ],
-                  ),
+                    const Spacer(),
+                    ...actions,
+                  ],
                 ),
               ),
-              Divider(height: 1, color: t.stroke.hairline),
-              Expanded(child: child),
-            ],
-          ),
-        );
-      }),
-    );
+            ),
+            Divider(height: 1, color: t.stroke.hairline),
+            Expanded(child: child),
+          ],
+        ),
+      );
+    });
   }
 
   /// The same section, drawn as a pane: no back arrow and no page-sized title,

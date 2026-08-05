@@ -1,22 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/legacy.dart';
 import 'package:go_router/go_router.dart';
 
 import '../design/skins.dart';
+import '../core/providers/skin_provider.dart';
 import '../design/hc_icons.dart';
 import 'command_palette.dart';
 import 'touch_chrome.dart';
 import 'wall_chrome.dart';
-
-/// The user's skin choice, or null to let each shell pick its own.
-///
-/// The shells are opinionated by default — Ambient Glass on the wall, Midnight
-/// in the hand — but none of that is hard-coded into a widget, so overriding it
-/// here re-skins the whole app without touching a single component. Control
-/// Room is still reachable this way; it simply is not anyone's default now that
-/// the admin portal it belonged to is part of the app.
-final skinOverrideProvider = StateProvider<HcSkin?>((ref) => null);
 
 /// Which surface a route belongs to.
 ///
@@ -118,5 +109,6 @@ const kPlaces = [
   NavItem('/scenes', 'Scenes', HcIcons.scenes),
   NavItem('/modes', 'Modes', HcIcons.modes),
   NavItem('/events', 'Events', HcIcons.events),
+  NavItem('/admin/appearance', 'Appearance', Icons.palette_outlined),
   NavItem('/admin/users', 'Admin', HcIcons.admin, adminOnly: true),
 ];

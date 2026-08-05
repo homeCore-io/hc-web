@@ -1,4 +1,4 @@
-import 'package:flutter_riverpod/legacy.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 const _kCollapsedKey = 'home_rooms_collapsed';
@@ -10,14 +10,18 @@ const _kCollapsedKey = 'home_rooms_collapsed';
 /// kept here as a local UI preference — a fast, per-view choice that survives a
 /// reload without a dashboard write on every tap. A room absent from this set is
 /// open, so a newly installed room is always visible, never folded by default.
-class RoomCollapseNotifier extends StateNotifier<Set<String>> {
-  RoomCollapseNotifier() : super(const {}) {
+class RoomCollapseNotifier extends Notifier<Set<String>> {
+  @override
+  Set<String> build() {
     _load();
+    return const {};
   }
 
   Future<void> _load() async {
     final p = await SharedPreferences.getInstance();
-    if (mounted) state = (p.getStringList(_kCollapsedKey) ?? const []).toSet();
+    if (ref.mounted) {
+      state = (p.getStringList(_kCollapsedKey) ?? const []).toSet();
+    }
   }
 
   Future<void> toggle(String key) async {
@@ -29,6 +33,6 @@ class RoomCollapseNotifier extends StateNotifier<Set<String>> {
 }
 
 final roomCollapseProvider =
-    StateNotifierProvider<RoomCollapseNotifier, Set<String>>(
-  (ref) => RoomCollapseNotifier(),
+    NotifierProvider<RoomCollapseNotifier, Set<String>>(
+  RoomCollapseNotifier.new,
 );

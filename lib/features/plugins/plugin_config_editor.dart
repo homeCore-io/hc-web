@@ -12,7 +12,6 @@ import '../../core/providers/plugins_provider.dart';
 import '../../core/schema/plugin_capabilities.dart';
 import '../../core/schema/plugin_config_schema.dart';
 import '../../design/hc_icons.dart';
-import '../../design/skins.dart';
 import '../../design/tokens.dart';
 import '../../shell/hc_sheet.dart';
 import 'plugin_actions.dart';
@@ -24,10 +23,7 @@ Future<void> showPluginConfigEditor(
   return showHcSheet(
     context,
     title: '${plugin.displayName} configuration',
-    child: Theme(
-      data: hcTheme(HcSkin.midnight),
-      child: _EditorLoader(plugin),
-    ),
+    child: _EditorLoader(plugin),
   );
 }
 

@@ -1,4 +1,4 @@
-import 'package:flutter_riverpod/legacy.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 const _kRailVisibleKey = 'nav_rail_visible';
@@ -10,14 +10,16 @@ const _kRailVisibleKey = 'nav_rail_visible';
 /// the launcher); `false` is "launcher-only" — no persistent chrome at all, just
 /// a single hub button that opens the full-screen page grid. Persisted, because
 /// which one you prefer is a lasting choice, not a per-session mood.
-class NavRailVisibleNotifier extends StateNotifier<bool> {
-  NavRailVisibleNotifier() : super(true) {
+class NavRailVisibleNotifier extends Notifier<bool> {
+  @override
+  bool build() {
     _load();
+    return true;
   }
 
   Future<void> _load() async {
     final p = await SharedPreferences.getInstance();
-    if (mounted) state = p.getBool(_kRailVisibleKey) ?? true;
+    if (ref.mounted) state = p.getBool(_kRailVisibleKey) ?? true;
   }
 
   Future<void> set(bool visible) async {
@@ -29,9 +31,8 @@ class NavRailVisibleNotifier extends StateNotifier<bool> {
   Future<void> toggle() => set(!state);
 }
 
-final navRailVisibleProvider =
-    StateNotifierProvider<NavRailVisibleNotifier, bool>(
-  (ref) => NavRailVisibleNotifier(),
+final navRailVisibleProvider = NotifierProvider<NavRailVisibleNotifier, bool>(
+  NavRailVisibleNotifier.new,
 );
 
 const _kRailExpandedKey = 'nav_rail_expanded';
@@ -41,14 +42,16 @@ const _kRailExpandedKey = 'nav_rail_expanded';
 /// Manual and persisted: the rail changes width only when the user toggles it —
 /// never on hover — so the page content never reflows out from under the
 /// pointer. Defaults to collapsed (icons), the quieter resting state.
-class NavRailExpandedNotifier extends StateNotifier<bool> {
-  NavRailExpandedNotifier() : super(false) {
+class NavRailExpandedNotifier extends Notifier<bool> {
+  @override
+  bool build() {
     _load();
+    return false;
   }
 
   Future<void> _load() async {
     final p = await SharedPreferences.getInstance();
-    if (mounted) state = p.getBool(_kRailExpandedKey) ?? false;
+    if (ref.mounted) state = p.getBool(_kRailExpandedKey) ?? false;
   }
 
   Future<void> set(bool expanded) async {
@@ -60,12 +63,16 @@ class NavRailExpandedNotifier extends StateNotifier<bool> {
   Future<void> toggle() => set(!state);
 }
 
-final navRailExpandedProvider =
-    StateNotifierProvider<NavRailExpandedNotifier, bool>(
-  (ref) => NavRailExpandedNotifier(),
+final navRailExpandedProvider = NotifierProvider<NavRailExpandedNotifier, bool>(
+  NavRailExpandedNotifier.new,
 );
 
-const _kLandingRouteKey = 'landing_route';
+/// Public because `app.dart` reads this key straight out of
+/// `SharedPreferences` in the router's redirect — it can `await`, and this
+/// provider cannot. Two readers, one constant: a second literal spelling of
+/// the key would desync the first time anyone renamed it, and the symptom
+/// would be a silently ignored Home page rather than an error.
+const kLandingRouteKey = 'landing_route';
 
 /// The route the app opens to on a fresh load — the house by default, or a page
 /// the user promoted with "Set as Home page".
@@ -74,24 +81,25 @@ const _kLandingRouteKey = 'landing_route';
 /// still stores its room arrangement in the default dashboard, so hijacking
 /// `is_default` for "which page is home" would move that storage out from under
 /// it. Landing is a navigation choice; it lives with navigation.
-class LandingRouteNotifier extends StateNotifier<String> {
-  LandingRouteNotifier() : super('/') {
+class LandingRouteNotifier extends Notifier<String> {
+  @override
+  String build() {
     _load();
+    return '/';
   }
 
   Future<void> _load() async {
     final p = await SharedPreferences.getInstance();
-    if (mounted) state = p.getString(_kLandingRouteKey) ?? '/';
+    if (ref.mounted) state = p.getString(kLandingRouteKey) ?? '/';
   }
 
   Future<void> set(String route) async {
     state = route;
     final p = await SharedPreferences.getInstance();
-    await p.setString(_kLandingRouteKey, route);
+    await p.setString(kLandingRouteKey, route);
   }
 }
 
-final landingRouteProvider =
-    StateNotifierProvider<LandingRouteNotifier, String>(
-  (ref) => LandingRouteNotifier(),
+final landingRouteProvider = NotifierProvider<LandingRouteNotifier, String>(
+  LandingRouteNotifier.new,
 );

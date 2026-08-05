@@ -3,11 +3,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'core/providers/auth_provider.dart';
+import 'core/providers/nav_prefs_provider.dart';
+import 'core/providers/skin_provider.dart';
 import 'features/admin/areas_page.dart';
 import 'features/admin/audit_page.dart';
 import 'features/admin/logs_page.dart';
 import 'features/admin/system_page.dart';
 import 'features/admin/users_page.dart';
+import 'features/settings/appearance_page.dart';
 import 'features/settings/data_page.dart';
 import 'features/settings/maintenance_page.dart';
 import 'features/settings/notifications_page.dart';
@@ -63,7 +66,7 @@ GoRouter _buildRouter(Ref ref) {
       if (isLoggedIn && !honouredLanding && state.matchedLocation == '/') {
         honouredLanding = true;
         final prefs = await SharedPreferences.getInstance();
-        final landing = prefs.getString('landing_route') ?? '/';
+        final landing = prefs.getString(kLandingRouteKey) ?? '/';
         if (landing != '/') return landing;
       }
       return null;
@@ -240,6 +243,9 @@ GoRouter _buildRouter(Ref ref) {
                   builder: (_, __) => const NotificationsPage()),
               GoRoute(
                   path: '/admin/users', builder: (_, __) => const UsersPage()),
+              GoRoute(
+                  path: '/admin/appearance',
+                  builder: (_, __) => const AppearancePage()),
               GoRoute(path: '/areas', builder: (_, __) => const AreasPage()),
               GoRoute(
                   path: '/admin/data', builder: (_, __) => const DataPage()),
@@ -266,16 +272,28 @@ class HomecoreApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(routerProvider);
+    // The base skin under everything. [ShellScope] re-themes each routed page
+    // for the surface it belongs to, but the routes that sit outside any shell
+    // — login, and the kiosk camera wall — render in this one, so a chosen skin
+    // has to reach here too or it would stop at the app's edges.
+    //
+    // Midnight when nothing is chosen: the design was drawn dark.
+    final skin = ref.watch(skinOverrideProvider) ?? HcSkin.midnight;
 
     return MaterialApp.router(
       title: 'HomeCore',
-      // Only the base — every routed page is re-themed by [ShellScope], which
-      // knows which surface the route belongs to. This theme is what the login
-      // page (the one route outside any shell) renders in.
-      // Dark by default — the design was drawn dark, and the login page is the
-      // one route that renders outside any shell.
-      theme: hcTheme(HcSkin.midnight),
-      darkTheme: hcTheme(HcSkin.midnight),
+      theme: hcTheme(skin),
+      darkTheme: hcTheme(skin),
+      // MediaQuery does not exist above MaterialApp, so reduced motion cannot be
+      // read where `theme:` is built. Re-applying it here gives the shell-less
+      // routes the same treatment ShellScope gives everything else.
+      builder: (context, child) => Theme(
+        data: hcTheme(
+          skin,
+          reduceMotion: MediaQuery.maybeDisableAnimationsOf(context) ?? false,
+        ),
+        child: child ?? const SizedBox.shrink(),
+      ),
       routerConfig: router,
     );
   }

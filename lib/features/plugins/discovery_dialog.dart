@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers/devices_provider.dart';
 import '../../core/providers/plugin_config_provider.dart';
 import '../../core/providers/plugins_provider.dart';
-import '../../design/skins.dart';
 import '../../design/tokens.dart';
 
 /// Presents the results of a plugin `discover_devices` action and lets the user
@@ -174,87 +173,82 @@ class _DiscoveryResultsDialogState
 
   @override
   Widget build(BuildContext context) {
-    return Theme(
-      data: hcTheme(HcSkin.midnight),
-      child: Builder(builder: (context) {
-        final t = HcTokens.of(context);
-        return Dialog(
-          backgroundColor: t.surface.raised,
-          shape: RoundedRectangleBorder(borderRadius: t.radius.lgR),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 460),
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Discovered devices',
-                      style: TextStyle(
-                          color: t.surface.onBase,
-                          fontSize: 17,
-                          fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 3),
-                  Text(
-                    _loading
-                        ? 'Loading current config…'
-                        : '${widget.discovered.length} found · add the ones you want.',
-                    style:
-                        TextStyle(color: t.surface.onBaseMuted, fontSize: 13),
-                  ),
-                  const SizedBox(height: 16),
-                  if (_loading)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 24),
-                      child: Center(child: CircularProgressIndicator()),
-                    )
-                  else
-                    Flexible(
-                      child: SingleChildScrollView(
-                        child: Column(
-                          children: [
-                            for (final d in widget.discovered) _row(t, d),
-                          ],
-                        ),
+    return Builder(builder: (context) {
+      final t = HcTokens.of(context);
+      return Dialog(
+        backgroundColor: t.surface.raised,
+        shape: RoundedRectangleBorder(borderRadius: t.radius.lgR),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 460),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Discovered devices',
+                    style: TextStyle(
+                        color: t.surface.onBase,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700)),
+                const SizedBox(height: 3),
+                Text(
+                  _loading
+                      ? 'Loading current config…'
+                      : '${widget.discovered.length} found · add the ones you want.',
+                  style: TextStyle(color: t.surface.onBaseMuted, fontSize: 13),
+                ),
+                const SizedBox(height: 16),
+                if (_loading)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 24),
+                    child: Center(child: CircularProgressIndicator()),
+                  )
+                else
+                  Flexible(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        children: [
+                          for (final d in widget.discovered) _row(t, d),
+                        ],
                       ),
                     ),
-                  if (_error != null) ...[
-                    const SizedBox(height: 10),
-                    Text(_error!,
-                        style:
-                            TextStyle(color: t.accent.danger, fontSize: 12.5)),
-                  ],
-                  const SizedBox(height: 18),
-                  Row(children: [
-                    if (_dirty)
-                      Expanded(
-                        child: Text('Added devices register when you close.',
-                            style: TextStyle(
-                                color: t.surface.onBaseMuted, fontSize: 12)),
-                      )
-                    else
-                      const Spacer(),
-                    const SizedBox(width: 8),
-                    FilledButton(
-                      onPressed: _restarting ? null : _close,
-                      style: FilledButton.styleFrom(
-                          backgroundColor: t.accent.active,
-                          foregroundColor: t.accent.onPrimary),
-                      child: _restarting
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2))
-                          : Text(_dirty ? 'Done' : 'Close'),
-                    ),
-                  ]),
+                  ),
+                if (_error != null) ...[
+                  const SizedBox(height: 10),
+                  Text(_error!,
+                      style: TextStyle(color: t.accent.danger, fontSize: 12.5)),
                 ],
-              ),
+                const SizedBox(height: 18),
+                Row(children: [
+                  if (_dirty)
+                    Expanded(
+                      child: Text('Added devices register when you close.',
+                          style: TextStyle(
+                              color: t.surface.onBaseMuted, fontSize: 12)),
+                    )
+                  else
+                    const Spacer(),
+                  const SizedBox(width: 8),
+                  FilledButton(
+                    onPressed: _restarting ? null : _close,
+                    style: FilledButton.styleFrom(
+                        backgroundColor: t.accent.active,
+                        foregroundColor: t.accent.onPrimary),
+                    child: _restarting
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2))
+                        : Text(_dirty ? 'Done' : 'Close'),
+                  ),
+                ]),
+              ],
             ),
           ),
-        );
-      }),
-    );
+        ),
+      );
+    });
   }
 
   Widget _row(HcTokens t, Map<String, dynamic> d) {
