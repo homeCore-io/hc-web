@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -141,6 +143,13 @@ class _Option extends StatelessWidget {
 /// A skin, drawn in itself: its page colour, a card on it, and the accent an
 /// active device would emit. Small, but it is the real palette rather than a
 /// description of one.
+///
+/// The glass matters here. Midnight is deliberately "Ambient Glass with the
+/// glass taken out", so on colour alone their previews are the same picture and
+/// the one thing that separates them is invisible. A glass skin therefore gets
+/// a real BackdropFilter over a ground with something in it to blur — at a
+/// scaled-down sigma, since 24 across 84 pixels is a smear rather than a
+/// frost.
 class _SkinPreview extends StatelessWidget {
   const _SkinPreview({required this.skin, this.width = 84, this.height = 58});
 
@@ -152,56 +161,85 @@ class _SkinPreview extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = skin.tokens;
 
+    final cardRadius = BorderRadius.circular(5);
+
+    Widget card = Container(
+      decoration: BoxDecoration(
+        // A glass skin tints the blurred backdrop; a flat one is opaque.
+        color: s.surface.isGlass ? s.surface.glassTint : s.surface.raised,
+        borderRadius: cardRadius,
+        border: Border.all(color: s.stroke.hairline),
+      ),
+      padding: const EdgeInsets.all(4),
+      child: Row(
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              color: s.accent.active,
+              shape: BoxShape.circle,
+              // The signature effect, at 8 pixels: an active device
+              // emits light onto its own card.
+              boxShadow: [
+                BoxShadow(
+                  color: s.accent.active
+                      .withValues(alpha: s.glow.strength.clamp(0, 1)),
+                  blurRadius: 6,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 4),
+          Expanded(
+            child: Container(
+              height: 3,
+              color: s.surface.onBaseMuted.withValues(alpha: 0.5),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (s.surface.isGlass) {
+      card = ClipRRect(
+        borderRadius: cardRadius,
+        child: BackdropFilter(
+          filter: ui.ImageFilter.blur(
+            sigmaX: s.surface.glassBlur * 0.3,
+            sigmaY: s.surface.glassBlur * 0.3,
+          ),
+          child: card,
+        ),
+      );
+    }
+
     return Container(
       width: width,
       height: height,
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: s.surface.base,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: s.stroke.hairline),
+        // Something for the blur to find. A frost over a flat fill is
+        // indistinguishable from a flat fill.
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            s.surface.base,
+            Color.alphaBlend(
+                s.accent.active.withValues(alpha: 0.22), s.surface.base),
+            s.surface.base,
+          ],
+        ),
       ),
       padding: const EdgeInsets.all(7),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                color: s.surface.raised,
-                borderRadius: BorderRadius.circular(5),
-                border: Border.all(color: s.stroke.hairline),
-              ),
-              padding: const EdgeInsets.all(4),
-              child: Row(
-                children: [
-                  Container(
-                    width: 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color: s.accent.active,
-                      shape: BoxShape.circle,
-                      // The signature effect, at 8 pixels: an active device
-                      // emits light onto its own card.
-                      boxShadow: [
-                        BoxShadow(
-                          color: s.accent.active
-                              .withValues(alpha: s.glow.strength.clamp(0, 1)),
-                          blurRadius: 6,
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: Container(
-                      height: 3,
-                      color: s.surface.onBaseMuted.withValues(alpha: 0.5),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+          Expanded(child: card),
           const SizedBox(height: 5),
           Row(
             children: [
