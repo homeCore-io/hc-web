@@ -21,7 +21,6 @@ import '../../core/providers/plugin_config_provider.dart';
 import '../../core/providers/plugins_provider.dart';
 import '../../core/schema/plugin_config_schema.dart';
 import '../../design/hc_icons.dart';
-import '../../design/skins.dart';
 import '../../design/tokens.dart';
 import 'plugin_actions.dart';
 
@@ -96,68 +95,63 @@ class _PluginStudioPageState extends ConsumerState<PluginStudioPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Theme(
-      data: hcTheme(HcSkin.midnight),
-      child: Builder(builder: (context) {
-        final t = HcTokens.of(context);
-        ref.watch(pluginsAutoRefreshProvider);
-        final plugin = ref.watch(pluginsProvider).value?.firstWhere(
-              (p) => p.pluginId == widget.pluginId,
-              orElse: () => PluginEntry(
-                  pluginId: widget.pluginId,
-                  status: 'unknown',
-                  registeredAt: ''),
-            );
-        if (plugin == null) {
-          return const ColoredBox(
-            color: Color(0xFF0B0E13),
-            child: Center(child: CircularProgressIndicator()),
+    return Builder(builder: (context) {
+      final t = HcTokens.of(context);
+      ref.watch(pluginsAutoRefreshProvider);
+      final plugin = ref.watch(pluginsProvider).value?.firstWhere(
+            (p) => p.pluginId == widget.pluginId,
+            orElse: () => PluginEntry(
+                pluginId: widget.pluginId, status: 'unknown', registeredAt: ''),
           );
-        }
-
-        final standing = _registryStanding(plugin);
-        final update = standing.newer;
-        final nav = _railItems(plugin, update);
-        // The selection can name a section this plugin does not have: go_router
-        // reuses this page across `/plugins/:id`, so the rail's state survives
-        // the plugin changing, and a conditional section disappears when the
-        // config that revealed it changes (YoLink's cloud/local pair). Left
-        // alone that renders a pane titled after the *first* section with an
-        // empty body, because the header falls back and the renderer does not.
-        //
-        // Resolved for rendering only, never written back to `_selected` — a
-        // section is also absent for the frames before its descriptor loads,
-        // and the choice has to survive that and come back.
-        final selected =
-            nav.any((i) => i.key == _selected) ? _selected : 'overview';
-
-        return ColoredBox(
-          color: t.surface.base,
-          child: Column(
-            children: [
-              _Header(plugin: plugin, updateAvailable: update),
-              Divider(height: 1, color: t.stroke.hairline),
-              Expanded(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _Rail(
-                      items: nav,
-                      selected: selected,
-                      onSelect: (k) => setState(() => _selected = k),
-                    ),
-                    VerticalDivider(width: 1, color: t.stroke.hairline),
-                    Expanded(
-                        child:
-                            _pane(plugin, update, standing.answered, selected)),
-                  ],
-                ),
-              ),
-            ],
-          ),
+      if (plugin == null) {
+        return const ColoredBox(
+          color: Color(0xFF0B0E13),
+          child: Center(child: CircularProgressIndicator()),
         );
-      }),
-    );
+      }
+
+      final standing = _registryStanding(plugin);
+      final update = standing.newer;
+      final nav = _railItems(plugin, update);
+      // The selection can name a section this plugin does not have: go_router
+      // reuses this page across `/plugins/:id`, so the rail's state survives
+      // the plugin changing, and a conditional section disappears when the
+      // config that revealed it changes (YoLink's cloud/local pair). Left
+      // alone that renders a pane titled after the *first* section with an
+      // empty body, because the header falls back and the renderer does not.
+      //
+      // Resolved for rendering only, never written back to `_selected` — a
+      // section is also absent for the frames before its descriptor loads,
+      // and the choice has to survive that and come back.
+      final selected =
+          nav.any((i) => i.key == _selected) ? _selected : 'overview';
+
+      return ColoredBox(
+        color: t.surface.base,
+        child: Column(
+          children: [
+            _Header(plugin: plugin, updateAvailable: update),
+            Divider(height: 1, color: t.stroke.hairline),
+            Expanded(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _Rail(
+                    items: nav,
+                    selected: selected,
+                    onSelect: (k) => setState(() => _selected = k),
+                  ),
+                  VerticalDivider(width: 1, color: t.stroke.hairline),
+                  Expanded(
+                      child:
+                          _pane(plugin, update, standing.answered, selected)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    });
   }
 
   /// What the registry can say about this plugin's version.

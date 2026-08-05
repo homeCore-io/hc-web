@@ -25,6 +25,17 @@ Future<T?> showHcSheet<T>(
   final wide = MediaQuery.sizeOf(context).width >= 720;
   final t = HcTokens.of(context);
 
+  // showGeneralDialog pushes onto the root navigator and, unlike showDialog,
+  // does not carry the inherited theme across with it. Without this capture a
+  // sheet falls back to MaterialApp's base theme and silently loses both the
+  // skin the shell resolved and the reduced-motion setting that came with it —
+  // so the house behind the sheet and the sheet itself would be in different
+  // skins the moment anyone chose one.
+  final themes = InheritedTheme.capture(
+    from: context,
+    to: Navigator.of(context, rootNavigator: true).context,
+  );
+
   return showGeneralDialog<T>(
     context: context,
     barrierDismissible: true,
@@ -33,7 +44,8 @@ Future<T?> showHcSheet<T>(
     // point of not having navigated away from it.
     barrierColor: Colors.black.withValues(alpha: 0.45),
     transitionDuration: t.motion.base,
-    pageBuilder: (context, _, __) => _SheetFrame(wide: wide, child: child),
+    pageBuilder: (context, _, __) =>
+        themes.wrap(_SheetFrame(wide: wide, child: child)),
     transitionBuilder: (context, anim, _, sheet) {
       final curved = CurvedAnimation(
         parent: anim,
