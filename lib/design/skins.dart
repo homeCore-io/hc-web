@@ -37,6 +37,24 @@ enum HcSkin {
         HcSkin.softHome => 'Soft Home',
       };
 
+  /// One line for the picker. Here rather than in the page, because it is a
+  /// description of the skin and the skin is defined here — a second copy in a
+  /// widget would drift the first time one of these was retuned.
+  String get description => switch (this) {
+        HcSkin.midnight =>
+          'Charcoal and warm amber, no glass. The everyday dark skin, and the '
+              'one the mockups were drawn in.',
+        HcSkin.ambientGlass =>
+          'Frosted cards and light that bleeds out of active devices. Made for '
+              'a panel on a dark wall — the blur costs frames on long lists.',
+        HcSkin.controlRoom =>
+          'Near-black, hairlines, no bloom, minimal motion. Dense rows for '
+              'reading a lot of data at once.',
+        HcSkin.softHome =>
+          'Warm sand and generous radii, in the light. Meant to feel like a '
+              'well-made appliance rather than a tool.',
+      };
+
   HcTokens get tokens => switch (this) {
         HcSkin.midnight => _midnight,
         HcSkin.ambientGlass => _ambientGlass,

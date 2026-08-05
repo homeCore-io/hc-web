@@ -5,8 +5,10 @@ import 'package:hc_web/core/providers/client_error_log_provider.dart';
 import 'package:hc_web/core/providers/collapsed_groups_provider.dart';
 import 'package:hc_web/core/providers/nav_prefs_provider.dart';
 import 'package:hc_web/core/providers/room_collapse_provider.dart';
+import 'package:hc_web/core/providers/skin_provider.dart';
 import 'package:hc_web/core/providers/thermostat_prefs_provider.dart';
 import 'package:hc_web/core/providers/time_display_provider.dart';
+import 'package:hc_web/design/skins.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// What the locally-stored UI preferences must keep doing.
@@ -202,6 +204,22 @@ final _prefs = <_Pref>[
     readBack: (p) => p.getBool('time_display_utc'),
     written: true,
   ),
+  _Pref(
+    name: 'skin',
+    key: 'skin',
+    read: (c) => c.read(skinOverrideProvider),
+    // Null is a real choice, not a missing one: each shell picks its own.
+    fallback: null,
+    seed: 'controlRoom',
+    loaded: HcSkin.controlRoom,
+    mutate: (c) =>
+        c.read(skinOverrideProvider.notifier).choose(HcSkin.softHome),
+    afterMutation: HcSkin.softHome,
+    readBack: (p) => p.getString('skin'),
+    // Stored by enum name, so the value stays readable and survives the enum
+    // being reordered.
+    written: 'softHome',
+  ),
 ];
 
 Matcher _matches(Object? expected) {
@@ -320,6 +338,7 @@ void main() {
         'home_rooms_collapsed',
         'thermostat_large',
         'time_display_utc',
+        'skin',
       }),
     );
   });
@@ -400,6 +419,53 @@ void main() {
       expect(store.getBool('nav_rail_expanded'), true);
       expect(store.getBool('nav_rail_visible'), isNull,
           reason: 'expanding the rail wrote to the visibility key');
+    });
+  });
+
+  group('skin', () {
+    test('choosing null clears the key rather than storing a sentinel',
+        () async {
+      // "No choice" and "chose the default" have to stay the same state. A
+      // stored sentinel would be a second way to say it and could drift.
+      SharedPreferences.setMockInitialValues({'skin': 'softHome'});
+      final c = ProviderContainer();
+      addTearDown(c.dispose);
+      await _settleUntil(() => c.read(skinOverrideProvider) == HcSkin.softHome);
+
+      await c.read(skinOverrideProvider.notifier).choose(null);
+      expect(c.read(skinOverrideProvider), isNull);
+
+      final store = await SharedPreferences.getInstance();
+      expect(store.getKeys().contains('skin'), isFalse,
+          reason: 'clearing the skin left something behind');
+    });
+
+    test('a skin that no longer exists reads as no choice', () async {
+      // Retiring a skin must not lock out whoever had chosen it. Throwing here
+      // would fail every provider read on startup.
+      SharedPreferences.setMockInitialValues({'skin': 'artDeco'});
+      final c = ProviderContainer();
+      addTearDown(c.dispose);
+      c.read(skinOverrideProvider);
+      await _settle();
+      expect(c.read(skinOverrideProvider), isNull);
+    });
+
+    test('every skin round-trips through storage', () async {
+      for (final skin in HcSkin.values) {
+        SharedPreferences.setMockInitialValues({});
+        final c = ProviderContainer();
+        c.read(skinOverrideProvider);
+        await _settle();
+        await c.read(skinOverrideProvider.notifier).choose(skin);
+        c.dispose();
+
+        final reloaded = ProviderContainer();
+        addTearDown(reloaded.dispose);
+        await _settleUntil(() => reloaded.read(skinOverrideProvider) == skin);
+        expect(reloaded.read(skinOverrideProvider), skin,
+            reason: '${skin.name} did not survive a reload');
+      }
     });
   });
 

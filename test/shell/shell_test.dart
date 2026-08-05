@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hc_web/design/skins.dart';
+import 'package:hc_web/core/providers/skin_provider.dart';
 import 'package:hc_web/design/tokens.dart';
 import 'package:hc_web/shell/nav_rail.dart';
 import 'package:hc_web/shell/shell_scope.dart';

@@ -4,11 +4,13 @@ import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'core/providers/auth_provider.dart';
 import 'core/providers/nav_prefs_provider.dart';
+import 'core/providers/skin_provider.dart';
 import 'features/admin/areas_page.dart';
 import 'features/admin/audit_page.dart';
 import 'features/admin/logs_page.dart';
 import 'features/admin/system_page.dart';
 import 'features/admin/users_page.dart';
+import 'features/settings/appearance_page.dart';
 import 'features/settings/data_page.dart';
 import 'features/settings/maintenance_page.dart';
 import 'features/settings/notifications_page.dart';
@@ -241,6 +243,9 @@ GoRouter _buildRouter(Ref ref) {
                   builder: (_, __) => const NotificationsPage()),
               GoRoute(
                   path: '/admin/users', builder: (_, __) => const UsersPage()),
+              GoRoute(
+                  path: '/admin/appearance',
+                  builder: (_, __) => const AppearancePage()),
               GoRoute(path: '/areas', builder: (_, __) => const AreasPage()),
               GoRoute(
                   path: '/admin/data', builder: (_, __) => const DataPage()),
