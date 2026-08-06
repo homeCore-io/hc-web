@@ -106,6 +106,29 @@ class _DescriptorConfigPaneState extends ConsumerState<DescriptorConfigPane> {
                 child: Text('Could not load config: $e',
                     style: TextStyle(color: t.accent.warn))),
             data: (cfg) {
+              // No parsed config means no baseline, and this editor is a diff
+              // against a baseline from top to bottom. `??  const {}` turned
+              // that into "the plugin has no settings", which is a different
+              // and much worse thing: every field falls back to its descriptor
+              // default, so a Z-Wave server configured at
+              // `ws://10.0.10.123:3000` was shown as `ws://localhost:3000` —
+              // indistinguishable from "my setting was never saved". Saving
+              // then diffed against nothing, so the patch was the whole form
+              // and `PUT /config` replaced the document with it, dropping every
+              // key the descriptor does not cover.
+              //
+              // That is the same failure the save path below already carries a
+              // scar from ("how a Lutron repeater's host and credentials once
+              // vanished on an otherwise ordinary save") — its re-fetch and
+              // conflict check are sound, but they were all reasoning about an
+              // empty map and had nothing to catch.
+              //
+              // `GET /plugins/:id/config` is supposed to return `config`
+              // alongside `raw`; on the deployed core it returns neither for
+              // any plugin, so this is reachable today rather than theoretical.
+              if (cfg != null && cfg.config == null) {
+                return _NoBaseline(raw: cfg.raw);
+              }
               final values = Map<String, dynamic>.from(cfg?.config ?? const {});
               // The baseline a save diffs against — what this editor was shown,
               // which may already be behind the server.
@@ -369,8 +392,23 @@ class _DescriptorConfigPaneState extends ConsumerState<DescriptorConfigPane> {
       // replaces the document, so sending a stale copy silently reverts
       // anything added since — which is how a Lutron repeater's host and
       // credentials once vanished on an otherwise ordinary save.
-      final fresh = Map<String, dynamic>.from(
-          (await api.getConfig(widget.pluginId))?.config ?? const {});
+      final freshDoc = await api.getConfig(widget.pluginId);
+      if (freshDoc != null && freshDoc.config == null) {
+        // Belt to the braces above: a save must never diff against a baseline
+        // that failed to load, because the patch then becomes the entire form
+        // and the PUT replaces the document.
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text(
+              'Not saved — the current settings could not be read, so saving '
+              'would overwrite them with defaults.',
+            ),
+          ));
+          setState(() => _saving = false);
+        }
+        return;
+      }
+      final fresh = Map<String, dynamic>.from(freshDoc?.config ?? const {});
       final patch = diffConfig(_loaded, values);
       final clashes = conflictingPaths(_loaded, fresh, patch);
       if (clashes.isNotEmpty) {
@@ -408,5 +446,61 @@ class _DescriptorConfigPaneState extends ConsumerState<DescriptorConfigPane> {
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+}
+
+/// Shown when the plugin has settings but this editor could not read them.
+///
+/// Better than a form full of descriptor defaults, which is what used to happen
+/// and which reads as "my configuration is gone" while quietly standing ready
+/// to make that true on the next save.
+class _NoBaseline extends StatelessWidget {
+  const _NoBaseline({this.raw});
+
+  final String? raw;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Padding(
+      padding: EdgeInsets.all(t.space.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Icon(Icons.warning_amber_rounded, size: 18, color: t.accent.warn),
+            SizedBox(width: t.space.sm),
+            Text('Settings could not be read',
+                style: t.text.titleStyle.copyWith(color: t.surface.onBase)),
+          ]),
+          SizedBox(height: t.space.sm),
+          Text(
+            'This plugin is configured, but core returned the file without a '
+            'parsed copy, so the form has nothing to show or to save against. '
+            'Editing here would write defaults over the real settings, so it '
+            'is disabled. The current file is below.',
+            style: t.text.bodyStyle.copyWith(color: t.surface.onBaseMuted),
+          ),
+          if (raw != null && raw!.trim().isNotEmpty) ...[
+            SizedBox(height: t.space.md),
+            Container(
+              width: double.infinity,
+              padding: EdgeInsets.all(t.space.md),
+              decoration: BoxDecoration(
+                color: t.surface.sunken,
+                borderRadius: t.radius.smR,
+                border: Border.all(color: t.stroke.hairline),
+              ),
+              child: SelectableText(
+                raw!,
+                style: t.text
+                    .resolve(t.text.bodySmall, mono: true)
+                    .copyWith(color: t.surface.onBase),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
   }
 }
