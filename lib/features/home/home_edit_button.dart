@@ -19,7 +19,6 @@ class HomeEditButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
     return IconButton(
-      visualDensity: VisualDensity.compact,
       padding: EdgeInsets.zero,
       constraints: BoxConstraints.tightFor(width: size + 15, height: size + 15),
       iconSize: size,

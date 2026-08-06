@@ -802,7 +802,6 @@ class _InfoTabState extends ConsumerState<_InfoTab> {
                 for (final a in areas)
                   ActionChip(
                     label: Text(a, style: t.text.bodySmallStyle),
-                    visualDensity: VisualDensity.compact,
                     onPressed: _busy ? null : () => _area.text = a,
                   ),
               ],

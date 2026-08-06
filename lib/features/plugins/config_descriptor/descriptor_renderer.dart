@@ -1089,7 +1089,6 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
               width: 30,
               child: Checkbox(
                 value: isSelected,
-                visualDensity: VisualDensity.compact,
                 activeColor: t.accent.active,
                 onChanged: (v) => setState(() => v == true
                     ? selected.add(entry.index)

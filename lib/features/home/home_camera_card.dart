@@ -86,7 +86,6 @@ class HomeCameraCard extends ConsumerWidget {
                       // The resize: hero ⇄ compact. A single tap toggles it and
                       // saves, so the size you set is the size you come back to.
                       IconButton(
-                        visualDensity: VisualDensity.compact,
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints.tightFor(
                             width: 30, height: 30),

@@ -116,7 +116,6 @@ class _HomeThermostatState extends ConsumerState<HomeThermostat> {
                 icon: const Icon(Icons.unfold_less, size: 18),
                 tooltip: 'Show compact',
                 color: t.surface.onBaseMuted,
-                visualDensity: VisualDensity.compact,
                 onPressed: () => _setLarge(false),
               ),
             ],

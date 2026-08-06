@@ -161,7 +161,6 @@ class _LayoutToggle extends StatelessWidget {
     return SegmentedButton<WallLayout>(
       style: SegmentedButton.styleFrom(
         textStyle: t.text.bodySmallStyle,
-        visualDensity: VisualDensity.compact,
         foregroundColor: t.surface.onBaseMuted,
         selectedForegroundColor: t.accent.onPrimary,
         selectedBackgroundColor: t.accent.active,
@@ -191,7 +190,6 @@ class _StripToggle extends StatelessWidget {
     return SegmentedButton<StripPosition>(
       style: SegmentedButton.styleFrom(
         textStyle: t.text.captionStyle,
-        visualDensity: VisualDensity.compact,
         foregroundColor: t.surface.onBaseMuted,
         selectedForegroundColor: t.accent.onPrimary,
         selectedBackgroundColor: t.accent.active,
@@ -289,7 +287,6 @@ class _CameraChip extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           IconButton(
-            visualDensity: VisualDensity.compact,
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints.tightFor(width: 28, height: 28),
             iconSize: 15,
@@ -303,7 +300,6 @@ class _CameraChip extends StatelessWidget {
                   color: on ? t.surface.onBase : t.surface.onBaseMuted)),
           SizedBox(width: t.space.xs),
           IconButton(
-            visualDensity: VisualDensity.compact,
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints.tightFor(width: 24, height: 28),
             iconSize: 13,

@@ -797,7 +797,6 @@ class _PlacementStepper extends StatelessWidget {
           children: [
             IconButton(
               tooltip: 'One fewer',
-              visualDensity: VisualDensity.compact,
               onPressed: canDecrease ? () => onChanged(value - 1) : null,
               icon: const Icon(Icons.remove),
             ),
@@ -809,7 +808,6 @@ class _PlacementStepper extends StatelessWidget {
             ),
             IconButton(
               tooltip: 'One more',
-              visualDensity: VisualDensity.compact,
               onPressed: canIncrease ? () => onChanged(value + 1) : null,
               icon: const Icon(Icons.add),
             ),

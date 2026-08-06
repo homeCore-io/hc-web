@@ -519,7 +519,6 @@ class _RoomDeviceRow extends StatelessWidget {
         IconButton(
           icon: Icon(Icons.close, size: 16, color: t.surface.onBaseMuted),
           tooltip: 'Remove from room',
-          visualDensity: VisualDensity.compact,
           onPressed: onRemove,
         ),
       ]),

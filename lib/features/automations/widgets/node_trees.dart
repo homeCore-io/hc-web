@@ -598,7 +598,6 @@ class _CheckDeviceButton extends StatelessWidget {
       icon: const Icon(HcIcons.plus, size: 14),
       label: Text(label, style: t.text.bodyStyle),
       style: TextButton.styleFrom(
-        visualDensity: VisualDensity.compact,
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       ),
       onPressed: () async {
@@ -631,7 +630,6 @@ class _AddActionButton extends StatelessWidget {
         icon: const Icon(HcIcons.plus, size: 14),
         label: Text(label, style: t.text.bodyStyle),
         style: TextButton.styleFrom(
-          visualDensity: VisualDensity.compact,
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         ),
         onPressed: () async {

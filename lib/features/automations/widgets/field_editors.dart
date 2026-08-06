@@ -439,7 +439,6 @@ class FieldEditor extends StatelessWidget {
               FilterChip(
                 label: Text(d, style: t.text.captionStyle),
                 selected: selected.contains(d),
-                visualDensity: VisualDensity.compact,
                 onSelected: (on) {
                   final next = {...selected};
                   if (on) {

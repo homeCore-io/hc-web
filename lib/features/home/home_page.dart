@@ -1275,7 +1275,6 @@ class _Room extends StatelessWidget {
                       ),
                       if (onRename != null)
                         IconButton(
-                          visualDensity: VisualDensity.compact,
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints.tightFor(
                               width: 28, height: 28),
