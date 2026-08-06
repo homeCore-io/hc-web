@@ -1003,7 +1003,7 @@ class _TypeChip extends StatelessWidget {
           color: selected
               ? t.accent.active.withValues(alpha: 0.16)
               : t.surface.raised,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: t.radius.smR,
           border:
               Border.all(color: selected ? t.accent.active : t.stroke.hairline),
         ),

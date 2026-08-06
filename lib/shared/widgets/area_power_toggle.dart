@@ -43,7 +43,7 @@ class AreaPowerToggle extends ConsumerWidget {
           color: anyOn
               ? t.accent.active.withValues(alpha: 0.3)
               : t.surface.overlay,
-          borderRadius: BorderRadius.circular(999),
+          borderRadius: t.radius.pillR,
           border:
               Border.all(color: anyOn ? Colors.transparent : t.stroke.hairline),
         ),

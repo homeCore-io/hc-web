@@ -392,7 +392,7 @@ class _SortMenu extends StatelessWidget {
         height: 34,
         padding: const EdgeInsets.symmetric(horizontal: 12),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(t.radius.pill),
+          borderRadius: t.radius.pillR,
           border: Border.all(color: t.stroke.hairline),
         ),
         child: Row(
@@ -768,7 +768,7 @@ class _BranchesBadge extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
       decoration: BoxDecoration(
         color: t.accent.primary.withValues(alpha: 0.13),
-        borderRadius: BorderRadius.circular(t.radius.pill),
+        borderRadius: t.radius.pillR,
       ),
       child: Text(
         '⑂ branches',

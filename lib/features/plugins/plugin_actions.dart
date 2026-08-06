@@ -162,7 +162,7 @@ class _ActionCard extends ConsumerWidget {
           alignment: Alignment.center,
           decoration: BoxDecoration(
             color: t.surface.sunken,
-            borderRadius: BorderRadius.circular(11),
+            borderRadius: t.radius.smR,
             border: Border.all(color: t.stroke.hairline),
           ),
           child: Icon(_actionIcon(action), size: 19, color: t.accent.active),

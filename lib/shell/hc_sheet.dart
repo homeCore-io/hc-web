@@ -136,7 +136,7 @@ class _Grabber extends StatelessWidget {
         height: 4,
         decoration: BoxDecoration(
           color: t.surface.onBaseMuted.withValues(alpha: 0.35),
-          borderRadius: BorderRadius.circular(2),
+          borderRadius: t.radius.pillR,
         ),
       ),
     );

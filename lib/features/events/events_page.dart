@@ -355,7 +355,7 @@ class _Segmented extends StatelessWidget {
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
         color: t.surface.sunken,
-        borderRadius: BorderRadius.circular(9),
+        borderRadius: t.radius.smR,
         border: Border.all(color: t.stroke.hairline),
       ),
       child: Row(
@@ -369,7 +369,7 @@ class _Segmented extends StatelessWidget {
                     const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                 decoration: BoxDecoration(
                   color: index == i ? t.surface.overlay : Colors.transparent,
-                  borderRadius: BorderRadius.circular(7),
+                  borderRadius: t.radius.xsR,
                 ),
                 child: Text(labels[i],
                     style: t.text.bodySmallStyle.copyWith(
@@ -412,7 +412,7 @@ class _TypeChips extends StatelessWidget {
                     color: selected.contains(ty)
                         ? t.accent.active.withValues(alpha: 0.14)
                         : Colors.transparent,
-                    borderRadius: BorderRadius.circular(t.radius.pill),
+                    borderRadius: t.radius.pillR,
                     border: Border.all(
                         color: selected.contains(ty)
                             ? Colors.transparent
@@ -458,8 +458,8 @@ class _EventRow extends StatelessWidget {
           Container(
             width: 3,
             height: 22,
-            decoration: BoxDecoration(
-                color: color, borderRadius: BorderRadius.circular(3)),
+            decoration:
+                BoxDecoration(color: color, borderRadius: t.radius.pillR),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -669,7 +669,7 @@ class _HistoryTabState extends ConsumerState<_HistoryTab> {
                         color: limit == l
                             ? t.accent.active.withValues(alpha: 0.14)
                             : Colors.transparent,
-                        borderRadius: BorderRadius.circular(t.radius.pill),
+                        borderRadius: t.radius.pillR,
                         border: Border.all(
                             color: limit == l
                                 ? Colors.transparent

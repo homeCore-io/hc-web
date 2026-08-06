@@ -149,7 +149,7 @@ class _UpdateBadge extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
         decoration: BoxDecoration(
           color: c.withValues(alpha: 0.16),
-          borderRadius: BorderRadius.circular(999),
+          borderRadius: t.radius.pillR,
           border: Border.all(color: c.withValues(alpha: 0.45)),
         ),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -193,7 +193,7 @@ class _PluginCard extends StatelessWidget {
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: t.surface.sunken,
-                borderRadius: BorderRadius.circular(11),
+                borderRadius: t.radius.smR,
                 border: Border.all(color: t.stroke.hairline),
               ),
               child: Icon(HcIcons.plugins, size: 19, color: color),
@@ -348,7 +348,7 @@ class _Chip extends StatelessWidget {
             color: warn
                 ? t.accent.warn.withValues(alpha: 0.5)
                 : t.stroke.hairline),
-        borderRadius: BorderRadius.circular(t.radius.pill),
+        borderRadius: t.radius.pillR,
       ),
       child: Text(text, style: t.text.captionStyle.copyWith(color: color)),
     );

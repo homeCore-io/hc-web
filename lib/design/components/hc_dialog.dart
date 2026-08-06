@@ -46,7 +46,7 @@ class HcDialog extends StatelessWidget {
       width: width,
       decoration: BoxDecoration(
         color: t.surface.isGlass ? t.surface.glassTint : t.surface.overlay,
-        borderRadius: BorderRadius.circular(t.radius.lg),
+        borderRadius: t.radius.lgR,
         border: Border.all(color: t.stroke.hairline, width: t.stroke.width),
         boxShadow: t.elevation.overlay,
       ),
@@ -99,7 +99,7 @@ class HcDialog extends StatelessWidget {
       insetPadding: EdgeInsets.all(t.space.lg),
       child: t.surface.isGlass
           ? ClipRRect(
-              borderRadius: BorderRadius.circular(t.radius.lg),
+              borderRadius: t.radius.lgR,
               child: BackdropFilter(
                 filter: ImageFilter.blur(
                   sigmaX: t.surface.glassBlur,
@@ -166,17 +166,17 @@ class HcButton extends StatelessWidget {
       child: Material(
         color:
             filled ? (enabled ? accent : t.surface.raised) : Colors.transparent,
-        borderRadius: BorderRadius.circular(t.radius.pill),
+        borderRadius: t.radius.pillR,
         child: InkWell(
           onTap: onPressed,
-          borderRadius: BorderRadius.circular(t.radius.pill),
+          borderRadius: t.radius.pillR,
           child: Container(
             padding: EdgeInsets.symmetric(
               horizontal: t.space.lg,
               vertical: t.space.sm + 2,
             ),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(t.radius.pill),
+              borderRadius: t.radius.pillR,
               border: filled
                   ? null
                   : Border.all(

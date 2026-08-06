@@ -38,11 +38,11 @@ class LogLevelControl extends ConsumerWidget {
           : 'This core was started without a reloadable log filter.',
       child: InkWell(
         onTap: enabled ? () => _open(context) : null,
-        borderRadius: BorderRadius.circular(t.radius.pill),
+        borderRadius: t.radius.pillR,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(t.radius.pill),
+            borderRadius: t.radius.pillR,
             border: Border.all(color: t.stroke.hairline),
           ),
           child: Row(

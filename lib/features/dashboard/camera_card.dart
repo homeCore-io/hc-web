@@ -245,7 +245,7 @@ class _LiveBadgeState extends State<_LiveBadge>
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
         color: t.accent.success.withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: t.radius.xsR,
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,

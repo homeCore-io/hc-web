@@ -381,7 +381,7 @@ class _Seek extends StatelessWidget {
                   height: 4,
                   decoration: BoxDecoration(
                     color: t.surface.onBase.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(t.radius.pill),
+                    borderRadius: t.radius.pillR,
                   ),
                   child: FractionallySizedBox(
                     alignment: Alignment.centerLeft,
@@ -389,7 +389,7 @@ class _Seek extends StatelessWidget {
                     child: DecoratedBox(
                       decoration: BoxDecoration(
                         color: t.surface.onBase,
-                        borderRadius: BorderRadius.circular(t.radius.pill),
+                        borderRadius: t.radius.pillR,
                       ),
                     ),
                   ),
@@ -565,7 +565,7 @@ class _Group extends StatelessWidget {
                               horizontal: 5, vertical: 1),
                           decoration: BoxDecoration(
                             color: t.accent.success.withValues(alpha: 0.16),
-                            borderRadius: BorderRadius.circular(4),
+                            borderRadius: t.radius.xsR,
                           ),
                           child: Text(
                             'LEAD',
@@ -646,7 +646,7 @@ class _Bar extends StatelessWidget {
                 height: 4,
                 decoration: BoxDecoration(
                   color: t.surface.onBase.withValues(alpha: 0.13),
-                  borderRadius: BorderRadius.circular(t.radius.pill),
+                  borderRadius: t.radius.pillR,
                 ),
                 child: FractionallySizedBox(
                   alignment: Alignment.centerLeft,
@@ -654,7 +654,7 @@ class _Bar extends StatelessWidget {
                   child: DecoratedBox(
                     decoration: BoxDecoration(
                       color: colour,
-                      borderRadius: BorderRadius.circular(t.radius.pill),
+                      borderRadius: t.radius.pillR,
                     ),
                   ),
                 ),

@@ -252,7 +252,7 @@ class _Header extends ConsumerWidget {
               color: on
                   ? t.accent.active.withValues(alpha: 0.14)
                   : t.surface.overlay,
-              borderRadius: BorderRadius.circular(13),
+              borderRadius: t.radius.mdR,
             ),
             child: Icon(facet.icon,
                 size: 21, color: on ? t.accent.active : t.surface.onBaseMuted),
@@ -357,7 +357,7 @@ class _PowerButton extends StatelessWidget {
             padding: EdgeInsets.symmetric(horizontal: t.space.md),
             decoration: BoxDecoration(
               color: on ? t.accent.active : t.surface.overlay,
-              borderRadius: BorderRadius.circular(t.radius.pill),
+              borderRadius: t.radius.pillR,
               border: Border.all(
                 color: on ? Colors.transparent : t.stroke.hairline,
               ),

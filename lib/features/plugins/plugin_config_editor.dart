@@ -362,7 +362,7 @@ class _ConfigFormState extends ConsumerState<_ConfigForm> {
           padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 5),
           decoration: BoxDecoration(
             color: sel ? t.surface.raised : Colors.transparent,
-            borderRadius: BorderRadius.circular(t.radius.pill),
+            borderRadius: t.radius.pillR,
           ),
           child: Text(label,
               style: t.text.bodySmallStyle.copyWith(
@@ -377,7 +377,7 @@ class _ConfigFormState extends ConsumerState<_ConfigForm> {
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
         color: t.surface.sunken,
-        borderRadius: BorderRadius.circular(t.radius.pill),
+        borderRadius: t.radius.pillR,
         border: Border.all(color: t.stroke.hairline),
       ),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -765,7 +765,7 @@ class _ObjectArraySection extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
         decoration: BoxDecoration(
           color: t.accent.active.withValues(alpha: 0.14),
-          borderRadius: BorderRadius.circular(t.radius.pill),
+          borderRadius: t.radius.pillR,
         ),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
           Icon(HcIcons.check, size: 11, color: t.accent.active),

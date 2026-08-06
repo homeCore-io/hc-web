@@ -212,7 +212,7 @@ class _Toggle extends StatelessWidget {
           padding: const EdgeInsets.all(3),
           decoration: BoxDecoration(
             color: on ? t.accent.active : t.accent.inactive,
-            borderRadius: BorderRadius.circular(t.radius.pill),
+            borderRadius: t.radius.pillR,
           ),
           child: AnimatedAlign(
             duration: t.motion.d(t.motion.fast),
@@ -263,7 +263,7 @@ class _Dimmer extends StatelessWidget {
                 height: 5,
                 decoration: BoxDecoration(
                   color: t.surface.sunken,
-                  borderRadius: BorderRadius.circular(t.radius.pill),
+                  borderRadius: t.radius.pillR,
                 ),
                 child: FractionallySizedBox(
                   alignment: Alignment.centerLeft,
@@ -272,7 +272,7 @@ class _Dimmer extends StatelessWidget {
                     duration: t.motion.d(t.motion.base),
                     curve: t.motion.curve,
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(t.radius.pill),
+                      borderRadius: t.radius.pillR,
                       gradient: LinearGradient(
                         colors: [
                           t.accent.active.withValues(alpha: 0.45),

@@ -279,7 +279,7 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
               filled: true,
               fillColor: t.surface.raised,
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(t.radius.sm),
+                borderRadius: t.radius.smR,
                 borderSide: BorderSide(color: t.stroke.hairline),
               ),
             ),
@@ -571,7 +571,7 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
           color: t.surface.sunken,
-          borderRadius: BorderRadius.circular(t.radius.sm),
+          borderRadius: t.radius.smR,
           border: Border.all(color: t.stroke.hairline),
         ),
         child: Row(children: [
@@ -882,7 +882,7 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
               // structure vanished.
               color: t.surface.raised,
               border: Border.all(color: t.stroke.hairline),
-              borderRadius: BorderRadius.circular(t.radius.md),
+              borderRadius: t.radius.mdR,
             ),
             clipBehavior: Clip.antiAlias,
             child: Column(children: [
@@ -976,7 +976,7 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
           EdgeInsets.symmetric(horizontal: t.space.md, vertical: t.space.sm),
       decoration: BoxDecoration(
         color: t.accent.active.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(t.radius.sm),
+        borderRadius: t.radius.smR,
       ),
       child: Row(children: [
         Text('${selected.length} selected',
@@ -1237,7 +1237,7 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
                 padding: EdgeInsets.all(t.space.md),
                 decoration: BoxDecoration(
                   color: t.surface.raised,
-                  borderRadius: BorderRadius.circular(t.radius.md),
+                  borderRadius: t.radius.mdR,
                   border: Border.all(
                       color: edited
                           ? t.accent.active.withValues(alpha: 0.5)
@@ -1335,7 +1335,7 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
         message: 'Overrides the plugin, which reports "$label" — tap to revert',
         child: InkWell(
           onTap: () => setValue('$source'),
-          borderRadius: BorderRadius.circular(t.radius.sm),
+          borderRadius: t.radius.smR,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
             child: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -1354,7 +1354,7 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
         decoration: BoxDecoration(
           color: t.accent.active.withValues(alpha: 0.15),
-          borderRadius: BorderRadius.circular(999),
+          borderRadius: t.radius.pillR,
         ),
         child: Text(label,
             style: t.text.captionStyle
@@ -1438,7 +1438,7 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
               padding: EdgeInsets.all(t.space.lg),
               decoration: BoxDecoration(
                 border: Border.all(color: t.stroke.hairline),
-                borderRadius: BorderRadius.circular(t.radius.md),
+                borderRadius: t.radius.mdR,
               ),
               child: Text('No ${_plural(f)} yet — add one below.',
                   style: t.text.bodySmallStyle
@@ -1450,7 +1450,7 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
               padding: EdgeInsets.all(t.space.md),
               decoration: BoxDecoration(
                 color: t.surface.raised,
-                borderRadius: BorderRadius.circular(t.radius.md),
+                borderRadius: t.radius.mdR,
                 border: Border.all(color: t.stroke.hairline),
               ),
               child: Column(
@@ -1529,7 +1529,7 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
         padding: EdgeInsets.all(t.space.md),
         decoration: BoxDecoration(
           color: t.accent.active.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(t.radius.md),
+          borderRadius: t.radius.mdR,
           border: Border.all(color: t.accent.active.withValues(alpha: 0.3)),
         ),
         child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -1684,7 +1684,7 @@ class _MultiSelect extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(10, 4, 4, 4),
             decoration: BoxDecoration(
               color: t.surface.sunken,
-              borderRadius: BorderRadius.circular(999),
+              borderRadius: t.radius.pillR,
               border: Border.all(color: t.stroke.hairline),
             ),
             child: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -1717,7 +1717,7 @@ class _MultiSelect extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(999),
+                borderRadius: t.radius.pillR,
                 border: Border.all(color: t.stroke.hairline),
               ),
               child: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -1751,7 +1751,7 @@ class _Segmented extends StatelessWidget {
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
         color: t.surface.sunken,
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: t.radius.pillR,
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -1767,7 +1767,7 @@ class _Segmented extends StatelessWidget {
                 decoration: BoxDecoration(
                   color:
                       o.value == value ? t.accent.active : Colors.transparent,
-                  borderRadius: BorderRadius.circular(999),
+                  borderRadius: t.radius.pillR,
                 ),
                 child: Text(o.label,
                     style: t.text.bodyStyle.copyWith(
@@ -1890,12 +1890,12 @@ class _InputState extends State<_Input> {
         filled: true,
         fillColor: t.surface.sunken,
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(t.radius.sm),
+          borderRadius: t.radius.smR,
           borderSide: BorderSide(
               color: _error == null ? t.stroke.hairline : t.accent.warn),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(t.radius.sm),
+          borderRadius: t.radius.smR,
           borderSide: BorderSide(
               color: _error == null ? t.accent.active : t.accent.warn),
         ),
@@ -1945,15 +1945,15 @@ class _FilterChip extends StatelessWidget {
       color: selected
           ? t.accent.active.withValues(alpha: 0.16)
           : Colors.transparent,
-      borderRadius: BorderRadius.circular(t.radius.pill),
+      borderRadius: t.radius.pillR,
       child: InkWell(
-        borderRadius: BorderRadius.circular(t.radius.pill),
+        borderRadius: t.radius.pillR,
         onTap: onTap,
         child: Container(
           padding: EdgeInsets.symmetric(
               horizontal: t.space.sm, vertical: t.space.xs),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(t.radius.pill),
+            borderRadius: t.radius.pillR,
             border: Border.all(
                 color: selected ? Colors.transparent : t.stroke.hairline),
           ),
@@ -1992,7 +1992,7 @@ class _StateChip extends StatelessWidget {
         color: attention
             ? t.accent.active.withValues(alpha: 0.16)
             : t.surface.overlay,
-        borderRadius: BorderRadius.circular(t.radius.pill),
+        borderRadius: t.radius.pillR,
       ),
       child: Text(label,
           style: t.text.captionStyle.copyWith(
@@ -2028,7 +2028,7 @@ class _BulkSet extends StatelessWidget {
             EdgeInsets.symmetric(horizontal: t.space.sm, vertical: t.space.xs),
         decoration: BoxDecoration(
           color: t.surface.raised,
-          borderRadius: BorderRadius.circular(t.radius.sm),
+          borderRadius: t.radius.smR,
           border: Border.all(color: t.stroke.hairline),
         ),
         child: Row(mainAxisSize: MainAxisSize.min, children: [

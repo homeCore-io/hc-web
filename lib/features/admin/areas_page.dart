@@ -171,7 +171,7 @@ class _RailItem extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: t.radius.smR,
           child: Container(
             padding: EdgeInsets.symmetric(
                 horizontal: t.space.md, vertical: t.space.sm + 1),
@@ -179,7 +179,7 @@ class _RailItem extends StatelessWidget {
               color: selected
                   ? t.accent.active.withValues(alpha: 0.10)
                   : Colors.transparent,
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: t.radius.smR,
               border: Border(
                 left: BorderSide(
                   color: selected ? t.accent.active : Colors.transparent,
@@ -539,7 +539,7 @@ class _AddDeviceRow extends StatelessWidget {
     final t = HcTokens.of(context);
     return InkWell(
       onTap: onAdd,
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: t.radius.smR,
       child: Padding(
         padding:
             EdgeInsets.symmetric(horizontal: t.space.xs, vertical: t.space.sm),
@@ -563,7 +563,7 @@ class _AddDeviceRow extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 3),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(t.radius.pill),
+              borderRadius: t.radius.pillR,
               border: Border.all(color: t.accent.active.withValues(alpha: 0.4)),
             ),
             child: Text('+ Add',
@@ -590,7 +590,7 @@ class _DangerZone extends StatelessWidget {
       padding: EdgeInsets.all(t.space.md),
       decoration: BoxDecoration(
         color: t.accent.danger.withValues(alpha: 0.04),
-        borderRadius: BorderRadius.circular(t.radius.md),
+        borderRadius: t.radius.mdR,
         border: Border.all(color: t.accent.danger.withValues(alpha: 0.28)),
       ),
       child: Column(

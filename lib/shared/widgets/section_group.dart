@@ -115,7 +115,7 @@ class _Tag extends StatelessWidget {
       decoration: BoxDecoration(
         border: Border.all(
             color: accent ? c.withValues(alpha: 0.4) : t.stroke.hairline),
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: t.radius.xsR,
       ),
       child: Text(label.toUpperCase(),
           style: t.text.overlineStyle.copyWith(

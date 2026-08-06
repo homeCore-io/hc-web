@@ -359,6 +359,7 @@ class _GradientSlider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
     final slider = Slider(
       value: value,
       min: min,
@@ -378,7 +379,7 @@ class _GradientSlider extends StatelessWidget {
             height: 6,
             decoration: BoxDecoration(
               gradient: gradient,
-              borderRadius: BorderRadius.circular(3),
+              borderRadius: t.radius.pillR,
             ),
           ),
         ),
@@ -438,7 +439,7 @@ class _ColorPickerState extends State<_ColorPicker> {
                 height: 64,
                 decoration: BoxDecoration(
                   color: color,
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: t.radius.mdR,
                   boxShadow: [
                     BoxShadow(
                         color: color.withValues(alpha: 0.55),

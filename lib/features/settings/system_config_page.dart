@@ -327,7 +327,7 @@ class _RailEntry extends StatelessWidget {
     final t = HcTokens.of(context);
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(t.radius.sm),
+      borderRadius: t.radius.smR,
       child: Padding(
         padding:
             EdgeInsets.symmetric(horizontal: t.space.sm, vertical: t.space.sm),
@@ -451,7 +451,7 @@ class _ViewToggle extends StatelessWidget {
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
         color: t.surface.sunken,
-        borderRadius: BorderRadius.circular(t.radius.pill),
+        borderRadius: t.radius.pillR,
         border: Border.all(color: t.stroke.hairline),
       ),
       child: Row(
@@ -466,7 +466,7 @@ class _ViewToggle extends StatelessWidget {
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                 decoration: BoxDecoration(
                   color: raw == isRaw ? t.surface.overlay : null,
-                  borderRadius: BorderRadius.circular(t.radius.pill),
+                  borderRadius: t.radius.pillR,
                 ),
                 child: Text(
                   label,
@@ -499,7 +499,7 @@ class _RestartBanner extends StatelessWidget {
       decoration: BoxDecoration(
         color: t.accent.warn.withValues(alpha: 0.10),
         border: Border.all(color: t.accent.warn.withValues(alpha: 0.45)),
-        borderRadius: BorderRadius.circular(t.radius.md),
+        borderRadius: t.radius.mdR,
       ),
       child: Row(
         children: [
@@ -545,7 +545,7 @@ class _SaveError extends StatelessWidget {
       decoration: BoxDecoration(
         color: t.accent.danger.withValues(alpha: 0.10),
         border: Border.all(color: t.accent.danger.withValues(alpha: 0.45)),
-        borderRadius: BorderRadius.circular(t.radius.md),
+        borderRadius: t.radius.mdR,
       ),
       child: Row(
         children: [

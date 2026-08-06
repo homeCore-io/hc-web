@@ -410,7 +410,7 @@ class _Note extends StatelessWidget {
       decoration: BoxDecoration(
         color: t.surface.raised,
         border: Border.all(color: t.stroke.hairline),
-        borderRadius: BorderRadius.circular(t.radius.md),
+        borderRadius: t.radius.mdR,
       ),
       child: SelectableText(text,
           style: t.text.bodySmallStyle.copyWith(color: t.surface.onBaseMuted)),

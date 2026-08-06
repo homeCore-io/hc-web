@@ -71,7 +71,7 @@ class AttentionBanner extends StatelessWidget {
         decoration: BoxDecoration(
           color: t.accent.warn.withValues(alpha: 0.10),
           border: Border.all(color: t.accent.warn.withValues(alpha: 0.45)),
-          borderRadius: BorderRadius.circular(t.radius.md),
+          borderRadius: t.radius.mdR,
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,

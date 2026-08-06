@@ -23,7 +23,7 @@ class SectionSearchField extends StatelessWidget {
       padding: EdgeInsets.symmetric(horizontal: t.space.md),
       decoration: BoxDecoration(
         color: t.surface.sunken,
-        borderRadius: BorderRadius.circular(t.radius.pill),
+        borderRadius: t.radius.pillR,
         border: Border.all(color: t.stroke.hairline),
       ),
       child: Row(
@@ -74,7 +74,7 @@ class SectionChip extends StatelessWidget {
           color: selected
               ? t.accent.active.withValues(alpha: 0.14)
               : Colors.transparent,
-          borderRadius: BorderRadius.circular(t.radius.pill),
+          borderRadius: t.radius.pillR,
           border: Border.all(
               color: selected ? Colors.transparent : t.stroke.hairline),
         ),
@@ -109,7 +109,7 @@ class SectionMenuButton extends StatelessWidget {
         height: 34,
         padding: const EdgeInsets.symmetric(horizontal: 12),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(t.radius.pill),
+          borderRadius: t.radius.pillR,
           border: Border.all(color: t.stroke.hairline),
         ),
         child: Row(

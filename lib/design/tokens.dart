@@ -471,23 +471,36 @@ class HcStroke {
 @immutable
 class HcRadii {
   const HcRadii({
+    required this.xs,
     required this.sm,
     required this.md,
     required this.lg,
     required this.pill,
   });
 
+  /// Badges and other things smaller than a card. Added when the literals were
+  /// swept up: 17 sites had settled between 4 and 7, a band clearly apart from
+  /// the 77 sitting between 8 and 11, and folding them into [sm] would have
+  /// turned every tiny bordered badge noticeably rounder on the dark skins.
+  final double xs;
+
   final double sm;
   final double md;
   final double lg;
+
+  /// Also the right answer for a thin bar. Flutter clamps a corner radius to
+  /// half the shorter side, so a 3px-wide stripe with [pill] renders exactly as
+  /// one with a hand-picked 1.5 — and keeps doing so when the bar changes size.
   final double pill;
 
   BorderRadius get pillR => BorderRadius.circular(pill);
+  BorderRadius get xsR => BorderRadius.circular(xs);
   BorderRadius get smR => BorderRadius.circular(sm);
   BorderRadius get mdR => BorderRadius.circular(md);
   BorderRadius get lgR => BorderRadius.circular(lg);
 
   HcRadii lerp(HcRadii o, double t) => HcRadii(
+        xs: lerpDouble(xs, o.xs, t),
         sm: lerpDouble(sm, o.sm, t),
         md: lerpDouble(md, o.md, t),
         lg: lerpDouble(lg, o.lg, t),

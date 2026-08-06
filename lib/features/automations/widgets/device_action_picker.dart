@@ -790,7 +790,7 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
             height: 40,
             decoration: BoxDecoration(
               color: t.accent.active.withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: t.radius.smR,
               border: Border.all(color: t.accent.active.withValues(alpha: 0.3)),
             ),
             child: Icon(e.icon, size: 21, color: t.accent.active),
@@ -1056,13 +1056,13 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
   Widget _countStepper(HcTokens t) {
     Widget btn(IconData i, VoidCallback f) => InkWell(
           onTap: f,
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: t.radius.smR,
           child: Container(
             width: 40,
             height: 40,
             decoration: BoxDecoration(
               color: t.surface.raised,
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: t.radius.smR,
               border: Border.all(color: t.stroke.hairline),
             ),
             child: Icon(i, size: 18, color: t.surface.onBase),
@@ -1088,7 +1088,7 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
         color: t.surface.sunken,
-        borderRadius: BorderRadius.circular(9),
+        borderRadius: t.radius.smR,
         border: Border.all(color: t.stroke.hairline),
       ),
       child: DropdownButtonHideUnderline(
@@ -1111,15 +1111,15 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
     return Expanded(
       child: Material(
         color: on ? ac.withValues(alpha: 0.14) : t.surface.raised,
-        borderRadius: BorderRadius.circular(9),
+        borderRadius: t.radius.smR,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(9),
+          borderRadius: t.radius.smR,
           child: Container(
             padding: const EdgeInsets.symmetric(vertical: 11),
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(9),
+              borderRadius: t.radius.smR,
               border: Border.all(
                   color: on ? ac.withValues(alpha: 0.4) : t.stroke.hairline),
             ),
@@ -1205,7 +1205,7 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
         padding: EdgeInsets.all(t.space.md),
         decoration: BoxDecoration(
           color: t.surface.sunken,
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: t.radius.smR,
           border: Border.all(color: t.stroke.hairline),
         ),
         child: child,
@@ -1265,13 +1265,13 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
         ((_values[p.name] as num?) ?? p.defaultValue as num? ?? 21).toDouble();
     Widget btn(IconData i, VoidCallback f) => InkWell(
           onTap: f,
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: t.radius.smR,
           child: Container(
             width: 40,
             height: 40,
             decoration: BoxDecoration(
               color: t.surface.raised,
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: t.radius.smR,
               border: Border.all(color: t.stroke.hairline),
             ),
             child: Icon(i, size: 18, color: t.surface.onBase),
@@ -1385,7 +1385,7 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
       padding: EdgeInsets.all(t.space.md),
       decoration: BoxDecoration(
         color: t.surface.sunken,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: t.radius.smR,
         border: Border.all(color: t.stroke.hairline),
       ),
       child: Column(
@@ -1411,7 +1411,7 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
           padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 2),
           decoration: BoxDecoration(
             color: c.withValues(alpha: 0.14),
-            borderRadius: BorderRadius.circular(7),
+            borderRadius: t.radius.xsR,
             border: Border.all(color: c.withValues(alpha: 0.32)),
           ),
           child: Text(s,
@@ -1696,14 +1696,14 @@ class _CommandChip extends StatelessWidget {
     final ac = t.accent.active;
     return Material(
       color: selected ? ac.withValues(alpha: 0.14) : t.surface.sunken,
-      borderRadius: BorderRadius.circular(9),
+      borderRadius: t.radius.smR,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(9),
+        borderRadius: t.radius.smR,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(9),
+            borderRadius: t.radius.smR,
             border: Border.all(
                 color:
                     selected ? ac.withValues(alpha: 0.4) : t.stroke.hairline),
@@ -1743,14 +1743,14 @@ class _Toggle extends StatelessWidget {
     final ac = t.accent.active;
     return Material(
       color: selected ? ac.withValues(alpha: 0.14) : t.surface.raised,
-      borderRadius: BorderRadius.circular(999),
+      borderRadius: t.radius.pillR,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: t.radius.pillR,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(999),
+            borderRadius: t.radius.pillR,
             border: Border.all(
                 color:
                     selected ? ac.withValues(alpha: 0.4) : t.stroke.hairline),

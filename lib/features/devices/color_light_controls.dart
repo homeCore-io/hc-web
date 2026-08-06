@@ -345,6 +345,7 @@ class _TempBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
     return LayoutBuilder(builder: (context, c) {
       void set(Offset p) =>
           onChanged((p.dy / c.maxHeight).clamp(0.0, 1.0) * 100);
@@ -354,7 +355,7 @@ class _TempBar extends StatelessWidget {
         onPanEnd: (_) => onEnd(),
         child: Container(
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: t.radius.lgR,
             gradient: const LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
@@ -414,7 +415,7 @@ class _Slider extends StatelessWidget {
               Container(
                 height: 10,
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(6),
+                  borderRadius: t.radius.xsR,
                   gradient:
                       LinearGradient(colors: [t.surface.sunken, trackColour]),
                 ),

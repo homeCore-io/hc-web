@@ -202,7 +202,7 @@ class _KindChip extends StatelessWidget {
           color: selected
               ? t.accent.active.withValues(alpha: 0.14)
               : Colors.transparent,
-          borderRadius: BorderRadius.circular(t.radius.pill),
+          borderRadius: t.radius.pillR,
           border: Border.all(
               color: selected ? Colors.transparent : t.stroke.hairline),
         ),
@@ -283,7 +283,7 @@ class _ModeCardState extends ConsumerState<_ModeCard> {
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
                   color: t.surface.sunken,
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: t.radius.smR,
                   border: Border.all(color: t.stroke.hairline),
                 ),
                 child: Icon(
@@ -449,7 +449,7 @@ class _Toggle extends StatelessWidget {
         decoration: BoxDecoration(
           color:
               on ? t.accent.active.withValues(alpha: 0.3) : t.surface.overlay,
-          borderRadius: BorderRadius.circular(999),
+          borderRadius: t.radius.pillR,
           border:
               Border.all(color: on ? Colors.transparent : t.stroke.hairline),
         ),
@@ -488,7 +488,7 @@ class _DayNightChip extends StatelessWidget {
         color: night
             ? t.accent.primary.withValues(alpha: 0.16)
             : t.surface.overlay,
-        borderRadius: BorderRadius.circular(7),
+        borderRadius: t.radius.xsR,
       ),
       child: Text(
         night ? 'NIGHT' : 'DAY',

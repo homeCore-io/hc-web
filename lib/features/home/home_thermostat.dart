@@ -431,7 +431,7 @@ class _ModeChip extends StatelessWidget {
             horizontal: t.space.md, vertical: t.space.xs + 1),
         decoration: BoxDecoration(
           color: selected ? colour.withValues(alpha: 0.16) : Colors.transparent,
-          borderRadius: BorderRadius.circular(t.radius.pill),
+          borderRadius: t.radius.pillR,
           border: Border.all(color: selected ? colour : t.stroke.hairline),
         ),
         child: Text(label,

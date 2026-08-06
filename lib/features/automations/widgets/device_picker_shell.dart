@@ -153,7 +153,7 @@ class _PickerPanelState extends State<PickerPanel> {
             width: w,
             decoration: BoxDecoration(
               color: t.surface.overlay,
-              borderRadius: BorderRadius.circular(t.radius.lg),
+              borderRadius: t.radius.lgR,
               border:
                   Border.all(color: t.stroke.hairline, width: t.stroke.width),
               boxShadow: t.elevation.overlay,
@@ -343,15 +343,15 @@ class _FooterBtn extends StatelessWidget {
       opacity: enabled ? 1 : 0.6,
       child: Material(
         color: bg,
-        borderRadius: BorderRadius.circular(t.radius.pill),
+        borderRadius: t.radius.pillR,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(t.radius.pill),
+          borderRadius: t.radius.pillR,
           child: Container(
             padding: EdgeInsets.symmetric(
                 horizontal: t.space.lg, vertical: t.space.sm + 1),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(t.radius.pill),
+              borderRadius: t.radius.pillR,
               border: primary
                   ? null
                   : Border.all(color: t.stroke.hairline, width: t.stroke.width),
@@ -373,7 +373,7 @@ Widget pickerSeg(HcTokens t,
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
         color: t.surface.sunken,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: t.radius.smR,
         border: Border.all(color: t.stroke.hairline),
       ),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -384,10 +384,10 @@ Widget pickerSeg(HcTokens t,
 
 Widget _seg(HcTokens t, String label, bool on, VoidCallback onTap) => Material(
       color: on ? t.surface.raised : Colors.transparent,
-      borderRadius: BorderRadius.circular(7),
+      borderRadius: t.radius.xsR,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(7),
+        borderRadius: t.radius.xsR,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 6),
           child: Text(label,
@@ -554,7 +554,7 @@ Widget pickerDeviceRow(HcTokens t,
             height: 34,
             decoration: BoxDecoration(
               color: t.surface.raised,
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: t.radius.smR,
               border: Border.all(color: t.stroke.hairline),
             ),
             child: Icon(icon,
@@ -583,7 +583,7 @@ Widget pickerDeviceRow(HcTokens t,
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
                 color: tone.withValues(alpha: 0.10),
-                borderRadius: BorderRadius.circular(999),
+                borderRadius: t.radius.pillR,
                 border: Border.all(color: tone.withValues(alpha: 0.28)),
               ),
               child: Text(chip,

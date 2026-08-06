@@ -333,7 +333,7 @@ class _Pill extends StatelessWidget {
       padding: EdgeInsets.symmetric(horizontal: t.space.sm, vertical: 3),
       decoration: BoxDecoration(
         color: filled ? tone.withValues(alpha: 0.14) : Colors.transparent,
-        borderRadius: BorderRadius.circular(t.radius.pill),
+        borderRadius: t.radius.pillR,
         border: Border.all(
           color: filled ? tone.withValues(alpha: 0.45) : t.stroke.hairline,
         ),
@@ -413,7 +413,7 @@ class _Toggle extends StatelessWidget {
           padding: const EdgeInsets.all(3),
           decoration: BoxDecoration(
             color: on ? t.accent.active : t.accent.inactive,
-            borderRadius: BorderRadius.circular(t.radius.pill),
+            borderRadius: t.radius.pillR,
           ),
           child: AnimatedAlign(
             duration: t.motion.d(t.motion.fast),

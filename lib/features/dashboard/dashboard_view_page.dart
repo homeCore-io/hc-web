@@ -576,7 +576,7 @@ class _TokenChip extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(t.radius.pill),
+        borderRadius: t.radius.pillR,
         onTap: onTap,
         child: AnimatedContainer(
           duration: t.motion.d(t.motion.fast),
@@ -586,7 +586,7 @@ class _TokenChip extends StatelessWidget {
             color: selected
                 ? t.accent.active.withValues(alpha: 0.14)
                 : t.surface.sunken,
-            borderRadius: BorderRadius.circular(t.radius.pill),
+            borderRadius: t.radius.pillR,
             border: Border.all(
               color: selected
                   ? t.accent.active.withValues(alpha: 0.6)
@@ -1108,6 +1108,7 @@ class _CameraVideoWidgetState extends State<_CameraVideoWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
     final url = widget.widgetModel.config['url'] as String? ?? '';
     final sourceType =
         widget.widgetModel.config['source_type'] as String? ?? 'image_refresh';
@@ -1136,7 +1137,7 @@ class _CameraVideoWidgetState extends State<_CameraVideoWidget> {
         const SizedBox(height: 8),
         if (sourceType == 'image_refresh' || sourceType == 'mjpeg')
           ClipRRect(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: t.radius.mdR,
             child: Image.network(
               resolvedUrl,
               fit: BoxFit.cover,
@@ -1163,6 +1164,7 @@ class _WebEmbedWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
     final url = widgetModel.config['url'] as String? ?? '';
     final sandboxProfile =
         widgetModel.config['sandbox_profile'] as String? ?? 'readonly_embed';
@@ -1187,7 +1189,7 @@ class _WebEmbedWidget extends StatelessWidget {
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             color: Theme.of(context).colorScheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: t.radius.mdR,
           ),
           child: const Text(
             'Web embeds are configured and ready for policy-backed rendering. This dashboard shows the target URL and sandbox profile until full inline embed support is enabled.',
@@ -2020,7 +2022,7 @@ class _MeterBar extends StatelessWidget {
             width: box.maxWidth,
             decoration: BoxDecoration(
               color: t.surface.onBaseMuted.withValues(alpha: 0.16),
-              borderRadius: BorderRadius.circular(999),
+              borderRadius: t.radius.pillR,
             ),
           ),
           Container(
@@ -2028,7 +2030,7 @@ class _MeterBar extends StatelessWidget {
             width: box.maxWidth * frac,
             decoration: BoxDecoration(
               color: color,
-              borderRadius: BorderRadius.circular(999),
+              borderRadius: t.radius.pillR,
             ),
           ),
         ],

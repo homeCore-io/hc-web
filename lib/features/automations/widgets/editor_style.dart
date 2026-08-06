@@ -16,7 +16,7 @@ InputDecoration fieldDecoration(
   String? hint,
 }) {
   OutlineInputBorder border(Color c, [double w = 1]) => OutlineInputBorder(
-        borderRadius: BorderRadius.circular(9),
+        borderRadius: t.radius.smR,
         borderSide: BorderSide(color: c, width: w),
       );
   return InputDecoration(
@@ -64,10 +64,10 @@ class PickerRow extends StatelessWidget {
       color: selected
           ? t.accent.active.withValues(alpha: 0.12)
           : Colors.transparent,
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: t.radius.smR,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: t.radius.smR,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
           child: Column(

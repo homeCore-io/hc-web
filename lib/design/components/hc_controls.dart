@@ -50,7 +50,7 @@ class HcToggle extends StatelessWidget {
             padding: const EdgeInsets.all(2.5),
             decoration: BoxDecoration(
               color: track,
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: t.radius.smR,
               border: Border.all(
                 color: on ? Colors.transparent : t.stroke.hairline,
               ),

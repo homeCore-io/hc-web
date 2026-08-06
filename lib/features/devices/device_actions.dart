@@ -337,9 +337,8 @@ class _KeyState extends State<_Key> {
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
-    final radius = widget.round
-        ? BorderRadius.circular(999)
-        : BorderRadius.circular(t.radius.sm + 2);
+    final radius =
+        widget.round ? t.radius.pillR : BorderRadius.circular(t.radius.sm + 2);
 
     final key = GestureDetector(
       onTapDown: widget.enabled ? (_) => setState(() => _down = true) : null,
@@ -911,13 +910,13 @@ class _Chip extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: enabled ? onTap : null,
-        borderRadius: BorderRadius.circular(t.radius.pill),
+        borderRadius: t.radius.pillR,
         child: Container(
           padding: EdgeInsets.symmetric(
               horizontal: t.space.md, vertical: t.space.sm),
           decoration: BoxDecoration(
             color: t.surface.raised,
-            borderRadius: BorderRadius.circular(t.radius.pill),
+            borderRadius: t.radius.pillR,
             border: Border.all(color: t.stroke.hairline),
           ),
           child: Row(

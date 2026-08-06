@@ -105,7 +105,7 @@ const _midnight = HcTokens(
     width: 1,
     focus: Color(0xFF7CC4FF),
   ),
-  radius: HcRadii(sm: 8, md: 14, lg: 22, pill: 999),
+  radius: HcRadii(xs: 4, sm: 8, md: 14, lg: 22, pill: 999),
   space: HcSpace(unit: 8),
   motion: HcMotion(
     fast: Duration(milliseconds: 140),
@@ -202,7 +202,7 @@ const _ambientGlass = HcTokens(
     width: 1,
     focus: Color(0xFF7CC4FF),
   ),
-  radius: HcRadii(sm: 10, md: 18, lg: 26, pill: 999),
+  radius: HcRadii(xs: 5, sm: 10, md: 18, lg: 26, pill: 999),
   space: HcSpace(unit: 8),
   motion: HcMotion(
     fast: Duration(milliseconds: 160),
@@ -281,7 +281,7 @@ const _controlRoom = HcTokens(
     focus: Color(0xFF38BDF8),
   ),
   // Sharp corners: this skin is a instrument panel, not a pillow.
-  radius: HcRadii(sm: 3, md: 5, lg: 8, pill: 999),
+  radius: HcRadii(xs: 2, sm: 3, md: 5, lg: 8, pill: 999),
   space: HcSpace(unit: 6),
   motion: HcMotion(
     fast: Duration(milliseconds: 90),
@@ -358,7 +358,7 @@ const _softHome = HcTokens(
     width: 1,
     focus: Color(0xFFC2603F),
   ),
-  radius: HcRadii(sm: 12, md: 20, lg: 28, pill: 999),
+  radius: HcRadii(xs: 6, sm: 12, md: 20, lg: 28, pill: 999),
   space: HcSpace(unit: 8),
   motion: HcMotion(
     fast: Duration(milliseconds: 130),

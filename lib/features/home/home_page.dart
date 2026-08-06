@@ -385,7 +385,7 @@ class _HouseState extends ConsumerState<_House> {
                     height: 4,
                     decoration: BoxDecoration(
                       color: t.accent.active,
-                      borderRadius: BorderRadius.circular(2),
+                      borderRadius: t.radius.pillR,
                       boxShadow: [
                         BoxShadow(
                             color: t.accent.active.withValues(alpha: 0.5),
@@ -838,13 +838,13 @@ class _AttentionChip extends StatelessWidget {
 
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(t.radius.pill),
+      borderRadius: t.radius.pillR,
       child: Container(
         padding:
             EdgeInsets.symmetric(horizontal: t.space.md, vertical: t.space.sm),
         decoration: BoxDecoration(
           color: t.surface.raised,
-          borderRadius: BorderRadius.circular(t.radius.pill),
+          borderRadius: t.radius.pillR,
           border: Border.all(color: t.stroke.hairline),
         ),
         child: Row(
@@ -1538,12 +1538,12 @@ class _MoreChip extends StatelessWidget {
     final t = HcTokens.of(context);
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: t.radius.lgR,
       child: Container(
         padding: EdgeInsets.symmetric(
             horizontal: t.space.sm + 2, vertical: t.space.xs + 1),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: t.radius.lgR,
           border: Border.all(color: t.stroke.hairline),
         ),
         child: Text(
@@ -1569,13 +1569,13 @@ class _SceneChip extends StatelessWidget {
 
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: t.radius.lgR,
       child: Container(
         padding: EdgeInsets.symmetric(
             horizontal: t.space.sm + 2, vertical: t.space.xs + 1),
         decoration: BoxDecoration(
           color: t.surface.raised,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: t.radius.lgR,
           border: Border.all(color: t.stroke.hairline),
         ),
         child: Row(

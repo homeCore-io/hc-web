@@ -387,13 +387,13 @@ class _ConfigChip extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(t.radius.pill),
+        borderRadius: t.radius.pillR,
         child: Container(
           padding: EdgeInsets.symmetric(
               horizontal: t.space.md, vertical: t.space.sm),
           decoration: BoxDecoration(
             color: t.surface.raised,
-            borderRadius: BorderRadius.circular(t.radius.pill),
+            borderRadius: t.radius.pillR,
             border: Border.all(
               color: selected ? t.accent.active : t.stroke.hairline,
             ),

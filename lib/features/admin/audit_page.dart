@@ -272,7 +272,7 @@ class _Chip extends StatelessWidget {
           color: active
               ? accent.withValues(alpha: 0.14)
               : (subtle ? Colors.transparent : t.surface.raised),
-          borderRadius: BorderRadius.circular(t.radius.pill),
+          borderRadius: t.radius.pillR,
           border: Border.all(
             color: active ? accent : t.stroke.hairline,
           ),
@@ -427,7 +427,7 @@ class _ResultPill extends StatelessWidget {
       margin: EdgeInsets.only(right: t.space.xs),
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 2),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(t.radius.pill),
+        borderRadius: t.radius.pillR,
         border: Border.all(
             color: ok ? t.stroke.hairline : tone.withValues(alpha: 0.5)),
       ),

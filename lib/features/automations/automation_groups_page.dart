@@ -206,7 +206,7 @@ class _GroupTile extends StatelessWidget {
             height: 34,
             decoration: BoxDecoration(
               color: t.surface.sunken,
-              borderRadius: BorderRadius.circular(9),
+              borderRadius: t.radius.smR,
               border: Border.all(color: t.stroke.hairline),
             ),
             child: Icon(Icons.group_work_outlined,

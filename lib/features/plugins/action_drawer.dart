@@ -206,7 +206,7 @@ class _ActionDrawerState extends State<ActionDrawer> {
             Padding(
               padding: EdgeInsets.only(bottom: t.space.sm),
               child: ClipRRect(
-                borderRadius: BorderRadius.circular(t.radius.pill),
+                borderRadius: t.radius.pillR,
                 child: LinearProgressIndicator(
                   value: (pct / 100).clamp(0.0, 1.0).toDouble(),
                   minHeight: 4,
@@ -260,7 +260,7 @@ class _ActionDrawerState extends State<ActionDrawer> {
       padding: EdgeInsets.all(t.space.md),
       decoration: BoxDecoration(
         color: t.accent.active.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(t.radius.md),
+        borderRadius: t.radius.mdR,
         border: Border.all(color: t.accent.active.withValues(alpha: 0.3)),
       ),
       child: Row(

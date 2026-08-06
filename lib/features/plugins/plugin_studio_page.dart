@@ -336,7 +336,7 @@ class _Header extends ConsumerWidget {
           alignment: Alignment.center,
           decoration: BoxDecoration(
             color: t.surface.sunken,
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: t.radius.mdR,
             border: Border.all(color: t.stroke.hairline),
             boxShadow: plugin.isActive
                 ? [
@@ -416,7 +416,7 @@ class _Header extends ConsumerWidget {
         padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
         decoration: BoxDecoration(
           color: t.accent.active.withValues(alpha: 0.14),
-          borderRadius: BorderRadius.circular(t.radius.pill),
+          borderRadius: t.radius.pillR,
           border: Border.all(color: t.accent.active.withValues(alpha: 0.38)),
         ),
         child: Text(s,
@@ -510,7 +510,7 @@ class _Rail extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
         decoration: BoxDecoration(
           color: t.accent.active.withValues(alpha: 0.14),
-          borderRadius: BorderRadius.circular(t.radius.pill),
+          borderRadius: t.radius.pillR,
           border: Border.all(color: t.accent.active.withValues(alpha: 0.38)),
         ),
         child: Text(s,
@@ -867,7 +867,7 @@ class _OverviewPane extends ConsumerWidget {
             alignment: Alignment.center,
             decoration: BoxDecoration(
               color: t.accent.active.withValues(alpha: 0.16),
-              borderRadius: BorderRadius.circular(11),
+              borderRadius: t.radius.smR,
             ),
             child:
                 Icon(Icons.upgrade_rounded, color: t.accent.active, size: 22),
@@ -928,7 +928,7 @@ class _OverviewPane extends ConsumerWidget {
               // all of *this* plugin's devices, not the whole house.
               onTap: () => context.go(
                   '/devices?plugin=${Uri.encodeComponent(plugin.pluginId)}'),
-              borderRadius: BorderRadius.circular(6),
+              borderRadius: t.radius.xsR,
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                 child: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -951,7 +951,7 @@ class _OverviewPane extends ConsumerWidget {
                 style: t.text.bodyStyle.copyWith(color: t.surface.onBaseMuted))
           else ...[
             ClipRRect(
-              borderRadius: BorderRadius.circular(5),
+              borderRadius: t.radius.xsR,
               child: SizedBox(
                 height: 9,
                 child: Row(children: [
@@ -1361,7 +1361,7 @@ class _ConfigSectionPane extends ConsumerWidget {
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
                     color: t.surface.sunken,
-                    borderRadius: BorderRadius.circular(11),
+                    borderRadius: t.radius.smR,
                     border: Border.all(color: t.stroke.hairline)),
                 child: Icon(Icons.router_rounded,
                     size: 19, color: t.surface.onBaseMuted)),
@@ -1388,7 +1388,7 @@ class _ConfigSectionPane extends ConsumerWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
                 decoration: BoxDecoration(
                     color: t.accent.active.withValues(alpha: 0.14),
-                    borderRadius: BorderRadius.circular(t.radius.pill)),
+                    borderRadius: t.radius.pillR),
                 child: Row(mainAxisSize: MainAxisSize.min, children: [
                   Icon(HcIcons.check, size: 11, color: t.accent.active),
                   const SizedBox(width: 4),
@@ -1430,7 +1430,7 @@ class _Segmented extends StatelessWidget {
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
           color: t.surface.sunken,
-          borderRadius: BorderRadius.circular(9),
+          borderRadius: t.radius.smR,
           border: Border.all(color: t.stroke.hairline)),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
         for (final o in options)
@@ -1440,7 +1440,7 @@ class _Segmented extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 6),
               decoration: BoxDecoration(
                   color: value == o ? t.accent.active : Colors.transparent,
-                  borderRadius: BorderRadius.circular(6)),
+                  borderRadius: t.radius.xsR),
               child: Text(o.toUpperCase(),
                   style: t.text.bodySmallStyle.copyWith(
                       color: value == o
@@ -1467,7 +1467,7 @@ class _Dropdown extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
       decoration: BoxDecoration(
           color: t.surface.sunken,
-          borderRadius: BorderRadius.circular(9),
+          borderRadius: t.radius.smR,
           border: Border.all(color: t.stroke.hairline)),
       child: DropdownButton<String>(
         value: options.contains(value) ? value : null,
@@ -1511,7 +1511,7 @@ class _NumInputState extends State<_NumInput> {
     return Container(
       decoration: BoxDecoration(
           color: t.surface.sunken,
-          borderRadius: BorderRadius.circular(9),
+          borderRadius: t.radius.smR,
           border: Border.all(color: t.stroke.hairline)),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
         SizedBox(
@@ -1576,10 +1576,10 @@ class _TextInputState extends State<_TextInput> {
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
             enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(9),
+                borderRadius: t.radius.smR,
                 borderSide: BorderSide(color: t.stroke.hairline)),
             focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(9),
+                borderRadius: t.radius.smR,
                 borderSide: BorderSide(color: t.stroke.focus))),
       ),
     );
@@ -1630,10 +1630,10 @@ class _SecretInputState extends State<_SecretInput> {
                     color: t.surface.onBaseMuted),
                 onPressed: () => setState(() => _reveal = !_reveal)),
             enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(9),
+                borderRadius: t.radius.smR,
                 borderSide: BorderSide(color: t.stroke.hairline)),
             focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(9),
+                borderRadius: t.radius.smR,
                 borderSide: BorderSide(color: t.stroke.focus))),
       ),
     );
@@ -1964,7 +1964,7 @@ class _LogLevelPick extends StatelessWidget {
           color: selected
               ? t.accent.active.withValues(alpha: 0.14)
               : Colors.transparent,
-          borderRadius: BorderRadius.circular(t.radius.pill),
+          borderRadius: t.radius.pillR,
           border:
               Border.all(color: selected ? t.accent.active : t.stroke.hairline),
         ),

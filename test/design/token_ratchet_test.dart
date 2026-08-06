@@ -2,22 +2,27 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
-/// The app is on the ramp. This is what keeps it there.
+/// The app takes its values from the tokens. This is what keeps it there.
 ///
-/// ~700 literal `fontSize:` values accumulated here for one reason: nothing
-/// ever objected to the next one. A migration without a ratchet behind it is a
-/// treadmill — and the second cleanup is always harder than the first, because
-/// by then the drift looks intentional.
+/// ~700 literal `fontSize:` values and 132 literal corner radii accumulated
+/// here for one reason: nothing ever objected to the next one. A migration
+/// without a ratchet behind it is a treadmill — and the second cleanup is
+/// always harder than the first, because by then the drift looks intentional.
 ///
-/// The allowlist is as much the point as the ban. Every entry is a deliberate
-/// exception with its reason written beside it in the source. If you are adding
-/// one, write that reason there first. If you are adding one because no role
-/// fits, that is a finding about the ramp — take it to `type-tokens-plan.md`,
-/// not to this list.
+/// One file, a test per category, so the next sweep (shadows, the stray
+/// `Colors.white`s) has somewhere obvious to land rather than a fourth
+/// near-identical test file.
 ///
-/// For a size the ramp genuinely has no role for — a wall clock, a hero number
-/// — use `t.text.scaled(n)`. It keeps the value and still lets the skin's
-/// `scale` reach it, which a bare literal does not.
+/// The allowlists are as much the point as the bans. Every entry is a
+/// deliberate exception with its reason written beside it in the source. If you
+/// are adding one, write that reason there first. If you are adding one because
+/// no role fits, that is a finding about the ramp — take it to
+/// `type-tokens-plan.md`, not to the list.
+///
+/// For a value the tokens genuinely have no role for — a wall clock, a hero
+/// number — use `t.text.scaled(n)`. It keeps the value and still lets the
+/// skin's `scale` reach it, which a bare literal does not.
+
 void main() {
   test('type sizes come from the ramp, not from literals', () {
     // file -> the sizes it is allowed to state outright.
@@ -100,5 +105,52 @@ void main() {
     expect(m, isNotNull, reason: 'fontFallbackBaseUrl is not configured');
     expect(m!.group(1)!, isNot(contains('://')),
         reason: 'glyph fallback points off our own origin: ${m.group(1)}');
+  });
+
+  test('corner radii come from the tokens, not from literals', () {
+    // 132 of these were swept up at once. Two mappings in that pass were
+    // judgement rather than arithmetic, and both are worth knowing before
+    // adding to the allowlist below:
+    //
+    //   * a thin bar wants `pill`, not a small number. Flutter clamps a corner
+    //     to half the shorter side, so a 3px stripe at `pill` renders exactly
+    //     as one at a hand-picked 1.5 — and keeps doing so if the bar is
+    //     resized. Every 2 and 3 in the app was one of these.
+    //   * `xs` exists because 17 sites had settled between 4 and 7, a band
+    //     clearly apart from the 77 between 8 and 11. Folding them into `sm`
+    //     would have turned every tiny bordered badge visibly rounder on the
+    //     dark skins.
+    //
+    // Deliberate non-literals that are fine and deliberately not matched here:
+    // `t.radius.sm + 2` (an inner corner inset from an outer one) and
+    // `BorderRadius.circular(avatar / 2)` (a computed circle).
+    const allowed = <String, List<String>>{};
+
+    final root = Directory('lib');
+    // No `\b` before `Radius`: there is no word boundary inside
+    // `BorderRadius`, so anchoring it matches only the bare `Radius.circular`
+    // used inside `BorderRadius.vertical/only` — and silently misses
+    // `BorderRadius.circular(N)`, which is the form 129 of the 132 sites used.
+    // This test passed against a planted violation until that was fixed.
+    final pattern = RegExp(r'Radius\.circular\(([0-9]+(?:\.[0-9]+)?)\)');
+    final offenders = <String>[];
+
+    for (final f in root.listSync(recursive: true).whereType<File>()) {
+      if (!f.path.endsWith('.dart')) continue;
+      final ok = allowed[f.uri.pathSegments.last] ?? const [];
+      final lines = f.readAsLinesSync();
+      for (var i = 0; i < lines.length; i++) {
+        for (final m in pattern.allMatches(lines[i])) {
+          if (ok.contains(m.group(1))) continue;
+          offenders.add('${f.path}:${i + 1} → ${m.group(1)}');
+        }
+      }
+    }
+
+    expect(offenders, isEmpty,
+        reason: 'these state a radius instead of taking one from t.radius:\n'
+            '  ${offenders.join('\n  ')}\n'
+            'Use t.radius.xsR / smR / mdR / lgR / pillR — and pillR for a thin '
+            'bar, which clamps to half its shorter side.');
   });
 }

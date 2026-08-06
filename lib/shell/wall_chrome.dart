@@ -195,7 +195,7 @@ class _WallChromeState extends ConsumerState<WallChrome> {
               ),
               decoration: BoxDecoration(
                 color: t.accent.danger.withValues(alpha: 0.18),
-                borderRadius: BorderRadius.circular(t.radius.pill),
+                borderRadius: t.radius.pillR,
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,

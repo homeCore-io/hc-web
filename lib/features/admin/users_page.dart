@@ -210,7 +210,7 @@ class _UserDetail extends ConsumerWidget {
       constraints: const BoxConstraints(maxHeight: 720),
       decoration: BoxDecoration(
         color: t.surface.overlay,
-        borderRadius: BorderRadius.circular(t.radius.lg),
+        borderRadius: t.radius.lgR,
         border: Border.all(color: t.stroke.hairline),
       ),
       child: Column(
@@ -700,14 +700,14 @@ class _LevelToggle extends StatelessWidget {
       final on = level == value;
       return InkWell(
         onTap: () => onChanged(value),
-        borderRadius: BorderRadius.circular(t.radius.pill),
+        borderRadius: t.radius.pillR,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
           decoration: BoxDecoration(
             color: on
                 ? t.accent.active.withValues(alpha: 0.16)
                 : Colors.transparent,
-            borderRadius: BorderRadius.circular(t.radius.pill),
+            borderRadius: t.radius.pillR,
             border: Border.all(color: on ? t.accent.active : t.stroke.hairline),
           ),
           child: Text(label,
@@ -1053,7 +1053,7 @@ class _ScopeChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         color: t.surface.sunken,
-        borderRadius: BorderRadius.circular(t.radius.pill),
+        borderRadius: t.radius.pillR,
         border: Border.all(color: t.stroke.hairline),
       ),
       child: Text(label,
@@ -1075,13 +1075,13 @@ class _SelectableScope extends StatelessWidget {
     final t = HcTokens.of(context);
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(t.radius.pill),
+      borderRadius: t.radius.pillR,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
         decoration: BoxDecoration(
           color:
               on ? t.accent.active.withValues(alpha: 0.16) : t.surface.sunken,
-          borderRadius: BorderRadius.circular(t.radius.pill),
+          borderRadius: t.radius.pillR,
           border: Border.all(color: on ? t.accent.active : t.stroke.hairline),
         ),
         child: Text(label,
@@ -1105,7 +1105,7 @@ class _Tag extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
         color: accent?.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(t.radius.pill),
+        borderRadius: t.radius.pillR,
         border: Border.all(
             color: accent?.withValues(alpha: 0.5) ?? t.stroke.hairline),
       ),

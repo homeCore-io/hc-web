@@ -217,7 +217,7 @@ class _AuroraChipState extends State<_AuroraChip>
               colors: colors,
               transform: GradientRotation(_c.value * 6.2831853),
             ),
-            borderRadius: BorderRadius.circular(11),
+            borderRadius: t.radius.smR,
             boxShadow: [
               BoxShadow(
                 color: widget.palette.dot.withValues(alpha: 0.45),
@@ -232,7 +232,7 @@ class _AuroraChipState extends State<_AuroraChip>
         child: Container(
           decoration: BoxDecoration(
             color: t.surface.raised,
-            borderRadius: BorderRadius.circular(9.6),
+            borderRadius: t.radius.smR,
           ),
           padding: const EdgeInsets.fromLTRB(11, 8, 13, 8),
           child: widget.child,

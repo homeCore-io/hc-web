@@ -584,7 +584,7 @@ class _DeviceTriggerPickerState extends State<DeviceTriggerPicker> {
             height: 40,
             decoration: BoxDecoration(
               color: t.accent.active.withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: t.radius.smR,
               border: Border.all(color: t.accent.active.withValues(alpha: 0.3)),
             ),
             child: Icon(e.icon, size: 21, color: t.accent.active),
@@ -653,14 +653,14 @@ class _DeviceTriggerPickerState extends State<DeviceTriggerPicker> {
     final ac = t.accent.active;
     return Material(
       color: on ? ac.withValues(alpha: 0.14) : t.surface.sunken,
-      borderRadius: BorderRadius.circular(9),
+      borderRadius: t.radius.smR,
       child: InkWell(
         onTap: () => setState(() => _ttype = ty.$1),
-        borderRadius: BorderRadius.circular(9),
+        borderRadius: t.radius.smR,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(9),
+            borderRadius: t.radius.smR,
             border: Border.all(
                 color: on ? ac.withValues(alpha: 0.4) : t.stroke.hairline),
           ),
@@ -831,7 +831,7 @@ class _DeviceTriggerPickerState extends State<DeviceTriggerPicker> {
         padding: EdgeInsets.all(t.space.md),
         decoration: BoxDecoration(
           color: t.surface.sunken,
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: t.radius.smR,
           border: Border.all(color: t.stroke.hairline),
         ),
         child: Text(text,
@@ -1031,7 +1031,7 @@ class _DeviceTriggerPickerState extends State<DeviceTriggerPicker> {
             padding: EdgeInsets.all(t.space.md),
             decoration: BoxDecoration(
               color: t.surface.sunken,
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: t.radius.smR,
               border: Border.all(color: t.stroke.hairline),
             ),
             child: Text(
@@ -1054,9 +1054,9 @@ class _DeviceTriggerPickerState extends State<DeviceTriggerPicker> {
         '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}';
     return Material(
       color: t.surface.sunken,
-      borderRadius: BorderRadius.circular(9),
+      borderRadius: t.radius.smR,
       child: InkWell(
-        borderRadius: BorderRadius.circular(9),
+        borderRadius: t.radius.smR,
         onTap: () async {
           final picked = await showTimePicker(
               context: context, initialTime: TimeOfDay(hour: h, minute: m));
@@ -1068,7 +1068,7 @@ class _DeviceTriggerPickerState extends State<DeviceTriggerPicker> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(9),
+            borderRadius: t.radius.smR,
             border: Border.all(color: t.stroke.hairline),
           ),
           child: Row(children: [
@@ -1088,14 +1088,14 @@ class _DeviceTriggerPickerState extends State<DeviceTriggerPicker> {
     final ac = t.accent.active;
     return Material(
       color: on ? ac.withValues(alpha: 0.14) : t.surface.raised,
-      borderRadius: BorderRadius.circular(999),
+      borderRadius: t.radius.pillR,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: t.radius.pillR,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(999),
+            borderRadius: t.radius.pillR,
             border: Border.all(
                 color: on ? ac.withValues(alpha: 0.4) : t.stroke.hairline),
           ),
@@ -1117,7 +1117,7 @@ class _DeviceTriggerPickerState extends State<DeviceTriggerPicker> {
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
         color: t.surface.sunken,
-        borderRadius: BorderRadius.circular(9),
+        borderRadius: t.radius.smR,
         border: Border.all(color: t.stroke.hairline),
       ),
       child: DropdownButtonHideUnderline(
@@ -1141,15 +1141,15 @@ class _DeviceTriggerPickerState extends State<DeviceTriggerPicker> {
     return Expanded(
       child: Material(
         color: on ? ac.withValues(alpha: 0.14) : t.surface.raised,
-        borderRadius: BorderRadius.circular(9),
+        borderRadius: t.radius.smR,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(9),
+          borderRadius: t.radius.smR,
           child: Container(
             padding: const EdgeInsets.symmetric(vertical: 11),
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(9),
+              borderRadius: t.radius.smR,
               border: Border.all(
                   color: on ? ac.withValues(alpha: 0.4) : t.stroke.hairline),
             ),
@@ -1170,7 +1170,7 @@ class _DeviceTriggerPickerState extends State<DeviceTriggerPicker> {
           padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 2),
           decoration: BoxDecoration(
             color: c.withValues(alpha: 0.14),
-            borderRadius: BorderRadius.circular(7),
+            borderRadius: t.radius.xsR,
             border: Border.all(color: c.withValues(alpha: 0.32)),
           ),
           child: Text(s,
@@ -1316,7 +1316,7 @@ class _DeviceTriggerPickerState extends State<DeviceTriggerPicker> {
       padding: EdgeInsets.all(t.space.md),
       decoration: BoxDecoration(
         color: t.surface.sunken,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: t.radius.smR,
         border: Border.all(color: t.stroke.hairline),
       ),
       child: Column(

@@ -167,17 +167,17 @@ class _ActionFormState extends State<ActionForm> {
         contentPadding: EdgeInsets.symmetric(
             horizontal: t.space.md, vertical: t.space.sm + 2),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(t.radius.md),
+          borderRadius: t.radius.mdR,
           borderSide:
               BorderSide(color: t.stroke.hairline, width: t.stroke.width),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(t.radius.md),
+          borderRadius: t.radius.mdR,
           borderSide:
               BorderSide(color: t.stroke.hairline, width: t.stroke.width),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(t.radius.md),
+          borderRadius: t.radius.mdR,
           borderSide:
               BorderSide(color: t.stroke.focus, width: t.stroke.width + 1),
         ),

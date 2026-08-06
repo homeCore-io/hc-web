@@ -470,7 +470,7 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: c.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: t.radius.smR,
         border: Border.all(color: c.withValues(alpha: isError ? 0.4 : 0.25)),
       ),
       child: Row(
@@ -496,7 +496,7 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: c.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: t.radius.smR,
         border: Border.all(color: c.withValues(alpha: 0.3)),
       ),
       child: Row(
@@ -922,7 +922,7 @@ class _MetaLine extends ConsumerWidget {
                       setInner(() {});
                       onChanged();
                     },
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: t.radius.smR,
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 4, vertical: 10),
@@ -1071,7 +1071,7 @@ class _SectionState extends State<_Section> {
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
         color: t.surface.raised,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: t.radius.mdR,
         border: Border.all(color: t.stroke.hairline),
       ),
       child: Column(
@@ -1079,7 +1079,7 @@ class _SectionState extends State<_Section> {
         children: [
           InkWell(
             onTap: () => setState(() => _open = !_open),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: t.radius.mdR,
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
               child: Row(

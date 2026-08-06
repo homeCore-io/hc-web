@@ -153,9 +153,10 @@ class _SkinPreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
     final s = skin.tokens;
 
-    final cardRadius = BorderRadius.circular(5);
+    final cardRadius = t.radius.xsR;
 
     Widget card = Container(
       decoration: BoxDecoration(
@@ -214,7 +215,7 @@ class _SkinPreview extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: s.surface.base,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: t.radius.smR,
         border: Border.all(color: s.stroke.hairline),
         // Something for the blur to find. A frost over a flat fill is
         // indistinguishable from a flat fill.

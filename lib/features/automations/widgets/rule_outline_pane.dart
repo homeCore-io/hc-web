@@ -46,7 +46,7 @@ class RuleOutlinePane extends StatelessWidget {
               margin: const EdgeInsets.only(right: 7),
               decoration: BoxDecoration(
                 color: _clauseColor(clause),
-                borderRadius: BorderRadius.circular(2),
+                borderRadius: t.radius.pillR,
               ),
             ),
             Text(

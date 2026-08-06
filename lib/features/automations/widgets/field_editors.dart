@@ -215,12 +215,12 @@ class FieldEditor extends StatelessWidget {
             );
             if (picked != null) onChanged(picked);
           },
-          borderRadius: BorderRadius.circular(9),
+          borderRadius: t.radius.smR,
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
               color: t.surface.sunken,
-              borderRadius: BorderRadius.circular(9),
+              borderRadius: t.radius.smR,
               border: Border.all(
                 color: missing ? t.accent.danger : t.stroke.hairline,
               ),
@@ -636,14 +636,14 @@ class _StateChoice extends StatelessWidget {
     final accent = t.accent.active;
     return Material(
       color: selected ? accent.withValues(alpha: 0.14) : t.surface.raised,
-      borderRadius: BorderRadius.circular(9),
+      borderRadius: t.radius.smR,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(9),
+        borderRadius: t.radius.smR,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(9),
+            borderRadius: t.radius.smR,
             border: Border.all(
               color: selected ? accent : t.stroke.hairline,
               width: selected ? 1.5 : 1,

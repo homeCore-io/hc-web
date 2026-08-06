@@ -493,7 +493,7 @@ class _DeviceConditionPickerState extends State<DeviceConditionPicker> {
             height: 40,
             decoration: BoxDecoration(
               color: t.accent.active.withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: t.radius.smR,
               border: Border.all(color: t.accent.active.withValues(alpha: 0.3)),
             ),
             child: Icon(e.icon, size: 21, color: t.accent.active),
@@ -762,7 +762,7 @@ class _DeviceConditionPickerState extends State<DeviceConditionPicker> {
             padding: EdgeInsets.all(t.space.md),
             decoration: BoxDecoration(
               color: t.surface.sunken,
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: t.radius.smR,
               border: Border.all(color: t.stroke.hairline),
             ),
             child: Text(note,
@@ -784,9 +784,9 @@ class _DeviceConditionPickerState extends State<DeviceConditionPicker> {
         '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}';
     return Material(
       color: t.surface.sunken,
-      borderRadius: BorderRadius.circular(9),
+      borderRadius: t.radius.smR,
       child: InkWell(
-        borderRadius: BorderRadius.circular(9),
+        borderRadius: t.radius.smR,
         onTap: () async {
           final picked = await showTimePicker(
             context: context,
@@ -800,7 +800,7 @@ class _DeviceConditionPickerState extends State<DeviceConditionPicker> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(9),
+            borderRadius: t.radius.smR,
             border: Border.all(color: t.stroke.hairline),
           ),
           child: Row(children: [
@@ -828,7 +828,7 @@ class _DeviceConditionPickerState extends State<DeviceConditionPicker> {
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
         color: t.surface.sunken,
-        borderRadius: BorderRadius.circular(9),
+        borderRadius: t.radius.smR,
         border: Border.all(color: t.stroke.hairline),
       ),
       child: DropdownButtonHideUnderline(
@@ -852,15 +852,15 @@ class _DeviceConditionPickerState extends State<DeviceConditionPicker> {
     return Expanded(
       child: Material(
         color: on ? ac.withValues(alpha: 0.14) : t.surface.raised,
-        borderRadius: BorderRadius.circular(9),
+        borderRadius: t.radius.smR,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(9),
+          borderRadius: t.radius.smR,
           child: Container(
             padding: const EdgeInsets.symmetric(vertical: 11),
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(9),
+              borderRadius: t.radius.smR,
               border: Border.all(
                   color: on ? ac.withValues(alpha: 0.4) : t.stroke.hairline),
             ),
@@ -883,7 +883,7 @@ class _DeviceConditionPickerState extends State<DeviceConditionPicker> {
           padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 2),
           decoration: BoxDecoration(
             color: c.withValues(alpha: 0.14),
-            borderRadius: BorderRadius.circular(7),
+            borderRadius: t.radius.xsR,
             border: Border.all(color: c.withValues(alpha: 0.32)),
           ),
           child: Text(s,
@@ -965,7 +965,7 @@ class _DeviceConditionPickerState extends State<DeviceConditionPicker> {
       padding: EdgeInsets.all(t.space.md),
       decoration: BoxDecoration(
         color: t.surface.sunken,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: t.radius.smR,
         border: Border.all(color: t.stroke.hairline),
       ),
       child: Column(

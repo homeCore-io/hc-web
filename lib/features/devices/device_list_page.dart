@@ -274,10 +274,10 @@ class _ScopePill extends ConsumerWidget {
 
     return Material(
       color: t.accent.active.withValues(alpha: 0.12),
-      borderRadius: BorderRadius.circular(t.radius.pill),
+      borderRadius: t.radius.pillR,
       child: InkWell(
         onTap: onClear,
-        borderRadius: BorderRadius.circular(t.radius.pill),
+        borderRadius: t.radius.pillR,
         child: Padding(
           padding: EdgeInsets.symmetric(
               horizontal: t.space.md, vertical: t.space.xs + 2),
@@ -314,7 +314,7 @@ class _Controls extends ConsumerWidget {
             padding: EdgeInsets.symmetric(horizontal: t.space.md),
             decoration: BoxDecoration(
               color: t.surface.sunken,
-              borderRadius: BorderRadius.circular(t.radius.pill),
+              borderRadius: t.radius.pillR,
               border: Border.all(color: t.stroke.hairline),
             ),
             child: Row(
@@ -419,7 +419,7 @@ class _Menu<T> extends StatelessWidget {
         height: 40,
         padding: EdgeInsets.symmetric(horizontal: t.space.md),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(t.radius.pill),
+          borderRadius: t.radius.pillR,
           border: Border.all(color: t.stroke.hairline),
         ),
         child: Row(
@@ -516,7 +516,7 @@ class _Chip extends StatelessWidget {
         padding: EdgeInsets.symmetric(
             horizontal: t.space.md - 2, vertical: t.space.xs + 1),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(t.radius.pill),
+          borderRadius: t.radius.pillR,
           border: Border.all(
             color: selected
                 ? accent
