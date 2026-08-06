@@ -504,6 +504,27 @@ ThemeData hcTheme(HcSkin skin, {bool reduceMotion = false}) {
     visualDensity: t.density.rowHeight < 40
         ? VisualDensity.compact
         : VisualDensity.standard,
+
+    // `minTapTarget` had never reached a widget. It was declared by all four
+    // skins — 44, 56, 32, 48 — read by none of them, and every icon button in
+    // every skin rendered at Material's default 48. So Ambient Glass, the skin
+    // whose entire reason for existing is a panel read and pressed from across
+    // a room, asked for 56 and got the same 48 as the admin portal. The same
+    // story as the type sizes: a dimension the skin was allowed to have an
+    // opinion about, and no way for that opinion to arrive.
+    //
+    // `padded` is Material's own floor and it clamps *up* to 48, which is why
+    // it had to go for the skins that want less. The tap target is the token's
+    // now, in both directions.
+    materialTapTargetSize: t.density.minTapTarget >= 48
+        ? MaterialTapTargetSize.padded
+        : MaterialTapTargetSize.shrinkWrap,
+    iconButtonTheme: IconButtonThemeData(
+      style: ButtonStyle(
+        minimumSize:
+            WidgetStatePropertyAll(Size.square(t.density.minTapTarget)),
+      ),
+    ),
     cardTheme: CardThemeData(
       color: t.surface.raised,
       elevation: 0,

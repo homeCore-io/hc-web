@@ -170,6 +170,61 @@ void main() {
     });
   });
 
+  group('tap targets', () {
+    testWidgets('every skin gets the target size it asks for', (tester) async {
+      // `minTapTarget` was declared by all four skins and read by none of them.
+      // Every icon button in every skin rendered at Material's default 48 — so
+      // Ambient Glass, the skin whose whole reason for existing is a panel
+      // pressed from across a room, asked for 56 and got the same 48 as the
+      // admin portal. The same shape as the type sizes: a dimension the skin
+      // was allowed an opinion about, with no way for the opinion to arrive.
+      for (final skin in HcSkin.values) {
+        await tester.pumpWidget(_host(
+          skin,
+          Scaffold(
+            body: IconButton(onPressed: () {}, icon: const Icon(Icons.add)),
+          ),
+        ));
+        // Settle, or every skin measures as the first one — MaterialApp
+        // cross-fades themes and the size is read mid-transition.
+        await tester.pumpAndSettle();
+
+        final t = skin.tokens;
+        final size = tester.getSize(find.byType(IconButton));
+        expect(size.height, greaterThanOrEqualTo(t.density.minTapTarget),
+            reason: '${skin.name} asks for ${t.density.minTapTarget} and '
+                'renders ${size.height}');
+        expect(size.width, greaterThanOrEqualTo(t.density.minTapTarget),
+            reason: skin.name);
+      }
+    });
+
+    testWidgets('nothing falls under the 24px floor, even when compacted',
+        (tester) async {
+      // `VisualDensity.compact` appears on 17 widgets, and on a skin whose
+      // theme is already compact — Control Room, whose rows are 34 high — the
+      // two compound. That is the smallest interactive thing in the app, so it
+      // is the one worth pinning: WCAG 2.5.8 puts the floor at 24x24.
+      for (final skin in HcSkin.values) {
+        await tester.pumpWidget(_host(
+          skin,
+          Scaffold(
+            body: IconButton(
+              visualDensity: VisualDensity.compact,
+              onPressed: () {},
+              icon: const Icon(Icons.add),
+            ),
+          ),
+        ));
+        await tester.pumpAndSettle();
+        final size = tester.getSize(find.byType(IconButton));
+        expect(size.shortestSide, greaterThanOrEqualTo(24.0),
+            reason: '${skin.name} compacts a target to ${size.shortestSide}, '
+                'under the WCAG 2.5.8 floor');
+      }
+    });
+  });
+
   group('loading states', () {
     // The skeletons carried their own shimmer for a while: a second animation
     // controller, colours read off `colorScheme` rather than the tokens, and a
