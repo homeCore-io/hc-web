@@ -242,6 +242,7 @@ class _UserDetail extends ConsumerWidget {
                   onPressed: () => _deleteUser(context, ref),
                 ),
               IconButton(
+                tooltip: 'Close',
                 icon: Icon(Icons.close, color: t.surface.onBaseMuted),
                 onPressed: () => Navigator.of(context).pop(),
               ),

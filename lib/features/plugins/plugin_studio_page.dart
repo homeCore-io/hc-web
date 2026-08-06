@@ -1622,6 +1622,7 @@ class _SecretInputState extends State<_SecretInput> {
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
             suffixIcon: IconButton(
+                tooltip: 'Show or hide this secret',
                 icon: Icon(
                     _reveal
                         ? Icons.visibility_off_rounded

@@ -98,7 +98,7 @@ const _midnight = HcTokens(
     success: Color(0xFF6FD1A6),
     warn: Color(0xFFFFC978),
     danger: Color(0xFFFF7B72),
-    offline: Color(0xFF7A4A50),
+    offline: Color(0xFFAA737A),
   ),
   stroke: HcStroke(
     hairline: Color(0xFF262D38),
@@ -195,7 +195,7 @@ const _ambientGlass = HcTokens(
     success: Color(0xFF5FD6A2),
     warn: Color(0xFFFFC978),
     danger: Color(0xFFFF7B72),
-    offline: Color(0xFF6B4A52),
+    offline: Color(0xFFA07680),
   ),
   stroke: HcStroke(
     hairline: Color(0x1FFFFFFF),
@@ -273,7 +273,7 @@ const _controlRoom = HcTokens(
     success: Color(0xFF34D399),
     warn: Color(0xFFFBBF24),
     danger: Color(0xFFF87171),
-    offline: Color(0xFF7F3F46),
+    offline: Color(0xFFB3666E),
   ),
   stroke: HcStroke(
     hairline: Color(0xFF1E2126),
@@ -345,13 +345,20 @@ const _softHome = HcTokens(
   ),
   accent: HcAccents(
     primary: Color(0xFFC2603F),
-    onPrimary: Color(0xFFFFFFFF),
+    // Dark ink, not white. This is the only light skin, so it is the only one
+    // whose fills are light enough that white text fails on them: white on the
+    // amber `active` — which every primary button and every TextButton label
+    // uses — measured 2.16:1, under even the large-text bar. The same ink as
+    // `onBase` gives 7.57:1. The dark skins keep their near-black ink at 10.8:1
+    // and are untouched; an ink that works is a property of the ground it sits
+    // on, which is why it is per skin rather than an `if`.
+    onPrimary: Color(0xFF241F1A),
     active: Color(0xFFE8A33D),
     inactive: Color(0xFFD8D0C6),
     success: Color(0xFF5E9E7A),
     warn: Color(0xFFD9913A),
     danger: Color(0xFFC0524B),
-    offline: Color(0xFFB59A9C),
+    offline: Color(0xFF936C6F),
   ),
   stroke: HcStroke(
     hairline: Color(0xFFE2DACE),

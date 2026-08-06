@@ -625,7 +625,7 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
             FilledButton(
               style: FilledButton.styleFrom(
                   backgroundColor: t.accent.active,
-                  foregroundColor: t.surface.base),
+                  foregroundColor: t.accent.onPrimary),
               onPressed: () => Navigator.pop(ctx, c.text.trim()),
               child: const Text('Add'),
             ),
@@ -754,6 +754,7 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
                   ),
                 ),
                 IconButton(
+                  tooltip: 'Remove this entry',
                   icon:
                       Icon(Icons.close, size: 18, color: t.surface.onBaseMuted),
                   onPressed: () {
@@ -1570,7 +1571,7 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
         FilledButton(
           style: FilledButton.styleFrom(
               backgroundColor: t.accent.active,
-              foregroundColor: t.surface.base,
+              foregroundColor: t.accent.onPrimary,
               disabledBackgroundColor: t.stroke.hairline,
               disabledForegroundColor: t.surface.onBaseMuted),
           onPressed: widget.saving || blocked

@@ -117,7 +117,12 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     onPressed: loading ? null : _submit,
                     style: FilledButton.styleFrom(
                       backgroundColor: t.accent.active,
-                      foregroundColor: t.surface.base,
+                      // `onPrimary`, not `base`. Both read as "the dark colour"
+                      // on the three dark skins, which is why this was written
+                      // that way — but Soft Home's base is near-white sand, so
+                      // the label came out at 2.1:1 on the amber fill. Ink for a
+                      // fill is what onPrimary is for.
+                      foregroundColor: t.accent.onPrimary,
                       padding: EdgeInsets.symmetric(vertical: t.space.md),
                       shape: RoundedRectangleBorder(
                         borderRadius: t.radius.mdR,
@@ -129,7 +134,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                             width: 16,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
-                              color: t.surface.base,
+                              color: t.accent.onPrimary,
                             ),
                           )
                         : const Text('Sign in'),

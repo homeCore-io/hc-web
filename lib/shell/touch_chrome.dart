@@ -79,6 +79,7 @@ class TouchChrome extends ConsumerWidget {
           const LiveDot(),
           SizedBox(width: t.space.sm),
           IconButton(
+            tooltip: 'Sign out',
             icon: const Icon(Icons.logout),
             onPressed: () => ref.read(authProvider.notifier).logout(),
           ),

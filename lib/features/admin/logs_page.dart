@@ -197,6 +197,7 @@ class _ServerLogsPageState extends ConsumerState<_ServerLogsPage> {
                         borderSide: BorderSide(color: t.accent.active)),
                     suffixIcon: _moduleFilterCtrl.text.isNotEmpty
                         ? IconButton(
+                            tooltip: 'Clear the module filter',
                             icon: Icon(Icons.clear,
                                 size: 14, color: t.surface.onBaseMuted),
                             onPressed: () => _moduleFilterCtrl.clear(),

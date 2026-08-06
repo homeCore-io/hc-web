@@ -28,6 +28,7 @@ class DeviceHistoryPage extends ConsumerWidget {
         title: Text('History: $deviceId'),
         actions: [
           IconButton(
+            tooltip: 'Reload history',
             icon: const Icon(Icons.refresh),
             onPressed: () => ref.invalidate(_historyProvider(deviceId)),
           ),

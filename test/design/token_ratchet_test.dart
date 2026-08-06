@@ -1,6 +1,9 @@
 import 'dart:io';
+import 'dart:math' as math;
 
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hc_web/design/skins.dart';
 
 /// The app takes its values from the tokens. This is what keeps it there.
 ///
@@ -152,5 +155,82 @@ void main() {
             '  ${offenders.join('\n  ')}\n'
             'Use t.radius.xsR / smR / mdR / lgR / pillR — and pillR for a thin '
             'bar, which clamps to half its shorter side.');
+  });
+
+  test('text colours clear WCAG AA against the surfaces they sit on', () {
+    // Computed from the tokens, so a palette edit cannot quietly undo this.
+    // Two of these were real and shipped: "Offline" was the faintest text in
+    // every skin at 2.3-2.6:1 — the fault state, least readable — and Soft
+    // Home wrote white on its amber `active` fill at 2.16:1, which is every
+    // primary button and every TextButton label in the one light skin.
+    //
+    // The bar is 4.5 rather than 3.0 because the ramp runs 10-26px and the
+    // scale takes the small end to 9.2px: almost none of this app is large
+    // text by WCAG's definition.
+    double lum(int argb) {
+      double ch(int c) {
+        final s = c / 255;
+        return s <= 0.04045
+            ? s / 12.92
+            : math.pow((s + 0.055) / 1.055, 2.4).toDouble();
+      }
+
+      return 0.2126 * ch((argb >> 16) & 0xFF) +
+          0.7152 * ch((argb >> 8) & 0xFF) +
+          0.0722 * ch(argb & 0xFF);
+    }
+
+    double ratio(Color a, Color b) {
+      // ignore: deprecated_member_use
+      final la = lum(a.value), lb = lum(b.value);
+      final hi = la > lb ? la : lb, lo = la > lb ? lb : la;
+      return (hi + 0.05) / (lo + 0.05);
+    }
+
+    // Pairs deferred with their reasons on record, not silently tolerated.
+    // Soft Home's `active` is the skin's signature amber and making it legible
+    // as *text* means either changing that colour or splitting a separate
+    // on-surface token; `onBaseMuted`, `success` and `warn` sit in the same
+    // question. Its `primary` is 3.92 against dark ink and would clear at
+    // #C86F51. See the a11y findings in the design brief's learned notes.
+    const deferred = {
+      'soft_home:active',
+      'soft_home:onBaseMuted',
+      'soft_home:success',
+      'soft_home:warn',
+      'soft_home:primary',
+      'soft_home:onPrimaryOnPrimary'
+    };
+
+    final failures = <String>[];
+    for (final skin in HcSkin.values) {
+      final t = skin.tokens;
+      final n = t.name;
+      void check(String label, Color fg, Color bg) {
+        if (deferred.contains('$n:$label')) return;
+        final r = ratio(fg, bg);
+        if (r < 4.5) failures.add('$n $label ${r.toStringAsFixed(2)}');
+      }
+
+      for (final (label, fg) in [
+        ('onBase', t.surface.onBase),
+        ('onBaseMuted', t.surface.onBaseMuted),
+        ('active', t.accent.active),
+        ('primary', t.accent.primary),
+        ('success', t.accent.success),
+        ('warn', t.accent.warn),
+        ('danger', t.accent.danger),
+        ('offline', t.accent.offline),
+      ]) {
+        check(label, fg, t.surface.raised);
+      }
+      // The ink a filled button writes in, on the fill it writes on.
+      check('onPrimaryOnActive', t.accent.onPrimary, t.accent.active);
+      check('onPrimaryOnPrimary', t.accent.onPrimary, t.accent.primary);
+    }
+
+    expect(failures, isEmpty,
+        reason: 'these text colours are under 4.5:1 on the surface they sit '
+            'on:\n  ${failures.join('\n  ')}');
   });
 }

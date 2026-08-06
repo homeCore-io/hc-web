@@ -729,6 +729,7 @@ class _DashboardEditorPageState extends ConsumerState<DashboardEditorPage> {
                     subtitle: Text(_enumName(widget.type)),
                     trailing: IconButton(
                       onPressed: () => _removeWidget(widget.id),
+                      tooltip: 'Remove this card',
                       icon: const Icon(Icons.delete_outline),
                     ),
                     children: [
@@ -795,6 +796,7 @@ class _PlacementStepper extends StatelessWidget {
         child: Row(
           children: [
             IconButton(
+              tooltip: 'One fewer',
               visualDensity: VisualDensity.compact,
               onPressed: canDecrease ? () => onChanged(value - 1) : null,
               icon: const Icon(Icons.remove),
@@ -806,6 +808,7 @@ class _PlacementStepper extends StatelessWidget {
               ),
             ),
             IconButton(
+              tooltip: 'One more',
               visualDensity: VisualDensity.compact,
               onPressed: canIncrease ? () => onChanged(value + 1) : null,
               icon: const Icon(Icons.add),
