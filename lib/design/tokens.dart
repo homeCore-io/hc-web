@@ -284,8 +284,8 @@ class HcType {
   /// none does.
   const HcType.scaled(
     this.scale, {
-    this.family,
-    this.monoFamily = 'monospace',
+    this.family = 'Inter',
+    this.monoFamily = 'JetBrains Mono',
   })  : display =
             const HcTextRole(size: 26, weight: FontWeight.w700, height: 1.05),
         title =
@@ -300,10 +300,16 @@ class HcType {
         overline = const HcTextRole(
             size: 10, weight: FontWeight.w600, height: 1.2, tracking: 1.1);
 
-  /// `null` leaves the engine's own face in place. No text typeface is bundled
-  /// yet; when one is, this is the only place that needs to know.
+  /// The text face. `null` falls back to whatever the engine has, which is what
+  /// the app ran on before one was bundled — CanvasKit's own Roboto, with glyph
+  /// fallback reaching out to fonts.gstatic.com.
+  ///
+  /// This is the only place that names it. Every size in the app routes through
+  /// [resolve], so changing the face is this line.
   final String? family;
 
+  /// The face for anything read character by character: config, JSON, log
+  /// lines, device ids.
   final String monoFamily;
 
   /// One number that sizes the whole ramp, exactly as `HcSpace.unit` loosens

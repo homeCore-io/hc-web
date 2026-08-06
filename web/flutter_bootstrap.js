@@ -22,8 +22,22 @@
 // or a test — Flutter quietly regenerates the default and the fetch goes back
 // to gstatic — so there is a test that asserts it is still here and still
 // points at us.
+
+// Glyph fallback goes the same way, for the same reason.
+//
+// Bundling Inter and JetBrains Mono covers the text this app writes, but not a
+// codepoint neither face carries — a device name a plugin reports in a script
+// we do not ship, say. CanvasKit's answer is to fetch a fallback font at
+// runtime, and its default base is `https://fonts.gstatic.com/s/`.
+//
+// Nothing is served from `assets/fonts/fallback/` today, so such a glyph
+// renders as tofu: visibly missing, which is the honest outcome and sits better
+// with "stale is a state, and it must be visible" than a glyph that silently
+// depends on the internet. Drop Noto subsets in that directory if real coverage
+// is ever wanted — this already points at them.
 _flutter.loader.load({
   config: {
     canvasKitBaseUrl: "canvaskit/",
+    fontFallbackBaseUrl: "assets/fonts/fallback/",
   },
 });

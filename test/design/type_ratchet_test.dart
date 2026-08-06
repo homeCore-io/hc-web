@@ -59,4 +59,46 @@ void main() {
             'to bend; use t.text.scaled(n) for a real one-off; or add a '
             'documented exception to `allowed` above.');
   });
+
+  test('every weight the app asks for is a weight we ship', () {
+    // Flutter does not fail on a missing weight, it rounds to the nearest one
+    // shipped — so dropping Inter-ExtraBold would not break the build, it would
+    // quietly render the 21 w800 sites at 700, including hc_sensor_chip's chip
+    // label where the extra weight is deliberate and commented.
+    final pubspec = File('pubspec.yaml').readAsStringSync();
+    for (final w in ['400', '500', '600', '700', '800']) {
+      expect(pubspec, contains('weight: $w'),
+          reason: 'Inter is missing weight $w');
+    }
+    for (final f in [
+      'Inter-Regular',
+      'Inter-Medium',
+      'Inter-SemiBold',
+      'Inter-Bold',
+      'Inter-ExtraBold',
+      'JetBrainsMono-Regular',
+      'JetBrainsMono-Medium',
+      'JetBrainsMono-SemiBold',
+    ]) {
+      expect(File('assets/fonts/$f.ttf').existsSync(), isTrue,
+          reason: '$f.ttf is declared or expected but not vendored');
+    }
+    // Vendored, so the licences have to travel with them.
+    for (final l in ['INTER-LICENSE', 'JETBRAINS-MONO-LICENSE']) {
+      expect(File('assets/fonts/$l').existsSync(), isTrue);
+    }
+  });
+
+  test('glyph fallback stays on our own origin', () {
+    // The engine's own base URL is covered by local_first_test.dart, which is
+    // where that story belongs. This is the font half: bundling the two faces
+    // does not stop CanvasKit reaching for a fallback on a codepoint neither of
+    // them carries.
+    final src = File('web/flutter_bootstrap.js').readAsStringSync();
+    final m =
+        RegExp(r'''fontFallbackBaseUrl:\s*["']([^"']*)["']''').firstMatch(src);
+    expect(m, isNotNull, reason: 'fontFallbackBaseUrl is not configured');
+    expect(m!.group(1)!, isNot(contains('://')),
+        reason: 'glyph fallback points off our own origin: ${m.group(1)}');
+  });
 }

@@ -51,3 +51,60 @@ flutter:
     - family: PhosphorFill
       fonts:
         - asset: assets/fonts/Phosphor-Fill.ttf
+
+    # Text, finally. Until now nothing declared a text face at all, so the app
+    # rendered in whatever CanvasKit had — and glyph fallback resolved against
+    # fonts.gstatic.com, which is a request out of a house that is supposed to
+    # work with no route out.
+    #
+    # Inter because ~660 of this app's type sites sit between 11 and 14px, and
+    # the two ends the skin scale creates are a 9.2px tracked overline in
+    # Control Room and body read across a dark room at ~15px in Ambient Glass.
+    # A tall x-height and open apertures are what survive both. It also carries
+    # real `tnum` in every weight — verified, not assumed — which is the whole
+    # mechanism behind `numericFontFeatures` and the reason a ticking
+    # temperature does not reflow the layout.
+    #
+    # Statics rather than InterVariable (860KB, would have covered 100–900 in
+    # one file): 170 sites call `copyWith(fontWeight:)`, which does not drive a
+    # variable `wght` axis, so the weight would have been silently ignored at
+    # every one of them. 2MB of cached TTF against a 4.6MB main.dart.js and a
+    # 7MB canvaskit.wasm is the cheaper mistake to avoid.
+    #
+    # OFL; see assets/fonts/INTER-LICENSE.
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Inter-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Inter-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Inter-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Inter-ExtraBold.ttf
+          weight: 800
+
+    # The 42 monospace sites — config editors, JSON, log tails, device IDs —
+    # were asking for `'monospace'` and getting whatever the browser called
+    # that, which is a different face on the phone than on the wall panel.
+    #
+    # The NL cut, with no code ligatures: these are log lines and device IDs
+    # read for their exact characters, and `->` quietly becoming an arrow is the
+    # wrong favour in a tool you reach for when something is wrong. Weights are
+    # the three the mono roles actually request (400 body/bodySmall, 500
+    # caption, 600 subtitle/title).
+    #
+    # It carries no `tnum`, which is correct rather than missing: a monospaced
+    # face has fixed-advance digits by construction, so tabularFigures() is a
+    # no-op there.
+    #
+    # OFL; see assets/fonts/JETBRAINS-MONO-LICENSE.
+    - family: JetBrains Mono
+      fonts:
+        - asset: assets/fonts/JetBrainsMono-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/JetBrainsMono-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/JetBrainsMono-SemiBold.ttf
+          weight: 600

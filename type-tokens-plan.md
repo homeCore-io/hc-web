@@ -164,23 +164,54 @@ so much as absent. 0.92 is the floor where the ramp still reads.
 
 ---
 
-## 3. Decision needed: the typeface
+## 3. The typeface — settled 2026-08-06
 
-This is the one part I should not pick unilaterally.
+**Inter for text, JetBrains Mono (NL) for the 42 monospace sites.** Vendored
+into `assets/fonts/`, OFL, declared in `pubspec.yaml`.
 
-- **Do nothing** — `family: null`, keep the engine default. Costs nothing,
-  changes nothing, leaves the gstatic fallback in place and leaves the wall
-  reading in Roboto.
-- **Bundle one face** — ~100–300KB depending on weights shipped. Fixes the
-  offline fallback, and lets the wall be given a face chosen for distance
-  (open apertures, tall x-height) rather than inherited.
-- **Bundle two** — a text face plus a real mono for the 42 monospace sites,
-  which currently resolve to whatever the browser calls `monospace` and so
-  differ between the phone and the panel.
+Inter because ~660 of this app's type sites sit between 11 and 14px, and the
+scale puts the two extremes at a 9.2px tracked overline (Control Room) and body
+read across a dark room at ~15px (Ambient Glass). A tall x-height and open
+apertures survive both. It also ships `tnum` in every weight — checked against
+the GSUB feature list, not assumed — which is the mechanism `numericFontFeatures`
+depends on in 81 places and the reason a ticking temperature does not reflow the
+layout.
 
-I would ship one text face plus one mono, and set `fontFallbackBaseUrl` to a
-self-hosted path so nothing reaches out. But it is a size-versus-fidelity call
-on a bundle that already carries CanvasKit, so it is yours.
+Weight coverage decided it against the alternative. The app uses w400–w800, and
+IBM Plex tops out at 700: it would have synthesised the 21 w800 sites, including
+`hc_sensor_chip`'s chip label where the weight is deliberate and commented.
+
+Statics, not `InterVariable` (860KB, all weights in one file). 170 sites call
+`copyWith(fontWeight:)`, which does not drive a variable `wght` axis — the
+weight would have been silently ignored at every one of them. 2MB of cached TTF
+against a 4.6MB `main.dart.js` and a 7MB `canvaskit.wasm` is the cheaper mistake
+to avoid.
+
+The mono is the no-ligature cut. These are log lines and device ids read for
+their exact characters; `->` quietly becoming an arrow is the wrong favour in a
+tool you open when something is already wrong. It carries no `tnum`, which is
+correct rather than missing — a monospaced face has fixed-advance digits by
+construction.
+
+### What bundling did *not* fix on its own
+
+Measuring the page's requests afterwards — rather than assuming — turned up a
+larger hole one layer down. The default loader ignores the CanvasKit that
+`flutter build web` puts in `build/web/canvaskit/` and fetches
+`https://www.gstatic.com/flutter-canvaskit/<hash>/chromium/canvaskit.wasm`
+instead: **7MB from Google before the app draws anything**. A house with its
+internet down got a blank page, and had done since the first build. Nothing
+surfaced it, because any machine that can reach the house can usually also reach
+Google, and the local copy shipping in the image made it look handled.
+
+`web/flutter_bootstrap.js` now sets both `canvasKitBaseUrl` and
+`fontFallbackBaseUrl` to our own origin. Measured after: **27 requests, zero
+external hosts.**
+
+Nothing is served from `assets/fonts/fallback/` yet, so a codepoint neither face
+carries renders as tofu — visibly missing, which is the honest outcome and beats
+a glyph that silently depends on the internet. Drop Noto subsets there if real
+coverage is ever wanted; the config already points at it.
 
 ---
 
