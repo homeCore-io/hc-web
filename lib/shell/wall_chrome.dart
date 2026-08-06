@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 
 import '../core/providers/events_provider.dart';
 import '../design/tokens.dart';
+import 'command_failure_banner.dart';
 import 'session_status.dart';
 
 /// True while the UI is running as a wall panel.
@@ -144,6 +145,12 @@ class _WallChromeState extends ConsumerState<WallChrome> {
                 child: Column(
                   children: [
                     _statusBar(context, t),
+                    // Under the status bar, which already says whether the
+                    // socket is up. This says whether the house took the last
+                    // instruction — the same question about writes rather than
+                    // reads, and the one a panel nobody is watching most needs
+                    // to still be saying two minutes later.
+                    const CommandFailureBanner(),
                     Expanded(child: widget.child),
                   ],
                 ),

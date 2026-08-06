@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../api/devices_api.dart';
 import '../models/device_state.dart';
 import 'auth_provider.dart';
+import 'command_failure_provider.dart';
 import 'events_provider.dart';
 
 final devicesApiProvider = Provider<DevicesApi>((ref) {
@@ -106,18 +107,82 @@ class DevicesNotifier extends AsyncNotifier<List<DeviceState>> {
   /// Sends a command, and applies it optimistically.
   ///
   /// The tile must move the instant you touch it — waiting for the round trip
-  /// through MQTT and back makes a light switch feel broken. If core rejects it,
-  /// the next WS frame corrects us.
+  /// through MQTT and back makes a light switch feel broken. If core *rejects*
+  /// it, the next WS frame corrects us.
+  ///
+  /// If the send never lands, nothing corrects us. The two things that break
+  /// the request — core down, network down — are the same two that stop the
+  /// frame arriving, so the moment the optimistic state most needs correcting
+  /// is the moment nothing is coming to correct it. That left the tile saying a
+  /// light was on until someone reloaded the page, which is the exact shape of
+  /// thing the brief means by *stale is a state, and it must be visible*.
+  ///
+  /// So a failed send is put back and said out loud. Nothing is rethrown:
+  /// all 41 call sites are `onPressed: () => notifier.command(...)`, so a throw
+  /// here is an unhandled Future, and this app installs no zone guard.
   Future<void> command(String id, Map<String, dynamic> patch) async {
     final current = state.value ?? [];
+    DeviceState? before;
+    for (final d in current) {
+      if (d.id == id) before = d;
+    }
+
+    // Held so the rollback can recognise its own work. See [_revert].
+    DeviceState? optimistic;
     state = AsyncData([
       for (final d in current)
         if (d.id == id)
-          d.copyWith(state: Map<String, dynamic>.from(d.state)..addAll(patch))
+          optimistic = d.copyWith(
+              state: Map<String, dynamic>.from(d.state)..addAll(patch))
         else
           d,
     ]);
-    await ref.read(devicesApiProvider).setDeviceState(id, patch);
+
+    try {
+      await ref.read(devicesApiProvider).setDeviceState(id, patch);
+      ref.read(commandFailureProvider.notifier).clear();
+    } catch (e) {
+      _revert(id, optimistic, before);
+      ref.read(commandFailureProvider.notifier).report(CommandFailure(
+            deviceId: id,
+            deviceName: before?.displayName ?? id,
+            error: e,
+            at: DateTime.now(),
+          ));
+    }
+  }
+
+  /// Undoes an optimistic patch — but only if nothing has touched the device
+  /// since we applied it.
+  ///
+  /// A WS frame can land while the doomed request is still in flight, and that
+  /// frame is the truth: someone flipped the physical switch, and the light
+  /// really is on now. Undoing to a pre-command snapshot would replace a real
+  /// reading with an older one — the same lie, pointed the other way.
+  ///
+  /// Telling those apart needs *identity*, not equality. Comparing values
+  /// cannot distinguish "nobody has changed this" from "somebody set it to the
+  /// same value I did", and the second is precisely the mid-flight case: our
+  /// optimistic `on: true` and core's real `on: true` are indistinguishable by
+  /// value. Every update in this notifier goes through `copyWith`, which mints
+  /// a new object, so an unchanged device is still the exact instance we put
+  /// there and a changed one never is.
+  ///
+  /// Erring toward leaving it alone is the right bias anyway: whatever replaced
+  /// our object came from somewhere more current than our snapshot.
+  void _revert(String id, DeviceState? optimistic, DeviceState? before) {
+    if (optimistic == null || before == null) return;
+    final now = state.value ?? [];
+    var untouched = false;
+    for (final d in now) {
+      if (d.id == id && identical(d, optimistic)) untouched = true;
+    }
+    if (!untouched) return;
+
+    state = AsyncData([
+      for (final d in now)
+        if (d.id == id) before else d,
+    ]);
   }
 
   Future<void> updateDevice(String id, Map<String, dynamic> body) async {
