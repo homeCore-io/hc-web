@@ -147,18 +147,17 @@ class _ActionDrawerState extends State<ActionDrawer> {
       contentPadding: EdgeInsets.zero,
       leading: Icon(statusIcon, size: 16, color: statusColor),
       title: Text(title,
-          style: TextStyle(fontSize: 13.5, color: t.surface.onBase)),
+          style: t.text.bodyStyle.copyWith(color: t.surface.onBase)),
       subtitle: subtitle == null
           ? null
           : Text(subtitle,
-              style: TextStyle(fontSize: 12, color: t.surface.onBaseMuted)),
+              style:
+                  t.text.bodySmallStyle.copyWith(color: t.surface.onBaseMuted)),
       trailing: status == null
           ? null
           : Text(humanize(status),
-              style: TextStyle(
-                  color: statusColor,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600)),
+              style: t.text.bodySmallStyle
+                  .copyWith(color: statusColor, fontWeight: FontWeight.w600)),
     );
   }
 
@@ -220,7 +219,7 @@ class _ActionDrawerState extends State<ActionDrawer> {
             Padding(
               padding: EdgeInsets.only(bottom: t.space.sm),
               child: Text(msg,
-                  style: TextStyle(fontSize: 13, color: t.surface.onBase)),
+                  style: t.text.bodyStyle.copyWith(color: t.surface.onBase)),
             ),
           for (final w in _warnings)
             Padding(
@@ -231,8 +230,8 @@ class _ActionDrawerState extends State<ActionDrawer> {
                   SizedBox(width: t.space.sm),
                   Expanded(
                     child: Text(w,
-                        style: TextStyle(
-                            fontSize: 12, color: t.surface.onBaseMuted)),
+                        style: t.text.bodySmallStyle
+                            .copyWith(color: t.surface.onBaseMuted)),
                   ),
                 ],
               ),
@@ -271,11 +270,8 @@ class _ActionDrawerState extends State<ActionDrawer> {
           Expanded(
             child: Text(
               message,
-              style: TextStyle(
-                fontSize: 13,
-                color: t.accent.active,
-                fontWeight: FontWeight.w600,
-              ),
+              style: t.text.bodyStyle.copyWith(
+                  color: t.accent.active, fontWeight: FontWeight.w600),
             ),
           ),
         ],

@@ -277,6 +277,15 @@ void main() {
         scrollable: find.descendant(
             of: find.byType(PickerRail), matching: find.byType(Scrollable)),
       );
+      // `scrollUntilVisible` stops the moment the finder matches, and a widget
+      // can match while it is still half under the panel's edge — so the tap
+      // then lands on whatever is painted over it. That made this test fail
+      // twice for reasons that had nothing to do with the picker: any change to
+      // type metrics moves the row a few pixels and the scroll stops somewhere
+      // else. `ensureVisible` asks for the thing to be properly on screen,
+      // which is what the test means by "reaches".
+      await tester.ensureVisible(find.text('Waiting'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Waiting'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Wait a while'));

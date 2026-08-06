@@ -93,7 +93,8 @@ class _HomePageState extends ConsumerState<HomePage> {
                   style: TextStyle(color: t.surface.onBase)),
               SizedBox(height: t.space.xs),
               Text('$e',
-                  style: TextStyle(color: t.surface.onBaseMuted, fontSize: 12)),
+                  style: t.text.bodySmallStyle
+                      .copyWith(color: t.surface.onBaseMuted)),
             ],
           ),
         ),
@@ -228,7 +229,8 @@ class _ArrangeBar extends StatelessWidget {
             Expanded(
               child: Text(
                 'Drag a room to reorder it. Hide one with the eye.',
-                style: TextStyle(fontSize: 12.5, color: t.surface.onBaseMuted),
+                style: t.text.bodySmallStyle
+                    .copyWith(color: t.surface.onBaseMuted),
               ),
             ),
             TextButton(
@@ -423,11 +425,8 @@ class _HouseState extends ConsumerState<_House> {
           alignment: Alignment.center,
           child: active
               ? Text('Drop in this column',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: t.accent.active,
-                  ))
+                  style: t.text.bodySmallStyle.copyWith(
+                      fontWeight: FontWeight.w600, color: t.accent.active))
               : null,
         );
       },
@@ -793,12 +792,10 @@ class _AttentionCard extends StatelessWidget {
                 problems.length == 1
                     ? '1 thing needs you'
                     : '${problems.length} things need you',
-                style: TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w600,
-                  color: t.accent.warn,
-                  fontFeatures: t.numericFontFeatures,
-                ),
+                style: t.text.bodySmallStyle.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: t.accent.warn,
+                    fontFeatures: t.numericFontFeatures),
               ),
             ],
           ),
@@ -865,17 +862,14 @@ class _AttentionChip extends StatelessWidget {
                 problem.device.displayName,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w600,
-                    color: t.surface.onBase),
+                style: t.text.bodySmallStyle.copyWith(
+                    fontWeight: FontWeight.w600, color: t.surface.onBase),
               ),
             ),
             SizedBox(width: t.space.sm),
             Text(
               problem.reason,
-              style: TextStyle(
-                  fontSize: 11.5,
+              style: t.text.captionStyle.copyWith(
                   color: t.surface.onBaseMuted,
                   fontFeatures: t.numericFontFeatures),
             ),
@@ -910,11 +904,10 @@ class _HouseHeader extends ConsumerWidget {
         Text(
           'Home',
           style: TextStyle(
-            fontSize: 30,
-            fontWeight: FontWeight.w700,
-            letterSpacing: -0.8,
-            color: t.surface.onBase,
-          ),
+              fontSize: t.text.scaled(30),
+              fontWeight: FontWeight.w700,
+              letterSpacing: -0.8,
+              color: t.surface.onBase),
         ),
         SizedBox(height: t.space.xs),
         Wrap(
@@ -985,11 +978,9 @@ class _ActiveSortToggle extends ConsumerWidget {
               SizedBox(width: t.space.xs),
               Text(
                 on ? 'Active first' : 'A–Z',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: on ? FontWeight.w600 : FontWeight.w400,
-                  color: on ? t.accent.active : t.surface.onBaseMuted,
-                ),
+                style: t.text.bodyStyle.copyWith(
+                    fontWeight: on ? FontWeight.w600 : FontWeight.w400,
+                    color: on ? t.accent.active : t.surface.onBaseMuted),
               ),
             ],
           ),
@@ -1020,12 +1011,10 @@ class _Stat extends StatelessWidget {
             : t.surface.onBaseMuted;
     return Text(
       label,
-      style: TextStyle(
-        fontSize: 13,
-        fontWeight: lit || warn ? FontWeight.w600 : FontWeight.w400,
-        color: colour,
-        fontFeatures: t.numericFontFeatures,
-      ),
+      style: t.text.bodyStyle.copyWith(
+          fontWeight: lit || warn ? FontWeight.w600 : FontWeight.w400,
+          color: colour,
+          fontFeatures: t.numericFontFeatures),
     );
   }
 }
@@ -1104,21 +1093,17 @@ class _NeedsAttentionSheet extends StatelessWidget {
                               p.device.displayName,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                                color: t.surface.onBase,
-                              ),
+                              style: t.text.subtitleStyle.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  color: t.surface.onBase),
                             ),
                             Text(
                               area.isEmpty ? p.reason : '$area · ${p.reason}',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: colour,
-                                fontFeatures: t.numericFontFeatures,
-                              ),
+                              style: t.text.bodySmallStyle.copyWith(
+                                  color: colour,
+                                  fontFeatures: t.numericFontFeatures),
                             ),
                           ],
                         ),
@@ -1282,12 +1267,10 @@ class _Room extends StatelessWidget {
                           humanize(room.key),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 13.5,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 0.1,
-                            color: t.surface.onBase,
-                          ),
+                          style: t.text.bodyStyle.copyWith(
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.1,
+                              color: t.surface.onBase),
                         ),
                       ),
                       if (onRename != null)
@@ -1310,11 +1293,9 @@ class _Room extends StatelessWidget {
                             behavior: HitTestBehavior.opaque,
                             child: Text(
                               'Assign rooms',
-                              style: TextStyle(
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w600,
-                                color: t.accent.primary,
-                              ),
+                              style: t.text.captionStyle.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  color: t.accent.primary),
                             ),
                           ),
                         ),
@@ -1326,19 +1307,16 @@ class _Room extends StatelessWidget {
                       // away without losing.
                       if (summary case final extra?) ...[
                         Text(extra.text,
-                            style: TextStyle(
-                              fontSize: 11.5,
-                              fontWeight: extra.warn
-                                  ? FontWeight.w600
-                                  : FontWeight.w400,
-                              color: extra.warn
-                                  ? t.accent.warn
-                                  : t.surface.onBaseMuted,
-                              fontFeatures: t.numericFontFeatures,
-                            )),
+                            style: t.text.captionStyle.copyWith(
+                                fontWeight: extra.warn
+                                    ? FontWeight.w600
+                                    : FontWeight.w400,
+                                color: extra.warn
+                                    ? t.accent.warn
+                                    : t.surface.onBaseMuted,
+                                fontFeatures: t.numericFontFeatures)),
                         Text(' · ',
-                            style: TextStyle(
-                                fontSize: 11.5,
+                            style: t.text.captionStyle.copyWith(
                                 color: t.surface.onBaseMuted
                                     .withValues(alpha: 0.5))),
                       ],
@@ -1356,22 +1334,18 @@ class _Room extends StatelessWidget {
                             ),
                             TextSpan(text: ' of ${controls.length} on'),
                           ]),
-                          style: TextStyle(
-                            fontSize: 11.5,
-                            color: t.surface.onBaseMuted,
-                            fontFeatures: t.numericFontFeatures,
-                          ),
+                          style: t.text.captionStyle.copyWith(
+                              color: t.surface.onBaseMuted,
+                              fontFeatures: t.numericFontFeatures),
                         )
                       else
                         Text(
                           room.devices.length == 1
                               ? '1 device'
                               : '${room.devices.length} devices',
-                          style: TextStyle(
-                            fontSize: 11.5,
-                            color: t.surface.onBaseMuted,
-                            fontFeatures: t.numericFontFeatures,
-                          ),
+                          style: t.text.captionStyle.copyWith(
+                              color: t.surface.onBaseMuted,
+                              fontFeatures: t.numericFontFeatures),
                         ),
                     ],
                   ),
@@ -1426,12 +1400,10 @@ class _Room extends StatelessWidget {
                     children: [
                       Text(
                         'SCENES',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 1.3,
-                          color: t.surface.onBaseMuted,
-                        ),
+                        style: t.text.overlineStyle.copyWith(
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 1.3,
+                            color: t.surface.onBaseMuted),
                       ),
                       SizedBox(height: t.space.sm),
                       _SceneChips(scenes: scenes, onActivate: onActivate),
@@ -1489,8 +1461,8 @@ class _RemotesFoldState extends State<_RemotesFold> {
                 SizedBox(width: t.space.sm),
                 Text(
                   n == 1 ? '1 remote or keypad' : '$n remotes & keypads',
-                  style:
-                      TextStyle(fontSize: 12.5, color: t.surface.onBaseMuted),
+                  style: t.text.bodySmallStyle
+                      .copyWith(color: t.surface.onBaseMuted),
                 ),
               ],
             ),
@@ -1576,11 +1548,8 @@ class _MoreChip extends StatelessWidget {
         ),
         child: Text(
           label,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: t.surface.onBaseMuted,
-          ),
+          style: t.text.bodySmallStyle.copyWith(
+              fontWeight: FontWeight.w600, color: t.surface.onBaseMuted),
         ),
       ),
     );
@@ -1617,7 +1586,7 @@ class _SceneChip extends StatelessWidget {
             SizedBox(width: t.space.xs),
             Text(
               scene.displayName,
-              style: TextStyle(fontSize: 12, color: t.surface.onBase),
+              style: t.text.bodySmallStyle.copyWith(color: t.surface.onBase),
             ),
           ],
         ),
@@ -1667,11 +1636,8 @@ class _DragChip extends StatelessWidget {
             SizedBox(width: t.space.sm),
             Text(
               label,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-                color: t.surface.onBase,
-              ),
+              style: t.text.subtitleStyle.copyWith(
+                  fontWeight: FontWeight.w700, color: t.surface.onBase),
             ),
           ],
         ),
@@ -1731,20 +1697,15 @@ class _ArrangeRow extends StatelessWidget {
               Expanded(
                 child: Text(
                   label,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: t.surface.onBase,
-                  ),
+                  style: t.text.subtitleStyle.copyWith(
+                      fontWeight: FontWeight.w600, color: t.surface.onBase),
                 ),
               ),
               Text(
                 detail ?? (count == 1 ? '1 device' : '$count devices'),
-                style: TextStyle(
-                  fontSize: 12,
-                  color: t.surface.onBaseMuted,
-                  fontFeatures: t.numericFontFeatures,
-                ),
+                style: t.text.bodySmallStyle.copyWith(
+                    color: t.surface.onBaseMuted,
+                    fontFeatures: t.numericFontFeatures),
               ),
               SizedBox(width: t.space.sm),
               HcIconButton(

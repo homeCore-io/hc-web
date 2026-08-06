@@ -78,12 +78,10 @@ class HomeCameraCard extends ConsumerWidget {
                       Expanded(
                         child: Text(camera.name,
                             overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 13.5,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: 0.1,
-                              color: t.surface.onBase,
-                            )),
+                            style: t.text.bodyStyle.copyWith(
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.1,
+                                color: t.surface.onBase)),
                       ),
                       // The resize: hero ⇄ compact. A single tap toggles it and
                       // saves, so the size you set is the size you come back to.

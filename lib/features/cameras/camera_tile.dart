@@ -73,12 +73,12 @@ class CameraTile extends StatelessWidget {
                     name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                      shadows: [Shadow(color: Colors.black87, blurRadius: 4)],
-                    ),
+                    style: t.text.bodySmallStyle.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                        shadows: const [
+                          Shadow(color: Colors.black87, blurRadius: 4)
+                        ]),
                   ),
                 ),
               ],
@@ -114,7 +114,7 @@ class _LiveDot extends StatelessWidget {
           const SizedBox(width: 5),
           Text('LIVE',
               style: TextStyle(
-                  fontSize: 9,
+                  fontSize: t.text.scaled(9),
                   fontWeight: FontWeight.w800,
                   letterSpacing: 0.9,
                   color: t.accent.success)),

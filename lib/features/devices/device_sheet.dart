@@ -178,12 +178,10 @@ class _SectionState extends State<_Section> {
               children: [
                 Text(
                   widget.title.toUpperCase(),
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 1.1,
-                    color: t.surface.onBaseMuted,
-                  ),
+                  style: t.text.overlineStyle.copyWith(
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.1,
+                      color: t.surface.onBaseMuted),
                 ),
                 const Spacer(),
                 Icon(
@@ -269,12 +267,10 @@ class _Header extends ConsumerWidget {
                   device.displayName,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 19,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.3,
-                    color: t.surface.onBase,
-                  ),
+                  style: t.text.titleStyle.copyWith(
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.3,
+                      color: t.surface.onBase),
                 ),
                 const SizedBox(height: 3),
                 Row(
@@ -284,18 +280,16 @@ class _Header extends ConsumerWidget {
                         child: Text(room,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                                fontSize: 12.5, color: t.surface.onBaseMuted)),
+                            style: t.text.bodySmallStyle
+                                .copyWith(color: t.surface.onBaseMuted)),
                       ),
                       Text(' · ',
-                          style: TextStyle(
-                              fontSize: 12.5, color: t.surface.onBaseMuted)),
+                          style: t.text.bodySmallStyle
+                              .copyWith(color: t.surface.onBaseMuted)),
                     ],
                     Text(stateWord,
-                        style: TextStyle(
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w600,
-                            color: stateColor)),
+                        style: t.text.bodySmallStyle.copyWith(
+                            fontWeight: FontWeight.w600, color: stateColor)),
                   ],
                 ),
               ],
@@ -388,12 +382,10 @@ class _PowerButton extends StatelessWidget {
                 SizedBox(width: t.space.xs),
                 Text(
                   on ? 'On' : 'Off',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.2,
-                    color: fg,
-                  ),
+                  style: t.text.bodyStyle.copyWith(
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.2,
+                      color: fg),
                 ),
               ],
             ),
@@ -482,8 +474,8 @@ class _ControlsState extends ConsumerState<_Controls> {
                 child: Row(
                   children: [
                     Text('Advanced · ${advanced.length}',
-                        style: TextStyle(
-                            fontSize: 12.5, color: t.surface.onBaseMuted)),
+                        style: t.text.bodySmallStyle
+                            .copyWith(color: t.surface.onBaseMuted)),
                     const Spacer(),
                     Icon(
                         _advOpen
@@ -684,8 +676,8 @@ class _InfoTabState extends ConsumerState<_InfoTab> {
               child: Row(
                 children: [
                   Text('Technical details',
-                      style: TextStyle(
-                          fontSize: 12.5, color: t.surface.onBaseMuted)),
+                      style: t.text.bodySmallStyle
+                          .copyWith(color: t.surface.onBaseMuted)),
                   const Spacer(),
                   Icon(
                       _tech
@@ -732,11 +724,11 @@ class _InfoTabState extends ConsumerState<_InfoTab> {
           SizedBox(
             width: 76,
             child: Text(key,
-                style: TextStyle(fontSize: 13, color: t.surface.onBaseMuted)),
+                style: t.text.bodyStyle.copyWith(color: t.surface.onBaseMuted)),
           ),
           Expanded(
             child: Text(value,
-                style: TextStyle(fontSize: 13, color: t.surface.onBase)),
+                style: t.text.bodyStyle.copyWith(color: t.surface.onBase)),
           ),
           if (onEdit != null)
             GestureDetector(
@@ -745,10 +737,8 @@ class _InfoTabState extends ConsumerState<_InfoTab> {
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                 child: Text(actionLabel,
-                    style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: t.accent.active)),
+                    style: t.text.bodySmallStyle.copyWith(
+                        fontWeight: FontWeight.w600, color: t.accent.active)),
               ),
             ),
         ],
@@ -763,12 +753,11 @@ class _InfoTabState extends ConsumerState<_InfoTab> {
             SizedBox(
                 width: 76,
                 child: Text(key,
-                    style:
-                        TextStyle(fontSize: 12, color: t.surface.onBaseMuted))),
+                    style: t.text.bodySmallStyle
+                        .copyWith(color: t.surface.onBaseMuted))),
             Expanded(
               child: Text(value,
-                  style: TextStyle(
-                      fontSize: 11.5,
+                  style: t.text.captionStyle.copyWith(
                       color: t.surface.onBaseMuted,
                       fontFeatures: t.numericFontFeatures)),
             ),
@@ -812,7 +801,7 @@ class _InfoTabState extends ConsumerState<_InfoTab> {
               children: [
                 for (final a in areas)
                   ActionChip(
-                    label: Text(a, style: const TextStyle(fontSize: 12)),
+                    label: Text(a, style: t.text.bodySmallStyle),
                     visualDensity: VisualDensity.compact,
                     onPressed: _busy ? null : () => _area.text = a,
                   ),
@@ -822,7 +811,7 @@ class _InfoTabState extends ConsumerState<_InfoTab> {
           if (_error != null) ...[
             SizedBox(height: t.space.sm),
             Text(_error!,
-                style: TextStyle(fontSize: 12, color: t.accent.danger)),
+                style: t.text.bodySmallStyle.copyWith(color: t.accent.danger)),
           ],
           SizedBox(height: t.space.sm),
           Row(
@@ -884,7 +873,8 @@ class _UsedBy extends ConsumerWidget {
       return Padding(
         padding: EdgeInsets.symmetric(vertical: t.space.sm),
         child: Text('Not used by any automation.',
-            style: TextStyle(fontSize: 12.5, color: t.surface.onBaseMuted)),
+            style:
+                t.text.bodySmallStyle.copyWith(color: t.surface.onBaseMuted)),
       );
     }
 
@@ -896,12 +886,10 @@ class _UsedBy extends ConsumerWidget {
           using.length == 1
               ? 'USED BY 1 AUTOMATION'
               : 'USED BY ${using.length} AUTOMATIONS',
-          style: TextStyle(
-            fontSize: 10.5,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 0.9,
-            color: t.surface.onBaseMuted,
-          ),
+          style: t.text.captionStyle.copyWith(
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.9,
+              color: t.surface.onBaseMuted),
         ),
         SizedBox(height: t.space.xs),
         for (final r in using)
@@ -933,14 +921,14 @@ class _UsedBy extends ConsumerWidget {
                         Text(r.name,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                                fontSize: 13, color: t.surface.onBase)),
+                            style: t.text.bodyStyle
+                                .copyWith(color: t.surface.onBase)),
                         Text(
                           triggerSentence(r.trigger, label: label) ?? '',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                              fontSize: 11.5, color: t.surface.onBaseMuted),
+                          style: t.text.captionStyle
+                              .copyWith(color: t.surface.onBaseMuted),
                         ),
                       ],
                     ),
@@ -984,11 +972,13 @@ class _HistoryTabState extends ConsumerState<_HistoryTab> {
           child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
         ),
         error: (_, __) => Text('Could not load history.',
-            style: TextStyle(fontSize: 12.5, color: t.surface.onBaseMuted)),
+            style:
+                t.text.bodySmallStyle.copyWith(color: t.surface.onBaseMuted)),
         data: (entries) {
           if (entries.isEmpty) {
             return Text('No recent changes.',
-                style: TextStyle(fontSize: 12.5, color: t.surface.onBaseMuted));
+                style: t.text.bodySmallStyle
+                    .copyWith(color: t.surface.onBaseMuted));
           }
 
           // Every numeric metric with enough points gets its own vibrant chart,
@@ -1016,8 +1006,7 @@ class _HistoryTabState extends ConsumerState<_HistoryTab> {
                 SizedBox(height: t.space.md),
               ],
               Text('RECENT CHANGES',
-                  style: TextStyle(
-                      fontSize: 10,
+                  style: t.text.overlineStyle.copyWith(
                       fontWeight: FontWeight.w700,
                       letterSpacing: 1.1,
                       color: t.surface.onBaseMuted)),
@@ -1033,14 +1022,13 @@ class _HistoryTabState extends ConsumerState<_HistoryTab> {
                           '${_readingValue(widget.device, e.attribute, e.value)}',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                              fontSize: 12.5, color: t.surface.onBase),
+                          style: t.text.bodySmallStyle
+                              .copyWith(color: t.surface.onBase),
                         ),
                       ),
                       SizedBox(width: t.space.sm),
                       Text(_ago(e.recordedAt),
-                          style: TextStyle(
-                              fontSize: 11,
+                          style: t.text.captionStyle.copyWith(
                               color: t.surface.onBaseMuted,
                               fontFeatures: t.numericFontFeatures)),
                     ],
@@ -1053,8 +1041,7 @@ class _HistoryTabState extends ConsumerState<_HistoryTab> {
                     onTap: () => setState(() => _expanded = true),
                     behavior: HitTestBehavior.opaque,
                     child: Text('Show all ${recent.length} changes',
-                        style: TextStyle(
-                            fontSize: 12.5,
+                        style: t.text.bodySmallStyle.copyWith(
                             fontWeight: FontWeight.w600,
                             color: t.accent.active)),
                   ),
@@ -1085,16 +1072,14 @@ class _HistoryTabState extends ConsumerState<_HistoryTab> {
         ),
         SizedBox(width: t.space.sm),
         Text(_metricName(attr).toUpperCase(),
-            style: TextStyle(
-                fontSize: 10,
+            style: t.text.overlineStyle.copyWith(
                 fontWeight: FontWeight.w700,
                 letterSpacing: 1.1,
                 color: t.surface.onBaseMuted)),
         const Spacer(),
         if (latest != null)
           Text(_readingValue(widget.device, attr, latest.value),
-              style: TextStyle(
-                  fontSize: 13,
+              style: t.text.bodyStyle.copyWith(
                   fontWeight: FontWeight.w700,
                   color: c,
                   fontFeatures: t.numericFontFeatures)),
@@ -1133,11 +1118,11 @@ class _Reading extends StatelessWidget {
       child: Row(
         children: [
           Text(name.replaceAll('_', ' '),
-              style: TextStyle(fontSize: 12.5, color: t.surface.onBaseMuted)),
+              style:
+                  t.text.bodySmallStyle.copyWith(color: t.surface.onBaseMuted)),
           const Spacer(),
           Text(value,
-              style: TextStyle(
-                  fontSize: 13,
+              style: t.text.bodyStyle.copyWith(
                   color: t.surface.onBase,
                   fontFeatures: t.numericFontFeatures)),
         ],
@@ -1167,7 +1152,7 @@ class _Banner extends StatelessWidget {
           SizedBox(width: t.space.sm),
           Expanded(
             child: Text(message,
-                style: TextStyle(fontSize: 12, color: t.accent.warn)),
+                style: t.text.bodySmallStyle.copyWith(color: t.accent.warn)),
           ),
         ],
       ),

@@ -176,17 +176,15 @@ class _ActionCard extends ConsumerWidget {
               Text(action.label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                      color: t.surface.onBase,
-                      fontSize: 14.5,
-                      fontWeight: FontWeight.w600)),
+                  style: t.text.subtitleStyle.copyWith(
+                      color: t.surface.onBase, fontWeight: FontWeight.w600)),
               if (action.description != null) ...[
                 const SizedBox(height: 2),
                 Text(action.description!,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                        color: t.surface.onBaseMuted, fontSize: 12.5)),
+                    style: t.text.bodySmallStyle
+                        .copyWith(color: t.surface.onBaseMuted)),
               ],
             ],
           ),

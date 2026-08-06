@@ -372,8 +372,7 @@ class _Segmented extends StatelessWidget {
                   borderRadius: BorderRadius.circular(7),
                 ),
                 child: Text(labels[i],
-                    style: TextStyle(
-                        fontSize: 12.5,
+                    style: t.text.bodySmallStyle.copyWith(
                         fontWeight: FontWeight.w600,
                         color: index == i
                             ? t.surface.onBase
@@ -420,8 +419,7 @@ class _TypeChips extends StatelessWidget {
                             : t.stroke.hairline),
                   ),
                   child: Text(humanize(ty),
-                      style: TextStyle(
-                          fontSize: 11.5,
+                      style: t.text.captionStyle.copyWith(
                           fontWeight: FontWeight.w600,
                           color: selected.contains(ty)
                               ? t.accent.active
@@ -471,8 +469,7 @@ class _EventRow extends StatelessWidget {
                   child: Text(subject,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                          fontSize: 13.5,
+                      style: t.text.bodyStyle.copyWith(
                           fontWeight: FontWeight.w500,
                           color: t.surface.onBase)),
                 ),
@@ -483,8 +480,7 @@ class _EventRow extends StatelessWidget {
                     child: Text(detail!,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                            fontSize: 12.5,
+                        style: t.text.bodySmallStyle.copyWith(
                             color: t.surface.onBaseMuted,
                             fontFeatures: t.numericFontFeatures)),
                   ),
@@ -494,8 +490,7 @@ class _EventRow extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           Text(time,
-              style: TextStyle(
-                  fontSize: 11.5,
+              style: t.text.captionStyle.copyWith(
                   color: t.surface.onBaseMuted,
                   fontFeatures: t.numericFontFeatures)),
         ],
@@ -681,8 +676,7 @@ class _HistoryTabState extends ConsumerState<_HistoryTab> {
                                 : t.stroke.hairline),
                       ),
                       child: Text('$l',
-                          style: TextStyle(
-                              fontSize: 11.5,
+                          style: t.text.captionStyle.copyWith(
                               fontWeight: FontWeight.w600,
                               fontFeatures: t.numericFontFeatures,
                               color: limit == l

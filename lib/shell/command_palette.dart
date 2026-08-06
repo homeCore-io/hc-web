@@ -199,10 +199,8 @@ class _PaletteState extends State<_Palette> {
                                 c.subtitle == null ? null : Text(c.subtitle!),
                             trailing: Text(
                               c.category,
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: t.surface.onBaseMuted,
-                              ),
+                              style: t.text.captionStyle
+                                  .copyWith(color: t.surface.onBaseMuted),
                             ),
                             onTap: () => _run(c),
                           );

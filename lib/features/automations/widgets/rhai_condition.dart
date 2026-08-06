@@ -304,12 +304,10 @@ class _CodeState extends State<_Code> {
             SizedBox(width: t.space.xs),
             Text(
               'expression',
-              style: TextStyle(
-                fontSize: 10.5,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.8,
-                color: t.surface.onBaseMuted,
-              ),
+              style: t.text.captionStyle.copyWith(
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.8,
+                  color: t.surface.onBaseMuted),
             ),
           ],
         ),
@@ -317,11 +315,9 @@ class _CodeState extends State<_Code> {
         TextField(
           controller: _ctrl,
           maxLines: null,
-          style: TextStyle(
-            fontFamily: 'monospace',
-            fontSize: 12.5,
-            color: t.surface.onBase,
-          ),
+          style: t.text
+              .resolve(t.text.bodySmall, mono: true)
+              .copyWith(color: t.surface.onBase),
           decoration: InputDecoration(
             isDense: true,
             filled: true,
@@ -417,7 +413,8 @@ class _EmptyPredicate extends StatelessWidget {
         TextButton(
           onPressed: () => onChanged(' '),
           child: Text('Write an expression',
-              style: TextStyle(fontSize: 12, color: t.surface.onBaseMuted)),
+              style:
+                  t.text.bodySmallStyle.copyWith(color: t.surface.onBaseMuted)),
         ),
       ]),
     );
@@ -460,11 +457,9 @@ class _Choice extends StatelessWidget {
             label,
             textAlign: TextAlign.center,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-              color: selected ? t.surface.onBase : t.surface.onBaseMuted,
-            ),
+            style: t.text.bodyStyle.copyWith(
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                color: selected ? t.surface.onBase : t.surface.onBaseMuted),
           ),
         ),
       ),

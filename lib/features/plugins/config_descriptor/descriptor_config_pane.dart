@@ -88,15 +88,14 @@ class _DescriptorConfigPaneState extends ConsumerState<DescriptorConfigPane> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(_section.title,
-                  style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                      color: t.surface.onBase)),
+                  style: t.text.titleStyle.copyWith(
+                      fontWeight: FontWeight.w600, color: t.surface.onBase)),
               Text(
                   _sectionIsLiveResource
                       ? 'Changes take effect immediately.'
                       : 'Operator settings — changes apply on save (restarts the plugin).',
-                  style: TextStyle(fontSize: 12, color: t.surface.onBaseMuted)),
+                  style: t.text.bodySmallStyle
+                      .copyWith(color: t.surface.onBaseMuted)),
             ],
           ),
         ),

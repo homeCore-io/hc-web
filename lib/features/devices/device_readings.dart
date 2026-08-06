@@ -80,12 +80,10 @@ class _DeviceReadingsBlockState extends State<DeviceReadingsBlock> {
               SizedBox(height: t.space.xs),
               Text(
                 g.toUpperCase(),
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 1.1,
-                  color: t.surface.onBaseMuted,
-                ),
+                style: t.text.overlineStyle.copyWith(
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.1,
+                    color: t.surface.onBaseMuted),
               ),
               SizedBox(height: t.space.xs),
             ],
@@ -103,8 +101,8 @@ class _DeviceReadingsBlockState extends State<DeviceReadingsBlock> {
                 child: Row(
                   children: [
                     Text('Advanced · ${advanced.length}',
-                        style: TextStyle(
-                            fontSize: 12.5, color: t.surface.onBaseMuted)),
+                        style: t.text.bodySmallStyle
+                            .copyWith(color: t.surface.onBaseMuted)),
                     const Spacer(),
                     Icon(
                         _advancedOpen
@@ -144,7 +142,8 @@ class _Row extends StatelessWidget {
         textBaseline: TextBaseline.alphabetic,
         children: [
           Text(name,
-              style: TextStyle(fontSize: 12.5, color: t.surface.onBaseMuted)),
+              style:
+                  t.text.bodySmallStyle.copyWith(color: t.surface.onBaseMuted)),
           SizedBox(width: t.space.md),
           // Expanded, not Spacer + Flexible. Two flexible children split the
           // free space between them, so the value box hugged its text at a
@@ -156,11 +155,8 @@ class _Row extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.right,
-              style: TextStyle(
-                fontSize: 13,
-                color: t.surface.onBase,
-                fontFeatures: t.numericFontFeatures,
-              ),
+              style: t.text.bodyStyle.copyWith(
+                  color: t.surface.onBase, fontFeatures: t.numericFontFeatures),
             ),
           ),
         ],

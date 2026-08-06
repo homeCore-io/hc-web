@@ -73,11 +73,9 @@ class _SentenceNodeState extends State<SentenceNode> {
             SizedBox(height: t.space.sm),
             Text(
               widget.phrase.summary!,
-              style: TextStyle(
-                fontSize: 12,
-                color: t.surface.onBaseMuted,
-                fontFeatures: t.numericFontFeatures,
-              ),
+              style: t.text.bodySmallStyle.copyWith(
+                  color: t.surface.onBaseMuted,
+                  fontFeatures: t.numericFontFeatures),
             ),
           ],
           // The disclosure appears when it has something to TELL you — a hidden
@@ -107,10 +105,9 @@ class _SentenceNodeState extends State<SentenceNode> {
                         : set > 0
                             ? 'Refine · $set set'
                             : 'Refine — ${_names(hidden)}',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: set > 0 ? t.accent.primary : t.surface.onBaseMuted,
-                    ),
+                    style: t.text.bodySmallStyle.copyWith(
+                        color:
+                            set > 0 ? t.accent.primary : t.surface.onBaseMuted),
                   ),
                 ],
               ),
@@ -187,6 +184,7 @@ class _SentenceNodeState extends State<SentenceNode> {
       );
 
   Widget _chip(BuildContext context, Slot slot) {
+    final t = HcTokens.of(context);
     final field =
         widget.variant.fields.where((f) => f.name == slot.field).firstOrNull;
     final value = widget.node[slot.field];
@@ -241,9 +239,8 @@ class _SentenceNodeState extends State<SentenceNode> {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 2),
                 child: Text('or',
-                    style: TextStyle(
-                        fontSize: 13,
-                        color: HcTokens.of(context).surface.onBaseMuted)),
+                    style: t.text.bodyStyle
+                        .copyWith(color: t.surface.onBaseMuted)),
               ),
             Builder(builder: (context) {
               final device = widget.refs.deviceFor(refs[i]);
@@ -381,10 +378,8 @@ class _SentenceNodeState extends State<SentenceNode> {
                           _advancedOpen
                               ? 'Hide advanced'
                               : 'Advanced — ${_names(advanced)}',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: t.surface.onBaseMuted,
-                          ),
+                          style: t.text.bodySmallStyle
+                              .copyWith(color: t.surface.onBaseMuted),
                         ),
                       ]),
                     ),

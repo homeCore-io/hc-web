@@ -61,11 +61,7 @@ class HcDialog extends StatelessWidget {
               Expanded(
                 child: Text(
                   title,
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: t.surface.onBase,
-                  ),
+                  style: t.text.titleStyle.copyWith(color: t.surface.onBase),
                 ),
               ),
               if (trailing != null) ...[SizedBox(width: t.space.md), trailing!],
@@ -75,11 +71,8 @@ class HcDialog extends StatelessWidget {
             SizedBox(height: t.space.sm),
             Text(
               description!,
-              style: TextStyle(
-                fontSize: 12.5,
-                height: 1.45,
-                color: t.surface.onBaseMuted,
-              ),
+              style:
+                  t.text.bodySmallStyle.copyWith(color: t.surface.onBaseMuted),
             ),
           ],
           SizedBox(height: t.space.md),
@@ -202,11 +195,8 @@ class HcButton extends StatelessWidget {
                 ],
                 Text(
                   label,
-                  style: TextStyle(
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w600,
-                    color: fg,
-                  ),
+                  style: t.text.bodyStyle
+                      .copyWith(fontWeight: FontWeight.w600, color: fg),
                 ),
               ],
             ),

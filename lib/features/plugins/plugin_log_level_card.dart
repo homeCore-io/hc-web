@@ -75,10 +75,8 @@ class _PluginLogLevelCardState extends ConsumerState<PluginLogLevelCard> {
               Icon(Icons.bolt_rounded, size: 15, color: t.surface.onBaseMuted),
               const SizedBox(width: 6),
               Text('Log level right now',
-                  style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: t.surface.onBase)),
+                  style: t.text.bodyStyle.copyWith(
+                      fontWeight: FontWeight.w600, color: t.surface.onBase)),
             ],
           ),
           SizedBox(height: t.space.xs),
@@ -86,7 +84,7 @@ class _PluginLogLevelCardState extends ConsumerState<PluginLogLevelCard> {
             'Applies to the running plugin immediately. The level below is the '
             'one it boots with — this one is not written down and goes away '
             'when the plugin restarts.',
-            style: TextStyle(fontSize: 12, color: t.surface.onBaseMuted),
+            style: t.text.bodySmallStyle.copyWith(color: t.surface.onBaseMuted),
           ),
           SizedBox(height: t.space.sm),
           if (!plugin.supportsManagement)
@@ -123,18 +121,18 @@ class _PluginLogLevelCardState extends ConsumerState<PluginLogLevelCard> {
             Text(
               'Asked, not confirmed: core sends the request and does not wait '
               'for the plugin to answer.',
-              style: TextStyle(fontSize: 11, color: t.surface.onBaseMuted),
+              style: t.text.captionStyle.copyWith(color: t.surface.onBaseMuted),
             ),
           ],
           if (_error != null) ...[
             SizedBox(height: t.space.sm),
             Text(_error!,
-                style: TextStyle(color: t.accent.danger, fontSize: 12)),
+                style: t.text.bodySmallStyle.copyWith(color: t.accent.danger)),
           ],
           if (_notice != null) ...[
             SizedBox(height: t.space.sm),
             Text(_notice!,
-                style: TextStyle(color: t.accent.success, fontSize: 12)),
+                style: t.text.bodySmallStyle.copyWith(color: t.accent.success)),
           ],
         ],
       ),
@@ -156,11 +154,9 @@ class _Current extends StatelessWidget {
           // how a screen ends up asserting something it never read.
           ? 'Nobody has changed it this run — it is on whatever it booted with.'
           : 'Last asked for: $level',
-      style: TextStyle(
-        fontSize: 12,
-        color: level == null ? t.surface.onBaseMuted : t.surface.onBase,
-        fontFamily: level == null ? null : 'monospace',
-      ),
+      style: t.text.bodySmallStyle.copyWith(
+          color: level == null ? t.surface.onBaseMuted : t.surface.onBase,
+          fontFamily: level == null ? null : 'monospace'),
     );
   }
 }
@@ -179,7 +175,8 @@ class _Unavailable extends StatelessWidget {
         const SizedBox(width: 6),
         Expanded(
           child: Text(text,
-              style: TextStyle(fontSize: 12, color: t.surface.onBaseMuted)),
+              style:
+                  t.text.bodySmallStyle.copyWith(color: t.surface.onBaseMuted)),
         ),
       ],
     );

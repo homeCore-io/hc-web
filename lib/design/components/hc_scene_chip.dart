@@ -130,8 +130,7 @@ class _HcSceneChipState extends State<HcSceneChip> {
               size: 14, color: t.surface.onBaseMuted),
         const SizedBox(width: 9),
         Text(widget.name,
-            style: TextStyle(
-                fontSize: 12.5,
+            style: t.text.bodySmallStyle.copyWith(
                 fontWeight: FontWeight.w600,
                 color: widget.active ? t.accent.active : t.surface.onBase)),
         if (custom) ...[

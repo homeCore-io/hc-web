@@ -153,15 +153,13 @@ class _ColorLightControlsState extends ConsumerState<ColorLightControls> {
                     Row(
                       children: [
                         Text('BRIGHTNESS',
-                            style: TextStyle(
-                                fontSize: 10,
+                            style: t.text.overlineStyle.copyWith(
                                 letterSpacing: 1.1,
                                 fontWeight: FontWeight.w700,
                                 color: t.surface.onBaseMuted)),
                         const Spacer(),
                         Text('${_bri.round()}%',
-                            style: TextStyle(
-                                fontSize: 12,
+                            style: t.text.bodySmallStyle.copyWith(
                                 fontWeight: FontWeight.w600,
                                 color: t.surface.onBase,
                                 fontFeatures: t.numericFontFeatures)),
@@ -232,8 +230,7 @@ class _Segmented extends StatelessWidget {
               borderRadius: t.radius.smR,
             ),
             child: Text(label,
-                style: TextStyle(
-                    fontSize: 11.5,
+                style: t.text.captionStyle.copyWith(
                     fontWeight: FontWeight.w600,
                     color: sel ? t.surface.onBase : t.surface.onBaseMuted)),
           ),

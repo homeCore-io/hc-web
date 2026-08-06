@@ -142,11 +142,8 @@ class HomeClimateCard extends ConsumerWidget {
                   device.displayName,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: t.surface.onBase,
-                  ),
+                  style: t.text.bodyStyle.copyWith(
+                      fontWeight: FontWeight.w600, color: t.surface.onBase),
                 ),
               ),
               _Pill(
@@ -164,13 +161,12 @@ class HomeClimateCard extends ConsumerWidget {
               Text(
                 temp(current),
                 style: TextStyle(
-                  fontSize: 30,
-                  height: 1,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: -1,
-                  color: t.surface.onBase,
-                  fontFeatures: t.numericFontFeatures,
-                ),
+                    fontSize: t.text.scaled(30),
+                    height: 1,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -1,
+                    color: t.surface.onBase,
+                    fontFeatures: t.numericFontFeatures),
               ),
               const Spacer(),
               if (setpoint != null) ...[
@@ -180,13 +176,12 @@ class HomeClimateCard extends ConsumerWidget {
                   children: [
                     Text('TARGET',
                         style: TextStyle(
-                            fontSize: 8.5,
+                            fontSize: t.text.scaled(8.5),
                             fontWeight: FontWeight.w700,
                             letterSpacing: 1,
                             color: t.surface.onBaseMuted)),
                     Text(temp(setpoint),
-                        style: TextStyle(
-                            fontSize: 15,
+                        style: t.text.subtitleStyle.copyWith(
                             fontWeight: FontWeight.w700,
                             color: accent,
                             fontFeatures: t.numericFontFeatures)),
@@ -225,12 +220,8 @@ class _Step extends StatelessWidget {
         ),
         child: Text(
           glyph,
-          style: TextStyle(
-            fontSize: 18,
-            height: 1,
-            fontWeight: FontWeight.w500,
-            color: t.surface.onBase,
-          ),
+          style: t.text.titleStyle.copyWith(
+              height: 1, fontWeight: FontWeight.w500, color: t.surface.onBase),
         ),
       ),
     );
@@ -258,11 +249,10 @@ class _Pill extends StatelessWidget {
       child: Text(
         label,
         style: TextStyle(
-          fontSize: 9,
-          fontWeight: FontWeight.w800,
-          letterSpacing: 0.8,
-          color: filled ? colour : t.surface.onBaseMuted,
-        ),
+            fontSize: t.text.scaled(9),
+            fontWeight: FontWeight.w800,
+            letterSpacing: 0.8,
+            color: filled ? colour : t.surface.onBaseMuted),
       ),
     );
   }

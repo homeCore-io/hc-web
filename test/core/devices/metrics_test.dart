@@ -1,6 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hc_web/core/models/device_state.dart';
 import 'package:hc_web/core/devices/metrics.dart';
+import 'package:hc_web/design/skins.dart';
+import 'package:hc_web/design/tokens.dart';
 
 DeviceState _d(String id, Map<String, dynamic> state, {String? type}) =>
     DeviceState(
@@ -85,6 +87,86 @@ void main() {
     test('an unknown numeric attribute is not promoted', () {
       // `vpd` is real but it is not what anyone opens a weather station for.
       expect(primaryMetricOf(_d('w', {'vpd': 0.446})), isNull);
+    });
+  });
+
+  group('readings carry a role, not a colour', () {
+    // This module has no BuildContext, so when it returned colours they were
+    // literals — and they were Midnight's, which meant a Soft Home house drew
+    // its sensor readings in the dark skin's palette. The role is the fix: the
+    // meaning is decided here, the value wherever the tokens are.
+
+    test('a reading names what it means, not what it looks like', () {
+      expect(primaryMetricOf(_d('a', {'leak': true}))?.$3, HcMetricRole.alarm);
+      expect(primaryMetricOf(_d('a', {'leak': false}))?.$3, HcMetricRole.safe);
+      expect(
+          primaryMetricOf(_d('b', {'motion': true}))?.$3, HcMetricRole.active);
+      expect(primaryMetricOf(_d('c', {'temperature': 70}))?.$3,
+          HcMetricRole.temperature);
+    });
+
+    test('plugins disagree on the attribute name; the role does not', () {
+      // Whoever published it, a temperature is a temperature.
+      for (final k in const [
+        'temperature',
+        'current_temperature',
+        'outdoor_temperature'
+      ]) {
+        expect(metricRole(k), HcMetricRole.temperature, reason: k);
+      }
+    });
+
+    test('the metric tints stay distinct from each other in every skin', () {
+      // A multisensor shows these side by side, so they have to read apart.
+      // State roles are deliberately *not* in this set: a co2 reading and a
+      // "safe" state may share a green because they never appear together.
+      const tints = [
+        HcMetricRole.temperature,
+        HcMetricRole.humidity,
+        HcMetricRole.illuminance,
+        HcMetricRole.co2,
+        HcMetricRole.power,
+        HcMetricRole.reading,
+      ];
+      for (final skin in HcSkin.values) {
+        final seen = tints.map((r) => r.color(skin.tokens)).toSet();
+        expect(seen.length, tints.length,
+            reason: '${skin.name} gives two metrics the same tint');
+      }
+    });
+
+    test('a fault never looks like the reassuring answer', () {
+      // The one pair that must never collapse: alarm against safe. If a leak
+      // reads the same colour as a dry sensor the widget is worse than useless.
+      for (final skin in HcSkin.values) {
+        final t = skin.tokens;
+        expect(HcMetricRole.alarm.color(t), isNot(HcMetricRole.safe.color(t)),
+            reason: skin.name);
+        expect(HcMetricRole.caution.color(t), isNot(HcMetricRole.safe.color(t)),
+            reason: skin.name);
+        expect(HcMetricRole.active.color(t), isNot(HcMetricRole.idle.color(t)),
+            reason: skin.name);
+      }
+    });
+
+    test('a wet sensor and a dry one differ in every skin, not just Midnight',
+        () {
+      final wet = primaryMetricOf(_d('a', {'leak': true}))!.$3;
+      final dry = primaryMetricOf(_d('b', {'leak': false}))!.$3;
+      for (final skin in HcSkin.values) {
+        expect(wet.color(skin.tokens), isNot(dry.color(skin.tokens)),
+            reason: skin.name);
+      }
+    });
+
+    test('the light skin does not reuse the dark skins\' tints', () {
+      // The whole point of making these tokens: Soft Home is light, and a tint
+      // drawn for a near-black ground does not carry on sand.
+      for (final role in HcMetricRole.values) {
+        expect(role.color(HcSkin.softHome.tokens),
+            isNot(role.color(HcSkin.midnight.tokens)),
+            reason: '$role is identical in both');
+      }
     });
   });
 }

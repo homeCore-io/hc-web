@@ -309,11 +309,8 @@ class _Cell extends StatelessWidget {
                 model!.title,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: t.surface.onBase,
-                ),
+                style: t.text.bodyStyle.copyWith(
+                    fontWeight: FontWeight.w600, color: t.surface.onBase),
               ),
             ),
           Expanded(child: ClipRect(child: body)),

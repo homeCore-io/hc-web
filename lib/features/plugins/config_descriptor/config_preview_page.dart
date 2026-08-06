@@ -44,12 +44,12 @@ class _ConfigPreviewPageState extends ConsumerState<ConfigPreviewPage> {
               children: [
                 Text('Config Descriptor Preview',
                     style: TextStyle(
-                        fontSize: 22,
+                        fontSize: t.text.scaled(22),
                         fontWeight: FontWeight.w600,
                         color: t.surface.onBase)),
                 Text('Sonos — rendered from a descriptor, not a schema form.',
-                    style:
-                        TextStyle(fontSize: 13, color: t.surface.onBaseMuted)),
+                    style: t.text.bodyStyle
+                        .copyWith(color: t.surface.onBaseMuted)),
               ],
             ),
           ),

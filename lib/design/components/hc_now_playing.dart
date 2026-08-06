@@ -129,8 +129,7 @@ class HcNowPlaying extends StatelessWidget {
                               SizedBox(width: t.space.xs + 1),
                               Text(
                                 device.displayName.toUpperCase(),
-                                style: TextStyle(
-                                  fontSize: 10.5,
+                                style: t.text.overlineStyle.copyWith(
                                   fontWeight: FontWeight.w700,
                                   letterSpacing: 1.4,
                                   color: t.surface.onBaseMuted,
@@ -144,10 +143,8 @@ class HcNowPlaying extends StatelessWidget {
                             headline,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 24,
+                            style: t.text.displayStyle.copyWith(
                               height: 1.2,
-                              fontWeight: FontWeight.w700,
                               letterSpacing: -0.5,
                               color: t.surface.onBase,
                             ),
@@ -159,8 +156,8 @@ class HcNowPlaying extends StatelessWidget {
                               a,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 15,
+                              style: t.text.subtitleStyle.copyWith(
+                                fontWeight: t.text.body.weight,
                                 color: t.surface.onBaseMuted,
                               ),
                             ),
@@ -170,8 +167,7 @@ class HcNowPlaying extends StatelessWidget {
                               a,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 12,
+                              style: t.text.bodySmallStyle.copyWith(
                                 color: t.surface.onBaseMuted
                                     .withValues(alpha: 0.7),
                               ),
@@ -278,18 +274,15 @@ class _IdleSpeaker extends StatelessWidget {
               children: [
                 Text(
                   '${device.displayName}$rooms',
-                  style: TextStyle(
-                    fontSize: 13.5,
+                  style: t.text.bodyStyle.copyWith(
                     fontWeight: FontWeight.w600,
                     color: t.surface.onBase,
                   ),
                 ),
                 Text(
                   device.available ? 'Nothing playing' : 'Offline',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: t.surface.onBaseMuted,
-                  ),
+                  style: t.text.bodySmallStyle
+                      .copyWith(color: t.surface.onBaseMuted),
                 ),
               ],
             ),
@@ -363,8 +356,7 @@ class _Seek extends StatelessWidget {
     if (dur <= 0) {
       return Text(
         device.playbackState == 'playing' ? 'Live' : '—',
-        style: TextStyle(
-          fontSize: 11,
+        style: t.text.captionStyle.copyWith(
           color: t.surface.onBaseMuted,
           fontFeatures: t.numericFontFeatures,
         ),
@@ -419,8 +411,7 @@ class _Seek extends StatelessWidget {
     );
   }
 
-  TextStyle _timeStyle(HcTokens t) => TextStyle(
-        fontSize: 11,
+  TextStyle _timeStyle(HcTokens t) => t.text.captionStyle.copyWith(
         color: t.surface.onBaseMuted,
         fontFeatures: t.numericFontFeatures,
       );
@@ -541,8 +532,7 @@ class _Group extends StatelessWidget {
       children: [
         Text(
           'PLAYING IN ${members.length} ROOMS',
-          style: TextStyle(
-            fontSize: 10,
+          style: t.text.overlineStyle.copyWith(
             fontWeight: FontWeight.w700,
             letterSpacing: 1.3,
             color: t.surface.onBaseMuted,
@@ -562,10 +552,8 @@ class _Group extends StatelessWidget {
                         child: Text(
                           m.displayName,
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: t.surface.onBase,
-                          ),
+                          style: t.text.bodyStyle
+                              .copyWith(color: t.surface.onBase),
                         ),
                       ),
                       // The coordinator is the speaker the others follow; the
@@ -582,6 +570,9 @@ class _Group extends StatelessWidget {
                           child: Text(
                             'LEAD',
                             style: TextStyle(
+                              // Below the ramp's floor: a 4-character badge
+                              // inside a row, sized to the row rather than to
+                              // the type scale.
                               fontSize: 8.5,
                               fontWeight: FontWeight.w800,
                               letterSpacing: 0.5,
@@ -609,8 +600,7 @@ class _Group extends StatelessWidget {
                   child: Text(
                     '${m.volumePercent ?? 0}',
                     textAlign: TextAlign.right,
-                    style: TextStyle(
-                      fontSize: 11,
+                    style: t.text.captionStyle.copyWith(
                       color: t.surface.onBaseMuted,
                       fontFeatures: t.numericFontFeatures,
                     ),

@@ -172,17 +172,16 @@ class _WallChromeState extends ConsumerState<WallChrome> {
           Text(
             _hhmm(_now),
             style: TextStyle(
-              fontSize: 34,
-              fontWeight: FontWeight.w200,
-              height: 1,
-              color: t.surface.onBase,
-              fontFeatures: t.numericFontFeatures,
-            ),
+                fontSize: t.text.scaled(34),
+                fontWeight: FontWeight.w200,
+                height: 1,
+                color: t.surface.onBase,
+                fontFeatures: t.numericFontFeatures),
           ),
           SizedBox(width: t.space.md),
           Text(
             _dayLabel(_now),
-            style: TextStyle(fontSize: 14, color: t.surface.onBaseMuted),
+            style: t.text.subtitleStyle.copyWith(color: t.surface.onBaseMuted),
           ),
           const Spacer(),
 
@@ -205,7 +204,7 @@ class _WallChromeState extends ConsumerState<WallChrome> {
                   SizedBox(width: t.space.sm),
                   Text(
                     'Not live — showing last known state',
-                    style: TextStyle(color: t.accent.danger, fontSize: 13),
+                    style: t.text.bodyStyle.copyWith(color: t.accent.danger),
                   ),
                 ],
               ),
@@ -231,20 +230,17 @@ class _WallChromeState extends ConsumerState<WallChrome> {
                 Text(
                   _hhmm(_now),
                   style: TextStyle(
-                    fontSize: 96,
-                    fontWeight: FontWeight.w100,
-                    height: 1,
-                    color: t.surface.onBaseMuted.withValues(alpha: 0.55),
-                    fontFeatures: t.numericFontFeatures,
-                  ),
+                      fontSize: t.text.scaled(96),
+                      fontWeight: FontWeight.w100,
+                      height: 1,
+                      color: t.surface.onBaseMuted.withValues(alpha: 0.55),
+                      fontFeatures: t.numericFontFeatures),
                 ),
                 SizedBox(height: t.space.sm),
                 Text(
                   _dayLabel(_now),
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: t.surface.onBaseMuted.withValues(alpha: 0.4),
-                  ),
+                  style: t.text.titleStyle.copyWith(
+                      color: t.surface.onBaseMuted.withValues(alpha: 0.4)),
                 ),
               ],
             ),

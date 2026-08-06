@@ -47,15 +47,13 @@ class LogLevelPicks extends StatelessWidget {
               ),
               child: Text(
                 level,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: !enabled
-                      ? t.surface.onBaseMuted
-                      : selected == level
-                          ? t.accent.active
-                          : t.surface.onBaseMuted,
-                ),
+                style: t.text.bodySmallStyle.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: !enabled
+                        ? t.surface.onBaseMuted
+                        : selected == level
+                            ? t.accent.active
+                            : t.surface.onBaseMuted),
               ),
             ),
           ),

@@ -150,14 +150,12 @@ class _CameraCardState extends State<CameraCard> {
                     widget.name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: _down ? t.accent.danger : Colors.white,
-                      shadows: const [
-                        Shadow(color: Colors.black87, blurRadius: 4),
-                      ],
-                    ),
+                    style: t.text.bodySmallStyle.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: _down ? t.accent.danger : Colors.white,
+                        shadows: const [
+                          Shadow(color: Colors.black87, blurRadius: 4),
+                        ]),
                   ),
                 ),
               ],
@@ -168,11 +166,11 @@ class _CameraCardState extends State<CameraCard> {
             right: 10,
             child: Text(
               widget.sourceType,
-              style: const TextStyle(
-                fontSize: 9.5,
-                color: Colors.white54,
-                shadows: [Shadow(color: Colors.black87, blurRadius: 3)],
-              ),
+              style: t.text.overlineStyle.copyWith(
+                  color: Colors.white54,
+                  shadows: const [
+                    Shadow(color: Colors.black87, blurRadius: 3)
+                  ]),
             ),
           ),
         ],
@@ -267,11 +265,10 @@ class _LiveBadgeState extends State<_LiveBadge>
           Text(
             'LIVE',
             style: TextStyle(
-              fontSize: 9,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.9,
-              color: t.accent.success,
-            ),
+                fontSize: t.text.scaled(9),
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.9,
+                color: t.accent.success),
           ),
         ],
       ),
@@ -300,11 +297,8 @@ class _Placeholder extends StatelessWidget {
           Text(
             message,
             textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 11.5,
-              fontWeight: FontWeight.w600,
-              color: colour,
-            ),
+            style: t.text.captionStyle
+                .copyWith(fontWeight: FontWeight.w600, color: colour),
           ),
         ],
       ),

@@ -76,12 +76,10 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       SizedBox(width: t.space.sm),
                       Text(
                         'HomeCore',
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: -0.5,
-                          color: t.surface.onBase,
-                        ),
+                        style: t.text.displayStyle.copyWith(
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -0.5,
+                            color: t.surface.onBase),
                       ),
                     ],
                   ),
@@ -107,10 +105,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                         Expanded(
                           child: Text(
                             _error!,
-                            style: TextStyle(
-                              fontSize: 12.5,
-                              color: t.accent.danger,
-                            ),
+                            style: t.text.bodySmallStyle
+                                .copyWith(color: t.accent.danger),
                           ),
                         ),
                       ],
@@ -172,12 +168,12 @@ class _Field extends StatelessWidget {
       controller: controller,
       obscureText: obscure,
       autofocus: autofocus,
-      style: TextStyle(fontSize: 14, color: t.surface.onBase),
+      style: t.text.subtitleStyle.copyWith(color: t.surface.onBase),
       validator: (v) => v == null || v.isEmpty ? 'Required' : null,
       onFieldSubmitted: onSubmit == null ? null : (_) => onSubmit!(),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: TextStyle(fontSize: 13, color: t.surface.onBaseMuted),
+        labelStyle: t.text.bodyStyle.copyWith(color: t.surface.onBaseMuted),
         filled: true,
         fillColor: t.surface.raised,
         isDense: true,

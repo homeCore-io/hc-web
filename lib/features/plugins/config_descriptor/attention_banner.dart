@@ -85,22 +85,16 @@ class AttentionBanner extends StatelessWidget {
                 children: [
                   Text(
                     '$count $noun ${one ? 'needs' : 'need'} a $what',
-                    style: TextStyle(
-                      color: t.surface.onBase,
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    style: t.text.bodyStyle.copyWith(
+                        color: t.surface.onBase, fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 2),
                   Text(
                     'Until you choose one, ${one ? 'it stays' : 'they stay'} in '
                     'this list and ${one ? 'does' : 'do'} not appear in '
                     'homeCore. Pick a $what on each row below, then save.',
-                    style: TextStyle(
-                      color: t.surface.onBaseMuted,
-                      fontSize: 12.5,
-                      height: 1.35,
-                    ),
+                    style: t.text.bodySmallStyle
+                        .copyWith(color: t.surface.onBaseMuted, height: 1.35),
                   ),
                 ],
               ),

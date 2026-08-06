@@ -217,17 +217,16 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
         children: [
           if (showHeader)
             Text(s.title.toUpperCase(),
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 1.0,
-                  color: t.surface.onBaseMuted,
-                )),
+                style: t.text.captionStyle.copyWith(
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.0,
+                    color: t.surface.onBaseMuted)),
           if (s.help != null)
             Padding(
               padding: EdgeInsets.only(top: t.space.xs),
               child: Text(s.help!,
-                  style: TextStyle(fontSize: 12, color: t.surface.onBaseMuted)),
+                  style: t.text.bodySmallStyle
+                      .copyWith(color: t.surface.onBaseMuted)),
             ),
           SizedBox(height: t.space.md),
           for (final f in fields) _field(t, f),
@@ -272,11 +271,10 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
             controller: controller,
             maxLines: 6,
             minLines: 3,
-            style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+            style: t.text.resolve(t.text.bodySmall, mono: true),
             decoration: InputDecoration(
               hintText: f.placeholder,
-              hintStyle: TextStyle(
-                  fontSize: 12,
+              hintStyle: t.text.bodySmallStyle.copyWith(
                   color: t.surface.onBaseMuted.withValues(alpha: 0.5)),
               filled: true,
               fillColor: t.surface.raised,
@@ -298,12 +296,10 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
                   padding: EdgeInsets.only(left: t.space.sm),
                   child: Text(
                     _importNote[key]!,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: _importFailed.contains(key)
-                          ? t.accent.warn
-                          : t.surface.onBaseMuted,
-                    ),
+                    style: t.text.bodySmallStyle.copyWith(
+                        color: _importFailed.contains(key)
+                            ? t.accent.warn
+                            : t.surface.onBaseMuted),
                   ),
                 ),
               ),
@@ -427,17 +423,17 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
           Row(children: [
             Flexible(
                 child: Text(f.label ?? humanize(f.key?.split('.').last),
-                    style: TextStyle(fontSize: 14, color: t.surface.onBase))),
+                    style: t.text.subtitleStyle
+                        .copyWith(color: t.surface.onBase))),
             if (_isRequired(f))
               Text('  •  required',
-                  style: TextStyle(fontSize: 11, color: t.accent.warn)),
+                  style: t.text.captionStyle.copyWith(color: t.accent.warn)),
           ]),
           if (f.help != null)
             Padding(
               padding: const EdgeInsets.only(top: 2),
               child: Text(f.help!,
-                  style: TextStyle(
-                      fontSize: 12,
+                  style: t.text.bodySmallStyle.copyWith(
                       color: t.surface.onBaseMuted.withValues(alpha: 0.85))),
             ),
         ],
@@ -534,7 +530,8 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
           PopupMenuItem(
               value: o.value,
               child: Text(o.label,
-                  style: TextStyle(color: t.surface.onBase, fontSize: 14))),
+                  style:
+                      t.text.subtitleStyle.copyWith(color: t.surface.onBase))),
         if (f.allowCreate) ...[
           const PopupMenuDivider(),
           PopupMenuItem(
@@ -580,8 +577,7 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
         child: Row(children: [
           Expanded(
             child: Text(display,
-                style: TextStyle(
-                    fontSize: 14,
+                style: t.text.subtitleStyle.copyWith(
                     color: empty
                         ? t.surface.onBaseMuted.withValues(alpha: 0.7)
                         : t.surface.onBase)),
@@ -738,8 +734,7 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
           SizedBox(height: t.space.sm),
           if (items.isEmpty)
             Text('None yet.',
-                style: TextStyle(
-                    fontSize: 12,
+                style: t.text.bodySmallStyle.copyWith(
                     color: t.surface.onBaseMuted.withValues(alpha: 0.7))),
           for (var i = 0; i < items.length; i++)
             Padding(
@@ -898,8 +893,8 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
                     all.isEmpty
                         ? 'No ${_plural(f)} yet — add one below.'
                         : 'No ${_plural(f)} match that search.',
-                    style:
-                        TextStyle(fontSize: 12, color: t.surface.onBaseMuted),
+                    style: t.text.bodySmallStyle
+                        .copyWith(color: t.surface.onBaseMuted),
                   ),
                 ),
               for (final g in orderedGroups) ...[
@@ -956,8 +951,7 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
         ],
         SizedBox(width: t.space.sm),
         Text('$total',
-            style: TextStyle(
-                fontSize: 12,
+            style: t.text.bodySmallStyle.copyWith(
                 fontFeatures: const [FontFeature.tabularFigures()],
                 color: t.surface.onBaseMuted)),
       ]),
@@ -986,10 +980,8 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
       ),
       child: Row(children: [
         Text('${selected.length} selected',
-            style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: t.surface.onBase)),
+            style: t.text.bodyStyle.copyWith(
+                fontWeight: FontWeight.w600, color: t.surface.onBase)),
         SizedBox(width: t.space.md),
         for (final c in settable) ...[
           _BulkSet(
@@ -1041,15 +1033,13 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
         ),
         child: Row(children: [
           Text(humanize(label).toUpperCase(),
-              style: TextStyle(
-                  fontSize: 10,
+              style: t.text.overlineStyle.copyWith(
                   fontWeight: FontWeight.w700,
                   letterSpacing: 0.8,
                   color: t.surface.onBaseMuted)),
           SizedBox(width: t.space.xs),
           Text('· $count',
-              style: TextStyle(
-                  fontSize: 10,
+              style: t.text.overlineStyle.copyWith(
                   fontFeatures: const [FontFeature.tabularFigures()],
                   color: t.surface.onBaseMuted)),
         ]),
@@ -1108,16 +1098,14 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
             Expanded(
               child: Text(title.isEmpty ? 'Untitled' : title,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                      fontSize: 13.5,
+                  style: t.text.bodyStyle.copyWith(
                       color: title.isEmpty
                           ? t.surface.onBaseMuted
                           : t.surface.onBase)),
             ),
             if (idCol != null) ...[
               Text('#${_cellText(idCol, entry.row[idCol.key])}',
-                  style: TextStyle(
-                      fontSize: 12,
+                  style: t.text.bodySmallStyle.copyWith(
                       fontFeatures: const [FontFeature.tabularFigures()],
                       color: t.surface.onBaseMuted)),
               SizedBox(width: t.space.sm),
@@ -1176,12 +1164,13 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
         SizedBox(
           width: 132,
           child: Text(c.label ?? c.key!,
-              style: TextStyle(fontSize: 12, color: t.surface.onBaseMuted)),
+              style:
+                  t.text.bodySmallStyle.copyWith(color: t.surface.onBaseMuted)),
         ),
         Expanded(
           child: c.readOnly
               ? Text(_cellText(c, entry.row[c.key]),
-                  style: TextStyle(fontSize: 13, color: t.surface.onBase))
+                  style: t.text.bodyStyle.copyWith(color: t.surface.onBase))
               : _columnControl(
                   t,
                   c,
@@ -1229,8 +1218,7 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
           SizedBox(height: t.space.sm),
           if (live.isEmpty)
             Text('No devices discovered yet.',
-                style: TextStyle(
-                    fontSize: 12,
+                style: t.text.bodySmallStyle.copyWith(
                     color: t.surface.onBaseMuted.withValues(alpha: 0.7))),
           for (final item in live)
             Builder(builder: (_) {
@@ -1263,15 +1251,14 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
                           size: 18, color: t.surface.onBaseMuted),
                       SizedBox(width: t.space.sm),
                       Text('$title',
-                          style: TextStyle(
-                              fontSize: 14,
+                          style: t.text.subtitleStyle.copyWith(
                               fontWeight: FontWeight.w600,
                               color: t.surface.onBase)),
                       if (subtitle != null) ...[
                         SizedBox(width: t.space.sm),
                         Text('$subtitle',
-                            style: TextStyle(
-                                fontSize: 12, color: t.surface.onBaseMuted)),
+                            style: t.text.bodySmallStyle
+                                .copyWith(color: t.surface.onBaseMuted)),
                       ],
                       const Spacer(),
                       if (edited) _pill(t, 'edited'),
@@ -1285,8 +1272,7 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
                             SizedBox(
                                 width: 90,
                                 child: Text(c.label ?? c.key ?? '',
-                                    style: TextStyle(
-                                        fontSize: 13,
+                                    style: t.text.bodyStyle.copyWith(
                                         color: t.surface.onBaseMuted))),
                             Expanded(
                               child: _columnControl(
@@ -1356,7 +1342,7 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
               Icon(Icons.undo, size: 14, color: t.accent.active),
               const SizedBox(width: 4),
               Text('overridden',
-                  style: TextStyle(fontSize: 11, color: t.accent.active)),
+                  style: t.text.captionStyle.copyWith(color: t.accent.active)),
             ]),
           ),
         ),
@@ -1371,10 +1357,8 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
           borderRadius: BorderRadius.circular(999),
         ),
         child: Text(label,
-            style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: t.accent.active)),
+            style: t.text.captionStyle
+                .copyWith(fontWeight: FontWeight.w600, color: t.accent.active)),
       );
 
   /// What this table's rows are *called*, taken from the field itself. This
@@ -1457,7 +1441,8 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
                 borderRadius: BorderRadius.circular(t.radius.md),
               ),
               child: Text('No ${_plural(f)} yet — add one below.',
-                  style: TextStyle(fontSize: 12, color: t.surface.onBaseMuted)),
+                  style: t.text.bodySmallStyle
+                      .copyWith(color: t.surface.onBaseMuted)),
             ),
           for (var i = 0; i < rows.length; i++)
             Container(
@@ -1479,17 +1464,15 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
                           SizedBox(
                               width: 120,
                               child: Text(c.label ?? c.key ?? '',
-                                  style: TextStyle(
-                                      fontSize: 13,
-                                      color: t.surface.onBaseMuted))),
+                                  style: t.text.bodyStyle
+                                      .copyWith(color: t.surface.onBaseMuted))),
                           Expanded(
                             child: c.readOnly
                                 ? Text(
                                     rows[i][c.key] == null
                                         ? '—'
                                         : _columnInitial(c, rows[i][c.key]),
-                                    style: TextStyle(
-                                        fontSize: 13,
+                                    style: t.text.bodyStyle.copyWith(
                                         color: t.surface.onBase,
                                         fontFeatures: const []))
                                 // Same control set as a sourced table's columns,
@@ -1554,7 +1537,7 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
           SizedBox(width: t.space.sm),
           Expanded(
             child: Text(f.noteText ?? '',
-                style: TextStyle(fontSize: 13, color: t.surface.onBase)),
+                style: t.text.bodyStyle.copyWith(color: t.surface.onBase)),
           ),
         ]),
       );
@@ -1577,7 +1560,7 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
               problems.length == 1
                   ? problems.first
                   : '${problems.first}  (+${problems.length - 1} more)',
-              style: TextStyle(fontSize: 12, color: t.accent.warn),
+              style: t.text.bodySmallStyle.copyWith(color: t.accent.warn),
               overflow: TextOverflow.ellipsis,
             ),
           )
@@ -1706,7 +1689,7 @@ class _MultiSelect extends StatelessWidget {
             ),
             child: Row(mainAxisSize: MainAxisSize.min, children: [
               Text(labelFor(id),
-                  style: TextStyle(fontSize: 13, color: t.surface.onBase)),
+                  style: t.text.bodyStyle.copyWith(color: t.surface.onBase)),
               const SizedBox(width: 4),
               GestureDetector(
                 behavior: HitTestBehavior.opaque,
@@ -1726,7 +1709,8 @@ class _MultiSelect extends StatelessWidget {
                 PopupMenuItem(
                   value: '${o.value}',
                   child: Text(o.label,
-                      style: TextStyle(color: t.surface.onBase, fontSize: 14)),
+                      style: t.text.subtitleStyle
+                          .copyWith(color: t.surface.onBase)),
                 ),
             ],
             onSelected: (v) => onChanged([...selected, v]),
@@ -1740,14 +1724,13 @@ class _MultiSelect extends StatelessWidget {
                 Icon(Icons.add, size: 14, color: t.accent.active),
                 const SizedBox(width: 4),
                 Text(placeholder ?? 'Add',
-                    style: TextStyle(fontSize: 13, color: t.accent.active)),
+                    style: t.text.bodyStyle.copyWith(color: t.accent.active)),
               ]),
             ),
           )
         else if (selected.isEmpty)
           Text('Nothing available to choose.',
-              style: TextStyle(
-                  fontSize: 12,
+              style: t.text.bodySmallStyle.copyWith(
                   color: t.surface.onBaseMuted.withValues(alpha: 0.7))),
       ],
     );
@@ -1787,13 +1770,11 @@ class _Segmented extends StatelessWidget {
                   borderRadius: BorderRadius.circular(999),
                 ),
                 child: Text(o.label,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                      color: o.value == value
-                          ? t.surface.base
-                          : t.surface.onBaseMuted,
-                    )),
+                    style: t.text.bodyStyle.copyWith(
+                        fontWeight: FontWeight.w500,
+                        color: o.value == value
+                            ? t.surface.base
+                            : t.surface.onBaseMuted)),
               ),
             ),
         ],
@@ -1895,14 +1876,15 @@ class _InputState extends State<_Input> {
       onSubmitted: (_) => _commit(),
       obscureText: widget.obscure,
       keyboardType: widget.numeric ? TextInputType.number : null,
-      style: TextStyle(fontSize: 14, color: t.surface.onBase),
+      style: t.text.subtitleStyle.copyWith(color: t.surface.onBase),
       decoration: InputDecoration(
         isDense: true,
         hintText: widget.hint ?? widget.placeholder,
-        hintStyle: TextStyle(
-            color: t.surface.onBaseMuted.withValues(alpha: 0.6), fontSize: 13),
+        hintStyle: t.text.bodyStyle
+            .copyWith(color: t.surface.onBaseMuted.withValues(alpha: 0.6)),
         suffixText: widget.suffix,
-        suffixStyle: TextStyle(color: t.surface.onBaseMuted, fontSize: 12),
+        suffixStyle:
+            t.text.bodySmallStyle.copyWith(color: t.surface.onBaseMuted),
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         filled: true,
@@ -1935,7 +1917,7 @@ class _InputState extends State<_Input> {
         Padding(
           padding: const EdgeInsets.only(top: 3),
           child: Text(_error!,
-              style: TextStyle(fontSize: 11, color: t.accent.warn)),
+              style: t.text.captionStyle.copyWith(color: t.accent.warn)),
         ),
       ],
     );
@@ -1977,14 +1959,12 @@ class _FilterChip extends StatelessWidget {
           ),
           child: Row(mainAxisSize: MainAxisSize.min, children: [
             Text(label,
-                style: TextStyle(
-                    fontSize: 12,
+                style: t.text.bodySmallStyle.copyWith(
                     fontWeight: FontWeight.w600,
                     color: selected ? t.accent.active : t.surface.onBaseMuted)),
             SizedBox(width: t.space.xs),
             Text('$count',
-                style: TextStyle(
-                    fontSize: 12,
+                style: t.text.bodySmallStyle.copyWith(
                     fontFeatures: const [FontFeature.tabularFigures()],
                     color: selected ? t.accent.active : t.surface.onBaseMuted)),
           ]),
@@ -2015,8 +1995,7 @@ class _StateChip extends StatelessWidget {
         borderRadius: BorderRadius.circular(t.radius.pill),
       ),
       child: Text(label,
-          style: TextStyle(
-              fontSize: 11.5,
+          style: t.text.captionStyle.copyWith(
               fontWeight: FontWeight.w600,
               color: attention ? t.accent.active : t.surface.onBaseMuted)),
     );
@@ -2054,10 +2033,8 @@ class _BulkSet extends StatelessWidget {
         ),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
           Text(label,
-              style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: t.surface.onBase)),
+              style: t.text.bodySmallStyle.copyWith(
+                  fontWeight: FontWeight.w600, color: t.surface.onBase)),
           Icon(Icons.arrow_drop_down, size: 16, color: t.surface.onBaseMuted),
         ]),
       ),

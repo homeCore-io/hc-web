@@ -230,11 +230,8 @@ class _DashboardWidgetCard extends ConsumerWidget {
               widgetModel.title,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: t.surface.onBase,
-              ),
+              style: t.text.bodyStyle.copyWith(
+                  fontWeight: FontWeight.w600, color: t.surface.onBase),
             ),
           if (widgetModel.subtitle != null &&
               widgetModel.subtitle!.isNotEmpty) ...[
@@ -243,7 +240,7 @@ class _DashboardWidgetCard extends ConsumerWidget {
               widgetModel.subtitle!,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: 11, color: t.surface.onBaseMuted),
+              style: t.text.captionStyle.copyWith(color: t.surface.onBaseMuted),
             ),
           ],
           SizedBox(height: t.space.sm),
@@ -605,8 +602,8 @@ class _TokenChip extends StatelessWidget {
                 SizedBox(width: t.space.xs),
               ],
               Text(label,
-                  style: TextStyle(
-                      fontSize: 12.5, fontWeight: FontWeight.w600, color: fg)),
+                  style: t.text.bodySmallStyle
+                      .copyWith(fontWeight: FontWeight.w600, color: fg)),
             ],
           ),
         ),
@@ -717,7 +714,8 @@ class _EventFeedWidgetState extends ConsumerState<_EventFeedWidget> {
               size: 15, color: t.surface.onBaseMuted),
           SizedBox(width: t.space.sm),
           Text('No events yet — activity will stream in here.',
-              style: TextStyle(color: t.surface.onBaseMuted, fontSize: 12.5)),
+              style:
+                  t.text.bodySmallStyle.copyWith(color: t.surface.onBaseMuted)),
         ],
       );
     }
@@ -751,8 +749,7 @@ class _EventFeedWidgetState extends ConsumerState<_EventFeedWidget> {
           SizedBox(
             width: 56,
             child: Text(clock,
-                style: TextStyle(
-                    fontSize: 11.5,
+                style: t.text.captionStyle.copyWith(
                     color: t.surface.onBaseMuted,
                     fontFeatures: t.numericFontFeatures)),
           ),
@@ -771,23 +768,20 @@ class _EventFeedWidgetState extends ConsumerState<_EventFeedWidget> {
                 Text(humanize(e.type),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w600,
-                        color: t.surface.onBase)),
+                    style: t.text.bodySmallStyle.copyWith(
+                        fontWeight: FontWeight.w600, color: t.surface.onBase)),
                 if (detail.isNotEmpty)
                   Text(detail,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                          fontSize: 11, color: t.surface.onBaseMuted)),
+                      style: t.text.captionStyle
+                          .copyWith(color: t.surface.onBaseMuted)),
               ],
             ),
           ),
           SizedBox(width: t.space.sm),
           Text(_relTime(e.timestamp),
-              style: TextStyle(
-                  fontSize: 10.5,
+              style: t.text.captionStyle.copyWith(
                   color: t.surface.onBaseMuted,
                   fontFeatures: t.numericFontFeatures)),
         ],
@@ -909,7 +903,8 @@ class _MarkdownWidget extends StatelessWidget {
           style: TextStyle(color: t.surface.onBaseMuted));
     }
     return DefaultTextStyle.merge(
-      style: TextStyle(color: t.surface.onBase, height: 1.4, fontSize: 14),
+      style:
+          t.text.subtitleStyle.copyWith(color: t.surface.onBase, height: 1.4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: _renderMarkdown(markdown, t),
@@ -1285,6 +1280,7 @@ class _HistoryChartContent extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final t = HcTokens.of(context);
     final isUtc = ref.watch(timeUtcProvider);
     final isBool = entries.any((e) => e.value is bool);
     final isNumeric = entries.any((e) => e.value is num);
@@ -1363,18 +1359,16 @@ class _HistoryChartContent extends ConsumerWidget {
                     getTitlesWidget: (value, meta) {
                       if (isBool) {
                         if (value == 1) {
-                          return const Text('ON',
-                              style: TextStyle(fontSize: 10));
+                          return Text('ON', style: t.text.overlineStyle);
                         }
                         if (value == 0) {
-                          return const Text('OFF',
-                              style: TextStyle(fontSize: 10));
+                          return Text('OFF', style: t.text.overlineStyle);
                         }
                         return const SizedBox.shrink();
                       }
                       return Text(
                         value.toStringAsFixed(1),
-                        style: const TextStyle(fontSize: 10),
+                        style: t.text.overlineStyle,
                       );
                     },
                   ),
@@ -1390,7 +1384,7 @@ class _HistoryChartContent extends ConsumerWidget {
                       final shown = isUtc ? dt.toUtc() : dt.toLocal();
                       return Text(
                         '${shown.hour.toString().padLeft(2, '0')}:${shown.minute.toString().padLeft(2, '0')}',
-                        style: const TextStyle(fontSize: 10),
+                        style: t.text.overlineStyle,
                       );
                     },
                   ),
@@ -1971,12 +1965,10 @@ class _SystemTile extends StatelessWidget {
               SizedBox(width: t.space.sm),
               Text(
                 label.toUpperCase(),
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: t.surface.onBaseMuted,
-                  letterSpacing: 0.8,
-                ),
+                style: t.text.captionStyle.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: t.surface.onBaseMuted,
+                    letterSpacing: 0.8),
               ),
             ],
           ),
@@ -1997,7 +1989,7 @@ class _SystemTile extends StatelessWidget {
             detail,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontSize: 11, color: t.surface.onBaseMuted),
+            style: t.text.captionStyle.copyWith(color: t.surface.onBaseMuted),
           ),
           if (meter != null) ...[
             SizedBox(height: t.space.sm),

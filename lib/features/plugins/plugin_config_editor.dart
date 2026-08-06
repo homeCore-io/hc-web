@@ -293,10 +293,8 @@ class _ConfigFormState extends ConsumerState<_ConfigForm> {
             ),
             Expanded(
               child: Text('${widget.plugin.displayName} configuration',
-                  style: TextStyle(
-                      color: t.surface.onBase,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600)),
+                  style: t.text.titleStyle.copyWith(
+                      color: t.surface.onBase, fontWeight: FontWeight.w600)),
             ),
             if (_hasForm && widget.doc.hasRaw) _tabs(t),
             IconButton(
@@ -318,7 +316,8 @@ class _ConfigFormState extends ConsumerState<_ConfigForm> {
             if (_error != null)
               Expanded(
                 child: Text(_error!,
-                    style: TextStyle(color: t.accent.danger, fontSize: 12.5)),
+                    style:
+                        t.text.bodySmallStyle.copyWith(color: t.accent.danger)),
               )
             else
               Expanded(
@@ -326,9 +325,8 @@ class _ConfigFormState extends ConsumerState<_ConfigForm> {
                     widget.plugin.managed
                         ? 'Saving restarts the plugin to apply'
                         : 'Applies live',
-                    style: TextStyle(
-                        color: t.surface.onBaseMuted.withValues(alpha: 0.8),
-                        fontSize: 12)),
+                    style: t.text.bodySmallStyle.copyWith(
+                        color: t.surface.onBaseMuted.withValues(alpha: 0.8))),
               ),
             TextButton(
               onPressed:
@@ -367,9 +365,8 @@ class _ConfigFormState extends ConsumerState<_ConfigForm> {
             borderRadius: BorderRadius.circular(t.radius.pill),
           ),
           child: Text(label,
-              style: TextStyle(
+              style: t.text.bodySmallStyle.copyWith(
                   color: sel ? t.surface.onBase : t.surface.onBaseMuted,
-                  fontSize: 12.5,
                   fontWeight: FontWeight.w600)),
         ),
       );
@@ -396,8 +393,9 @@ class _ConfigFormState extends ConsumerState<_ConfigForm> {
           controller: _toml,
           maxLines: null,
           expands: true,
-          style: const TextStyle(
-              fontFamily: 'monospace', fontSize: 12.5, height: 1.5),
+          style: t.text
+              .resolve(t.text.bodySmall, mono: true)
+              .copyWith(height: 1.5),
           decoration: InputDecoration(
             filled: true,
             fillColor: t.surface.sunken,
@@ -450,9 +448,8 @@ class _ConfigFormState extends ConsumerState<_ConfigForm> {
   Widget _sectionLabel(HcTokens t, String s) => Padding(
         padding: EdgeInsets.only(top: t.space.md, bottom: t.space.xs),
         child: Text(s.toUpperCase(),
-            style: TextStyle(
+            style: t.text.captionStyle.copyWith(
                 color: t.surface.onBaseMuted,
-                fontSize: 10.5,
                 letterSpacing: 1.4,
                 fontWeight: FontWeight.w700)),
       );
@@ -486,7 +483,8 @@ class _FieldRow extends StatelessWidget {
               Row(children: [
                 Flexible(
                   child: Text(field.label ?? field.name,
-                      style: TextStyle(color: t.surface.onBase, fontSize: 14)),
+                      style: t.text.subtitleStyle
+                          .copyWith(color: t.surface.onBase)),
                 ),
                 if (field.required)
                   Text(' *', style: TextStyle(color: t.accent.danger)),
@@ -495,9 +493,8 @@ class _FieldRow extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.only(top: 2),
                   child: Text(field.help!,
-                      style: TextStyle(
-                          color: t.surface.onBaseMuted.withValues(alpha: 0.8),
-                          fontSize: 12)),
+                      style: t.text.bodySmallStyle.copyWith(
+                          color: t.surface.onBaseMuted.withValues(alpha: 0.8))),
                 ),
             ],
           ),
@@ -607,12 +604,12 @@ class _TextInputState extends State<_TextInput> {
         obscureText: widget.obscure,
         textAlign: widget.numeric ? TextAlign.right : TextAlign.start,
         keyboardType: widget.numeric ? TextInputType.number : null,
-        style: TextStyle(color: t.surface.onBase, fontSize: 13.5),
+        style: t.text.bodyStyle.copyWith(color: t.surface.onBase),
         onChanged: widget.onChanged,
         decoration: InputDecoration(
           isDense: true,
           hintText: widget.hint,
-          hintStyle: TextStyle(color: t.surface.onBaseMuted, fontSize: 13),
+          hintStyle: t.text.bodyStyle.copyWith(color: t.surface.onBaseMuted),
           contentPadding:
               const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
           filled: true,
@@ -671,23 +668,22 @@ class _ObjectArraySection extends StatelessWidget {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
           Text(path.toUpperCase(),
-              style: TextStyle(
+              style: t.text.captionStyle.copyWith(
                   color: t.surface.onBaseMuted,
-                  fontSize: 10.5,
                   letterSpacing: 1.4,
                   fontWeight: FontWeight.w700)),
           const SizedBox(width: 6),
           Text('${items.length}',
-              style: TextStyle(
+              style: t.text.captionStyle.copyWith(
                   color: t.surface.onBaseMuted.withValues(alpha: 0.65),
-                  fontSize: 10.5,
                   fontWeight: FontWeight.w700)),
         ]),
         const SizedBox(height: 8),
         if (items.isEmpty)
           _card(t,
               child: Text('None paired yet',
-                  style: TextStyle(color: t.surface.onBaseMuted, fontSize: 13)))
+                  style:
+                      t.text.bodyStyle.copyWith(color: t.surface.onBaseMuted)))
         else
           for (var i = 0; i < items.length; i++) ...[
             if (i > 0) const SizedBox(height: 8),
@@ -721,19 +717,16 @@ class _ObjectArraySection extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(title,
-                  style: TextStyle(
-                      color: t.surface.onBase,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600)),
+                  style: t.text.subtitleStyle.copyWith(
+                      color: t.surface.onBase, fontWeight: FontWeight.w600)),
               if (sub != null)
                 Padding(
                   padding: const EdgeInsets.only(top: 2),
                   child: Text(sub,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
+                      style: t.text.bodySmallStyle.copyWith(
                           color: t.surface.onBaseMuted,
-                          fontSize: 12,
                           fontFeatures: t.numericFontFeatures)),
                 ),
             ],
@@ -778,10 +771,8 @@ class _ObjectArraySection extends StatelessWidget {
           Icon(HcIcons.check, size: 11, color: t.accent.active),
           const SizedBox(width: 4),
           Text('Paired',
-              style: TextStyle(
-                  color: t.accent.active,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600)),
+              style: t.text.captionStyle.copyWith(
+                  color: t.accent.active, fontWeight: FontWeight.w600)),
         ]),
       );
 

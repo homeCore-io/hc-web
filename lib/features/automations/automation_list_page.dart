@@ -399,12 +399,11 @@ class _SortMenu extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text('Sort  ',
-                style: TextStyle(fontSize: 12, color: t.surface.onBaseMuted)),
+                style: t.text.bodySmallStyle
+                    .copyWith(color: t.surface.onBaseMuted)),
             Text(_sortLabels[value] ?? '',
-                style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: t.surface.onBase)),
+                style: t.text.bodySmallStyle.copyWith(
+                    fontWeight: FontWeight.w600, color: t.surface.onBase)),
             const SizedBox(width: 3),
             Icon(Icons.keyboard_arrow_down_rounded,
                 size: 15, color: t.surface.onBaseMuted),
@@ -437,8 +436,7 @@ class _GhostAction extends StatelessWidget {
         children: [
           if (icon != null) ...[Icon(icon, size: 16), const SizedBox(width: 6)],
           Text(label,
-              style:
-                  const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+              style: t.text.bodyStyle.copyWith(fontWeight: FontWeight.w600)),
         ],
       ),
     );
@@ -537,16 +535,16 @@ class _RuleTile extends ConsumerWidget {
                               dt != null
                                   ? fmtTime(dt, utc: isUtc, showDate: true)
                                   : ts ?? '?',
-                              style: TextStyle(
-                                  fontSize: 12.5, color: t.surface.onBase),
+                              style: t.text.bodySmallStyle
+                                  .copyWith(color: t.surface.onBase),
                             ),
                           ),
                           Text(
                             'cond ${condPass ? '✓' : '✗'} · '
                             'fire ${fired ? '✓' : '✗'}'
                             '${ms != null ? ' · ${ms}ms' : ''}',
-                            style: TextStyle(
-                                fontSize: 11, color: t.surface.onBaseMuted),
+                            style: t.text.captionStyle
+                                .copyWith(color: t.surface.onBaseMuted),
                           ),
                         ],
                       ),
@@ -583,8 +581,7 @@ class _RuleTile extends ConsumerWidget {
                 if (actions.isNotEmpty) ...[
                   const SizedBox(height: 14),
                   Text('Actions that would run',
-                      style: TextStyle(
-                          fontSize: 11,
+                      style: t.text.captionStyle.copyWith(
                           fontWeight: FontWeight.w700,
                           letterSpacing: 0.4,
                           color: t.surface.onBaseMuted)),
@@ -593,8 +590,8 @@ class _RuleTile extends ConsumerWidget {
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 2),
                       child: Text('• ${(a as Map)['type']}',
-                          style: TextStyle(
-                              fontSize: 12.5, color: t.surface.onBase)),
+                          style: t.text.bodySmallStyle
+                              .copyWith(color: t.surface.onBase)),
                     ),
                 ],
               ],
@@ -668,11 +665,10 @@ class _RuleTile extends ConsumerWidget {
                           rule.name,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: broken ? t.accent.danger : t.surface.onBase,
-                          ),
+                          style: t.text.subtitleStyle.copyWith(
+                              fontWeight: FontWeight.w600,
+                              color:
+                                  broken ? t.accent.danger : t.surface.onBase),
                         ),
                       ),
                       if (broken) ...[
@@ -694,12 +690,10 @@ class _RuleTile extends ConsumerWidget {
                     broken ? rule.error! : _sentence(),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      color: broken
-                          ? t.accent.danger.withValues(alpha: 0.8)
-                          : t.surface.onBaseMuted,
-                    ),
+                    style: t.text.bodySmallStyle.copyWith(
+                        color: broken
+                            ? t.accent.danger.withValues(alpha: 0.8)
+                            : t.surface.onBaseMuted),
                   ),
                 ],
               ),
@@ -713,11 +707,9 @@ class _RuleTile extends ConsumerWidget {
                 padding: EdgeInsets.only(right: t.space.sm),
                 child: Text(
                   'P${rule.priority}',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: t.surface.onBaseMuted.withValues(alpha: 0.6),
-                    fontFeatures: t.numericFontFeatures,
-                  ),
+                  style: t.text.captionStyle.copyWith(
+                      color: t.surface.onBaseMuted.withValues(alpha: 0.6),
+                      fontFeatures: t.numericFontFeatures),
                 ),
               ),
             HcHoverControls(
@@ -780,11 +772,8 @@ class _BranchesBadge extends StatelessWidget {
       ),
       child: Text(
         '⑂ branches',
-        style: TextStyle(
-          fontSize: 10.5,
-          fontWeight: FontWeight.w700,
-          color: t.accent.primary,
-        ),
+        style: t.text.captionStyle
+            .copyWith(fontWeight: FontWeight.w700, color: t.accent.primary),
       ),
     );
   }
@@ -857,7 +846,7 @@ class _TestRow extends StatelessWidget {
         Icon(value ? Icons.check_circle : Icons.cancel,
             color: value ? t.accent.success : t.accent.danger, size: 18),
         const SizedBox(width: 8),
-        Text(label, style: TextStyle(fontSize: 13.5, color: t.surface.onBase)),
+        Text(label, style: t.text.bodyStyle.copyWith(color: t.surface.onBase)),
       ],
     );
   }

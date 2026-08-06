@@ -43,7 +43,7 @@ class HcSensorChip extends StatelessWidget {
         ? t.accent.offline
         : alert
             ? t.accent.danger
-            : (metric?.$3 ?? t.surface.onBase);
+            : (metric?.$3.color(t) ?? t.surface.onBase);
 
     return InkWell(
       onTap: onTap,
@@ -75,11 +75,10 @@ class HcSensorChip extends StatelessWidget {
               device.displayName.toUpperCase(),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 9.5,
-                height: 1.3,
+              // Heavier than the ramp's overline, which is deliberate: this is
+              // a chip's only label and it carries at a glance.
+              style: t.text.overlineStyle.copyWith(
                 fontWeight: FontWeight.w800,
-                letterSpacing: 0.8,
                 color: t.surface.onBaseMuted,
               ),
             ),
@@ -87,11 +86,11 @@ class HcSensorChip extends StatelessWidget {
               reading,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 15,
-                height: 1.25,
+              // `title`, not a body role: this is the number you read across
+              // the room, and the ramp's 16 is a point larger than the 15 it
+              // drifted to.
+              style: t.text.titleStyle.copyWith(
                 fontWeight: FontWeight.w700,
-                letterSpacing: -0.2,
                 color: accent,
                 fontFeatures: t.numericFontFeatures,
               ),

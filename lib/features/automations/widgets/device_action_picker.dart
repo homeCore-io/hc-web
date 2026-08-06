@@ -775,8 +775,8 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
             'of the rail; flow, waits, notifications, variables and '
             'integrations are further down.',
             textAlign: TextAlign.center,
-            style: TextStyle(
-                fontSize: 12.5, height: 1.5, color: t.surface.onBaseMuted),
+            style: t.text.bodySmallStyle
+                .copyWith(height: 1.5, color: t.surface.onBaseMuted),
           ),
         ),
       );
@@ -801,17 +801,15 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(e.label,
-                    style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: t.surface.onBase)),
+                    style: t.text.subtitleStyle.copyWith(
+                        fontWeight: FontWeight.w600, color: t.surface.onBase)),
                 Text(
                     e.kind == _Kind.template
                         ? 'action'
                         : (e.device?.mediaSubtitle ?? e.sub),
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                        fontSize: 11.5, color: t.surface.onBaseMuted)),
+                    style: t.text.captionStyle
+                        .copyWith(color: t.surface.onBaseMuted)),
               ],
             ),
           ),
@@ -828,10 +826,8 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
             _panel(
                 t,
                 Text(_effectNote(_cmd!),
-                    style: TextStyle(
-                        fontSize: 12.5,
-                        height: 1.5,
-                        color: t.surface.onBaseMuted)))
+                    style: t.text.bodySmallStyle
+                        .copyWith(height: 1.5, color: t.surface.onBaseMuted)))
           else
             for (final pr in _cmd!.params) ...[
               RailLabel(_paramLabel(_cmd!, pr)),
@@ -1054,8 +1050,8 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
   Widget _note(HcTokens t, String text) => _panel(
       t,
       Text(text,
-          style: TextStyle(
-              fontSize: 12.5, height: 1.5, color: t.surface.onBaseMuted)));
+          style: t.text.bodySmallStyle
+              .copyWith(height: 1.5, color: t.surface.onBaseMuted)));
 
   Widget _countStepper(HcTokens t) {
     Widget btn(IconData i, VoidCallback f) => InkWell(
@@ -1077,10 +1073,8 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
           () => setState(() => _repeatCount = (_repeatCount - 1).clamp(1, 99))),
       SizedBox(width: t.space.md),
       Text('$_repeatCount',
-          style: TextStyle(
-              fontSize: 26,
-              fontWeight: FontWeight.w700,
-              color: t.accent.active)),
+          style: t.text.displayStyle
+              .copyWith(fontWeight: FontWeight.w700, color: t.accent.active)),
       SizedBox(width: t.space.md),
       btn(Icons.add,
           () => setState(() => _repeatCount = (_repeatCount + 1).clamp(1, 99))),
@@ -1102,7 +1096,7 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
           value: safe,
           isExpanded: true,
           dropdownColor: t.surface.overlay,
-          style: TextStyle(fontSize: 13.5, color: t.surface.onBase),
+          style: t.text.bodyStyle.copyWith(color: t.surface.onBase),
           items: [
             for (final o in opts) DropdownMenuItem(value: o, child: Text(o)),
           ],
@@ -1130,8 +1124,7 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
                   color: on ? ac.withValues(alpha: 0.4) : t.stroke.hairline),
             ),
             child: Text(label,
-                style: TextStyle(
-                    fontSize: 13,
+                style: t.text.bodyStyle.copyWith(
                     fontWeight: FontWeight.w600,
                     color: on ? ac : t.surface.onBaseMuted)),
           ),
@@ -1260,10 +1253,8 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
         width: 52,
         child: Text('${v.round()}${p.unit ?? ''}',
             textAlign: TextAlign.right,
-            style: TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 14,
-                color: t.accent.primary)),
+            style: t.text.subtitleStyle.copyWith(
+                fontWeight: FontWeight.w700, color: t.accent.primary)),
       ),
     ]);
   }
@@ -1291,10 +1282,8 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
           () => setState(() => _values[p.name] = (v - step).clamp(5.0, 40.0))),
       SizedBox(width: t.space.md),
       Text('${v % 1 == 0 ? v.toInt() : v}${p.unit ?? ''}',
-          style: TextStyle(
-              fontSize: 26,
-              fontWeight: FontWeight.w700,
-              color: t.accent.active)),
+          style: t.text.displayStyle
+              .copyWith(fontWeight: FontWeight.w700, color: t.accent.active)),
       SizedBox(width: t.space.md),
       btn(Icons.add,
           () => setState(() => _values[p.name] = (v + step).clamp(5.0, 40.0))),
@@ -1316,14 +1305,14 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
         (_values[p.name] as String?) ?? (opts.isEmpty ? null : opts.first);
     if (opts.isEmpty) {
       return Text('None available on this device.',
-          style: TextStyle(fontSize: 12.5, color: t.surface.onBaseMuted));
+          style: t.text.bodySmallStyle.copyWith(color: t.surface.onBaseMuted));
     }
     return DropdownButtonHideUnderline(
       child: DropdownButton<String>(
         value: v,
         isExpanded: true,
         dropdownColor: t.surface.overlay,
-        style: TextStyle(fontSize: 13.5, color: t.surface.onBase),
+        style: t.text.bodyStyle.copyWith(color: t.surface.onBase),
         items: [
           for (final o in opts)
             DropdownMenuItem(value: o, child: Text(p.labelFor(o))),
@@ -1383,10 +1372,8 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
             _swatches
                 .firstWhere((s) => s.$2 == sel, orElse: () => _swatches[2])
                 .$1,
-            style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: t.surface.onBase)),
+            style: t.text.bodyStyle.copyWith(
+                fontWeight: FontWeight.w600, color: t.surface.onBase)),
       ],
     );
   }
@@ -1419,7 +1406,7 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
 
   List<Widget> _sentence(HcTokens t, _Entry e) {
     Widget word(String s) =>
-        Text(s, style: TextStyle(fontSize: 13.5, color: t.surface.onBaseMuted));
+        Text(s, style: t.text.bodyStyle.copyWith(color: t.surface.onBaseMuted));
     Widget tok(String s, Color c) => Container(
           padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 2),
           decoration: BoxDecoration(
@@ -1428,8 +1415,8 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
             border: Border.all(color: c.withValues(alpha: 0.32)),
           ),
           child: Text(s,
-              style: TextStyle(
-                  fontSize: 13, fontWeight: FontWeight.w600, color: c)),
+              style: t.text.bodyStyle
+                  .copyWith(fontWeight: FontWeight.w600, color: c)),
         );
     if (e.kind == _Kind.template) return _templateSentence(t, e, word, tok);
     final dev = tok(e.label, t.accent.primary);
@@ -1729,8 +1716,7 @@ class _CommandChip extends StatelessWidget {
               child: Text(command.label,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                      fontSize: 12.5,
+                  style: t.text.bodySmallStyle.copyWith(
                       fontWeight: FontWeight.w600,
                       height: 1.15,
                       color: selected ? ac : t.surface.onBaseMuted)),
@@ -1770,8 +1756,7 @@ class _Toggle extends StatelessWidget {
                     selected ? ac.withValues(alpha: 0.4) : t.stroke.hairline),
           ),
           child: Text(label,
-              style: TextStyle(
-                  fontSize: 12,
+              style: t.text.bodySmallStyle.copyWith(
                   fontWeight: FontWeight.w600,
                   color: selected ? ac : t.surface.onBaseMuted)),
         ),

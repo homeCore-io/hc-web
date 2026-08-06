@@ -111,7 +111,8 @@ class _AuditPageState extends ConsumerState<AuditPage> {
                 child: Text(
                   'Showing the most recent ${filter.limit}. Narrow the range '
                   'to see further back.',
-                  style: TextStyle(fontSize: 12, color: t.surface.onBaseMuted),
+                  style: t.text.bodySmallStyle
+                      .copyWith(color: t.surface.onBaseMuted),
                 ),
               ),
           ],
@@ -226,7 +227,7 @@ class _Filters extends StatelessWidget {
             width: 210,
             child: TextField(
               onChanged: onSearch,
-              style: const TextStyle(fontSize: 13),
+              style: t.text.bodyStyle,
               decoration: const InputDecoration(
                 isDense: true,
                 hintText: 'Actor, event, target or IP',
@@ -278,11 +279,9 @@ class _Chip extends StatelessWidget {
         ),
         child: Text(
           label,
-          style: TextStyle(
-            fontSize: 12.5,
-            fontWeight: FontWeight.w600,
-            color: active ? accent : t.surface.onBaseMuted,
-          ),
+          style: t.text.bodySmallStyle.copyWith(
+              fontWeight: FontWeight.w600,
+              color: active ? accent : t.surface.onBaseMuted),
         ),
       ),
     );
@@ -313,12 +312,10 @@ class _Timeline extends ConsumerWidget {
               padding: EdgeInsets.fromLTRB(2, t.space.md, 0, t.space.xs),
               child: Text(
                 day.label,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 1.1,
-                  color: t.surface.onBaseMuted,
-                ),
+                style: t.text.captionStyle.copyWith(
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.1,
+                    color: t.surface.onBaseMuted),
               ),
             ),
             for (final e in day.entries) _Row(entry: e, utc: utc),
@@ -367,11 +364,9 @@ class _RowState extends State<_Row> {
                       width: 62,
                       child: Text(
                         fmtTime(e.at, utc: widget.utc),
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: t.surface.onBaseMuted,
-                          fontFeatures: t.numericFontFeatures,
-                        ),
+                        style: t.text.bodySmallStyle.copyWith(
+                            color: t.surface.onBaseMuted,
+                            fontFeatures: t.numericFontFeatures),
                       ),
                     ),
                     SizedBox(width: t.space.sm),
@@ -384,8 +379,8 @@ class _RowState extends State<_Row> {
                         auditActorName(e),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                            fontSize: 12.5, color: t.surface.onBaseMuted),
+                        style: t.text.bodySmallStyle
+                            .copyWith(color: t.surface.onBaseMuted),
                       ),
                     ),
                     SizedBox(width: t.space.sm),
@@ -394,7 +389,8 @@ class _RowState extends State<_Row> {
                         auditPhrase(e),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontSize: 13, color: t.surface.onBase),
+                        style:
+                            t.text.bodyStyle.copyWith(color: t.surface.onBase),
                       ),
                     ),
                     SizedBox(width: t.space.sm),
@@ -437,11 +433,9 @@ class _ResultPill extends StatelessWidget {
       ),
       child: Text(
         result,
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-          color: ok ? t.surface.onBaseMuted : tone,
-        ),
+        style: t.text.captionStyle.copyWith(
+            fontWeight: FontWeight.w700,
+            color: ok ? t.surface.onBaseMuted : tone),
       ),
     );
   }
@@ -492,17 +486,15 @@ class _Detail extends StatelessWidget {
                   SizedBox(
                     width: 96,
                     child: Text(r.$1,
-                        style: TextStyle(
-                            fontSize: 12, color: t.surface.onBaseMuted)),
+                        style: t.text.bodySmallStyle
+                            .copyWith(color: t.surface.onBaseMuted)),
                   ),
                   Expanded(
                     child: SelectableText(
                       r.$2,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: t.surface.onBase,
-                        fontFeatures: t.numericFontFeatures,
-                      ),
+                      style: t.text.bodySmallStyle.copyWith(
+                          color: t.surface.onBase,
+                          fontFeatures: t.numericFontFeatures),
                     ),
                   ),
                 ],
@@ -534,14 +526,15 @@ class _Empty extends StatelessWidget {
             SizedBox(height: t.space.sm),
             Text(
               narrowed ? 'Nothing matches these filters' : 'No events recorded',
-              style: TextStyle(fontSize: 14, color: t.surface.onBase),
+              style: t.text.subtitleStyle.copyWith(color: t.surface.onBase),
             ),
             const SizedBox(height: 4),
             Text(
               narrowed
                   ? 'Widen the range or clear a filter.'
                   : 'Signing in, changing config and managing users all land here.',
-              style: TextStyle(fontSize: 12.5, color: t.surface.onBaseMuted),
+              style:
+                  t.text.bodySmallStyle.copyWith(color: t.surface.onBaseMuted),
             ),
           ],
         ),
@@ -571,7 +564,7 @@ class _Error extends StatelessWidget {
             SizedBox(height: t.space.sm),
             Text(
               forbidden ? 'You cannot read the audit log' : 'Audit unavailable',
-              style: TextStyle(fontSize: 14, color: t.surface.onBase),
+              style: t.text.subtitleStyle.copyWith(color: t.surface.onBase),
             ),
             const SizedBox(height: 4),
             Text(
@@ -579,7 +572,8 @@ class _Error extends StatelessWidget {
                   ? 'It needs the audit:read scope — Admin and Observer have it.'
                   : message,
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 12.5, color: t.surface.onBaseMuted),
+              style:
+                  t.text.bodySmallStyle.copyWith(color: t.surface.onBaseMuted),
             ),
           ],
         ),

@@ -111,8 +111,7 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
                 size: 15,
                 color: on ? tt.accent.active : tt.surface.onBaseMuted),
             label: Text('Outline',
-                style: TextStyle(
-                    fontSize: 13,
+                style: tt.text.bodyStyle.copyWith(
                     fontWeight: FontWeight.w600,
                     color: on ? tt.accent.active : tt.surface.onBaseMuted)),
             style: TextButton.styleFrom(
@@ -130,8 +129,9 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               ),
-              child: const Text('Dry run',
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+              child: Text('Dry run',
+                  style:
+                      tt.text.bodyStyle.copyWith(fontWeight: FontWeight.w600)),
             );
           }),
       ],
@@ -194,20 +194,16 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
         children: [
           TextFormField(
             initialValue: rule.name,
-            style: TextStyle(
-              fontSize: 26,
-              fontWeight: FontWeight.w700,
-              letterSpacing: -0.6,
-              color: t.surface.onBase,
-            ),
-            decoration: InputDecoration(
-              hintText: 'Name this automation',
-              hintStyle: TextStyle(
-                fontSize: 26,
+            style: t.text.displayStyle.copyWith(
                 fontWeight: FontWeight.w700,
                 letterSpacing: -0.6,
-                color: t.surface.onBaseMuted.withValues(alpha: 0.4),
-              ),
+                color: t.surface.onBase),
+            decoration: InputDecoration(
+              hintText: 'Name this automation',
+              hintStyle: t.text.displayStyle.copyWith(
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.6,
+                  color: t.surface.onBaseMuted.withValues(alpha: 0.4)),
               isDense: true,
               contentPadding: EdgeInsets.zero,
               border: InputBorder.none,
@@ -484,7 +480,7 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
           const SizedBox(width: 8),
           Expanded(
             child: SelectableText(message,
-                style: TextStyle(fontSize: 13, color: t.surface.onBase)),
+                style: t.text.bodyStyle.copyWith(color: t.surface.onBase)),
           ),
         ],
       ),
@@ -514,7 +510,7 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
                   ? 'As things stand right now, this rule would fire.'
                   : 'As things stand right now, this rule would not fire — the '
                       'failing condition is marked below.',
-              style: TextStyle(fontSize: 13, color: t.surface.onBase),
+              style: t.text.bodyStyle.copyWith(color: t.surface.onBase),
             ),
           ),
         ],
@@ -634,11 +630,8 @@ class _SaveBar extends StatelessWidget {
                 SizedBox(width: t.space.sm),
                 Text(
                   'Unsaved changes',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: t.surface.onBase,
-                  ),
+                  style: t.text.bodyStyle.copyWith(
+                      fontWeight: FontWeight.w600, color: t.surface.onBase),
                 ),
                 const Spacer(),
                 TextButton(
@@ -948,8 +941,8 @@ class _MetaLine extends ConsumerWidget {
                           Text(
                             _runMode(
                                 RunMode(k, maxQueue: rule.runMode.maxQueue)),
-                            style: TextStyle(
-                                fontSize: 13.5, color: t.surface.onBase),
+                            style: t.text.bodyStyle
+                                .copyWith(color: t.surface.onBase),
                           ),
                         ],
                       ),
@@ -1039,12 +1032,10 @@ class _MetaChip extends StatelessWidget {
             ],
             Text(
               label,
-              style: TextStyle(
-                fontSize: 12.5,
-                color: colour,
-                fontWeight: dot ? FontWeight.w600 : FontWeight.w400,
-                fontFeatures: t.numericFontFeatures,
-              ),
+              style: t.text.bodySmallStyle.copyWith(
+                  color: colour,
+                  fontWeight: dot ? FontWeight.w600 : FontWeight.w400,
+                  fontFeatures: t.numericFontFeatures),
             ),
           ],
         ),
@@ -1094,8 +1085,7 @@ class _SectionState extends State<_Section> {
               child: Row(
                 children: [
                   Text(widget.title,
-                      style: TextStyle(
-                          fontSize: 14,
+                      style: t.text.subtitleStyle.copyWith(
                           fontWeight: FontWeight.w600,
                           color: t.surface.onBase)),
                   const Spacer(),

@@ -107,20 +107,14 @@ class _Option extends StatelessWidget {
                 children: [
                   Text(
                     label,
-                    style: TextStyle(
-                      color: t.surface.onBase,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 15,
-                    ),
+                    style: t.text.subtitleStyle.copyWith(
+                        color: t.surface.onBase, fontWeight: FontWeight.w600),
                   ),
                   SizedBox(height: t.space.xs),
                   Text(
                     description,
-                    style: TextStyle(
-                      color: t.surface.onBaseMuted,
-                      fontSize: 13,
-                      height: 1.4,
-                    ),
+                    style: t.text.bodyStyle
+                        .copyWith(color: t.surface.onBaseMuted, height: 1.4),
                   ),
                 ],
               ),

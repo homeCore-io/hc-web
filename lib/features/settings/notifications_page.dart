@@ -226,15 +226,15 @@ class _ChannelRow extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(channel.name,
-                      style: const TextStyle(
-                          fontSize: 14, fontWeight: FontWeight.w600)),
+                      style: t.text.subtitleStyle
+                          .copyWith(fontWeight: FontWeight.w600)),
                   const SizedBox(height: 2),
                   Text(
                     // What a person needs to recognise the channel — the
                     // address or chat it reaches, never the credential.
                     _summary(channel),
-                    style:
-                        TextStyle(fontSize: 12.5, color: t.surface.onBaseMuted),
+                    style: t.text.bodySmallStyle
+                        .copyWith(color: t.surface.onBaseMuted),
                   ),
                 ],
               ),
@@ -243,14 +243,15 @@ class _ChannelRow extends StatelessWidget {
               Padding(
                 padding: EdgeInsets.only(right: t.space.sm),
                 child: Text('Unknown provider “${channel.type}”',
-                    style: TextStyle(fontSize: 12, color: t.accent.warn)),
+                    style:
+                        t.text.bodySmallStyle.copyWith(color: t.accent.warn)),
               )
             else
               Padding(
                 padding: EdgeInsets.only(right: t.space.sm),
                 child: Text(kind.label,
-                    style: TextStyle(
-                        fontSize: 12.5, color: t.surface.onBaseMuted)),
+                    style: t.text.bodySmallStyle
+                        .copyWith(color: t.surface.onBaseMuted)),
               ),
             TextButton(onPressed: onTest, child: const Text('Send test')),
             TextButton(onPressed: onEdit, child: const Text('Edit')),
@@ -303,7 +304,7 @@ class _Empty extends StatelessWidget {
                 size: 30, color: t.surface.onBaseMuted),
             SizedBox(height: t.space.sm),
             Text('No channels yet',
-                style: TextStyle(fontSize: 14, color: t.surface.onBase)),
+                style: t.text.subtitleStyle.copyWith(color: t.surface.onBase)),
             const SizedBox(height: 4),
             SizedBox(
               width: 380,
@@ -311,7 +312,8 @@ class _Empty extends StatelessWidget {
                 'A rule that says “notify” needs somewhere to send. Battery '
                 'alerts use one too — the channel named in Configuration.',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 12.5, color: t.surface.onBaseMuted),
+                style: t.text.bodySmallStyle
+                    .copyWith(color: t.surface.onBaseMuted),
               ),
             ),
             SizedBox(height: t.space.md),
@@ -401,7 +403,8 @@ class _ChannelEditorState extends State<_ChannelEditor> {
               if (_error != null) ...[
                 SizedBox(height: t.space.sm),
                 Text(_error!,
-                    style: TextStyle(fontSize: 12.5, color: t.accent.danger)),
+                    style:
+                        t.text.bodySmallStyle.copyWith(color: t.accent.danger)),
               ],
             ],
           ),
@@ -510,7 +513,7 @@ class _Error extends StatelessWidget {
               ? 'Notification channels are admin-only — they hold credentials.'
               : message,
           textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 13, color: t.surface.onBaseMuted),
+          style: t.text.bodyStyle.copyWith(color: t.surface.onBaseMuted),
         ),
       ),
     );

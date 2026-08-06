@@ -283,10 +283,8 @@ class _ScopePill extends ConsumerWidget {
               horizontal: t.space.md, vertical: t.space.xs + 2),
           child: Row(mainAxisSize: MainAxisSize.min, children: [
             Text('Showing $name devices',
-                style: TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w600,
-                    color: t.accent.active)),
+                style: t.text.bodySmallStyle.copyWith(
+                    fontWeight: FontWeight.w600, color: t.accent.active)),
             SizedBox(width: t.space.sm),
             Icon(Icons.close, size: 14, color: t.accent.active),
           ]),
@@ -330,12 +328,10 @@ class _Controls extends ConsumerWidget {
                       isDense: true,
                       border: InputBorder.none,
                       hintText: 'Search by name, room, type, plugin…',
-                      hintStyle: TextStyle(
-                        color: t.surface.onBaseMuted,
-                        fontSize: 13.5,
-                      ),
+                      hintStyle: t.text.bodyStyle
+                          .copyWith(color: t.surface.onBaseMuted),
                     ),
-                    style: TextStyle(fontSize: 13.5, color: t.surface.onBase),
+                    style: t.text.bodyStyle.copyWith(color: t.surface.onBase),
                     onChanged: (v) => update(query.copyWith(search: v)),
                   ),
                 ),
@@ -430,15 +426,13 @@ class _Menu<T> extends StatelessWidget {
           children: [
             Text(
               '$label ',
-              style: TextStyle(fontSize: 12.5, color: t.surface.onBaseMuted),
+              style:
+                  t.text.bodySmallStyle.copyWith(color: t.surface.onBaseMuted),
             ),
             Text(
               options[value] ?? '',
-              style: TextStyle(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w600,
-                color: t.surface.onBase,
-              ),
+              style: t.text.bodySmallStyle.copyWith(
+                  fontWeight: FontWeight.w600, color: t.surface.onBase),
             ),
             Icon(Icons.expand_more, size: 14, color: t.surface.onBaseMuted),
           ],
@@ -537,20 +531,16 @@ class _Chip extends StatelessWidget {
           children: [
             Text(
               label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: selected || warn ? accent : t.surface.onBaseMuted,
-              ),
+              style: t.text.bodySmallStyle.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: selected || warn ? accent : t.surface.onBaseMuted),
             ),
             SizedBox(width: t.space.xs + 1),
             Text(
               '$count',
-              style: TextStyle(
-                fontSize: 10.5,
-                color: t.surface.onBaseMuted,
-                fontFeatures: t.numericFontFeatures,
-              ),
+              style: t.text.captionStyle.copyWith(
+                  color: t.surface.onBaseMuted,
+                  fontFeatures: t.numericFontFeatures),
             ),
           ],
         ),
@@ -587,11 +577,8 @@ class _NeedsAttention extends ConsumerWidget {
               SizedBox(width: t.space.sm),
               Text(
                 'Needs attention · ${problems.length + (noRoom.isEmpty ? 0 : 1)}',
-                style: TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w700,
-                  color: t.accent.danger,
-                ),
+                style: t.text.bodySmallStyle.copyWith(
+                    fontWeight: FontWeight.w700, color: t.accent.danger),
               ),
             ],
           ),
@@ -611,26 +598,21 @@ class _NeedsAttention extends ConsumerWidget {
                     SizedBox(width: t.space.sm),
                     Text(
                       p.device.displayName,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: t.surface.onBase,
-                      ),
+                      style: t.text.bodyStyle.copyWith(
+                          fontWeight: FontWeight.w600, color: t.surface.onBase),
                     ),
                     SizedBox(width: t.space.sm),
                     Text(
                       p.device.effectiveArea ?? '',
-                      style:
-                          TextStyle(fontSize: 12, color: t.surface.onBaseMuted),
+                      style: t.text.bodySmallStyle
+                          .copyWith(color: t.surface.onBaseMuted),
                     ),
                     const Spacer(),
                     Text(
                       p.reason,
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        color: t.accent.danger,
-                        fontFeatures: t.numericFontFeatures,
-                      ),
+                      style: t.text.captionStyle.copyWith(
+                          color: t.accent.danger,
+                          fontFeatures: t.numericFontFeatures),
                     ),
                   ],
                 ),
@@ -652,17 +634,14 @@ class _NeedsAttention extends ConsumerWidget {
                       child: Text(
                         '${noRoom.length} devices have no room — grouping and '
                         'rules both get worse without one',
-                        style: TextStyle(
-                            fontSize: 12.5, color: t.surface.onBaseMuted),
+                        style: t.text.bodySmallStyle
+                            .copyWith(color: t.surface.onBaseMuted),
                       ),
                     ),
                     Text(
                       'assign →',
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w600,
-                        color: t.accent.primary,
-                      ),
+                      style: t.text.captionStyle.copyWith(
+                          fontWeight: FontWeight.w600, color: t.accent.primary),
                     ),
                   ],
                 ),
@@ -736,10 +715,8 @@ class _Table extends ConsumerWidget {
                 })),
                 DataCell(Text(
                   d.pluginId,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: t.surface.onBaseMuted,
-                  ),
+                  style: t.text.bodySmallStyle
+                      .copyWith(color: t.surface.onBaseMuted),
                 )),
               ],
             ),

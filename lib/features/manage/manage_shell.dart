@@ -235,11 +235,8 @@ class _SectionNav extends StatelessWidget {
                 Expanded(
                   child: Text(
                     selected?.label ?? 'Sections',
-                    style: TextStyle(
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.w600,
-                      color: t.surface.onBase,
-                    ),
+                    style: t.text.bodyStyle.copyWith(
+                        fontWeight: FontWeight.w600, color: t.surface.onBase),
                   ),
                 ),
                 Icon(Icons.expand_more, size: 18, color: t.surface.onBaseMuted),
@@ -266,12 +263,10 @@ class _SectionNav extends StatelessWidget {
                     EdgeInsets.fromLTRB(t.space.sm, t.space.sm, 0, t.space.sm),
                 child: Text(
                   group.heading.toUpperCase(),
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1.2,
-                    color: t.surface.onBaseMuted,
-                  ),
+                  style: t.text.captionStyle.copyWith(
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.2,
+                      color: t.surface.onBaseMuted),
                 ),
               ),
               for (final s in ManageShell.sections)
@@ -305,12 +300,10 @@ Future<void> _pick(BuildContext context) async {
                     EdgeInsets.fromLTRB(t.space.sm, t.space.sm, 0, t.space.sm),
                 child: Text(
                   group.heading.toUpperCase(),
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1.2,
-                    color: t.surface.onBaseMuted,
-                  ),
+                  style: t.text.captionStyle.copyWith(
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.2,
+                      color: t.surface.onBaseMuted),
                 ),
               ),
               for (final s in ManageShell.sections)
@@ -370,11 +363,9 @@ class _NavEntry extends StatelessWidget {
               SizedBox(width: t.space.sm),
               Text(
                 section.label,
-                style: TextStyle(
-                  fontSize: 13.5,
-                  fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-                  color: selected ? t.surface.onBase : t.surface.onBaseMuted,
-                ),
+                style: t.text.bodyStyle.copyWith(
+                    fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                    color: selected ? t.surface.onBase : t.surface.onBaseMuted),
               ),
             ],
           ),

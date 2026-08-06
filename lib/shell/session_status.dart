@@ -95,10 +95,8 @@ class LiveDot extends ConsumerWidget {
         SizedBox(width: t.space.sm),
         Text(
           connected ? 'Live' : 'Reconnecting…',
-          style: TextStyle(
-            color: connected ? t.surface.onBaseMuted : t.accent.danger,
-            fontSize: 12,
-          ),
+          style: t.text.bodySmallStyle.copyWith(
+              color: connected ? t.surface.onBaseMuted : t.accent.danger),
         ),
       ],
     );

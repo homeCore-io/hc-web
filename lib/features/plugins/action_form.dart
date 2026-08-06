@@ -63,7 +63,8 @@ class _ActionFormState extends State<ActionForm> {
           if (action.params.isEmpty)
             Text(
               'This action takes no parameters.',
-              style: TextStyle(fontSize: 12.5, color: t.surface.onBaseMuted),
+              style:
+                  t.text.bodySmallStyle.copyWith(color: t.surface.onBaseMuted),
             ),
           for (final p in action.params)
             Padding(
@@ -73,7 +74,7 @@ class _ActionFormState extends State<ActionForm> {
           if (_missing != null)
             Text(
               '${humanize(_missing!)} is required.',
-              style: TextStyle(fontSize: 12.5, color: t.accent.danger),
+              style: t.text.bodySmallStyle.copyWith(color: t.accent.danger),
             ),
           if (action.stream) ...[
             SizedBox(height: t.space.sm),
@@ -86,8 +87,8 @@ class _ActionFormState extends State<ActionForm> {
                     action.cancelable
                         ? 'Reports progress live, and can be cancelled.'
                         : 'Reports progress live.',
-                    style:
-                        TextStyle(fontSize: 12.5, color: t.surface.onBaseMuted),
+                    style: t.text.bodySmallStyle
+                        .copyWith(color: t.surface.onBaseMuted),
                   ),
                 ),
               ],
@@ -145,16 +146,15 @@ class _ActionFormState extends State<ActionForm> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(label,
-            style: TextStyle(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w600,
-                color: t.surface.onBase)),
+            style: t.text.bodySmallStyle.copyWith(
+                fontWeight: FontWeight.w600, color: t.surface.onBase)),
         SizedBox(height: t.space.xs),
         field,
         if (help != null) ...[
           SizedBox(height: t.space.xs),
           Text(help,
-              style: TextStyle(fontSize: 11.5, color: t.surface.onBaseMuted)),
+              style:
+                  t.text.captionStyle.copyWith(color: t.surface.onBaseMuted)),
         ],
       ],
     );
@@ -187,7 +187,7 @@ class _ActionFormState extends State<ActionForm> {
         initialValue: _values[p.name] as String?,
         isExpanded: true,
         dropdownColor: t.surface.overlay,
-        style: TextStyle(fontSize: 13.5, color: t.surface.onBase),
+        style: t.text.bodyStyle.copyWith(color: t.surface.onBase),
         decoration: _decoration(t),
         items: [
           for (final o in p.options!)
@@ -209,14 +209,12 @@ class _ActionFormState extends State<ActionForm> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(humanize(p.name),
-                    style: TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w600,
-                        color: t.surface.onBase)),
+                    style: t.text.bodySmallStyle.copyWith(
+                        fontWeight: FontWeight.w600, color: t.surface.onBase)),
                 if (p.description != null)
                   Text(p.description!,
-                      style: TextStyle(
-                          fontSize: 11.5, color: t.surface.onBaseMuted)),
+                      style: t.text.captionStyle
+                          .copyWith(color: t.surface.onBaseMuted)),
               ],
             ),
           ),
@@ -227,7 +225,7 @@ class _ActionFormState extends State<ActionForm> {
     final numeric = p.type == 'integer' || p.type == 'number';
     return TextFormField(
       initialValue: _values[p.name]?.toString() ?? '',
-      style: TextStyle(fontSize: 13.5, color: t.surface.onBase),
+      style: t.text.bodyStyle.copyWith(color: t.surface.onBase),
       decoration: _decoration(t),
       keyboardType: numeric ? TextInputType.number : null,
       onChanged: (v) => setState(() {

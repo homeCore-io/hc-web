@@ -569,8 +569,8 @@ class _DeviceTriggerPickerState extends State<DeviceTriggerPicker> {
             'Pick a device to fire on its changes, or choose a time, a solar '
             'event, a mode change, a webhook, or run it by hand.',
             textAlign: TextAlign.center,
-            style: TextStyle(
-                fontSize: 12.5, height: 1.5, color: t.surface.onBaseMuted),
+            style: t.text.bodySmallStyle
+                .copyWith(height: 1.5, color: t.surface.onBaseMuted),
           ),
         ),
       );
@@ -592,10 +592,8 @@ class _DeviceTriggerPickerState extends State<DeviceTriggerPicker> {
           SizedBox(width: t.space.sm),
           Expanded(
             child: Text(e.label,
-                style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: t.surface.onBase)),
+                style: t.text.subtitleStyle.copyWith(
+                    fontWeight: FontWeight.w600, color: t.surface.onBase)),
           ),
         ]),
         SizedBox(height: t.space.md),
@@ -673,8 +671,7 @@ class _DeviceTriggerPickerState extends State<DeviceTriggerPicker> {
               child: Text(ty.$2,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                      fontSize: 12.5,
+                  style: t.text.bodySmallStyle.copyWith(
                       fontWeight: FontWeight.w600,
                       height: 1.15,
                       color: on ? ac : t.surface.onBaseMuted)),
@@ -712,8 +709,8 @@ class _DeviceTriggerPickerState extends State<DeviceTriggerPicker> {
                 ? 'This device has not reported its buttons, so they cannot be '
                     'listed — enter the number, or leave it blank for any.'
                 : 'Only buttons this device has reported are listed.',
-            style: TextStyle(
-                fontSize: 11, height: 1.4, color: t.surface.onBaseMuted),
+            style: t.text.captionStyle
+                .copyWith(height: 1.4, color: t.surface.onBaseMuted),
           ),
           SizedBox(height: t.space.md),
           const RailLabel('Press type'),
@@ -838,8 +835,8 @@ class _DeviceTriggerPickerState extends State<DeviceTriggerPicker> {
           border: Border.all(color: t.stroke.hairline),
         ),
         child: Text(text,
-            style: TextStyle(
-                fontSize: 12.5, height: 1.5, color: t.surface.onBaseMuted)),
+            style: t.text.bodySmallStyle
+                .copyWith(height: 1.5, color: t.surface.onBaseMuted)),
       );
 
   List<Widget> _templateControls(BuildContext context, HcTokens t, String tag) {
@@ -866,8 +863,8 @@ class _DeviceTriggerPickerState extends State<DeviceTriggerPicker> {
             'Six fields, seconds first. "0 0 7 * * *" is 07:00 every day. Use '
             'Every N or At a time of day unless you need a schedule they '
             'cannot express.',
-            style: TextStyle(
-                fontSize: 11, height: 1.4, color: t.surface.onBaseMuted),
+            style: t.text.captionStyle
+                .copyWith(height: 1.4, color: t.surface.onBaseMuted),
           ),
         ];
       case 'Periodic':
@@ -956,8 +953,8 @@ class _DeviceTriggerPickerState extends State<DeviceTriggerPicker> {
           ),
           SizedBox(height: t.space.sm),
           Text('MQTT wildcards: + for one level, # for the rest.',
-              style: TextStyle(
-                  fontSize: 11, height: 1.4, color: t.surface.onBaseMuted)),
+              style: t.text.captionStyle
+                  .copyWith(height: 1.4, color: t.surface.onBaseMuted)),
         ];
       case 'TimeOfDay':
         return [
@@ -1000,7 +997,8 @@ class _DeviceTriggerPickerState extends State<DeviceTriggerPicker> {
           SizedBox(height: t.space.sm),
           if (widget.refs.modes.isEmpty)
             Text('No modes defined.',
-                style: TextStyle(color: t.surface.onBaseMuted, fontSize: 12.5))
+                style: t.text.bodySmallStyle
+                    .copyWith(color: t.surface.onBaseMuted))
           else
             _dropdown(t, _modeId, [for (final m in widget.refs.modes) m.id],
                 (v) => setState(() => _modeId = v!),
@@ -1039,8 +1037,8 @@ class _DeviceTriggerPickerState extends State<DeviceTriggerPicker> {
             child: Text(
                 'Runs only when you press Run, or when another rule calls it. '
                 'No parameters.',
-                style: TextStyle(
-                    fontSize: 12.5, height: 1.5, color: t.surface.onBaseMuted)),
+                style: t.text.bodySmallStyle
+                    .copyWith(height: 1.5, color: t.surface.onBaseMuted)),
           ),
         ];
     }
@@ -1078,11 +1076,8 @@ class _DeviceTriggerPickerState extends State<DeviceTriggerPicker> {
                 size: 16, color: t.surface.onBaseMuted),
             const Spacer(),
             Text(hhmm,
-                style: TextStyle(
-                    fontFamily: 'monospace',
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: t.accent.active)),
+                style: t.text.resolve(t.text.title, mono: true).copyWith(
+                    fontWeight: FontWeight.w600, color: t.accent.active)),
           ]),
         ),
       ),
@@ -1105,8 +1100,7 @@ class _DeviceTriggerPickerState extends State<DeviceTriggerPicker> {
                 color: on ? ac.withValues(alpha: 0.4) : t.stroke.hairline),
           ),
           child: Text(day,
-              style: TextStyle(
-                  fontSize: 12,
+              style: t.text.bodySmallStyle.copyWith(
                   fontWeight: FontWeight.w600,
                   color: on ? ac : t.surface.onBaseMuted)),
         ),
@@ -1131,7 +1125,7 @@ class _DeviceTriggerPickerState extends State<DeviceTriggerPicker> {
           value: safe,
           isExpanded: true,
           dropdownColor: t.surface.overlay,
-          style: TextStyle(fontSize: 13.5, color: t.surface.onBase),
+          style: t.text.bodyStyle.copyWith(color: t.surface.onBase),
           items: [
             for (final o in opts)
               DropdownMenuItem(value: o, child: Text(labelFor?.call(o) ?? o)),
@@ -1160,8 +1154,7 @@ class _DeviceTriggerPickerState extends State<DeviceTriggerPicker> {
                   color: on ? ac.withValues(alpha: 0.4) : t.stroke.hairline),
             ),
             child: Text(label,
-                style: TextStyle(
-                    fontSize: 13,
+                style: t.text.bodyStyle.copyWith(
                     fontWeight: FontWeight.w600,
                     color: on ? ac : t.surface.onBaseMuted)),
           ),
@@ -1172,7 +1165,7 @@ class _DeviceTriggerPickerState extends State<DeviceTriggerPicker> {
 
   Widget _preview(HcTokens t, _Entry e) {
     Widget word(String s) =>
-        Text(s, style: TextStyle(fontSize: 13.5, color: t.surface.onBaseMuted));
+        Text(s, style: t.text.bodyStyle.copyWith(color: t.surface.onBaseMuted));
     Widget tok(String s, Color c) => Container(
           padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 2),
           decoration: BoxDecoration(
@@ -1181,8 +1174,8 @@ class _DeviceTriggerPickerState extends State<DeviceTriggerPicker> {
             border: Border.all(color: c.withValues(alpha: 0.32)),
           ),
           child: Text(s,
-              style: TextStyle(
-                  fontSize: 13, fontWeight: FontWeight.w600, color: c)),
+              style: t.text.bodyStyle
+                  .copyWith(fontWeight: FontWeight.w600, color: c)),
         );
     final a = t.accent.active;
     final b = t.accent.primary;

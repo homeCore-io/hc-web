@@ -242,7 +242,7 @@ class _Form extends StatelessWidget {
                     t.space.lg, t.space.sm, t.space.md, t.space.sm),
                 child: TextField(
                   onChanged: onSearch,
-                  style: const TextStyle(fontSize: 13),
+                  style: t.text.bodyStyle,
                   decoration: const InputDecoration(
                     isDense: true,
                     hintText: 'Search settings',
@@ -268,8 +268,8 @@ class _Form extends StatelessWidget {
                         padding: EdgeInsets.all(t.space.sm),
                         child: Text(
                           'Nothing matches “$search”.',
-                          style: TextStyle(
-                              fontSize: 12.5, color: t.surface.onBaseMuted),
+                          style: t.text.bodySmallStyle
+                              .copyWith(color: t.surface.onBaseMuted),
                         ),
                       ),
                   ],
@@ -333,11 +333,9 @@ class _RailEntry extends StatelessWidget {
             EdgeInsets.symmetric(horizontal: t.space.sm, vertical: t.space.sm),
         child: Text(
           title,
-          style: TextStyle(
-            fontSize: 13.5,
-            fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-            color: selected ? t.surface.onBase : t.surface.onBaseMuted,
-          ),
+          style: t.text.bodyStyle.copyWith(
+              fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+              color: selected ? t.surface.onBase : t.surface.onBaseMuted),
         ),
       ),
     );
@@ -396,7 +394,7 @@ class _RawEditorState extends State<_RawEditor> {
               maxLines: null,
               expands: true,
               textAlignVertical: TextAlignVertical.top,
-              style: const TextStyle(fontFamily: 'monospace', fontSize: 12.5),
+              style: t.text.resolve(t.text.bodySmall, mono: true),
               decoration: const InputDecoration(
                 border: OutlineInputBorder(),
                 isDense: true,
@@ -410,8 +408,7 @@ class _RawEditorState extends State<_RawEditor> {
             children: [
               Text(
                 dirty ? 'Unsaved changes' : 'Saved',
-                style: TextStyle(
-                    fontSize: 12.5,
+                style: t.text.bodySmallStyle.copyWith(
                     color: dirty ? t.accent.warn : t.surface.onBaseMuted),
               ),
               const Spacer(),
@@ -473,12 +470,11 @@ class _ViewToggle extends StatelessWidget {
                 ),
                 child: Text(
                   label,
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w600,
-                    color:
-                        raw == isRaw ? t.surface.onBase : t.surface.onBaseMuted,
-                  ),
+                  style: t.text.bodySmallStyle.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: raw == isRaw
+                          ? t.surface.onBase
+                          : t.surface.onBaseMuted),
                 ),
               ),
             ),
@@ -515,7 +511,7 @@ class _RestartBanner extends StatelessWidget {
                   ? 'Restarting core — waiting for it to answer again…'
                   : 'Saved to the file. Core is still running the old settings '
                       'until it restarts.',
-              style: TextStyle(fontSize: 13, color: t.surface.onBase),
+              style: t.text.bodyStyle.copyWith(color: t.surface.onBase),
             ),
           ),
           if (restarting)
@@ -558,7 +554,7 @@ class _SaveError extends StatelessWidget {
           Expanded(
             child: SelectableText(
               message,
-              style: TextStyle(fontSize: 12.5, color: t.surface.onBase),
+              style: t.text.bodySmallStyle.copyWith(color: t.surface.onBase),
             ),
           ),
         ],
@@ -588,7 +584,7 @@ class _Error extends StatelessWidget {
               forbidden
                   ? 'Configuration is admin-only'
                   : 'Could not read the configuration',
-              style: TextStyle(fontSize: 14, color: t.surface.onBase),
+              style: t.text.subtitleStyle.copyWith(color: t.surface.onBase),
             ),
             const SizedBox(height: 4),
             Text(
@@ -596,7 +592,8 @@ class _Error extends StatelessWidget {
                   ? 'It names every path and port of this deployment.'
                   : message,
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 12.5, color: t.surface.onBaseMuted),
+              style:
+                  t.text.bodySmallStyle.copyWith(color: t.surface.onBaseMuted),
             ),
           ],
         ),

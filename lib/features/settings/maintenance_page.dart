@@ -85,7 +85,8 @@ class _MaintenancePageState extends ConsumerState<MaintenancePage> {
             child: Text(
               'These fire and do nothing. Open the rule to point it at the '
               'device that replaced the missing one, or delete it.',
-              style: TextStyle(fontSize: 12.5, color: t.surface.onBaseMuted),
+              style:
+                  t.text.bodySmallStyle.copyWith(color: t.surface.onBaseMuted),
             ),
           ),
           stale.when(
@@ -110,7 +111,8 @@ class _MaintenancePageState extends ConsumerState<MaintenancePage> {
               'Registered once, never seen again — a plugin that was removed, '
               'or hardware that went away. Deleting one nullifies its '
               'references in any rule that mentions it.',
-              style: TextStyle(fontSize: 12.5, color: t.surface.onBaseMuted),
+              style:
+                  t.text.bodySmallStyle.copyWith(color: t.surface.onBaseMuted),
             ),
           ),
           if (orphans.isEmpty)
@@ -132,8 +134,8 @@ class _MaintenancePageState extends ConsumerState<MaintenancePage> {
             Row(
               children: [
                 Text('${_selected.length} selected',
-                    style: TextStyle(
-                        fontSize: 12.5, color: t.surface.onBaseMuted)),
+                    style: t.text.bodySmallStyle
+                        .copyWith(color: t.surface.onBaseMuted)),
                 const Spacer(),
                 OutlinedButton(
                   onPressed:
@@ -153,7 +155,8 @@ class _MaintenancePageState extends ConsumerState<MaintenancePage> {
               'while its plugin stayed up — a bulb unpaired at the bridge, a '
               'sensor removed from a hub. Only plugins that are running and '
               'answer the management protocol can be checked.',
-              style: TextStyle(fontSize: 12.5, color: t.surface.onBaseMuted),
+              style:
+                  t.text.bodySmallStyle.copyWith(color: t.surface.onBaseMuted),
             ),
           ),
           ref.watch(orphanReportProvider).when(
@@ -244,15 +247,15 @@ class _DriftRow extends StatelessWidget {
               children: [
                 Expanded(
                   child: Text(humanize(plugin.pluginId),
-                      style: TextStyle(
-                          fontSize: 13.5,
+                      style: t.text.bodyStyle.copyWith(
                           fontWeight: FontWeight.w600,
                           color: t.surface.onBase)),
                 ),
                 Text(
                   'core holds ${plugin.coreHolds} · plugin reports '
                   '${plugin.pluginReports}',
-                  style: TextStyle(fontSize: 12, color: t.surface.onBaseMuted),
+                  style: t.text.bodySmallStyle
+                      .copyWith(color: t.surface.onBaseMuted),
                 ),
               ],
             ),
@@ -265,8 +268,8 @@ class _DriftRow extends StatelessWidget {
                       ? '· ${d.name ?? d.deviceId}'
                       : '· ${d.name ?? d.deviceId}  — last seen '
                           '${_ago(d.staleSecs!)} ago',
-                  style:
-                      TextStyle(fontSize: 12.5, color: t.surface.onBaseMuted),
+                  style: t.text.bodySmallStyle
+                      .copyWith(color: t.surface.onBaseMuted),
                 ),
               ),
           ],
@@ -306,16 +309,14 @@ class _StaleRow extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('${row['rule_name'] ?? row['rule_id']}',
-                      style: const TextStyle(
-                          fontSize: 14, fontWeight: FontWeight.w600)),
+                      style: t.text.subtitleStyle
+                          .copyWith(fontWeight: FontWeight.w600)),
                   const SizedBox(height: 2),
                   Text(
                     ids.join(', '),
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: t.surface.onBaseMuted,
-                      fontFeatures: t.numericFontFeatures,
-                    ),
+                    style: t.text.bodySmallStyle.copyWith(
+                        color: t.surface.onBaseMuted,
+                        fontFeatures: t.numericFontFeatures),
                   ),
                 ],
               ),
@@ -356,12 +357,10 @@ class _OrphanRow extends StatelessWidget {
               onChanged: (v) => onChanged(v ?? false),
             ),
             Expanded(
-              child: Text(device.displayName,
-                  style: const TextStyle(fontSize: 13.5)),
+              child: Text(device.displayName, style: t.text.bodyStyle),
             ),
             Text(device.id,
-                style: TextStyle(
-                    fontSize: 12,
+                style: t.text.bodySmallStyle.copyWith(
                     color: t.surface.onBaseMuted,
                     fontFeatures: t.numericFontFeatures)),
             SizedBox(width: t.space.md),
@@ -369,7 +368,8 @@ class _OrphanRow extends StatelessWidget {
               width: 150,
               child: Text(device.pluginId,
                   textAlign: TextAlign.right,
-                  style: TextStyle(fontSize: 12, color: t.surface.onBaseMuted)),
+                  style: t.text.bodySmallStyle
+                      .copyWith(color: t.surface.onBaseMuted)),
             ),
             SizedBox(width: t.space.sm),
           ],
@@ -391,7 +391,7 @@ class _Clear extends StatelessWidget {
         Icon(Icons.check_circle_outline, size: 16, color: t.accent.success),
         SizedBox(width: t.space.sm),
         Text(text,
-            style: TextStyle(fontSize: 13, color: t.surface.onBaseMuted)),
+            style: t.text.bodyStyle.copyWith(color: t.surface.onBaseMuted)),
       ],
     );
   }
@@ -413,7 +413,7 @@ class _Note extends StatelessWidget {
         borderRadius: BorderRadius.circular(t.radius.md),
       ),
       child: SelectableText(text,
-          style: TextStyle(fontSize: 12.5, color: t.surface.onBaseMuted)),
+          style: t.text.bodySmallStyle.copyWith(color: t.surface.onBaseMuted)),
     );
   }
 }

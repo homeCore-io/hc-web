@@ -74,10 +74,8 @@ class _RegistrySheetState extends ConsumerState<_RegistrySheet> {
           child: Row(children: [
             Expanded(
               child: Text('Add plugin',
-                  style: TextStyle(
-                      color: t.surface.onBase,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600)),
+                  style: t.text.titleStyle.copyWith(
+                      color: t.surface.onBase, fontWeight: FontWeight.w600)),
             ),
             IconButton(
               icon: Icon(HcIcons.x, size: 18, color: t.surface.onBaseMuted),
@@ -91,7 +89,7 @@ class _RegistrySheetState extends ConsumerState<_RegistrySheet> {
           Padding(
             padding: EdgeInsets.fromLTRB(t.space.md, t.space.sm, t.space.md, 0),
             child: Text(_error!,
-                style: TextStyle(color: t.accent.danger, fontSize: 12.5)),
+                style: t.text.bodySmallStyle.copyWith(color: t.accent.danger)),
           ),
         Flexible(
           child: catalog.when(
@@ -145,17 +143,15 @@ class _RegistrySheetState extends ConsumerState<_RegistrySheet> {
                   child: Text(p.displayName,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
+                      style: t.text.subtitleStyle.copyWith(
                           color: t.surface.onBase,
-                          fontSize: 14.5,
                           fontWeight: FontWeight.w600)),
                 ),
                 if (p.latest != null) ...[
                   const SizedBox(width: 8),
                   Text('v${p.latest}',
-                      style: TextStyle(
+                      style: t.text.bodySmallStyle.copyWith(
                           color: t.surface.onBaseMuted,
-                          fontSize: 12,
                           fontFeatures: t.numericFontFeatures)),
                 ],
               ]),
@@ -165,8 +161,8 @@ class _RegistrySheetState extends ConsumerState<_RegistrySheet> {
                   child: Text(p.description,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                          color: t.surface.onBaseMuted, fontSize: 12.5)),
+                      style: t.text.bodySmallStyle
+                          .copyWith(color: t.surface.onBaseMuted)),
                 ),
             ],
           ),
@@ -207,10 +203,8 @@ class _RegistrySheetState extends ConsumerState<_RegistrySheet> {
         Icon(HcIcons.check, size: 13, color: t.accent.active),
         const SizedBox(width: 5),
         Text('Installed',
-            style: TextStyle(
-                color: t.accent.active,
-                fontSize: 12.5,
-                fontWeight: FontWeight.w600)),
+            style: t.text.bodySmallStyle
+                .copyWith(color: t.accent.active, fontWeight: FontWeight.w600)),
       ]);
     }
     return _filledButton(
@@ -224,14 +218,13 @@ class _RegistrySheetState extends ConsumerState<_RegistrySheet> {
               size: 32, color: t.surface.onBaseMuted.withValues(alpha: 0.5)),
           const SizedBox(height: 12),
           Text(title,
-              style: TextStyle(
-                  color: t.surface.onBase,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600)),
+              style: t.text.subtitleStyle.copyWith(
+                  color: t.surface.onBase, fontWeight: FontWeight.w600)),
           const SizedBox(height: 6),
           Text(sub,
               textAlign: TextAlign.center,
-              style: TextStyle(color: t.surface.onBaseMuted, fontSize: 12.5)),
+              style:
+                  t.text.bodySmallStyle.copyWith(color: t.surface.onBaseMuted)),
         ]),
       );
 }

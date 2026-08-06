@@ -160,7 +160,7 @@ class _LayoutToggle extends StatelessWidget {
     final t = HcTokens.of(context);
     return SegmentedButton<WallLayout>(
       style: SegmentedButton.styleFrom(
-        textStyle: const TextStyle(fontSize: 12),
+        textStyle: t.text.bodySmallStyle,
         visualDensity: VisualDensity.compact,
         foregroundColor: t.surface.onBaseMuted,
         selectedForegroundColor: t.accent.onPrimary,
@@ -190,7 +190,7 @@ class _StripToggle extends StatelessWidget {
     final t = HcTokens.of(context);
     return SegmentedButton<StripPosition>(
       style: SegmentedButton.styleFrom(
-        textStyle: const TextStyle(fontSize: 11),
+        textStyle: t.text.captionStyle,
         visualDensity: VisualDensity.compact,
         foregroundColor: t.surface.onBaseMuted,
         selectedForegroundColor: t.accent.onPrimary,
@@ -236,8 +236,7 @@ class _CameraStrip extends StatelessWidget {
       child: Row(
         children: [
           Text('On Home',
-              style: TextStyle(
-                  fontSize: 11,
+              style: t.text.captionStyle.copyWith(
                   fontWeight: FontWeight.w700,
                   letterSpacing: 0.6,
                   color: t.surface.onBaseMuted)),
@@ -300,8 +299,7 @@ class _CameraChip extends StatelessWidget {
             onPressed: onToggleHome,
           ),
           Text(camera.name,
-              style: TextStyle(
-                  fontSize: 12,
+              style: t.text.bodySmallStyle.copyWith(
                   color: on ? t.surface.onBase : t.surface.onBaseMuted)),
           SizedBox(width: t.space.xs),
           IconButton(
@@ -333,13 +331,12 @@ class _Empty extends StatelessWidget {
           Icon(HcIcons.camera, size: 28, color: t.surface.onBaseMuted),
           SizedBox(height: t.space.md),
           Text('No cameras yet',
-              style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  color: t.surface.onBase)),
+              style: t.text.subtitleStyle.copyWith(
+                  fontWeight: FontWeight.w600, color: t.surface.onBase)),
           SizedBox(height: t.space.xs),
           Text('Add a go2rtc stream or any MJPEG camera.',
-              style: TextStyle(fontSize: 12.5, color: t.surface.onBaseMuted)),
+              style:
+                  t.text.bodySmallStyle.copyWith(color: t.surface.onBaseMuted)),
         ],
       ),
     );
@@ -404,12 +401,13 @@ class _KioskLinkDialogState extends State<_KioskLinkDialog> {
               'Point Fully Kiosk on the device at this URL. Pick the layout the '
               'device can handle — Spotlight for a small tablet, Grid for a big '
               'display.',
-              style: TextStyle(fontSize: 12.5, color: t.surface.onBaseMuted),
+              style:
+                  t.text.bodySmallStyle.copyWith(color: t.surface.onBaseMuted),
             ),
             SizedBox(height: t.space.md),
             SegmentedButton<WallLayout>(
               style: SegmentedButton.styleFrom(
-                textStyle: const TextStyle(fontSize: 12),
+                textStyle: t.text.bodySmallStyle,
                 selectedBackgroundColor: t.accent.active,
                 selectedForegroundColor: t.accent.onPrimary,
               ),
@@ -427,8 +425,8 @@ class _KioskLinkDialogState extends State<_KioskLinkDialog> {
               Row(
                 children: [
                   Text('Strip',
-                      style: TextStyle(
-                          fontSize: 12, color: t.surface.onBaseMuted)),
+                      style: t.text.bodySmallStyle
+                          .copyWith(color: t.surface.onBaseMuted)),
                   SizedBox(width: t.space.sm),
                   _StripToggle(
                     value: _strip,
@@ -439,8 +437,7 @@ class _KioskLinkDialogState extends State<_KioskLinkDialog> {
             ],
             SizedBox(height: t.space.md),
             Text('Include',
-                style: TextStyle(
-                    fontSize: 11,
+                style: t.text.captionStyle.copyWith(
                     fontWeight: FontWeight.w700,
                     letterSpacing: 0.6,
                     color: t.surface.onBaseMuted)),
@@ -449,7 +446,7 @@ class _KioskLinkDialogState extends State<_KioskLinkDialog> {
               children: [
                 for (final c in widget.cameras)
                   FilterChip(
-                    label: Text(c.name, style: const TextStyle(fontSize: 12)),
+                    label: Text(c.name, style: t.text.bodySmallStyle),
                     selected: _included.contains(_nameOf(c)),
                     onSelected: (on) => setState(() {
                       on
@@ -469,7 +466,7 @@ class _KioskLinkDialogState extends State<_KioskLinkDialog> {
               ),
               child: SelectableText(
                 link,
-                style: const TextStyle(fontFamily: 'monospace', fontSize: 11.5),
+                style: t.text.resolve(t.text.caption, mono: true),
               ),
             ),
           ],
@@ -563,7 +560,8 @@ class _AddCameraDialogState extends State<_AddCameraDialog> {
               Text(
                 'Embeds go2rtc\'s own player, so WebRTC works with no extra '
                 'go2rtc config — it is the same page you open in a browser tab.',
-                style: TextStyle(fontSize: 11.5, color: t.surface.onBaseMuted),
+                style:
+                    t.text.captionStyle.copyWith(color: t.surface.onBaseMuted),
               ),
             ],
           ],

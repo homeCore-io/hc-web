@@ -301,11 +301,9 @@ class HcAttributeControl extends StatelessWidget {
       ),
       child: SelectableText(
         text,
-        style: TextStyle(
-          fontFamily: 'monospace',
-          fontSize: 12,
-          color: t.surface.onBaseMuted,
-        ),
+        style: t.text
+            .resolve(t.text.bodySmall, mono: true)
+            .copyWith(color: t.surface.onBaseMuted),
       ),
     );
   }
@@ -492,8 +490,8 @@ class _ColorPickerState extends State<_ColorPicker> {
             SizedBox(
                 width: 84,
                 child: Text(label,
-                    style:
-                        TextStyle(fontSize: 13, color: t.surface.onBaseMuted))),
+                    style: t.text.bodyStyle
+                        .copyWith(color: t.surface.onBaseMuted))),
             Expanded(child: child),
           ],
         ),

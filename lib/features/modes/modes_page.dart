@@ -154,11 +154,9 @@ class ModesPage extends ConsumerWidget {
                         : clash
                             ? 'A mode with the id $id already exists.'
                             : 'Rules will refer to it as $id',
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      fontFamily: id.isEmpty ? null : 'monospace',
-                      color: clash ? t.accent.danger : t.surface.onBaseMuted,
-                    ),
+                    style: t.text.captionStyle.copyWith(
+                        fontFamily: id.isEmpty ? null : 'monospace',
+                        color: clash ? t.accent.danger : t.surface.onBaseMuted),
                   );
                 }),
                 SizedBox(height: t.space.md),
@@ -209,8 +207,7 @@ class _KindChip extends StatelessWidget {
               color: selected ? Colors.transparent : t.stroke.hairline),
         ),
         child: Text(label,
-            style: TextStyle(
-                fontSize: 12.5,
+            style: t.text.bodySmallStyle.copyWith(
                 fontWeight: FontWeight.w600,
                 color: selected ? t.accent.active : t.surface.onBaseMuted)),
       ),
@@ -302,13 +299,12 @@ class _ModeCardState extends ConsumerState<_ModeCard> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(mode.displayName,
-                        style: TextStyle(
-                            fontSize: 15,
+                        style: t.text.subtitleStyle.copyWith(
                             fontWeight: FontWeight.w600,
                             color: t.surface.onBase)),
                     Text(isSolar ? 'Solar' : 'Manual',
-                        style: TextStyle(
-                            fontSize: 12, color: t.surface.onBaseMuted)),
+                        style: t.text.bodySmallStyle
+                            .copyWith(color: t.surface.onBaseMuted)),
                   ],
                 ),
               ),
@@ -385,11 +381,10 @@ class _ModeCardState extends ConsumerState<_ModeCard> {
             SizedBox(
                 width: 118,
                 child: Text(label,
-                    style: TextStyle(
-                        fontSize: 12.5, color: t.surface.onBaseMuted))),
+                    style: t.text.bodySmallStyle
+                        .copyWith(color: t.surface.onBaseMuted))),
             Text(value,
-                style: TextStyle(
-                    fontSize: 12.5,
+                style: t.text.bodySmallStyle.copyWith(
                     color: t.surface.onBase,
                     fontFeatures: t.numericFontFeatures)),
           ],
@@ -410,11 +405,11 @@ class _ModeCardState extends ConsumerState<_ModeCard> {
         Row(
           children: [
             Text(label,
-                style: TextStyle(fontSize: 12, color: t.surface.onBaseMuted)),
+                style: t.text.bodySmallStyle
+                    .copyWith(color: t.surface.onBaseMuted)),
             const Spacer(),
             Text('${mins >= 0 ? '+' : ''}$mins min',
-                style: TextStyle(
-                    fontSize: 12,
+                style: t.text.bodySmallStyle.copyWith(
                     fontWeight: FontWeight.w600,
                     color: t.surface.onBase,
                     fontFeatures: t.numericFontFeatures)),
@@ -497,11 +492,8 @@ class _DayNightChip extends StatelessWidget {
       ),
       child: Text(
         night ? 'NIGHT' : 'DAY',
-        style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 0.5,
-            color: color),
+        style: t.text.captionStyle.copyWith(
+            fontWeight: FontWeight.w700, letterSpacing: 0.5, color: color),
       ),
     );
   }

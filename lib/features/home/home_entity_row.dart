@@ -76,11 +76,10 @@ class _HomeEntityRowState extends ConsumerState<HomeEntityRow> {
                   device.displayName,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w500,
-                    color: offline ? t.surface.onBaseMuted : t.surface.onBase,
-                  ),
+                  style: t.text.bodyStyle.copyWith(
+                      fontWeight: FontWeight.w500,
+                      color:
+                          offline ? t.surface.onBaseMuted : t.surface.onBase),
                 ),
               ),
               if (_hover) HomeEditButton(deviceId: device.id),
@@ -155,7 +154,8 @@ class _HomeEntityRowState extends ConsumerState<HomeEntityRow> {
             Padding(
               padding: EdgeInsets.only(right: t.space.sm),
               child: Text(fanSpeedLabel(speed),
-                  style: TextStyle(fontSize: 12, color: t.accent.active)),
+                  style:
+                      t.text.bodySmallStyle.copyWith(color: t.accent.active)),
             ),
           _Toggle(
             on: on,
@@ -180,8 +180,7 @@ class _HomeEntityRowState extends ConsumerState<HomeEntityRow> {
             Padding(
               padding: EdgeInsets.only(right: t.space.sm),
               child: Text('${(level * 100).round()}%',
-                  style: TextStyle(
-                      fontSize: 12,
+                  style: t.text.bodySmallStyle.copyWith(
                       color: t.surface.onBaseMuted,
                       fontFeatures: t.numericFontFeatures)),
             ),
@@ -209,12 +208,10 @@ class _HomeEntityRowState extends ConsumerState<HomeEntityRow> {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         textAlign: TextAlign.right,
-        style: TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w600,
-          color: colour,
-          fontFeatures: t.numericFontFeatures,
-        ),
+        style: t.text.bodyStyle.copyWith(
+            fontWeight: FontWeight.w600,
+            color: colour,
+            fontFeatures: t.numericFontFeatures),
       ),
     );
   }
@@ -343,12 +340,8 @@ class _Pill extends StatelessWidget {
       ),
       child: Text(
         label.toUpperCase(),
-        style: TextStyle(
-          fontSize: 10,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.6,
-          color: tone,
-        ),
+        style: t.text.overlineStyle.copyWith(
+            fontWeight: FontWeight.w700, letterSpacing: 0.6, color: tone),
       ),
     );
   }
@@ -382,11 +375,9 @@ class _LockButton extends StatelessWidget {
         ),
         child: Text(
           label,
-          style: TextStyle(
-            fontSize: 11.5,
-            fontWeight: FontWeight.w700,
-            color: filled ? t.surface.base : tone,
-          ),
+          style: t.text.captionStyle.copyWith(
+              fontWeight: FontWeight.w700,
+              color: filled ? t.surface.base : tone),
         ),
       ),
     );

@@ -212,11 +212,9 @@ class _PickerPanelState extends State<PickerPanel> {
               onTap: i <= step ? () => setState(() => _step = i) : null,
               child: Text(
                 widget.panes[steps[i]].compactLabel!,
-                style: TextStyle(
-                  fontSize: 11.5,
-                  fontWeight: i == step ? FontWeight.w700 : FontWeight.w400,
-                  color: i == step ? t.accent.active : t.surface.onBaseMuted,
-                ),
+                style: t.text.captionStyle.copyWith(
+                    fontWeight: i == step ? FontWeight.w700 : FontWeight.w400,
+                    color: i == step ? t.accent.active : t.surface.onBaseMuted),
               ),
             ),
           ],
@@ -236,15 +234,13 @@ class _PickerPanelState extends State<PickerPanel> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(widget.kicker,
-                            style: TextStyle(
-                                fontSize: 10.5,
+                            style: t.text.captionStyle.copyWith(
                                 letterSpacing: 1.4,
                                 fontWeight: FontWeight.w800,
                                 color: t.accent.active)),
                         const SizedBox(height: 3),
                         Text(widget.title,
-                            style: TextStyle(
-                                fontSize: 17,
+                            style: t.text.titleStyle.copyWith(
                                 fontWeight: FontWeight.w600,
                                 color: t.surface.onBase)),
                         SizedBox(height: t.space.sm),
@@ -255,15 +251,13 @@ class _PickerPanelState extends State<PickerPanel> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(widget.kicker,
-                              style: TextStyle(
-                                  fontSize: 10.5,
+                              style: t.text.captionStyle.copyWith(
                                   letterSpacing: 1.4,
                                   fontWeight: FontWeight.w800,
                                   color: t.accent.active)),
                           const SizedBox(height: 3),
                           Text(widget.title,
-                              style: TextStyle(
-                                  fontSize: 17,
+                              style: t.text.titleStyle.copyWith(
                                   fontWeight: FontWeight.w600,
                                   color: t.surface.onBase)),
                         ],
@@ -291,7 +285,8 @@ class _PickerPanelState extends State<PickerPanel> {
           Expanded(
             child: Text(widget.footerHint,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 11.5, color: t.surface.onBaseMuted)),
+                style:
+                    t.text.captionStyle.copyWith(color: t.surface.onBaseMuted)),
           )
         else
           const Spacer(),
@@ -362,8 +357,8 @@ class _FooterBtn extends StatelessWidget {
                   : Border.all(color: t.stroke.hairline, width: t.stroke.width),
             ),
             child: Text(label,
-                style: TextStyle(
-                    fontSize: 13.5, fontWeight: FontWeight.w600, color: fg)),
+                style: t.text.bodyStyle
+                    .copyWith(fontWeight: FontWeight.w600, color: fg)),
           ),
         ),
       ),
@@ -396,11 +391,9 @@ Widget _seg(HcTokens t, String label, bool on, VoidCallback onTap) => Material(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 6),
           child: Text(label,
-              style: TextStyle(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w600,
-                color: on ? t.surface.onBase : t.surface.onBaseMuted,
-              )),
+              style: t.text.bodySmallStyle.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: on ? t.surface.onBase : t.surface.onBaseMuted)),
         ),
       ),
     );
@@ -434,10 +427,8 @@ class PickerRail extends StatelessWidget {
                 SizedBox(width: t.space.xs),
                 Expanded(
                   child: Text(note!,
-                      style: TextStyle(
-                          fontSize: 10.5,
-                          height: 1.4,
-                          color: t.surface.onBaseMuted)),
+                      style: t.text.captionStyle
+                          .copyWith(height: 1.4, color: t.surface.onBaseMuted)),
                 ),
               ]),
             ),
@@ -477,14 +468,12 @@ Widget pickerRailRow(HcTokens t,
           Expanded(
             child: Text(label,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 13,
-                  color: selected ? t.surface.onBase : t.surface.onBaseMuted,
-                )),
+                style: t.text.bodyStyle.copyWith(
+                    color:
+                        selected ? t.surface.onBase : t.surface.onBaseMuted)),
           ),
           Text('$count',
-              style: TextStyle(
-                  fontSize: 11.5,
+              style: t.text.captionStyle.copyWith(
                   color: selected ? t.accent.active : t.surface.onBaseMuted)),
         ]),
       ),
@@ -579,13 +568,12 @@ Widget pickerDeviceRow(HcTokens t,
               children: [
                 Text(label,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 13.5, color: t.surface.onBase)),
+                    style: t.text.bodyStyle.copyWith(color: t.surface.onBase)),
                 Text(sub,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                        fontSize: 11,
-                        fontFamily: 'monospace',
-                        color: t.surface.onBaseMuted)),
+                    style: t.text
+                        .resolve(t.text.caption, mono: true)
+                        .copyWith(color: t.surface.onBaseMuted)),
               ],
             ),
           ),
@@ -599,8 +587,8 @@ Widget pickerDeviceRow(HcTokens t,
                 border: Border.all(color: tone.withValues(alpha: 0.28)),
               ),
               child: Text(chip,
-                  style: TextStyle(
-                      fontSize: 11, fontWeight: FontWeight.w600, color: tone)),
+                  style: t.text.captionStyle
+                      .copyWith(fontWeight: FontWeight.w600, color: tone)),
             ),
           ],
         ]),

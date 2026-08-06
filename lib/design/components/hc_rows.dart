@@ -112,16 +112,15 @@ class _HcRowState extends State<HcRow> {
               children: [
                 Text(
                   widget.label,
-                  style: TextStyle(color: fg, fontSize: 13.5),
+                  style: t.text.bodyStyle.copyWith(color: fg),
                 ),
                 if (widget.subtitle != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 2),
                     child: Text(
                       widget.subtitle!,
-                      style: TextStyle(
+                      style: t.text.bodySmallStyle.copyWith(
                         color: t.surface.onBaseMuted,
-                        fontSize: 12,
                         height: 1.3,
                       ),
                     ),
@@ -181,9 +180,8 @@ class HcKvRow extends StatelessWidget {
       subtitle: subtitle,
       trailing: Text(
         value,
-        style: TextStyle(
+        style: t.text.bodyStyle.copyWith(
           color: tone ?? t.surface.onBase,
-          fontSize: 13.5,
           fontWeight: FontWeight.w600,
           fontFeatures: t.numericFontFeatures,
         ),
@@ -308,7 +306,7 @@ class HcRowsNotice extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: TextStyle(color: t.surface.onBase, fontSize: 13.5),
+                  style: t.text.bodyStyle.copyWith(color: t.surface.onBase),
                 ),
                 if (detail != null)
                   Padding(
@@ -317,9 +315,8 @@ class HcRowsNotice extends StatelessWidget {
                       detail!,
                       maxLines: 3,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
+                      style: t.text.bodySmallStyle.copyWith(
                         color: t.surface.onBaseMuted,
-                        fontSize: 12,
                         height: 1.3,
                       ),
                     ),

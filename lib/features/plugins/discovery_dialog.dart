@@ -187,16 +187,15 @@ class _DiscoveryResultsDialogState
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('Discovered devices',
-                    style: TextStyle(
-                        color: t.surface.onBase,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w700)),
+                    style: t.text.titleStyle.copyWith(
+                        color: t.surface.onBase, fontWeight: FontWeight.w700)),
                 const SizedBox(height: 3),
                 Text(
                   _loading
                       ? 'Loading current config…'
                       : '${widget.discovered.length} found · add the ones you want.',
-                  style: TextStyle(color: t.surface.onBaseMuted, fontSize: 13),
+                  style:
+                      t.text.bodyStyle.copyWith(color: t.surface.onBaseMuted),
                 ),
                 const SizedBox(height: 16),
                 if (_loading)
@@ -217,15 +216,16 @@ class _DiscoveryResultsDialogState
                 if (_error != null) ...[
                   const SizedBox(height: 10),
                   Text(_error!,
-                      style: TextStyle(color: t.accent.danger, fontSize: 12.5)),
+                      style: t.text.bodySmallStyle
+                          .copyWith(color: t.accent.danger)),
                 ],
                 const SizedBox(height: 18),
                 Row(children: [
                   if (_dirty)
                     Expanded(
                       child: Text('Added devices register when you close.',
-                          style: TextStyle(
-                              color: t.surface.onBaseMuted, fontSize: 12)),
+                          style: t.text.bodySmallStyle
+                              .copyWith(color: t.surface.onBaseMuted)),
                     )
                   else
                     const Spacer(),
@@ -274,15 +274,12 @@ class _DiscoveryResultsDialogState
               Text(_nameOf(d),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                      color: t.surface.onBase,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600)),
+                  style: t.text.subtitleStyle.copyWith(
+                      color: t.surface.onBase, fontWeight: FontWeight.w600)),
               if (host.isNotEmpty)
                 Text(host,
-                    style: TextStyle(
+                    style: t.text.bodySmallStyle.copyWith(
                         color: t.surface.onBaseMuted,
-                        fontSize: 12,
                         fontFeatures: t.numericFontFeatures)),
             ],
           ),
@@ -293,10 +290,8 @@ class _DiscoveryResultsDialogState
             Icon(Icons.check_rounded, size: 15, color: t.accent.success),
             const SizedBox(width: 4),
             Text('Added',
-                style: TextStyle(
-                    color: t.accent.success,
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w600)),
+                style: t.text.bodySmallStyle.copyWith(
+                    color: t.accent.success, fontWeight: FontWeight.w600)),
           ])
         else
           OutlinedButton(

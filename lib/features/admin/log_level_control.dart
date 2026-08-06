@@ -54,11 +54,9 @@ class LogLevelControl extends ConsumerWidget {
               const SizedBox(width: 6),
               Text(
                 label,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: enabled ? t.surface.onBase : t.surface.onBaseMuted,
-                ),
+                style: t.text.captionStyle.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: enabled ? t.surface.onBase : t.surface.onBaseMuted),
               ),
             ],
           ),
@@ -152,7 +150,8 @@ class _LogLevelDialogState extends ConsumerState<_LogLevelDialog> {
               Text(
                 'What core writes to the log. This is not the filter on the '
                 'Server tab — that only hides lines core already wrote.',
-                style: TextStyle(color: t.surface.onBaseMuted, fontSize: 12),
+                style: t.text.bodySmallStyle
+                    .copyWith(color: t.surface.onBaseMuted),
               ),
               SizedBox(height: t.space.md),
 
@@ -167,7 +166,7 @@ class _LogLevelDialogState extends ConsumerState<_LogLevelDialog> {
                 Text(
                   'This filter sets more than one default level, so the quick '
                   'picks would have to guess which one you meant. Edit it below.',
-                  style: TextStyle(color: t.accent.warn, fontSize: 12),
+                  style: t.text.bodySmallStyle.copyWith(color: t.accent.warn),
                 ),
 
               // The reason this screen parses at all: say what is being kept.
@@ -177,30 +176,29 @@ class _LogLevelDialogState extends ConsumerState<_LogLevelDialog> {
                   'Keeping ${parsed.targets.length} target '
                   '${parsed.targets.length == 1 ? 'rule' : 'rules'}: '
                   '${parsed.targets.join(', ')}',
-                  style: TextStyle(color: t.surface.onBaseMuted, fontSize: 11),
+                  style: t.text.captionStyle
+                      .copyWith(color: t.surface.onBaseMuted),
                 ),
               ],
 
               SizedBox(height: t.space.md),
               Text('Filter directive',
-                  style: TextStyle(
+                  style: t.text.captionStyle.copyWith(
                       color: t.surface.onBaseMuted,
-                      fontSize: 11,
                       fontWeight: FontWeight.w600)),
               SizedBox(height: t.space.xs),
               TextField(
                 controller: _raw,
                 enabled: !_busy,
                 onChanged: (_) => setState(() {}),
-                style: TextStyle(
-                    color: t.surface.onBase,
-                    fontFamily: 'monospace',
-                    fontSize: 12),
+                style: t.text
+                    .resolve(t.text.bodySmall, mono: true)
+                    .copyWith(color: t.surface.onBase),
                 decoration: InputDecoration(
                   isDense: true,
                   hintText: 'info,hc_api=debug',
-                  hintStyle:
-                      TextStyle(color: t.surface.onBaseMuted, fontSize: 12),
+                  hintStyle: t.text.bodySmallStyle
+                      .copyWith(color: t.surface.onBaseMuted),
                   enabledBorder: OutlineInputBorder(
                       borderSide: BorderSide(color: t.stroke.hairline)),
                   focusedBorder: OutlineInputBorder(
@@ -211,7 +209,8 @@ class _LogLevelDialogState extends ConsumerState<_LogLevelDialog> {
               Text(
                 'A level on its own sets the default; `target=level` scopes it to '
                 'one module.',
-                style: TextStyle(color: t.surface.onBaseMuted, fontSize: 11),
+                style:
+                    t.text.captionStyle.copyWith(color: t.surface.onBaseMuted),
               ),
 
               SizedBox(height: t.space.md),
@@ -226,7 +225,7 @@ class _LogLevelDialogState extends ConsumerState<_LogLevelDialog> {
                       'down, so a restart goes back to the level in '
                       'homecore.toml. Change it in Configuration to make it '
                       'stick.',
-                      style: TextStyle(color: t.accent.warn, fontSize: 11),
+                      style: t.text.captionStyle.copyWith(color: t.accent.warn),
                     ),
                   ),
                 ],
@@ -235,12 +234,14 @@ class _LogLevelDialogState extends ConsumerState<_LogLevelDialog> {
               if (_error != null) ...[
                 SizedBox(height: t.space.sm),
                 Text(_error!,
-                    style: TextStyle(color: t.accent.danger, fontSize: 12)),
+                    style:
+                        t.text.bodySmallStyle.copyWith(color: t.accent.danger)),
               ],
               if (_notice != null) ...[
                 SizedBox(height: t.space.sm),
                 Text(_notice!,
-                    style: TextStyle(color: t.accent.success, fontSize: 12)),
+                    style: t.text.bodySmallStyle
+                        .copyWith(color: t.accent.success)),
               ],
 
               SizedBox(height: t.space.lg),
@@ -288,31 +289,31 @@ class _PluginLevels extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('Plugins',
-            style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: t.surface.onBase)),
+            style: t.text.bodyStyle.copyWith(
+                fontWeight: FontWeight.w600, color: t.surface.onBase)),
         SizedBox(height: t.space.xs),
         Text(
           'Each plugin filters its own log. Setting one here asks the running '
           'process directly; core does not wait for it to answer, and the '
           'change is forgotten when that plugin restarts.',
-          style: TextStyle(color: t.surface.onBaseMuted, fontSize: 11),
+          style: t.text.captionStyle.copyWith(color: t.surface.onBaseMuted),
         ),
         SizedBox(height: t.space.sm),
         switch (plugins) {
           AsyncData(:final value) when value.isEmpty => Text(
               'No plugins registered.',
-              style: TextStyle(color: t.surface.onBaseMuted, fontSize: 12)),
+              style:
+                  t.text.bodySmallStyle.copyWith(color: t.surface.onBaseMuted)),
           AsyncData(:final value) => Column(
               children: [
                 for (final p in value) _PluginRow(pluginId: p.pluginId),
               ],
             ),
           AsyncError(:final error) => Text('Could not list plugins: $error',
-              style: TextStyle(color: t.accent.danger, fontSize: 12)),
+              style: t.text.bodySmallStyle.copyWith(color: t.accent.danger)),
           _ => Text('Loading…',
-              style: TextStyle(color: t.surface.onBaseMuted, fontSize: 12)),
+              style:
+                  t.text.bodySmallStyle.copyWith(color: t.surface.onBaseMuted)),
         },
       ],
     );
@@ -371,10 +372,12 @@ class _PluginRowState extends ConsumerState<_PluginRow> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(p.displayName,
-                    style: TextStyle(color: t.surface.onBase, fontSize: 12)),
+                    style: t.text.bodySmallStyle
+                        .copyWith(color: t.surface.onBase)),
                 if (_error != null)
                   Text(_error!,
-                      style: TextStyle(color: t.accent.danger, fontSize: 10)),
+                      style: t.text.overlineStyle
+                          .copyWith(color: t.accent.danger)),
               ],
             ),
           ),
@@ -391,8 +394,8 @@ class _PluginRowState extends ConsumerState<_PluginRow> {
                     p.isActive
                         ? 'Does not answer the management protocol'
                         : 'Not running',
-                    style:
-                        TextStyle(color: t.surface.onBaseMuted, fontSize: 11),
+                    style: t.text.captionStyle
+                        .copyWith(color: t.surface.onBaseMuted),
                   ),
           ),
         ],

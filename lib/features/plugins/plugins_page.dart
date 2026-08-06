@@ -156,8 +156,8 @@ class _UpdateBadge extends StatelessWidget {
           Icon(Icons.arrow_circle_up_outlined, size: 13, color: c),
           const SizedBox(width: 4),
           Text(to,
-              style: TextStyle(
-                  fontSize: 11.5, fontWeight: FontWeight.w700, color: c)),
+              style: t.text.captionStyle
+                  .copyWith(fontWeight: FontWeight.w700, color: c)),
         ]),
       ),
     );
@@ -207,16 +207,14 @@ class _PluginCard extends StatelessWidget {
                   Text(p.displayName,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
+                      style: t.text.subtitleStyle.copyWith(
                           color: t.surface.onBase,
-                          fontSize: 15.5,
                           fontWeight: FontWeight.w600)),
                   Text(p.pluginId,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                          color: t.surface.onBaseMuted.withValues(alpha: 0.7),
-                          fontSize: 12)),
+                      style: t.text.bodySmallStyle.copyWith(
+                          color: t.surface.onBaseMuted.withValues(alpha: 0.7))),
                 ],
               ),
             ),
@@ -225,9 +223,8 @@ class _PluginCard extends StatelessWidget {
           const Spacer(),
           Row(children: [
             Text('${p.deviceCount}',
-                style: TextStyle(
+                style: t.text.titleStyle.copyWith(
                     color: t.surface.onBase,
-                    fontSize: 17,
                     fontWeight: FontWeight.w600,
                     fontFeatures: t.numericFontFeatures)),
             const SizedBox(width: 6),
@@ -267,11 +264,10 @@ class _PluginCard extends StatelessWidget {
                       : '${p.problems.length} problems reported',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
+                  style: t.text.bodySmallStyle.copyWith(
                       color: p.problems.any((n) => n.isError)
                           ? t.accent.danger
-                          : t.accent.warn,
-                      fontSize: 12.5),
+                          : t.accent.warn),
                 ),
               ),
             ])
@@ -280,9 +276,8 @@ class _PluginCard extends StatelessWidget {
               pluginHealthLine(p),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                  color: p.isOffline ? t.accent.danger : t.surface.onBaseMuted,
-                  fontSize: 12.5),
+              style: t.text.bodySmallStyle.copyWith(
+                  color: p.isOffline ? t.accent.danger : t.surface.onBaseMuted),
             ),
         ],
       ),
@@ -355,7 +350,7 @@ class _Chip extends StatelessWidget {
                 : t.stroke.hairline),
         borderRadius: BorderRadius.circular(t.radius.pill),
       ),
-      child: Text(text, style: TextStyle(color: color, fontSize: 11)),
+      child: Text(text, style: t.text.captionStyle.copyWith(color: color)),
     );
     return tooltip == null ? chip : Tooltip(message: tooltip!, child: chip);
   }
