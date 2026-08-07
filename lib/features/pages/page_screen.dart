@@ -169,6 +169,26 @@ class _PageScreenState extends ConsumerState<PageScreen> {
     });
   }
 
+  /// One line saying what saving will do besides write the layout on screen.
+  ///
+  /// Two consequences a person cannot see from the canvas: the layouts that
+  /// follow this one get recomputed, and editing a layout that was following
+  /// another one stops it following.
+  String? _editConsequence(DashboardDefinition d, DashboardBreakpoint edited) {
+    final followers = d.layouts
+        .where((l) => l.derivedFrom == edited && l.breakpoint != edited)
+        .map((l) => _breakpointLabel(l.breakpoint))
+        .toList();
+    final wasDerived =
+        d.layouts.where((l) => l.breakpoint == edited).firstOrNull?.derivedFrom;
+
+    if (wasDerived != null) {
+      return 'This will stop following ${_breakpointLabel(wasDerived)}';
+    }
+    if (followers.isEmpty) return null;
+    return '${followers.join(', ')} follow${followers.length == 1 ? 's' : ''} it';
+  }
+
   /// Drops the whole draft in one place. Leaving `_editingBreakpoint` set after
   /// a save would aim the *next* edit at the breakpoint the last one used.
   void _exitEditing() {
@@ -288,6 +308,9 @@ class _PageScreenState extends ConsumerState<PageScreen> {
                   dashboard: dashboard,
                   editing: _editing,
                   editingBreakpoint: _editingBreakpoint,
+                  editConsequence: _editingBreakpoint == null
+                      ? null
+                      : _editConsequence(dashboard, _editingBreakpoint!),
                   onEdit: () => _startEditing(dashboard, breakpoint),
                 ),
                 Expanded(
@@ -333,12 +356,17 @@ class _Header extends ConsumerWidget {
     required this.dashboard,
     required this.editing,
     required this.editingBreakpoint,
+    required this.editConsequence,
     required this.onEdit,
   });
 
   final DashboardDefinition dashboard;
   final bool editing;
   final DashboardBreakpoint? editingBreakpoint;
+
+  /// What saving will do beyond the layout on screen, or null when it will do
+  /// nothing else.
+  final String? editConsequence;
   final VoidCallback onEdit;
 
   @override
@@ -361,14 +389,29 @@ class _Header extends ConsumerWidget {
             ),
           ),
           if (editing)
-            // Name the layout being edited. Editing now writes to exactly one
-            // breakpoint, so "Editing" alone would leave you guessing which of
-            // the four your drag just changed.
-            Text(
-              editingBreakpoint == null
-                  ? 'Editing'
-                  : 'Editing ${_breakpointLabel(editingBreakpoint!)} layout',
-              style: t.text.bodyStyle.copyWith(color: t.accent.active),
+            // Name the layout being edited, and say what else the save will
+            // touch. Editing writes to exactly one breakpoint and recomputes
+            // any that follow it — both facts are invisible otherwise, and a
+            // save with a silent side effect is the thing this whole area is
+            // recovering from. The full switcher is a later pass; this is the
+            // minimum that keeps it honest.
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  editingBreakpoint == null
+                      ? 'Editing'
+                      : 'Editing ${_breakpointLabel(editingBreakpoint!)} layout',
+                  style: t.text.bodyStyle.copyWith(color: t.accent.active),
+                ),
+                if (editConsequence != null)
+                  Text(
+                    editConsequence!,
+                    style: t.text.captionStyle
+                        .copyWith(color: t.surface.onBaseMuted),
+                  ),
+              ],
             )
           else ...[
             HcIconButton(

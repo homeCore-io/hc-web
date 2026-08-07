@@ -293,8 +293,30 @@ fixes and should land before any redesign work.
    the old viewer. 6 resolver tests + 6 new widget tests — `PageScreen` had no
    widget coverage at all, which is how it kept a hardcoded desktop for this
    long.
-3. **`derivedFrom` in the model**, plus derive-on-save and the override flip.
-   Backward compatible; existing layouts read as authored.
+3. ~~**`derivedFrom` in the model**, plus derive-on-save and the override flip.~~
+   **DONE 2026-08-07.** It needed a **core change too**: `hc_types`'
+   `DashboardLayout` has no `deny_unknown_fields`, so a client-sent
+   `derived_from` would have been silently dropped on the round trip and every
+   layout would read back authored — which looks exactly like the client failing
+   to save. `Option` + `#[serde(default)]`, so every dashboard already in redb
+   reads as authored. Core stores it and never acts on it; it does not derive
+   and has no opinion about which breakpoint is primary. Its own
+   `default_dashboard_layout` keeps writing `None`, because marking those
+   derived would let a client recompute them with rules that are not core's.
+
+   Client side: `writeArrangement` grew a third case — recompute the layouts
+   that name the edited breakpoint — and editing a derived layout clears the
+   flag, which is how a person takes one over. `revertToDerived` is the same
+   pure function the derived layouts already run, which is what makes revert
+   safe to offer. A new page is now created with all four layouts, three of them
+   derived, or the model would never engage.
+
+   16 client tests + 4 in `hc-types`, and both failure modes were planted and
+   watched to fail. One bug the tests caught that the analyzer did not: generic
+   inference made the `derived_from` parser return a nullable enum, throwing at
+   runtime. It also prompted a better rule — an *unrecognised* breakpoint name
+   now reads as authored rather than coercing to desktop, because deriving from
+   the wrong source silently rearranges a layout while leaving it alone does not.
 4. **The editor chrome** — breakpoint switcher with derived/overridden state,
    column ruler, left rail with palette + inspector, the revert control.
 5. **The ghost underlay.** The signature bet, built here rather than deferred.

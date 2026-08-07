@@ -27,6 +27,45 @@ DashboardWidgetModel _w(String id) => DashboardWidgetModel(
 DashboardWidgetPlacement _p(String id, int x, int y, int w, int h) =>
     DashboardWidgetPlacement(widgetId: id, x: x, y: y, w: w, h: h);
 
+/// Desktop authored; mobile follows it; tv taken over by hand.
+DashboardDefinition _derivedDashboard() => DashboardDefinition(
+      id: 'kitchen',
+      name: 'Kitchen',
+      description: null,
+      ownerUserId: 'u',
+      visibility: DashboardVisibility.private,
+      tags: const [],
+      icon: 'grid',
+      isDefault: false,
+      createdAt: DateTime.utc(2026),
+      updatedAt: DateTime.utc(2026),
+      widgets: [_w('a')],
+      layouts: [
+        DashboardLayout(
+          breakpoint: DashboardBreakpoint.desktop,
+          columns: 12,
+          rowHeight: 120,
+          gap: 12,
+          placements: [_p('a', 0, 0, 6, 3)],
+        ),
+        DashboardLayout(
+          breakpoint: DashboardBreakpoint.mobile,
+          columns: 4,
+          rowHeight: 100,
+          gap: 8,
+          placements: [_p('a', 0, 0, 4, 2)],
+          derivedFrom: DashboardBreakpoint.desktop,
+        ),
+        DashboardLayout(
+          breakpoint: DashboardBreakpoint.tv,
+          columns: 12,
+          rowHeight: 180,
+          gap: 16,
+          placements: [_p('a', 0, 0, 12, 4)],
+        ),
+      ],
+    );
+
 DashboardDefinition _dashboard() => DashboardDefinition(
       id: 'kitchen',
       name: 'Kitchen',
@@ -70,6 +109,7 @@ Future<void> _pumpAt(
   WidgetTester tester, {
   required String location,
   required Size size,
+  DashboardDefinition? dashboard,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
@@ -94,7 +134,8 @@ Future<void> _pumpAt(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
-        dashboardsProvider.overrideWith(() => _StubDashboards([_dashboard()])),
+        dashboardsProvider
+            .overrideWith(() => _StubDashboards([dashboard ?? _dashboard()])),
       ],
       child: MaterialApp.router(
         routerConfig: router,
@@ -150,6 +191,43 @@ void main() {
     await tester.tap(find.byTooltip('Edit this page'));
     await tester.pumpAndSettle();
     expect(find.text('Editing wall layout'), findsOneWidget);
+  });
+
+  testWidgets('editing a layout others follow says so', (tester) async {
+    // Saving now recomputes the layouts that follow this one. That is invisible
+    // from the canvas, and a save with an unannounced side effect is the exact
+    // shape this work is recovering from.
+    await _pumpAt(tester,
+        location: '/pages/kitchen',
+        size: const Size(1400, 900),
+        dashboard: _derivedDashboard());
+    await tester.tap(find.byTooltip('Edit this page'));
+    await tester.pumpAndSettle();
+    expect(find.text('Editing desktop layout'), findsOneWidget);
+    expect(find.text('mobile follows it'), findsOneWidget);
+  });
+
+  testWidgets('editing a following layout warns it will stop following',
+      (tester) async {
+    await _pumpAt(tester,
+        location: '/pages/kitchen',
+        size: const Size(420, 900),
+        dashboard: _derivedDashboard());
+    await tester.tap(find.byTooltip('Edit this page'));
+    await tester.pumpAndSettle();
+    expect(find.text('Editing mobile layout'), findsOneWidget);
+    expect(find.text('This will stop following desktop'), findsOneWidget);
+  });
+
+  testWidgets('a layout nothing follows says nothing extra', (tester) async {
+    await _pumpAt(tester,
+        location: '/wall/kitchen',
+        size: const Size(1400, 900),
+        dashboard: _derivedDashboard());
+    await tester.tap(find.byTooltip('Edit this page'));
+    await tester.pumpAndSettle();
+    expect(find.text('Editing wall layout'), findsOneWidget);
+    expect(find.textContaining('follow'), findsNothing);
   });
 
   testWidgets('cancelling leaves edit mode', (tester) async {
