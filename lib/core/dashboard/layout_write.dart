@@ -41,10 +41,21 @@ const int kDefaultColumns = 12;
 ///     has taken over keeps following the one they do edit.
 ///   * **everything else** — authored, or derived from some other breakpoint;
 ///     positions preserved, widget set reconciled.
+/// [placeEverywhere] names the widgets a *hand-arranged* layout should be given
+/// a position for even though it does not have one. Everything else missing
+/// from such a layout is missing on purpose — someone hid it there — and gets
+/// left alone.
+///
+/// Without that distinction there is no way to keep a card off one breakpoint:
+/// a blanket "every layout gets every widget" reconcile re-adds it on the next
+/// save, forever, and "hide this on the phone" becomes impossible to express.
+/// Core allows the absence — it rejects a placement naming a missing widget,
+/// never a widget without a placement.
 List<DashboardLayout> writeArrangement({
   required List<DashboardLayout> layouts,
   required List<GridItem> items,
   required DashboardBreakpoint edited,
+  Set<String> placeEverywhere = const {},
 }) =>
     [
       for (final l in layouts)
@@ -54,9 +65,11 @@ List<DashboardLayout> writeArrangement({
           // the window. Only a save that carries their arrangement.
           _write(l, items).copyWith(derivedFrom: null)
         else if (l.derivedFrom == edited)
+          // A following layout gets everything: it has no arrangement of its
+          // own to protect, so there is nothing to hide and nothing to disturb.
           deriveLayout(l, items)
         else
-          reconcileWidgetSet(l, items),
+          reconcileWidgetSet(l, items, placeEverywhere: placeEverywhere),
     ];
 
 /// Recomputes a derived layout from the source arrangement, packed for its own
@@ -119,11 +132,20 @@ DashboardLayout _write(DashboardLayout l, List<GridItem> items) {
   );
 }
 
-/// Every other breakpoint: keep its own positions, make its widget set match.
+/// Every other breakpoint: keep its own positions, and drop placements whose
+/// widget is gone — that is the half core really does reject.
 ///
-/// Returns the layout **identically** when the widget set did not change, which
-/// is the case this whole module exists to protect.
-DashboardLayout reconcileWidgetSet(DashboardLayout l, List<GridItem> items) {
+/// Widgets absent from this layout are only added back if [placeEverywhere]
+/// names them. A hand-arranged layout is allowed to omit a card, and the
+/// omission has to survive a save or it is not a choice, it is a glitch.
+///
+/// Returns the layout **identically** when nothing changed, which is the case
+/// this whole module exists to protect.
+DashboardLayout reconcileWidgetSet(
+  DashboardLayout l,
+  List<GridItem> items, {
+  Set<String> placeEverywhere = const {},
+}) {
   final columns = l.columns <= 0 ? kDefaultColumns : l.columns;
   final wanted = {for (final i in items) i.id};
 
@@ -134,7 +156,7 @@ DashboardLayout reconcileWidgetSet(DashboardLayout l, List<GridItem> items) {
   final present = {for (final p in kept) p.widgetId};
   final missing = [
     for (final i in items)
-      if (!present.contains(i.id)) i,
+      if (!present.contains(i.id) && placeEverywhere.contains(i.id)) i,
   ];
 
   if (missing.isEmpty && kept.length == l.placements.length) {

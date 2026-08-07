@@ -129,10 +129,14 @@ void main() {
       }
     });
 
-    test('a widget added on one breakpoint reaches every other', () {
-      final before = _fourDistinctLayouts();
+    test('a new widget does not barge into a hand-arranged layout', () {
+      // These four are all hand-arranged. A card added while editing desktop
+      // must not shove itself into mobile's arrangement to make room — the
+      // editor announces it there instead, with both ways out. Auto-placing is
+      // how "leave this off the phone" becomes impossible to express, since the
+      // next save puts it back.
       final after = writeArrangement(
-        layouts: before,
+        layouts: _fourDistinctLayouts(),
         items: [
           _i('thermostat', 0, 0, 4, 3),
           _i('lights', 4, 0, 4, 3),
@@ -141,12 +145,41 @@ void main() {
         ],
         edited: DashboardBreakpoint.desktop,
       );
-      for (final l in after) {
+      final desktop =
+          after.firstWhere((l) => l.breakpoint == DashboardBreakpoint.desktop);
+      expect(desktop.placements.map((p) => p.widgetId), contains('doorbell'),
+          reason: 'the breakpoint it was added on must have it');
+      for (final b in [
+        DashboardBreakpoint.mobile,
+        DashboardBreakpoint.tablet,
+        DashboardBreakpoint.tv,
+      ]) {
         expect(
-          l.placements.map((p) => p.widgetId),
-          contains('doorbell'),
-          reason: '${l.breakpoint} is missing the new widget',
+          after
+              .firstWhere((l) => l.breakpoint == b)
+              .placements
+              .map((p) => p.widgetId),
+          isNot(contains('doorbell')),
+          reason: '$b was arranged by hand and must not be reflowed',
         );
+      }
+    });
+
+    test('placeEverywhere is how a card is put on a hand-arranged layout', () {
+      final after = writeArrangement(
+        layouts: _fourDistinctLayouts(),
+        items: [
+          _i('thermostat', 0, 0, 4, 3),
+          _i('lights', 4, 0, 4, 3),
+          _i('camera', 8, 0, 4, 6),
+          _i('doorbell', 0, 3, 4, 3),
+        ],
+        edited: DashboardBreakpoint.desktop,
+        placeEverywhere: {'doorbell'},
+      );
+      for (final l in after) {
+        expect(l.placements.map((p) => p.widgetId), contains('doorbell'),
+            reason: '${l.breakpoint} was asked for it explicitly');
       }
     });
 
@@ -217,9 +250,10 @@ void main() {
       }
     });
 
-    test('every layout carries every widget, and nothing else', () {
-      // What core 400s on, asserted directly: placements and widgets are the
-      // same set, on every breakpoint.
+    test('no layout is left holding a widget that no longer exists', () {
+      // The half core really does reject: a placement naming a missing widget.
+      // It does NOT require every widget on every layout — a hand-arranged
+      // layout may legitimately omit one, which is what makes hiding possible.
       final after = writeArrangement(
         layouts: _fourDistinctLayouts(),
         items: [
@@ -228,11 +262,12 @@ void main() {
         ],
         edited: DashboardBreakpoint.tablet,
       );
+      const alive = {'thermostat', 'doorbell'};
       for (final l in after) {
         expect(
-          l.placements.map((p) => p.widgetId).toSet(),
-          {'thermostat', 'doorbell'},
-          reason: '${l.breakpoint} widget set diverged',
+          l.placements.map((p) => p.widgetId).toSet().difference(alive),
+          isEmpty,
+          reason: '${l.breakpoint} still references a deleted widget',
         );
       }
     });

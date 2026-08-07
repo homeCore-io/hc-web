@@ -252,7 +252,7 @@ void main() {
   });
 
   group('the widget set still holds across every case', () {
-    test('add and remove reach derived, overridden and authored alike', () {
+    test('a removal reaches every layout, following or not', () {
       final after = writeArrangement(
         layouts: _mixed(),
         // 'b' dropped, 'd' added.
@@ -261,11 +261,68 @@ void main() {
       );
       for (final l in after) {
         expect(
-          l.placements.map((p) => p.widgetId).toSet(),
-          {'a', 'c', 'd'},
-          reason: '${l.breakpoint} (derivedFrom ${l.derivedFrom}) diverged',
+          l.placements.map((p) => p.widgetId),
+          isNot(contains('b')),
+          reason: '${l.breakpoint} still references a deleted widget',
         );
       }
+    });
+
+    test('an addition reaches following layouts but not hand-made ones', () {
+      // The asymmetry is the point. A following layout has no arrangement of
+      // its own to protect, so a new card just appears. A hand-made one does,
+      // so it is asked rather than reflowed.
+      final after = writeArrangement(
+        layouts: _mixed(),
+        items: [_i('a', 0, 0, 4, 3), _i('c', 4, 0, 4, 3), _i('d', 8, 0, 4, 3)],
+        edited: DashboardBreakpoint.desktop,
+      );
+      for (final b in [DashboardBreakpoint.tablet, DashboardBreakpoint.tv]) {
+        expect(
+          after
+              .firstWhere((l) => l.breakpoint == b)
+              .placements
+              .map((p) => p.widgetId),
+          contains('d'),
+          reason: '$b follows desktop and should have gained the card',
+        );
+      }
+      expect(
+        after
+            .firstWhere((l) => l.breakpoint == DashboardBreakpoint.mobile)
+            .placements
+            .map((p) => p.widgetId),
+        isNot(contains('d')),
+        reason: 'mobile was arranged by hand and must not be reflowed',
+      );
+    });
+
+    test('a card left off a hand-made layout stays off across saves', () {
+      // Without this, "leave it off the phone" is undone by the next save and
+      // the choice is not a choice at all. Repeated because the failure mode is
+      // a slow one: the card creeps back on some later save, not the first.
+      var layouts = [
+        _layout(DashboardBreakpoint.desktop, 12, [
+          _p('a', 0, 0, 4, 3),
+          _p('b', 4, 0, 4, 3),
+        ]),
+        // Deliberately without 'b' — someone left it off the phone.
+        _layout(DashboardBreakpoint.mobile, 4, [_p('a', 0, 0, 4, 2)]),
+      ];
+      final items = [_i('a', 0, 0, 4, 3), _i('b', 4, 0, 4, 3)];
+      for (var i = 0; i < 5; i++) {
+        layouts = writeArrangement(
+          layouts: layouts,
+          items: items,
+          edited: DashboardBreakpoint.desktop,
+        );
+      }
+      final mobile =
+          layouts.firstWhere((l) => l.breakpoint == DashboardBreakpoint.mobile);
+      expect(mobile.placements.map((p) => p.widgetId), isNot(contains('b')),
+          reason: 'b was left off the phone and must stay off');
+      expect(mobile.placements.map((p) => p.widgetId), contains('a'),
+          reason: 'and everything else on the phone is untouched');
     });
 
     test('every layout stays legal for its own column count', () {

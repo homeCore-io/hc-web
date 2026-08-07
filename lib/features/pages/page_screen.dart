@@ -68,6 +68,25 @@ class _PageScreenState extends ConsumerState<PageScreen> {
   /// and one that quietly detaches everything you click on.
   final Set<DashboardBreakpoint> _touched = {};
 
+  /// Cards added during this edit, and not yet settled on every hand-arranged
+  /// layout.
+  ///
+  /// A new card reaches the breakpoint you added it on and every layout
+  /// following that one, because those have no arrangement of their own to
+  /// disturb. It does **not** barge into a layout someone arranged by hand —
+  /// that would reflow their work to make room for something they have not
+  /// looked at yet. Instead it is announced there, with both ways out.
+  ///
+  /// Session-scoped on purpose: the question "where does this new card go on
+  /// the phone?" belongs to the session that added it. Once answered — placed
+  /// or left off — it is answered, and a card deliberately left off stays off,
+  /// because [reconcileWidgetSet] no longer re-adds what it did not add.
+  final Set<String> _pendingPlacement = {};
+
+  /// `breakpoint:widgetId` pairs already decided — placed here, or deliberately
+  /// left off here.
+  final Set<String> _settled = {};
+
   /// The layout for [wanted], falling back through [availableBreakpoint] and
   /// finally to an empty desktop layout for a dashboard that has none.
   DashboardLayout _layoutFor(
@@ -105,14 +124,19 @@ class _PageScreenState extends ConsumerState<PageScreen> {
     final layout = _layoutFor(d, breakpoint);
     var items = _itemsFrom(d, layout);
 
-    // A widget with no placement (some dashboards carry them) would be dropped
-    // on the first save. Give it one now via the engine, so editing preserves
-    // every card rather than quietly losing the un-placed ones.
+    // A widget placed on *no* layout at all would be dropped on the first save,
+    // so it is given a home here. A widget missing from only *this* layout is a
+    // different thing entirely — someone left it off this breakpoint — and
+    // force-placing it would undo that decision simply because you opened the
+    // layout to look at it. Only the orphans get rescued.
     final engine =
         GridEngine(columns: layout.columns <= 0 ? 12 : layout.columns);
-    final placed = items.map((i) => i.id).toSet();
+    final placedSomewhere = {
+      for (final l in d.layouts)
+        for (final p in l.placements) p.widgetId,
+    };
     for (final w in d.widgets) {
-      if (placed.contains(w.id)) continue;
+      if (placedSomewhere.contains(w.id)) continue;
       final hint =
           WidgetRegistry.lookup(w.type)?.sizeHint ?? const WidgetSizeHint();
       items = engine.add(
@@ -142,6 +166,8 @@ class _PageScreenState extends ConsumerState<PageScreen> {
       _draftWidgets = {for (final w in d.widgets) w.id: w};
       _editingBreakpoint = breakpoint;
       _touched.clear();
+      _pendingPlacement.clear();
+      _settled.clear();
     });
   }
 
@@ -155,6 +181,10 @@ class _PageScreenState extends ConsumerState<PageScreen> {
     final selected = _editingBreakpoint!;
     _touched.add(selected);
     _draftItems = items;
+    // `placeEverywhere` is deliberately empty: nothing lands in a hand-arranged
+    // layout without being asked for. A new card reaches the breakpoint it was
+    // added on and everything following it; elsewhere it is announced, and the
+    // notice row is what places it.
     _draftLayouts = writeArrangement(
       layouts: _draftLayouts!,
       items: items,
@@ -273,8 +303,65 @@ class _PageScreenState extends ConsumerState<PageScreen> {
     );
     setState(() {
       _draftWidgets = {...?_draftWidgets, created.id: created};
+      _pendingPlacement.add(created.id);
       _commit(engine.add(_draftItems!, item));
     });
+  }
+
+  /// Cards this session added that the selected layout has no place for.
+  ///
+  /// Only hand-arranged layouts can be in this state: a following one is
+  /// recomputed whole and always has everything.
+  List<DashboardWidgetModel> _unplacedHere(DashboardBreakpoint selected) {
+    if (_draftLayouts == null || _pendingPlacement.isEmpty) return const [];
+    final layout =
+        _draftLayouts!.where((l) => l.breakpoint == selected).firstOrNull;
+    if (layout == null || layout.derivedFrom != null) return const [];
+    final placed = {for (final p in layout.placements) p.widgetId};
+    return [
+      for (final id in _pendingPlacement)
+        if (!placed.contains(id) &&
+            !_settled.contains(_settledKey(selected, id)))
+          if (_draftWidgets?[id] case final w?) w,
+    ];
+  }
+
+  /// A decision is per layout, not per card: leaving a card off the phone says
+  /// nothing about whether it belongs on the wall, and a single global "dealt
+  /// with" flag would silently answer for every other hand-arranged layout.
+  static String _settledKey(DashboardBreakpoint b, String id) =>
+      '${b.name}:$id';
+
+  /// Puts a pending card on the selected layout, at the first place it fits.
+  void _placeHere(String id, DashboardBreakpoint selected, int columns) {
+    final hint =
+        WidgetRegistry.lookup(_draftWidgets?[id]?.type ?? '')?.sizeHint ??
+            const WidgetSizeHint();
+    final engine = GridEngine(columns: columns);
+    setState(() {
+      _settled.add(_settledKey(selected, id));
+      _commit(engine.add(
+        _draftItems!,
+        GridItem(
+          id: id,
+          x: 0,
+          y: 0,
+          w: hint.recommendedW.clamp(1, columns),
+          h: hint.recommendedH,
+          minW: hint.minW.clamp(1, columns),
+          minH: hint.minH,
+        ),
+      ));
+    });
+  }
+
+  /// Leaves a pending card off the selected layout for good.
+  ///
+  /// Nothing to undo in the document — it is already absent — so this only
+  /// stops the asking. The absence persists because the reconcile no longer
+  /// re-adds what it did not add.
+  void _keepOffHere(String id, DashboardBreakpoint selected) {
+    setState(() => _settled.add(_settledKey(selected, id)));
   }
 
   void _removeWidget(String id, int columns) {
@@ -333,15 +420,19 @@ class _PageScreenState extends ConsumerState<PageScreen> {
       _draftWidgets = null;
       _editingBreakpoint = null;
       _touched.clear();
+      _pendingPlacement.clear();
+      _settled.clear();
     });
   }
 
   Future<void> _save(DashboardDefinition d) async {
-    // Derive the widget list from the placed items, so placements and widgets
-    // are always the same set — a widget with no placement, or a placement with
-    // no widget, is exactly what core 400s on. Taken from the draft layouts
-    // rather than the on-screen arrangement: after switching breakpoints, the
-    // screen shows one layout and the document carries four.
+    // Keep only widgets placed on at least one layout. Core rejects a
+    // placement naming a widget that does not exist; it does NOT require every
+    // widget to appear on every layout — an earlier comment here claimed both
+    // and only the first half is true, which is what made leaving a card off
+    // one breakpoint look impossible. Gathered across the draft layouts rather
+    // than the on-screen arrangement: after switching breakpoints the screen
+    // shows one layout and the document carries four.
     final placed = {
       for (final l in _draftLayouts!)
         for (final p in l.placements) p.widgetId,
@@ -477,6 +568,19 @@ class _PageScreenState extends ConsumerState<PageScreen> {
                             style: t.text.captionStyle
                                 .copyWith(color: t.surface.onBaseMuted),
                           ),
+                        ],
+                        if (_unplacedHere(breakpoint) case final missing
+                            when missing.isNotEmpty) ...[
+                          SizedBox(height: t.space.sm),
+                          for (final w in missing)
+                            _UnplacedNotice(
+                              widget_: w,
+                              breakpointLabel:
+                                  breakpointLabel(breakpoint).toLowerCase(),
+                              onPlace: () =>
+                                  _placeHere(w.id, breakpoint, columns),
+                              onKeepOff: () => _keepOffHere(w.id, breakpoint),
+                            ),
                         ],
                       ],
                     ),
@@ -659,6 +763,63 @@ class _EditBar extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// "This card is not on this layout" — with both ways out.
+///
+/// A card added while arranging one breakpoint does not force itself into a
+/// layout someone arranged by hand; that would reflow their work to make room
+/// for something they have not seen. So it is said out loud here instead, once
+/// per card, and answering makes it stop.
+class _UnplacedNotice extends StatelessWidget {
+  const _UnplacedNotice({
+    required this.widget_,
+    required this.breakpointLabel,
+    required this.onPlace,
+    required this.onKeepOff,
+  });
+
+  final DashboardWidgetModel widget_;
+  final String breakpointLabel;
+  final VoidCallback onPlace;
+  final VoidCallback onKeepOff;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Container(
+      margin: EdgeInsets.only(bottom: t.space.xs),
+      padding:
+          EdgeInsets.symmetric(horizontal: t.space.sm, vertical: t.space.xs),
+      decoration: BoxDecoration(
+        color: t.surface.raised,
+        borderRadius: BorderRadius.circular(t.radius.sm),
+        border: Border.all(color: t.stroke.hairline, width: t.stroke.width),
+      ),
+      child: Wrap(
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: t.space.sm,
+        runSpacing: t.space.xs,
+        children: [
+          Text(
+            '${widget_.title} is not on the $breakpointLabel layout',
+            style: t.text.bodySmallStyle.copyWith(color: t.surface.onBase),
+          ),
+          TextButton(
+            onPressed: onPlace,
+            child: Text('Place it',
+                style: t.text.captionStyle.copyWith(color: t.accent.active)),
+          ),
+          TextButton(
+            onPressed: onKeepOff,
+            child: Text('Leave it off',
+                style:
+                    t.text.captionStyle.copyWith(color: t.surface.onBaseMuted)),
+          ),
+        ],
       ),
     );
   }

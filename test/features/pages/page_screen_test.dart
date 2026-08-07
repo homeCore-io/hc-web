@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hc_web/core/dashboard/widget_registry.dart';
 import 'package:hc_web/core/models/dashboard.dart';
 import 'package:hc_web/core/providers/dashboards_provider.dart';
 import 'package:hc_web/design/skins.dart';
+import 'package:hc_web/features/dashboard/dashboard_view_page.dart';
 import 'package:hc_web/features/pages/page_grid.dart';
 import 'package:hc_web/features/pages/page_screen.dart';
 
@@ -162,6 +164,12 @@ String? _selectedSegment(WidgetTester tester) {
 }
 
 void main() {
+  // The card registry is filled from main() in the real app, so a widget test
+  // starts with an empty palette. Registering here is what makes "add a card"
+  // testable at all — and it is the same registry a plugin's card would use.
+  setUp(registerBuiltinDashboardWidgets);
+  tearDown(WidgetRegistry.reset);
+
   testWidgets('the page builds inside a router without throwing',
       (tester) async {
     await _pumpAt(tester,
@@ -445,6 +453,117 @@ void main() {
           size: const Size(1400, 900),
           dashboard: _derivedDashboard());
       expect(ghostCount(tester), 0);
+    });
+  });
+
+  group('a card that is not on this layout', () {
+    // A dashboard where mobile is hand-arranged and deliberately missing 'b'.
+    DashboardDefinition withHiddenCard() => DashboardDefinition(
+          id: 'kitchen',
+          name: 'Kitchen',
+          description: null,
+          ownerUserId: 'u',
+          visibility: DashboardVisibility.private,
+          tags: const [],
+          icon: 'grid',
+          isDefault: false,
+          createdAt: DateTime.utc(2026),
+          updatedAt: DateTime.utc(2026),
+          widgets: [_w('a'), _w('b')],
+          layouts: [
+            DashboardLayout(
+              breakpoint: DashboardBreakpoint.desktop,
+              columns: 12,
+              rowHeight: 120,
+              gap: 12,
+              placements: [_p('a', 0, 0, 6, 3), _p('b', 6, 0, 6, 3)],
+            ),
+            DashboardLayout(
+              breakpoint: DashboardBreakpoint.mobile,
+              columns: 4,
+              rowHeight: 100,
+              gap: 8,
+              placements: [_p('a', 0, 0, 4, 2)],
+            ),
+          ],
+        );
+
+    testWidgets('opening the layout does not quietly put it back',
+        (tester) async {
+      // The regression this guards: editing used to force-place every widget
+      // onto whatever layout you opened, so merely looking at the phone layout
+      // undid the decision to leave a card off it.
+      await _pumpAt(tester,
+          location: '/pages/kitchen',
+          size: const Size(420, 900),
+          dashboard: withHiddenCard());
+      await tester.tap(find.byTooltip('Edit this page'));
+      await tester.pumpAndSettle();
+      expect(_selectedSegment(tester), 'Mobile');
+
+      final grid = tester.widget<PageGrid>(find.byType(PageGrid));
+      expect(grid.items.map((i) => i.id), contains('a'));
+      expect(grid.items.map((i) => i.id), isNot(contains('b')),
+          reason:
+              'b was left off the phone and opening it must not restore it');
+    });
+
+    testWidgets('an existing absence is not nagged about', (tester) async {
+      // The notice is for cards added in this session. A card that has been off
+      // the phone for a year is not news.
+      await _pumpAt(tester,
+          location: '/pages/kitchen',
+          size: const Size(420, 900),
+          dashboard: withHiddenCard());
+      await tester.tap(find.byTooltip('Edit this page'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('is not on the'), findsNothing);
+    });
+
+    testWidgets(
+        'adding a card announces it on the hand-made layout, and both '
+        'answers make it stop', (tester) async {
+      // The whole point of step 6, driven through the real palette rather than
+      // by poking state: add a card while arranging desktop, then look at the
+      // phone layout — the card is not there, and the editor says so instead of
+      // having quietly reflowed the phone to fit it in.
+      await _pumpAt(tester,
+          location: '/pages/kitchen',
+          size: const Size(1400, 900),
+          dashboard: withHiddenCard());
+      await tester.tap(find.byTooltip('Edit this page'));
+      await tester.pumpAndSettle();
+      expect(_selectedSegment(tester), 'Desktop');
+
+      await tester.tap(find.text('Add widget').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('House status'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Mobile'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('is not on the mobile layout'), findsOneWidget,
+          reason: 'the new card is missing here and that must be said');
+      expect(find.text('Place it'), findsOneWidget);
+      expect(find.text('Leave it off'), findsOneWidget);
+
+      await tester.tap(find.text('Leave it off'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('is not on the mobile layout'), findsNothing,
+          reason: 'answered once is answered');
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('no notice on a layout that follows another', (tester) async {
+      // A following layout is recomputed whole and always has everything, so
+      // there is nothing it could be missing.
+      await _pumpAt(tester,
+          location: '/pages/kitchen',
+          size: const Size(420, 900),
+          dashboard: _derivedDashboard());
+      await tester.tap(find.byTooltip('Edit this page'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('is not on the'), findsNothing);
     });
   });
 

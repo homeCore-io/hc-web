@@ -370,14 +370,52 @@ fixes and should land before any redesign work.
    source, never on a layout still following (it *is* its own ghost), and it
    disappears the moment you revert. 5 tests, and drawing one unconditionally
    fails two of them.
-6. **Unplaced-card handling** — the warning row, *Place it* / *Hide on this
-   breakpoint*.
+6. ~~**Unplaced-card handling.**~~ **DONE 2026-08-07.** The plan assumed this
+   needed a core change to express "not on this breakpoint". It did not:
+   `validate_dashboard` rejects a **placement naming a missing widget**, and
+   never requires a widget to appear on every layout. A comment in
+   `page_screen.dart` had claimed both halves and only the first was true —
+   which is exactly why leaving a card off one breakpoint had looked impossible.
+
+   So hiding is just an absent placement, and the work was in stopping two
+   things from undoing it: `reconcileWidgetSet` used to re-add every missing
+   widget on every save (it now adds only what `placeEverywhere` names), and
+   `_startEditing` used to force-place every widget onto whichever layout you
+   opened — so merely *looking* at the phone layout put back the card you had
+   left off it. It now rescues only widgets placed on no layout at all, which
+   was the real hazard that behaviour was aimed at.
+
+   A card added while arranging one breakpoint reaches that breakpoint and
+   every layout following it — those have no arrangement to disturb — and is
+   *announced* on hand-arranged ones rather than shoved in. **Never silently
+   reflow someone's work to make room for something they have not seen.** Both
+   answers, *Place it* and *Leave it off*, end the asking; the decision is per
+   layout, since leaving a card off the phone says nothing about the wall.
+
+   The notice is session-scoped by design: it is for cards *this* edit added. A
+   card that has been off the phone for a year is not news, and nagging about
+   it every session would be worse than useless.
+
+   The widget-registry contents live in `dashboard_view_page.dart`
+   (`registerBuiltinDashboardWidgets`) — **step 7 must move that before
+   deleting the file**, or every card type disappears. Tests now register it in
+   `setUp`, which is also how the palette became testable at all.
+
+   9 new tests; three older ones rewritten because step 6 deliberately changes
+   their contract. Both failure modes planted and watched to fail.
 7. **Consolidate.** Redirect `/dashboards`, `/dashboards/:id`,
    `/dashboards/:id/edit` and `/dashboard` to their `/pages` equivalents.
    Delete `dashboard_editor_page.dart` and `dashboard_view_page.dart` — about
    4200 lines, including the entire off-system surface from §1.3. Keep
    `camera_card.dart` if `/pages` still uses it; check before deleting.
    `/wall/:id` keeps its own route and gains the wall resolution from step 2.
+
+   **`dashboard_view_page.dart` is not only a view.** It also holds
+   `registerBuiltinDashboardWidgets` — every card type the app has, ~140 lines
+   of `WidgetDescriptor` from line 1452. That must move to its own file *first*
+   (`core/dashboard/builtin_widgets.dart` is the obvious home, beside the
+   registry it fills), or deleting the page takes the whole card vocabulary
+   with it. Found while writing step 6's tests.
 
 Steps 1–2 are correctness. 3–6 are the feature John asked for. 7 is what makes
 it maintainable, and it is why this is one plan and not two.
