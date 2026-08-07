@@ -484,7 +484,7 @@ class _Presets extends StatelessWidget {
                 color: p.white != null
                     ? _whiteColor(p.white!)
                     : HSVColor.fromAHSV(1, p.hue!, p.sat!, 1).toColor(),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+                border: Border.all(color: t.stroke.hairline),
               ),
             ),
           ),

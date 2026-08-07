@@ -98,6 +98,7 @@ const _midnight = HcTokens(
     success: Color(0xFF6FD1A6),
     warn: Color(0xFFFFC978),
     danger: Color(0xFFFF7B72),
+    onDanger: Color(0xFF06131F),
     offline: Color(0xFFAA737A),
   ),
   stroke: HcStroke(
@@ -195,6 +196,7 @@ const _ambientGlass = HcTokens(
     success: Color(0xFF5FD6A2),
     warn: Color(0xFFFFC978),
     danger: Color(0xFFFF7B72),
+    onDanger: Color(0xFF06131F),
     offline: Color(0xFFA07680),
   ),
   stroke: HcStroke(
@@ -273,6 +275,7 @@ const _controlRoom = HcTokens(
     success: Color(0xFF34D399),
     warn: Color(0xFFFBBF24),
     danger: Color(0xFFF87171),
+    onDanger: Color(0xFF04141D),
     offline: Color(0xFFB3666E),
   ),
   stroke: HcStroke(
@@ -358,6 +361,7 @@ const _softHome = HcTokens(
     success: Color(0xFF5E9E7A),
     warn: Color(0xFFD9913A),
     danger: Color(0xFFC0524B),
+    onDanger: Color(0xFFFFFFFF),
     offline: Color(0xFF936C6F),
   ),
   stroke: HcStroke(
@@ -441,7 +445,7 @@ ThemeData hcTheme(HcSkin skin, {bool reduceMotion = false}) {
     secondary: t.accent.active,
     onSecondary: t.accent.onPrimary,
     error: t.accent.danger,
-    onError: Colors.white,
+    onError: t.accent.onDanger,
     surface: t.surface.raised,
     onSurface: t.surface.onBase,
     surfaceContainerHighest: t.surface.sunken,

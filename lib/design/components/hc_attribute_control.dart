@@ -427,8 +427,8 @@ class _ColorPickerState extends State<_ColorPicker> {
         width: 300,
         child: SliderTheme(
           data: SliderTheme.of(context).copyWith(
-            thumbColor: Colors.white,
-            overlayColor: Colors.white.withValues(alpha: 0.12),
+            thumbColor: t.surface.onBase,
+            overlayColor: t.surface.onBase.withValues(alpha: 0.12),
             trackHeight: 8,
           ),
           child: Column(

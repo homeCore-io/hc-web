@@ -373,13 +373,13 @@ class _AppMark extends StatelessWidget {
       ),
       child: input || !on
           ? Icon(on ? Icons.settings_input_hdmi_rounded : Icons.tv_off_rounded,
-              size: 22, color: on ? Colors.white : t.surface.onBaseMuted)
+              size: 22, color: on ? t.inkOn(tint) : t.surface.onBaseMuted)
           : Text(
               _initials(label),
               style: t.text.titleStyle.copyWith(
                   fontWeight: FontWeight.w800,
                   letterSpacing: -0.5,
-                  color: Colors.white),
+                  color: t.inkOn(tint)),
             ),
     );
   }

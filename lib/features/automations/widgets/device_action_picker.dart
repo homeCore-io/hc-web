@@ -1359,7 +1359,7 @@ class _DeviceActionPickerState extends State<DeviceActionPicker> {
                     color: col,
                     shape: BoxShape.circle,
                     border: Border.all(
-                      color: sel == col ? t.surface.onBase : Colors.white24,
+                      color: sel == col ? t.surface.onBase : t.stroke.hairline,
                       width: sel == col ? 2 : 1,
                     ),
                   ),

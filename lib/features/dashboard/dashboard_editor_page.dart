@@ -1139,10 +1139,10 @@ class _InteractivePlacementTile extends StatelessWidget {
                         color: accentColor,
                         borderRadius: t.radius.smR,
                       ),
-                      child: const Icon(
+                      child: Icon(
                         Icons.open_in_full,
                         size: 16,
-                        color: Colors.white,
+                        color: t.accent.onPrimary,
                       ),
                     ),
                   ),

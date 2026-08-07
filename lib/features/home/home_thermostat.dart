@@ -129,6 +129,7 @@ class _HomeThermostatState extends ConsumerState<HomeThermostat> {
               onPanEnd: (_) => _dragging = false,
               child: CustomPaint(
                 painter: _DialPainter(
+                  ring: t.surface.raised,
                   frac: (_sp - _min) / (_max - _min),
                   colour: style.colour,
                   track: t.stroke.hairline,
@@ -259,6 +260,7 @@ class _HomeThermostatState extends ConsumerState<HomeThermostat> {
                               frac: (_sp - _min) / (_max - _min),
                               colour: style.colour,
                               track: t.stroke.hairline,
+                              ring: t.surface.raised,
                               stroke: 4,
                             ),
                             child: Center(
@@ -329,12 +331,19 @@ class _DialPainter extends CustomPainter {
     required this.frac,
     required this.colour,
     required this.track,
+    required this.ring,
     required this.stroke,
   });
 
   final double frac;
   final Color colour;
   final Color track;
+
+  /// The card behind the dial, drawn as a collar around the knob so it reads as
+  /// a cutout rather than a blob. It was `Colors.white`, which is a collar you
+  /// cannot see on the one skin whose cards are white.
+  final Color ring;
+
   final double stroke;
 
   static const _start = 135 * math.pi / 180;
@@ -367,7 +376,7 @@ class _DialPainter extends CustomPainter {
     final r = (size.width - stroke) / 2;
     final c = Offset(
         size.width / 2 + r * math.cos(a), size.height / 2 + r * math.sin(a));
-    canvas.drawCircle(c, stroke * 0.55 + 3, Paint()..color = Colors.white);
+    canvas.drawCircle(c, stroke * 0.55 + 3, Paint()..color = ring);
     canvas.drawCircle(c, stroke * 0.55, Paint()..color = colour);
   }
 

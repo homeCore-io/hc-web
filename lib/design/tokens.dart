@@ -61,6 +61,32 @@ class HcTokens extends ThemeExtension<HcTokens> {
   static HcTokens of(BuildContext context) =>
       Theme.of(context).extension<HcTokens>()!;
 
+  /// Ink for something sitting on a colour the design system did not choose —
+  /// a bulb's own hue, a scene swatch, a brand colour.
+  ///
+  /// No token can answer this and neither can a constant. A device tile fills
+  /// itself with the light's colour and wrote its label in `Colors.white`,
+  /// which is fine over a deep blue and invisible over a warm white bulb — and
+  /// the value changes as someone drags a colour wheel. `surface.onBase` is no
+  /// better: it is chosen to contrast with the *skin's* surfaces, not with an
+  /// arbitrary fill.
+  ///
+  /// So: pick whichever of the skin's two extremes reads better on that
+  /// particular colour. The answer stays inside the palette, and it is right
+  /// for every value rather than for the ones someone happened to test.
+  Color inkOn(Color background) {
+    final bg = background.computeLuminance();
+    double contrast(Color ink) {
+      final a = ink.computeLuminance();
+      final (hi, lo) = a > bg ? (a, bg) : (bg, a);
+      return (hi + 0.05) / (lo + 0.05);
+    }
+
+    return contrast(surface.onBase) >= contrast(surface.base)
+        ? surface.onBase
+        : surface.base;
+  }
+
   @override
   HcTokens copyWith({
     String? name,
@@ -186,6 +212,7 @@ class HcAccents {
     required this.success,
     required this.warn,
     required this.danger,
+    required this.onDanger,
     required this.offline,
   });
 
@@ -202,6 +229,16 @@ class HcAccents {
   final Color warn;
   final Color danger;
 
+  /// Ink for text or an icon sitting *on* [danger].
+  ///
+  /// `ColorScheme.onError` was a hardcoded `Colors.white`, which measures 2.52
+  /// against the dark skins' red — the one colour in the palette that exists to
+  /// be noticed. No single value works: white clears only on Soft Home, and the
+  /// near-black ink the other skins write on accent fills clears only on the
+  /// dark three. So it is a token, per skin, like every other "what do I write
+  /// on this" question here.
+  final Color onDanger;
+
   /// "Core has not heard from this device." Distinct from [inactive] — an
   /// offline device is a *fault*, not a state, and must never look merely off.
   final Color offline;
@@ -214,6 +251,7 @@ class HcAccents {
         success: Color.lerp(success, o.success, t)!,
         warn: Color.lerp(warn, o.warn, t)!,
         danger: Color.lerp(danger, o.danger, t)!,
+        onDanger: Color.lerp(onDanger, o.onDanger, t)!,
         offline: Color.lerp(offline, o.offline, t)!,
       );
 }

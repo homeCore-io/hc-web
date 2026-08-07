@@ -301,4 +301,84 @@ void main() {
             '.overlay for depth. If it is genuinely neither, add it to '
             '`allowed` above with the reason.');
   });
+
+  test('no widget picks its own black or white', () {
+    // `Colors.white` is not a colour in this design system, it is an opt-out of
+    // it. Twenty-seven sites had one, and the ones on skin-controlled surfaces
+    // were wrong on exactly one skin — the light one nobody runs: a white
+    // slider thumb on a white card, a white collar around a thermostat knob
+    // drawn on a white card, a white icon on an accent fill.
+    //
+    // The allowlist is where white really is white. It is not a place to put
+    // something because a token was inconvenient.
+    const allowed = <String, String>{
+      // Text and icons over live video — the background is a camera feed, so
+      // no skin token can contrast with it. White plus a black shadow is the
+      // standard answer and the only one available.
+      'camera_tile.dart': 'over a camera feed',
+      'camera_card.dart': 'over a camera feed',
+      'wall_presentations.dart': 'over a camera feed',
+      'kiosk_wall_page.dart': 'a black page behind full-bleed video',
+      // A colour picker. Its white swatch, its saturation ramp to white, and
+      // the handle ring that must show over any hue are all literally white.
+      'color_light_controls.dart': 'a colour picker is made of colours',
+      // Modal scrims. Black at low alpha is what a scrim is, on any skin.
+      'hc_sheet.dart': 'modal scrim',
+      'hub_launcher.dart': 'modal scrim',
+    };
+
+    final pattern = RegExp(r'Colors\.(white|black)[0-9]*');
+    final offenders = <String>[];
+    for (final f
+        in Directory('lib').listSync(recursive: true).whereType<File>()) {
+      if (!f.path.endsWith('.dart')) continue;
+      if (allowed.containsKey(f.uri.pathSegments.last)) continue;
+      final lines = f.readAsLinesSync();
+      for (var i = 0; i < lines.length; i++) {
+        // Skip comments: this file's own explanation of why `Colors.white` is
+        // wrong contains the words `Colors.white`, and a ratchet that fails on
+        // its own reasoning teaches people to delete the reasoning.
+        final code = lines[i].trimLeft();
+        if (code.startsWith('//') || code.startsWith('///')) continue;
+        if (pattern.hasMatch(lines[i])) offenders.add('${f.path}:${i + 1}');
+      }
+    }
+
+    expect(offenders, isEmpty,
+        reason: 'these opt out of the palette:\n  ${offenders.join('\n  ')}\n'
+            'Use a token; t.inkOn(colour) when the background is one the design '
+            'system did not choose; or add a documented exception above.');
+  });
+
+  test('ink on an arbitrary colour is legible on every skin', () {
+    // `inkOn` is the answer for a fill the design system did not pick — a
+    // bulb's hue, a scene swatch. A device tile used to write `Colors.white`
+    // on the light's own colour, which is fine over deep blue and invisible
+    // over a warm white bulb, and the colour changes as someone drags a wheel.
+    double lum(Color c) => c.computeLuminance();
+    double ratio(Color a, Color b) {
+      final (x, y) = (lum(a), lum(b));
+      final (hi, lo) = x > y ? (x, y) : (y, x);
+      return (hi + 0.05) / (lo + 0.05);
+    }
+
+    // Deliberately includes the values that break a fixed white: a warm white
+    // bulb, a pale amber, plain white.
+    const fills = [
+      Color(0xFFFFF4E5),
+      Color(0xFFFFB661),
+      Color(0xFFFFFFFF),
+      Color(0xFF1B2A4A),
+      Color(0xFF000000),
+      Color(0xFF7CC4FF),
+    ];
+    for (final skin in HcSkin.values) {
+      for (final fill in fills) {
+        final r = ratio(skin.tokens.inkOn(fill), fill);
+        expect(r, greaterThanOrEqualTo(4.5),
+            reason: '${skin.name} writes '
+                '${r.toStringAsFixed(2)}:1 on ${fill.toString()}');
+      }
+    }
+  });
 }
