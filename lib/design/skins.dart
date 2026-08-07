@@ -357,10 +357,28 @@ const _softHome = HcTokens(
     glassTint: Color(0x0A000000),
     glassBlur: 0,
     onBase: Color(0xFF241F1A),
-    onBaseMuted: Color(0xFF8A8078),
+    onBaseMuted: Color(0xFF706861),
   ),
+  // ── ink first, on the one skin where that is a constraint ────────────────
+  //
+  // These were picked as *fills* — a bright warm amber for a device that is on,
+  // a soft green for "clear" — and then used overwhelmingly as text. On the
+  // three dark skins that costs nothing, because anything bright enough to fill
+  // is also bright enough to read on near-black. On a white card it is the
+  // whole problem: `active` measured 1.80 against the surfaces it was written
+  // on, `warn` 2.18, `success` 2.64.
+  //
+  // Counting settled it. `warn`, `success` and `danger` are ink in 108 places
+  // and fill in none, so there was never a trade to make for them. `active` is
+  // ink 107 times and fill 16, and one value covers both jobs: anything that
+  // clears 4.5:1 against white is legible *on* white and also carries white
+  // text, because that is the same measurement read from either side.
+  //
+  // So no new token and no call-site changes — the values were simply wrong for
+  // this ground. The cost is that Soft Home's amber is deeper than it was,
+  // which is what a warm accent on a white ground has to be.
   accent: HcAccents(
-    primary: Color(0xFFC2603F),
+    primary: Color(0xFFA65135),
     // Dark ink, not white. This is the only light skin, so it is the only one
     // whose fills are light enough that white text fails on them: white on the
     // amber `active` — which every primary button and every TextButton label
@@ -368,11 +386,11 @@ const _softHome = HcTokens(
     // `onBase` gives 7.57:1. The dark skins keep their near-black ink at 10.8:1
     // and are untouched; an ink that works is a property of the ground it sits
     // on, which is why it is per skin rather than an `if`.
-    onPrimary: Color(0xFF241F1A),
-    active: Color(0xFFE8A33D),
+    onPrimary: Color(0xFFFFFFFF),
+    active: Color(0xFF925E11),
     inactive: Color(0xFFD8D0C6),
-    success: Color(0xFF5E9E7A),
-    warn: Color(0xFFD9913A),
+    success: Color(0xFF447359),
+    warn: Color(0xFF915C1C),
     danger: Color(0xFFC0524B),
     onDanger: Color(0xFFFFFFFF),
     offline: Color(0xFF936C6F),

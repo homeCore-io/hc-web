@@ -187,20 +187,18 @@ void main() {
       return (hi + 0.05) / (lo + 0.05);
     }
 
-    // Pairs deferred with their reasons on record, not silently tolerated.
-    // Soft Home's `active` is the skin's signature amber and making it legible
-    // as *text* means either changing that colour or splitting a separate
-    // on-surface token; `onBaseMuted`, `success` and `warn` sit in the same
-    // question. Its `primary` is 3.92 against dark ink and would clear at
-    // #C86F51. See the a11y findings in the design brief's learned notes.
-    const deferred = {
-      'soft_home:active',
-      'soft_home:onBaseMuted',
-      'soft_home:success',
-      'soft_home:warn',
-      'soft_home:primary',
-      'soft_home:onPrimaryOnPrimary'
-    };
+    // Nothing is deferred any more.
+    //
+    // This list used to hold six Soft Home pairs — `active` at 2.16 on a card,
+    // `warn`, `success`, `onBaseMuted`, `primary` — carried with reasons rather
+    // than silently passing. They were all the same mistake: colours chosen as
+    // fills and then used as ink, on the one skin whose surfaces are light
+    // enough for that to matter. Retuning the values closed all six without a
+    // new token or a single call-site change.
+    //
+    // If something goes back in here, it needs a reason next to it and a note
+    // in the brief — not a shrug.
+    const deferred = <String>{};
 
     final failures = <String>[];
     for (final skin in HcSkin.values) {
