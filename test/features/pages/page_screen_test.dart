@@ -146,6 +146,20 @@ Future<void> _pumpAt(
   await tester.pumpAndSettle();
 }
 
+/// Which segment of the breakpoint bar is selected, read the way a screen
+/// reader would rather than by poking at private widget state.
+String? _selectedSegment(WidgetTester tester) {
+  for (final b in ['Mobile', 'Tablet', 'Desktop', 'Wall']) {
+    final semantics = tester
+        .widgetList<Semantics>(find.byType(Semantics))
+        .where((s) => s.properties.label?.startsWith(b) ?? false);
+    for (final s in semantics) {
+      if (s.properties.selected ?? false) return b;
+    }
+  }
+  return null;
+}
+
 void main() {
   testWidgets('the page builds inside a router without throwing',
       (tester) async {
@@ -171,7 +185,9 @@ void main() {
     await tester.tap(find.byTooltip('Edit this page'));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
-    expect(find.text('Editing desktop layout'), findsOneWidget);
+    // The bar names the layout; the header only says the mode.
+    expect(find.text('Editing'), findsOneWidget);
+    expect(_selectedSegment(tester), 'Desktop');
   });
 
   testWidgets('a narrow viewport edits the mobile layout', (tester) async {
@@ -179,7 +195,7 @@ void main() {
         location: '/pages/kitchen', size: const Size(420, 900));
     await tester.tap(find.byTooltip('Edit this page'));
     await tester.pumpAndSettle();
-    expect(find.text('Editing mobile layout'), findsOneWidget);
+    expect(_selectedSegment(tester), 'Mobile');
   });
 
   testWidgets('the wall edits the wall layout at a desktop width',
@@ -190,7 +206,7 @@ void main() {
         location: '/wall/kitchen', size: const Size(1400, 900));
     await tester.tap(find.byTooltip('Edit this page'));
     await tester.pumpAndSettle();
-    expect(find.text('Editing wall layout'), findsOneWidget);
+    expect(_selectedSegment(tester), 'Wall');
   });
 
   testWidgets('editing a layout others follow says so', (tester) async {
@@ -203,7 +219,7 @@ void main() {
         dashboard: _derivedDashboard());
     await tester.tap(find.byTooltip('Edit this page'));
     await tester.pumpAndSettle();
-    expect(find.text('Editing desktop layout'), findsOneWidget);
+    expect(_selectedSegment(tester), 'Desktop');
     expect(find.text('mobile follows it'), findsOneWidget);
   });
 
@@ -215,8 +231,8 @@ void main() {
         dashboard: _derivedDashboard());
     await tester.tap(find.byTooltip('Edit this page'));
     await tester.pumpAndSettle();
-    expect(find.text('Editing mobile layout'), findsOneWidget);
-    expect(find.text('This will stop following desktop'), findsOneWidget);
+    expect(_selectedSegment(tester), 'Mobile');
+    expect(find.text('Follows desktop — editing stops that'), findsOneWidget);
   });
 
   testWidgets('a layout nothing follows says nothing extra', (tester) async {
@@ -226,8 +242,134 @@ void main() {
         dashboard: _derivedDashboard());
     await tester.tap(find.byTooltip('Edit this page'));
     await tester.pumpAndSettle();
-    expect(find.text('Editing wall layout'), findsOneWidget);
+    expect(_selectedSegment(tester), 'Wall');
     expect(find.textContaining('follow'), findsNothing);
+  });
+
+  group('the breakpoint bar', () {
+    testWidgets('lists every layout the page has', (tester) async {
+      await _pumpAt(tester,
+          location: '/pages/kitchen',
+          size: const Size(1400, 900),
+          dashboard: _derivedDashboard());
+      await tester.tap(find.byTooltip('Edit this page'));
+      await tester.pumpAndSettle();
+      expect(find.text('Desktop'), findsOneWidget);
+      expect(find.text('Mobile'), findsOneWidget);
+      expect(find.text('Wall'), findsOneWidget);
+      // The page has no tablet layout, so the bar does not invent one.
+      expect(find.text('Tablet'), findsNothing);
+    });
+
+    testWidgets('marks which layouts follow and which are hand-made',
+        (tester) async {
+      await _pumpAt(tester,
+          location: '/pages/kitchen',
+          size: const Size(1400, 900),
+          dashboard: _derivedDashboard());
+      await tester.tap(find.byTooltip('Edit this page'));
+      await tester.pumpAndSettle();
+      // mobile follows desktop; tv was arranged by hand; desktop is the source.
+      expect(find.text('Follows'), findsOneWidget);
+      expect(find.text('Yours'), findsOneWidget);
+    });
+
+    testWidgets('switching breakpoints shows that layout', (tester) async {
+      await _pumpAt(tester,
+          location: '/pages/kitchen',
+          size: const Size(1400, 900),
+          dashboard: _derivedDashboard());
+      await tester.tap(find.byTooltip('Edit this page'));
+      await tester.pumpAndSettle();
+      expect(_selectedSegment(tester), 'Desktop');
+
+      await tester.tap(find.text('Mobile'));
+      await tester.pumpAndSettle();
+      expect(_selectedSegment(tester), 'Mobile');
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('merely looking at a following layout does not take it over',
+        (tester) async {
+      // The rule that makes the bar safe to explore. Selecting is a read; only
+      // moving something is an edit. Get this wrong and a click detaches a
+      // layout from the one it follows, silently and permanently.
+      await _pumpAt(tester,
+          location: '/pages/kitchen',
+          size: const Size(1400, 900),
+          dashboard: _derivedDashboard());
+      await tester.tap(find.byTooltip('Edit this page'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Mobile'));
+      await tester.pumpAndSettle();
+      // Still following, so still offered as a follower and not as "Yours".
+      expect(find.text('Follows'), findsOneWidget);
+      expect(
+        find.text('Follows desktop — editing stops that'),
+        findsOneWidget,
+        reason: 'selecting it must not have flipped it to authored',
+      );
+
+      await tester.tap(find.text('Desktop'));
+      await tester.pumpAndSettle();
+      expect(find.text('mobile follows it'), findsOneWidget);
+    });
+
+    testWidgets('a hand-made layout is offered back to desktop',
+        (tester) async {
+      await _pumpAt(tester,
+          location: '/pages/kitchen',
+          size: const Size(1400, 900),
+          dashboard: _derivedDashboard());
+      await tester.tap(find.byTooltip('Edit this page'));
+      await tester.pumpAndSettle();
+
+      // tv is authored, so revert is on offer there.
+      await tester.tap(find.text('Wall'));
+      await tester.pumpAndSettle();
+      expect(find.text('Follow desktop again'), findsOneWidget);
+
+      await tester.tap(find.text('Follow desktop again'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      // Now following, so the offer is withdrawn and the state flips.
+      expect(find.text('Follow desktop again'), findsNothing);
+      expect(find.text('Follows desktop — editing stops that'), findsOneWidget);
+    });
+
+    testWidgets('the source layout is never offered a revert', (tester) async {
+      // Desktop cannot follow itself.
+      await _pumpAt(tester,
+          location: '/pages/kitchen',
+          size: const Size(1400, 900),
+          dashboard: _derivedDashboard());
+      await tester.tap(find.byTooltip('Edit this page'));
+      await tester.pumpAndSettle();
+      expect(_selectedSegment(tester), 'Desktop');
+      expect(find.text('Follow desktop again'), findsNothing);
+    });
+
+    testWidgets('a following layout is not offered a revert', (tester) async {
+      await _pumpAt(tester,
+          location: '/pages/kitchen',
+          size: const Size(1400, 900),
+          dashboard: _derivedDashboard());
+      await tester.tap(find.byTooltip('Edit this page'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Mobile'));
+      await tester.pumpAndSettle();
+      expect(find.text('Follow desktop again'), findsNothing);
+    });
+
+    testWidgets('the bar is not there in view mode', (tester) async {
+      await _pumpAt(tester,
+          location: '/pages/kitchen',
+          size: const Size(1400, 900),
+          dashboard: _derivedDashboard());
+      expect(find.text('Desktop'), findsNothing);
+      expect(find.text('Follows'), findsNothing);
+    });
   });
 
   testWidgets('cancelling leaves edit mode', (tester) async {

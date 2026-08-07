@@ -188,6 +188,24 @@ class _PageGridState extends State<PageGrid> {
           height: height + (widget.editing ? stepY * 2 : 0),
           child: Stack(
             children: [
+              // The column grid, behind everything, while editing. A card's
+              // width is only meaningful as a count of columns, and counting
+              // them off an unmarked canvas is guesswork — this is the ruler,
+              // drawn where the cards actually land rather than as a strip
+              // above them.
+              if (widget.editing)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: CustomPaint(
+                      painter: _ColumnGuides(
+                        columns: columns,
+                        cellW: cellW,
+                        gap: widget.gap,
+                        color: t.stroke.hairline,
+                      ),
+                    ),
+                  ),
+                ),
               for (final item in items)
                 AnimatedPositioned(
                   key: ValueKey(item.id),
@@ -223,6 +241,46 @@ class _PageGridState extends State<PageGrid> {
       },
     );
   }
+}
+
+/// The column bands, painted behind the cards while editing.
+///
+/// Bands rather than lines: a line between columns tells you where a boundary
+/// is, a band tells you how wide one column is, and width in columns is the
+/// thing being decided. Kept at hairline strength — this is a guide for the
+/// minute you spend arranging, not a permanent feature of the page.
+class _ColumnGuides extends CustomPainter {
+  const _ColumnGuides({
+    required this.columns,
+    required this.cellW,
+    required this.gap,
+    required this.color,
+  });
+
+  final int columns;
+  final double cellW;
+  final double gap;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // Very faint. Filled bands cover a lot of area — most of it the empty drop
+    // zone below the last row — and at anything like hairline strength the
+    // guide stops being a guide and becomes the loudest thing on the page.
+    // It only has to be enough to count against.
+    final paint = Paint()..color = color.withValues(alpha: color.a * 0.18);
+    for (var i = 0; i < columns; i++) {
+      final left = i * (cellW + gap);
+      canvas.drawRect(Rect.fromLTWH(left, 0, cellW, size.height), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_ColumnGuides old) =>
+      old.columns != columns ||
+      old.cellW != cellW ||
+      old.gap != gap ||
+      old.color != color;
 }
 
 /// A tiny integer point, so the drag origin does not need a whole GridItem.

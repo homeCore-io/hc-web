@@ -61,6 +61,35 @@ void main() {
     });
   });
 
+  group('previewWidthFor', () {
+    test('a preview width really would resolve to its own breakpoint', () {
+      // The point of the frame is to arrange a layout at a width that
+      // breakpoint would actually have. A preview width that resolved to a
+      // different breakpoint would be a lie in the shape of a reassurance.
+      for (final b in DashboardBreakpoint.values) {
+        final width = previewWidthFor(b);
+        if (width == null) continue;
+        expect(
+          resolveDashboardBreakpoint(shell: HcShell.touch, width: width),
+          b,
+          reason: '${width}px does not resolve to $b',
+        );
+      }
+    });
+
+    test('the wall is not framed', () {
+      // It is already the big end; a frame would only shrink it.
+      expect(previewWidthFor(DashboardBreakpoint.tv), isNull);
+    });
+
+    test('narrower breakpoints get narrower frames', () {
+      expect(previewWidthFor(DashboardBreakpoint.mobile)!,
+          lessThan(previewWidthFor(DashboardBreakpoint.tablet)!));
+      expect(previewWidthFor(DashboardBreakpoint.tablet)!,
+          lessThan(previewWidthFor(DashboardBreakpoint.desktop)!));
+    });
+  });
+
   group('availableBreakpoint', () {
     test('returns the wanted breakpoint when the dashboard has it', () {
       final d = _dashboard(DashboardBreakpoint.values);

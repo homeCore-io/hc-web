@@ -317,8 +317,37 @@ fixes and should land before any redesign work.
    runtime. It also prompted a better rule — an *unrecognised* breakpoint name
    now reads as authored rather than coercing to desktop, because deriving from
    the wrong source silently rearranges a layout while leaving it alone does not.
-4. **The editor chrome** — breakpoint switcher with derived/overridden state,
-   column ruler, left rail with palette + inspector, the revert control.
+4. ~~**The editor chrome.**~~ **DONE 2026-08-07**, with one deliberate
+   deviation from §3.1's wireframe: **there is no left rail.** A rail cannot
+   exist at 430px, and brief principle 4 says branch on shell rather than
+   viewport — a chrome that only works on one of the three shells is the wrong
+   chrome. The breakpoint switcher is a horizontal bar under the header, and
+   Add/Cancel/Done stay in the bottom bar, which already reads the same on a
+   phone, a laptop and a wall. Revisit the rail only if a desktop-only editor
+   is ever wanted on purpose.
+
+   `BreakpointBar` lists the layouts the page actually has (it does not invent
+   a tablet layout for a page without one), marks each as *Follows* or *Yours*,
+   and offers **Follow desktop again** on a hand-made one. The column guides
+   are painted behind the cards rather than as a ruler strip above them: width
+   is only meaningful as a count of columns, and bands show how wide one column
+   *is* where a line between them only shows where a boundary falls.
+
+   The editor now drafts across all four layouts, so you can move between
+   breakpoints in one session and Save writes them together. `_draftLayouts` is
+   kept as the true projection — every gesture runs `writeArrangement`
+   immediately — so switching is a read and Save is a push, and neither has to
+   reconstruct what the other did.
+
+   **The rule that makes the bar safe to explore: selecting a layout is not
+   editing it.** Only moving something takes a following layout over. Get that
+   wrong and a click silently detaches a layout forever; it is planted-and-
+   verified, and killing it fails two tests.
+
+   The header lost "Editing <x> layout" — with the bar present that was the
+   same fact in two places, and it overflowed at phone width. The header says
+   *Editing*; the bar says which; a line under the bar says what else the save
+   will touch. 17 widget tests.
 5. **The ghost underlay.** The signature bet, built here rather than deferred.
 6. **Unplaced-card handling** — the warning row, *Place it* / *Hide on this
    breakpoint*.

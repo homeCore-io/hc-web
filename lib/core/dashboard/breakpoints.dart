@@ -27,6 +27,22 @@ DashboardBreakpoint resolveDashboardBreakpoint({
       HcShell.touch => dashboardBreakpointForWidth(width),
     };
 
+/// How wide to draw [b] when previewing it on a screen that is not that size.
+///
+/// Editing the phone layout on a laptop otherwise arranges it across 1600px —
+/// a four-column grid stretched to a shape it will never have, where every card
+/// looks like a banner and no judgement you make about it transfers. The
+/// numbers sit just inside the thresholds [dashboardBreakpointForWidth] uses,
+/// so the preview is a width that really would resolve to that breakpoint.
+///
+/// Null means "as wide as it gets": desktop and wall are already the big end.
+double? previewWidthFor(DashboardBreakpoint b) => switch (b) {
+      DashboardBreakpoint.mobile => 430,
+      DashboardBreakpoint.tablet => 900,
+      DashboardBreakpoint.desktop => 1600,
+      DashboardBreakpoint.tv => null,
+    };
+
 /// What to fall back to when a dashboard has no layout for [wanted], in order of
 /// preference.
 ///
