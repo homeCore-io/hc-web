@@ -173,38 +173,36 @@ class _LightHeroState extends ConsumerState<_LightHero> {
                               Text(
                                 '${pct.round()}',
                                 style: TextStyle(
-                                  fontSize: 38,
-                                  height: 1,
-                                  fontWeight: FontWeight.w700,
-                                  letterSpacing: -1.6,
-                                  color: on
-                                      ? t.surface.onBase
-                                      : t.surface.onBaseMuted,
-                                  fontFeatures: t.numericFontFeatures,
-                                ),
+                                    fontSize: t.text.scaled(38),
+                                    height: 1,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: -1.6,
+                                    color: on
+                                        ? t.surface.onBase
+                                        : t.surface.onBaseMuted,
+                                    fontFeatures: t.numericFontFeatures),
                               ),
                             if (widget.dimmable)
                               Padding(
                                 padding: const EdgeInsets.only(bottom: 4),
                                 child: Text('%',
-                                    style: TextStyle(
-                                        fontSize: 16,
+                                    style: t.text.titleStyle.copyWith(
                                         fontWeight: FontWeight.w600,
                                         color: t.surface.onBaseMuted)),
                               ),
                             const Spacer(),
                             Text(
                               _whiteName(d) ?? (on ? 'On' : 'Off'),
-                              style: TextStyle(
-                                  fontSize: 11.5, color: t.surface.onBaseMuted),
+                              style: t.text.captionStyle
+                                  .copyWith(color: t.surface.onBaseMuted),
                             ),
                           ],
                         ),
                         if (widget.dimmable) ...[
                           SizedBox(height: t.space.xs),
                           Text('Drag to dim',
-                              style: TextStyle(
-                                  fontSize: 11, color: t.surface.onBaseMuted)),
+                              style: t.text.captionStyle
+                                  .copyWith(color: t.surface.onBaseMuted)),
                         ],
                       ],
                     ),
@@ -313,12 +311,12 @@ class _ScreenHero extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            fontSize: 21,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: -0.5,
-                            color:
-                                on ? t.surface.onBase : t.surface.onBaseMuted,
-                          )),
+                              fontSize: t.text.scaled(21),
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: -0.5,
+                              color: on
+                                  ? t.surface.onBase
+                                  : t.surface.onBaseMuted)),
                       const SizedBox(height: 2),
                       Text(
                         model is String && model.isNotEmpty
@@ -326,8 +324,8 @@ class _ScreenHero extends StatelessWidget {
                             : sub,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                            fontSize: 12, color: t.surface.onBaseMuted),
+                        style: t.text.bodySmallStyle
+                            .copyWith(color: t.surface.onBaseMuted),
                       ),
                     ],
                   ),
@@ -375,15 +373,13 @@ class _AppMark extends StatelessWidget {
       ),
       child: input || !on
           ? Icon(on ? Icons.settings_input_hdmi_rounded : Icons.tv_off_rounded,
-              size: 22, color: on ? Colors.white : t.surface.onBaseMuted)
+              size: 22, color: on ? t.inkOn(tint) : t.surface.onBaseMuted)
           : Text(
               _initials(label),
-              style: const TextStyle(
-                fontSize: 19,
-                fontWeight: FontWeight.w800,
-                letterSpacing: -0.5,
-                color: Colors.white,
-              ),
+              style: t.text.titleStyle.copyWith(
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.5,
+                  color: t.inkOn(tint)),
             ),
     );
   }
@@ -478,13 +474,11 @@ class _FanHero extends ConsumerWidget {
                     fanSpeedLabel(s),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: s == current
-                          ? t.accent.onPrimary
-                          : t.surface.onBaseMuted,
-                    ),
+                    style: t.text.bodySmallStyle.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: s == current
+                            ? t.accent.onPrimary
+                            : t.surface.onBaseMuted),
                   ),
                 ),
               ),
@@ -537,11 +531,9 @@ class _LockHero extends ConsumerWidget {
                     size: 20, color: active ? tint : t.surface.onBaseMuted),
                 SizedBox(height: t.space.xs),
                 Text(label,
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w600,
-                      color: active ? tint : t.surface.onBaseMuted,
-                    )),
+                    style: t.text.bodySmallStyle.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: active ? tint : t.surface.onBaseMuted)),
               ],
             ),
           ),
@@ -585,7 +577,8 @@ class _SensorHero extends ConsumerWidget {
     final primary = primaryMetricOf(device);
     if (primary == null) return const SizedBox.shrink();
 
-    final (name, text, colour) = primary;
+    final (name, text, role) = primary;
+    final colour = role.color(t);
     final key = primaryMetricKeyOf(device);
 
     // The trend rides the same fetch the History block below uses, so the panel
@@ -623,24 +616,21 @@ class _SensorHero extends ConsumerWidget {
                     children: [
                       Text(
                         name.toUpperCase(),
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 1.1,
-                          color: t.surface.onBaseMuted,
-                        ),
+                        style: t.text.overlineStyle.copyWith(
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 1.1,
+                            color: t.surface.onBaseMuted),
                       ),
                       SizedBox(height: t.space.xs),
                       Text(
                         text,
                         style: TextStyle(
-                          fontSize: 40,
-                          height: 1.05,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: -1.6,
-                          color: colour,
-                          fontFeatures: t.numericFontFeatures,
-                        ),
+                            fontSize: t.text.scaled(40),
+                            height: 1.05,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -1.6,
+                            color: colour,
+                            fontFeatures: t.numericFontFeatures),
                       ),
                     ],
                   ),
@@ -664,12 +654,10 @@ class _SensorHero extends ConsumerWidget {
                           ),
                         Text(
                           trend.text,
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: colour,
-                            fontFeatures: t.numericFontFeatures,
-                          ),
+                          style: t.text.bodySmallStyle.copyWith(
+                              fontWeight: FontWeight.w600,
+                              color: colour,
+                              fontFeatures: t.numericFontFeatures),
                         ),
                       ],
                     ),

@@ -38,12 +38,10 @@ class DeviceScenesBlock extends ConsumerWidget {
       children: [
         Text(
           'SCENES IN THIS ROOM',
-          style: TextStyle(
-            fontSize: 10,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 1.1,
-            color: t.surface.onBaseMuted,
-          ),
+          style: t.text.overlineStyle.copyWith(
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.1,
+              color: t.surface.onBaseMuted),
         ),
         SizedBox(height: t.space.sm),
         Wrap(

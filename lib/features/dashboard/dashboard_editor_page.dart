@@ -8,6 +8,7 @@ import '../../core/providers/auth_provider.dart';
 import '../../core/providers/areas_provider.dart';
 import '../../core/providers/dashboards_provider.dart';
 import '../../core/providers/devices_provider.dart';
+import '../../design/tokens.dart';
 
 class DashboardEditorPage extends ConsumerStatefulWidget {
   final String dashboardId;
@@ -728,6 +729,7 @@ class _DashboardEditorPageState extends ConsumerState<DashboardEditorPage> {
                     subtitle: Text(_enumName(widget.type)),
                     trailing: IconButton(
                       onPressed: () => _removeWidget(widget.id),
+                      tooltip: 'Remove this card',
                       icon: const Icon(Icons.delete_outline),
                     ),
                     children: [
@@ -794,7 +796,7 @@ class _PlacementStepper extends StatelessWidget {
         child: Row(
           children: [
             IconButton(
-              visualDensity: VisualDensity.compact,
+              tooltip: 'One fewer',
               onPressed: canDecrease ? () => onChanged(value - 1) : null,
               icon: const Icon(Icons.remove),
             ),
@@ -805,7 +807,7 @@ class _PlacementStepper extends StatelessWidget {
               ),
             ),
             IconButton(
-              visualDensity: VisualDensity.compact,
+              tooltip: 'One more',
               onPressed: canIncrease ? () => onChanged(value + 1) : null,
               icon: const Icon(Icons.add),
             ),
@@ -835,6 +837,7 @@ class _DashboardLayoutPreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
     final placements = [...layout.placements]
       ..sort((a, b) => a.y != b.y ? a.y.compareTo(b.y) : a.x.compareTo(b.x));
     final maxRow = placements.fold<int>(
@@ -848,7 +851,7 @@ class _DashboardLayoutPreview extends StatelessWidget {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         border: Border.all(color: Theme.of(context).dividerColor),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: t.radius.mdR,
         color: Theme.of(context).colorScheme.surfaceContainerLowest,
       ),
       child: Column(
@@ -946,6 +949,7 @@ class _InteractiveDashboardLayoutPreviewState
 
   @override
   Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
     return LayoutBuilder(
       builder: (context, constraints) {
         final totalGap = (widget.layout.columns - 1) * widget.layout.gap;
@@ -993,7 +997,7 @@ class _InteractiveDashboardLayoutPreviewState
                                 .colorScheme
                                 .surfaceContainerHighest
                                 .withValues(alpha: 0.45),
-                            borderRadius: BorderRadius.circular(8),
+                            borderRadius: t.radius.smR,
                           ),
                         ),
                       ),
@@ -1058,6 +1062,7 @@ class _InteractivePlacementTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
     final theme = Theme.of(context);
     final width = (placement.w * cellWidth) + ((placement.w - 1) * layout.gap);
     final height =
@@ -1085,16 +1090,11 @@ class _InteractivePlacementTile extends StatelessWidget {
                     ? theme.colorScheme.secondaryContainer
                     : theme.colorScheme.primaryContainer)
                 .withValues(alpha: 0.8),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: t.radius.mdR,
             border: Border.all(color: accentColor, width: isSelected ? 2 : 1),
             boxShadow: isSelected
-                ? [
-                    BoxShadow(
-                      color: accentColor.withValues(alpha: 0.18),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    ),
-                  ]
+                ? t.glow.halo(accentColor,
+                    blur: 10, alpha: 0.18, offset: const Offset(0, 4))
                 : null,
           ),
           child: Stack(
@@ -1137,12 +1137,12 @@ class _InteractivePlacementTile extends StatelessWidget {
                       height: 28,
                       decoration: BoxDecoration(
                         color: accentColor,
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: t.radius.smR,
                       ),
-                      child: const Icon(
+                      child: Icon(
                         Icons.open_in_full,
                         size: 16,
-                        color: Colors.white,
+                        color: t.accent.onPrimary,
                       ),
                     ),
                   ),

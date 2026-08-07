@@ -137,8 +137,7 @@ class _Rail extends StatelessWidget {
         Padding(
           padding: EdgeInsets.fromLTRB(t.space.sm, 0, t.space.sm, t.space.sm),
           child: Text('ROOMS · ${areas.length}',
-              style: TextStyle(
-                  fontSize: 11,
+              style: t.text.captionStyle.copyWith(
                   fontWeight: FontWeight.w700,
                   letterSpacing: 1.0,
                   color: t.surface.onBaseMuted)),
@@ -172,7 +171,7 @@ class _RailItem extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: t.radius.smR,
           child: Container(
             padding: EdgeInsets.symmetric(
                 horizontal: t.space.md, vertical: t.space.sm + 1),
@@ -180,7 +179,7 @@ class _RailItem extends StatelessWidget {
               color: selected
                   ? t.accent.active.withValues(alpha: 0.10)
                   : Colors.transparent,
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: t.radius.smR,
               border: Border(
                 left: BorderSide(
                   color: selected ? t.accent.active : Colors.transparent,
@@ -194,18 +193,16 @@ class _RailItem extends StatelessWidget {
                 Text(humanize(name),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                        fontSize: 13.5,
+                    style: t.text.bodyStyle.copyWith(
                         fontWeight: FontWeight.w600,
                         color: selected ? t.accent.active : t.surface.onBase)),
                 const SizedBox(height: 2),
                 Text('$name · $count device${count == 1 ? '' : 's'}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                        fontFamily: 'monospace',
-                        fontSize: 11,
-                        color: t.surface.onBaseMuted)),
+                    style: t.text
+                        .resolve(t.text.caption, mono: true)
+                        .copyWith(color: t.surface.onBaseMuted)),
               ],
             ),
           ),
@@ -292,7 +289,7 @@ class _AreaPaneState extends ConsumerState<_AreaPane> {
             child: Text(humanize(_name),
                 style: TextStyle(
                     color: t.surface.onBase,
-                    fontSize: 20,
+                    fontSize: t.text.scaled(20),
                     fontWeight: FontWeight.w700,
                     letterSpacing: -0.3)),
           ),
@@ -345,12 +342,12 @@ class _AreaPaneState extends ConsumerState<_AreaPane> {
             children: [
               TextField(
                 controller: _searchCtrl,
-                style: TextStyle(color: t.surface.onBase, fontSize: 13.5),
+                style: t.text.bodyStyle.copyWith(color: t.surface.onBase),
                 decoration: InputDecoration(
                   isDense: true,
                   hintText: 'Search devices to add…',
                   hintStyle:
-                      TextStyle(color: t.surface.onBaseMuted, fontSize: 13),
+                      t.text.bodyStyle.copyWith(color: t.surface.onBaseMuted),
                   prefixIcon: Icon(Icons.search,
                       size: 18, color: t.surface.onBaseMuted),
                   enabledBorder: OutlineInputBorder(
@@ -367,8 +364,8 @@ class _AreaPaneState extends ConsumerState<_AreaPane> {
                       q.isEmpty
                           ? 'Every device is already in a room.'
                           : 'No devices match "$_search".',
-                      style: TextStyle(
-                          color: t.surface.onBaseMuted, fontSize: 12.5)),
+                      style: t.text.bodySmallStyle
+                          .copyWith(color: t.surface.onBaseMuted)),
                 )
               else
                 ConstrainedBox(
@@ -445,8 +442,7 @@ class _Tile extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(label.toUpperCase(),
-                style: TextStyle(
-                    fontSize: 11,
+                style: t.text.captionStyle.copyWith(
                     fontWeight: FontWeight.w700,
                     letterSpacing: 0.8,
                     color: t.surface.onBaseMuted)),
@@ -477,17 +473,15 @@ class _SectionLabel extends StatelessWidget {
     return Row(children: [
       Expanded(
         child: Text(label.toUpperCase(),
-            style: TextStyle(
-                fontSize: 11,
+            style: t.text.captionStyle.copyWith(
                 fontWeight: FontWeight.w700,
                 letterSpacing: 1.0,
                 color: t.surface.onBaseMuted)),
       ),
       if (trailing != null)
         Text(trailing!,
-            style: TextStyle(
+            style: t.text.bodySmallStyle.copyWith(
                 color: t.surface.onBaseMuted,
-                fontSize: 12,
                 fontFeatures: t.numericFontFeatures)),
     ]);
   }
@@ -511,22 +505,20 @@ class _RoomDeviceRow extends StatelessWidget {
             Flexible(
               child: Text(label,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: t.surface.onBase, fontSize: 13.5)),
+                  style: t.text.bodyStyle.copyWith(color: t.surface.onBase)),
             ),
             SizedBox(width: t.space.sm),
             Text(id,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                    fontFamily: 'monospace',
-                    fontSize: 11,
-                    color: t.surface.onBaseMuted)),
+                style: t.text
+                    .resolve(t.text.caption, mono: true)
+                    .copyWith(color: t.surface.onBaseMuted)),
           ]),
         ),
         IconButton(
           icon: Icon(Icons.close, size: 16, color: t.surface.onBaseMuted),
           tooltip: 'Remove from room',
-          visualDensity: VisualDensity.compact,
           onPressed: onRemove,
         ),
       ]),
@@ -546,7 +538,7 @@ class _AddDeviceRow extends StatelessWidget {
     final t = HcTokens.of(context);
     return InkWell(
       onTap: onAdd,
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: t.radius.smR,
       child: Padding(
         padding:
             EdgeInsets.symmetric(horizontal: t.space.xs, vertical: t.space.sm),
@@ -556,29 +548,26 @@ class _AddDeviceRow extends StatelessWidget {
               Flexible(
                 child: Text(label,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(color: t.surface.onBase, fontSize: 13)),
+                    style: t.text.bodyStyle.copyWith(color: t.surface.onBase)),
               ),
               SizedBox(width: t.space.sm),
               Text(id,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                      fontFamily: 'monospace',
-                      fontSize: 11,
-                      color: t.surface.onBaseMuted)),
+                  style: t.text
+                      .resolve(t.text.caption, mono: true)
+                      .copyWith(color: t.surface.onBaseMuted)),
             ]),
           ),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 3),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(t.radius.pill),
+              borderRadius: t.radius.pillR,
               border: Border.all(color: t.accent.active.withValues(alpha: 0.4)),
             ),
             child: Text('+ Add',
-                style: TextStyle(
-                    color: t.accent.active,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600)),
+                style: t.text.bodySmallStyle.copyWith(
+                    color: t.accent.active, fontWeight: FontWeight.w600)),
           ),
         ]),
       ),
@@ -600,23 +589,22 @@ class _DangerZone extends StatelessWidget {
       padding: EdgeInsets.all(t.space.md),
       decoration: BoxDecoration(
         color: t.accent.danger.withValues(alpha: 0.04),
-        borderRadius: BorderRadius.circular(t.radius.md),
+        borderRadius: t.radius.mdR,
         border: Border.all(color: t.accent.danger.withValues(alpha: 0.28)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('Delete this area',
-              style: TextStyle(
-                  color: t.accent.danger,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13.5)),
+              style: t.text.bodyStyle.copyWith(
+                  color: t.accent.danger, fontWeight: FontWeight.w600)),
           SizedBox(height: t.space.xs),
           Text(
               count == 0
                   ? 'Removes $name. No devices are assigned to it.'
                   : 'Removes $name and clears it from its $count device${count == 1 ? '' : 's'}. The devices stay; they just lose their room.',
-              style: TextStyle(color: t.surface.onBaseMuted, fontSize: 12.5)),
+              style:
+                  t.text.bodySmallStyle.copyWith(color: t.surface.onBaseMuted)),
           SizedBox(height: t.space.md),
           HcButton(
               label: 'Delete area',
@@ -637,7 +625,7 @@ class _EmptyHint extends StatelessWidget {
     return HcSurface(
       padding: EdgeInsets.all(t.space.md),
       child: Text(text,
-          style: TextStyle(color: t.surface.onBaseMuted, fontSize: 12.5)),
+          style: t.text.bodySmallStyle.copyWith(color: t.surface.onBaseMuted)),
     );
   }
 }
@@ -656,10 +644,11 @@ class _Empty extends StatelessWidget {
               size: 40, color: t.surface.onBaseMuted),
           SizedBox(height: t.space.md),
           Text('No areas yet',
-              style: TextStyle(color: t.surface.onBase, fontSize: 15)),
+              style: t.text.subtitleStyle.copyWith(color: t.surface.onBase)),
           SizedBox(height: t.space.xs),
           Text('Group devices by room.',
-              style: TextStyle(color: t.surface.onBaseMuted, fontSize: 12.5)),
+              style:
+                  t.text.bodySmallStyle.copyWith(color: t.surface.onBaseMuted)),
           SizedBox(height: t.space.md),
           HcButton(
               label: 'Add area',

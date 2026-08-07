@@ -63,11 +63,8 @@ class _DriftNoticeState extends ConsumerState<DriftNotice> {
                 Expanded(
                   child: Text(
                     _headline(drift, serious),
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w600,
-                      color: colour,
-                    ),
+                    style: t.text.bodySmallStyle
+                        .copyWith(fontWeight: FontWeight.w600, color: colour),
                   ),
                 ),
                 Icon(
@@ -105,10 +102,7 @@ class _DriftNoticeState extends ConsumerState<DriftNotice> {
             SizedBox(height: t.space.xs),
             Text(
               'Update this app, or run tool/sync-vocabulary.sh and rebuild it.',
-              style: TextStyle(
-                fontSize: 11.5,
-                color: t.surface.onBaseMuted,
-              ),
+              style: t.text.captionStyle.copyWith(color: t.surface.onBaseMuted),
             ),
           ],
         ],
@@ -156,15 +150,12 @@ class _Section extends StatelessWidget {
         children: [
           Text(
             title,
-            style: TextStyle(
-              fontSize: 11.5,
-              fontWeight: FontWeight.w700,
-              color: t.surface.onBase,
-            ),
+            style: t.text.captionStyle
+                .copyWith(fontWeight: FontWeight.w700, color: t.surface.onBase),
           ),
           Text(
             detail,
-            style: TextStyle(fontSize: 11, color: t.surface.onBaseMuted),
+            style: t.text.captionStyle.copyWith(color: t.surface.onBaseMuted),
           ),
           SizedBox(height: t.space.xs),
           for (final entry in groups.entries)
@@ -172,11 +163,9 @@ class _Section extends StatelessWidget {
               padding: EdgeInsets.only(bottom: 2, left: t.space.sm),
               child: Text(
                 '${entry.key}: ${entry.value.join(', ')}',
-                style: TextStyle(
-                  fontSize: 11.5,
-                  fontFamily: 'monospace',
-                  color: colour,
-                ),
+                style: t.text
+                    .resolve(t.text.caption, mono: true)
+                    .copyWith(color: colour),
               ),
             ),
         ],

@@ -117,8 +117,9 @@ class HcTile extends StatelessWidget {
             // Occupan…" — a device you cannot read is a device you cannot use.
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 13.5,
+            style: t.text.bodyStyle.copyWith(
+              // Tighter than the ramp, per the two-line note above: 1.4 puts
+              // too much air between the halves of a wrapped name.
               height: 1.2,
               fontWeight: FontWeight.w600,
               letterSpacing: -0.1,
@@ -132,8 +133,7 @@ class HcTile extends StatelessWidget {
             offline ? 'Offline' : summarise(device),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 11.5,
+            style: t.text.captionStyle.copyWith(
               height: 1.2,
               color: offline ? t.accent.offline : t.surface.onBaseMuted,
               fontFeatures: t.numericFontFeatures,
@@ -212,7 +212,7 @@ class _Toggle extends StatelessWidget {
           padding: const EdgeInsets.all(3),
           decoration: BoxDecoration(
             color: on ? t.accent.active : t.accent.inactive,
-            borderRadius: BorderRadius.circular(t.radius.pill),
+            borderRadius: t.radius.pillR,
           ),
           child: AnimatedAlign(
             duration: t.motion.d(t.motion.fast),
@@ -263,7 +263,7 @@ class _Dimmer extends StatelessWidget {
                 height: 5,
                 decoration: BoxDecoration(
                   color: t.surface.sunken,
-                  borderRadius: BorderRadius.circular(t.radius.pill),
+                  borderRadius: t.radius.pillR,
                 ),
                 child: FractionallySizedBox(
                   alignment: Alignment.centerLeft,
@@ -272,7 +272,7 @@ class _Dimmer extends StatelessWidget {
                     duration: t.motion.d(t.motion.base),
                     curve: t.motion.curve,
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(t.radius.pill),
+                      borderRadius: t.radius.pillR,
                       gradient: LinearGradient(
                         colors: [
                           t.accent.active.withValues(alpha: 0.45),

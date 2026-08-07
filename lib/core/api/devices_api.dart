@@ -1,8 +1,20 @@
+import 'package:flutter/foundation.dart';
+
 import 'homecore_client.dart';
 
 class DevicesApi {
-  final HomecoreClient client;
+  late final HomecoreClient client;
   DevicesApi(this.client);
+
+  /// For fakes that override the methods they need and never reach the wire.
+  ///
+  /// Same reasoning as [PluginsApi.fake]: [HomecoreClient] cannot be built
+  /// under the Dart VM at all — dio rejects its relative `/api/v1` base URL off
+  /// web — so a test double has no real client to pass up. Leaving [client]
+  /// uninitialised is deliberate: a fake that falls through to a method it
+  /// forgot to override should fail loudly rather than quietly try a request.
+  @visibleForTesting
+  DevicesApi.fake();
 
   /// Inlining the schemas costs one request instead of N, and the payload only
   /// grows for the devices that actually have one — 9 of 168 on a real install.

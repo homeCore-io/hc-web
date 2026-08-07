@@ -68,14 +68,12 @@ class SectionGroupHeader extends ConsumerWidget {
                       title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: -0.1,
-                        // Room/group titles are always the active amber — a
-                        // deliberate, state-independent accent.
-                        color: t.accent.active,
-                      ),
+                      style: t.text.bodyStyle.copyWith(
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -0.1,
+                          // Room/group titles are always the active amber — a
+                          // deliberate, state-independent accent.
+                          color: t.accent.active),
                     ),
                   ),
                   if (tag != null) ...[
@@ -85,11 +83,9 @@ class SectionGroupHeader extends ConsumerWidget {
                   if (count != null) ...[
                     SizedBox(width: t.space.sm),
                     Text(count!,
-                        style: TextStyle(
-                          fontSize: 11.5,
-                          color: t.surface.onBaseMuted,
-                          fontFeatures: t.numericFontFeatures,
-                        )),
+                        style: t.text.captionStyle.copyWith(
+                            color: t.surface.onBaseMuted,
+                            fontFeatures: t.numericFontFeatures)),
                   ],
                 ],
               ),
@@ -119,14 +115,11 @@ class _Tag extends StatelessWidget {
       decoration: BoxDecoration(
         border: Border.all(
             color: accent ? c.withValues(alpha: 0.4) : t.stroke.hairline),
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: t.radius.xsR,
       ),
       child: Text(label.toUpperCase(),
-          style: TextStyle(
-              fontSize: 9.5,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.6,
-              color: c)),
+          style: t.text.overlineStyle.copyWith(
+              fontWeight: FontWeight.w700, letterSpacing: 0.6, color: c)),
     );
   }
 }

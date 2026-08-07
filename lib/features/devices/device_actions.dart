@@ -210,10 +210,8 @@ class _DPad extends ConsumerWidget {
           key(
             'select',
             Text('OK',
-                style: TextStyle(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w800,
-                    color: t.accent.primary)),
+                style: t.text.captionStyle.copyWith(
+                    fontWeight: FontWeight.w800, color: t.accent.primary)),
             round: true,
           ),
           SizedBox(width: t.space.xs),
@@ -339,9 +337,8 @@ class _KeyState extends State<_Key> {
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
-    final radius = widget.round
-        ? BorderRadius.circular(999)
-        : BorderRadius.circular(t.radius.sm + 2);
+    final radius =
+        widget.round ? t.radius.pillR : BorderRadius.circular(t.radius.sm + 2);
 
     final key = GestureDetector(
       onTapDown: widget.enabled ? (_) => setState(() => _down = true) : null,
@@ -523,8 +520,7 @@ class _ValueDialogState extends State<_ValueDialog> {
             ),
           ),
           Text('${(_value as num?)?.round() ?? p.min}${p.unit ?? ''}',
-              style: TextStyle(
-                  fontSize: 13,
+              style: t.text.bodyStyle.copyWith(
                   color: t.surface.onBase,
                   fontFeatures: t.numericFontFeatures)),
         ],
@@ -607,12 +603,10 @@ class _BlockLabel extends StatelessWidget {
     final t = HcTokens.of(context);
     return Text(
       text.toUpperCase(),
-      style: TextStyle(
-        fontSize: 10,
-        fontWeight: FontWeight.w800,
-        letterSpacing: 1.1,
-        color: t.surface.onBaseMuted,
-      ),
+      style: t.text.overlineStyle.copyWith(
+          fontWeight: FontWeight.w800,
+          letterSpacing: 1.1,
+          color: t.surface.onBaseMuted),
     );
   }
 }
@@ -834,7 +828,7 @@ class _ParamDialogState extends ConsumerState<_ParamDialog> {
           ),
           SizedBox(width: t.space.sm),
           Text(_values[p.name] == true ? 'Yes' : 'No',
-              style: TextStyle(fontSize: 13, color: t.surface.onBase)),
+              style: t.text.bodyStyle.copyWith(color: t.surface.onBase)),
         ],
       );
     } else if (p.kind.isNumeric && p.hasRange) {
@@ -854,8 +848,7 @@ class _ParamDialogState extends ConsumerState<_ParamDialog> {
             ),
           ),
           Text('${_values[p.name] ?? p.min!.round()}${p.unit ?? ''}',
-              style: TextStyle(
-                  fontSize: 13,
+              style: t.text.bodyStyle.copyWith(
                   color: t.surface.onBase,
                   fontFeatures: t.numericFontFeatures)),
         ],
@@ -880,10 +873,8 @@ class _ParamDialogState extends ConsumerState<_ParamDialog> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(label,
-            style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: t.surface.onBaseMuted)),
+            style: t.text.bodySmallStyle.copyWith(
+                fontWeight: FontWeight.w600, color: t.surface.onBaseMuted)),
         SizedBox(height: t.space.xs),
         control,
       ],
@@ -919,13 +910,13 @@ class _Chip extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: enabled ? onTap : null,
-        borderRadius: BorderRadius.circular(t.radius.pill),
+        borderRadius: t.radius.pillR,
         child: Container(
           padding: EdgeInsets.symmetric(
               horizontal: t.space.md, vertical: t.space.sm),
           decoration: BoxDecoration(
             color: t.surface.raised,
-            borderRadius: BorderRadius.circular(t.radius.pill),
+            borderRadius: t.radius.pillR,
             border: Border.all(color: t.stroke.hairline),
           ),
           child: Row(
@@ -943,19 +934,17 @@ class _Chip extends StatelessWidget {
               SizedBox(width: t.space.sm),
               Text(
                 label,
-                style: TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w600,
-                  color: enabled ? t.surface.onBase : t.surface.onBaseMuted,
-                ),
+                style: t.text.bodySmallStyle.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: enabled ? t.surface.onBase : t.surface.onBaseMuted),
               ),
               // An action that needs saying-more says so, rather than firing a
               // default the moment it is touched.
               if (hasParam) ...[
                 SizedBox(width: t.space.xs),
                 Text('…',
-                    style: TextStyle(
-                        fontSize: 12.5, color: t.surface.onBaseMuted)),
+                    style: t.text.bodySmallStyle
+                        .copyWith(color: t.surface.onBaseMuted)),
               ],
             ],
           ),

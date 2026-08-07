@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../design/tokens.dart';
+
 /// The dashboard's extension point.
 ///
 /// It replaces a closed Dart enum with an exhaustive `switch`, which had two
@@ -191,6 +193,7 @@ class UnknownWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
     final scheme = Theme.of(context).colorScheme;
     return Center(
       child: Column(
@@ -200,20 +203,18 @@ class UnknownWidget extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             'Unsupported card',
-            style: TextStyle(color: scheme.outline, fontSize: 12),
+            style: t.text.bodySmallStyle.copyWith(color: scheme.outline),
           ),
           Text(
             type,
-            style: TextStyle(
-              color: scheme.outline,
-              fontSize: 11,
-              fontFamily: 'monospace',
-            ),
+            style: t.text
+                .resolve(t.text.caption, mono: true)
+                .copyWith(color: scheme.outline),
           ),
           const SizedBox(height: 4),
           Text(
             'Kept as-is',
-            style: TextStyle(color: scheme.outline, fontSize: 10),
+            style: t.text.overlineStyle.copyWith(color: scheme.outline),
           ),
         ],
       ),

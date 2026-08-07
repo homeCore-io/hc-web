@@ -153,15 +153,13 @@ class _ColorLightControlsState extends ConsumerState<ColorLightControls> {
                     Row(
                       children: [
                         Text('BRIGHTNESS',
-                            style: TextStyle(
-                                fontSize: 10,
+                            style: t.text.overlineStyle.copyWith(
                                 letterSpacing: 1.1,
                                 fontWeight: FontWeight.w700,
                                 color: t.surface.onBaseMuted)),
                         const Spacer(),
                         Text('${_bri.round()}%',
-                            style: TextStyle(
-                                fontSize: 12,
+                            style: t.text.bodySmallStyle.copyWith(
                                 fontWeight: FontWeight.w600,
                                 color: t.surface.onBase,
                                 fontFeatures: t.numericFontFeatures)),
@@ -232,8 +230,7 @@ class _Segmented extends StatelessWidget {
               borderRadius: t.radius.smR,
             ),
             child: Text(label,
-                style: TextStyle(
-                    fontSize: 11.5,
+                style: t.text.captionStyle.copyWith(
                     fontWeight: FontWeight.w600,
                     color: sel ? t.surface.onBase : t.surface.onBaseMuted)),
           ),
@@ -348,6 +345,7 @@ class _TempBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
     return LayoutBuilder(builder: (context, c) {
       void set(Offset p) =>
           onChanged((p.dy / c.maxHeight).clamp(0.0, 1.0) * 100);
@@ -357,7 +355,7 @@ class _TempBar extends StatelessWidget {
         onPanEnd: (_) => onEnd(),
         child: Container(
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: t.radius.lgR,
             gradient: const LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
@@ -417,7 +415,7 @@ class _Slider extends StatelessWidget {
               Container(
                 height: 10,
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(6),
+                  borderRadius: t.radius.xsR,
                   gradient:
                       LinearGradient(colors: [t.surface.sunken, trackColour]),
                 ),
@@ -486,7 +484,7 @@ class _Presets extends StatelessWidget {
                 color: p.white != null
                     ? _whiteColor(p.white!)
                     : HSVColor.fromAHSV(1, p.hue!, p.sat!, 1).toColor(),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+                border: Border.all(color: t.stroke.hairline),
               ),
             ),
           ),

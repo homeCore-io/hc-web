@@ -306,17 +306,15 @@ class _Header extends ConsumerWidget {
               dashboard.name,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 26,
-                fontWeight: FontWeight.w700,
-                letterSpacing: -0.6,
-                color: t.surface.onBase,
-              ),
+              style: t.text.displayStyle.copyWith(
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.6,
+                  color: t.surface.onBase),
             ),
           ),
           if (editing)
             Text('Editing',
-                style: TextStyle(fontSize: 13, color: t.accent.active))
+                style: t.text.bodyStyle.copyWith(color: t.accent.active))
           else ...[
             HcIconButton(
               icon: HcIcons.pencil,

@@ -32,14 +32,14 @@ class LogLevelPicks extends StatelessWidget {
         for (final level in logLevels)
           InkWell(
             onTap: enabled ? () => onPick(level) : null,
-            borderRadius: BorderRadius.circular(t.radius.pill),
+            borderRadius: t.radius.pillR,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
                 color: selected == level
                     ? t.accent.active.withValues(alpha: 0.16)
                     : Colors.transparent,
-                borderRadius: BorderRadius.circular(t.radius.pill),
+                borderRadius: t.radius.pillR,
                 border: Border.all(
                   color:
                       selected == level ? t.accent.active : t.stroke.hairline,
@@ -47,15 +47,13 @@ class LogLevelPicks extends StatelessWidget {
               ),
               child: Text(
                 level,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: !enabled
-                      ? t.surface.onBaseMuted
-                      : selected == level
-                          ? t.accent.active
-                          : t.surface.onBaseMuted,
-                ),
+                style: t.text.bodySmallStyle.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: !enabled
+                        ? t.surface.onBaseMuted
+                        : selected == level
+                            ? t.accent.active
+                            : t.surface.onBaseMuted),
               ),
             ),
           ),

@@ -8,6 +8,7 @@ import '../design/hc_icons.dart';
 import '../design/tokens.dart';
 import 'hub_launcher.dart';
 import 'nav_rail.dart';
+import 'command_failure_banner.dart';
 import 'session_status.dart';
 
 /// Phone and tablet, in the hand.
@@ -35,6 +36,7 @@ class TouchChrome extends ConsumerWidget {
         body: Column(
           children: [
             const ExpiryBanner(),
+            const CommandFailureBanner(),
             Expanded(
               child: Row(
                 children: [
@@ -77,6 +79,7 @@ class TouchChrome extends ConsumerWidget {
           const LiveDot(),
           SizedBox(width: t.space.sm),
           IconButton(
+            tooltip: 'Sign out',
             icon: const Icon(Icons.logout),
             onPressed: () => ref.read(authProvider.notifier).logout(),
           ),
@@ -85,6 +88,7 @@ class TouchChrome extends ConsumerWidget {
       body: Column(
         children: [
           const ExpiryBanner(),
+          const CommandFailureBanner(),
           Expanded(child: child),
         ],
       ),

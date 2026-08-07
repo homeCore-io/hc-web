@@ -130,8 +130,7 @@ class _HcSceneChipState extends State<HcSceneChip> {
               size: 14, color: t.surface.onBaseMuted),
         const SizedBox(width: 9),
         Text(widget.name,
-            style: TextStyle(
-                fontSize: 12.5,
+            style: t.text.bodySmallStyle.copyWith(
                 fontWeight: FontWeight.w600,
                 color: widget.active ? t.accent.active : t.surface.onBase)),
         if (custom) ...[
@@ -158,15 +157,14 @@ class _Dot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
     return Container(
       width: 11,
       height: 11,
       decoration: BoxDecoration(
         color: color,
         shape: BoxShape.circle,
-        boxShadow: [
-          BoxShadow(color: color.withValues(alpha: 0.6), blurRadius: 6),
-        ],
+        boxShadow: t.glow.halo(color, blur: 6),
       ),
     );
   }
@@ -218,14 +216,9 @@ class _AuroraChipState extends State<_AuroraChip>
               colors: colors,
               transform: GradientRotation(_c.value * 6.2831853),
             ),
-            borderRadius: BorderRadius.circular(11),
-            boxShadow: [
-              BoxShadow(
-                color: widget.palette.dot.withValues(alpha: 0.45),
-                blurRadius: 18,
-                spreadRadius: -4,
-              ),
-            ],
+            borderRadius: t.radius.smR,
+            boxShadow: t.glow
+                .halo(widget.palette.dot, blur: 18, alpha: 0.45, spread: -4),
           ),
           padding: const EdgeInsets.all(1.6),
           child: child,
@@ -233,7 +226,7 @@ class _AuroraChipState extends State<_AuroraChip>
         child: Container(
           decoration: BoxDecoration(
             color: t.surface.raised,
-            borderRadius: BorderRadius.circular(9.6),
+            borderRadius: t.radius.smR,
           ),
           padding: const EdgeInsets.fromLTRB(11, 8, 13, 8),
           child: widget.child,

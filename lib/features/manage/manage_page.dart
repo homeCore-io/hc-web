@@ -352,12 +352,10 @@ class _AttentionBand extends StatelessWidget {
                 items.length == 1
                     ? '1 thing needs you'
                     : '${items.length} things need you',
-                style: TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w600,
-                  color: t.accent.warn,
-                  fontFeatures: t.numericFontFeatures,
-                ),
+                style: t.text.bodySmallStyle.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: t.accent.warn,
+                    fontFeatures: t.numericFontFeatures),
               ),
             ],
           ),
@@ -401,17 +399,15 @@ class _AttentionRow extends StatelessWidget {
                 children: [
                   Text(
                     item.headline,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: t.surface.onBase,
-                      fontFeatures: t.numericFontFeatures,
-                    ),
+                    style: t.text.bodyStyle.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: t.surface.onBase,
+                        fontFeatures: t.numericFontFeatures),
                   ),
                   Text(
                     item.detail,
-                    style:
-                        TextStyle(fontSize: 12.5, color: t.surface.onBaseMuted),
+                    style: t.text.bodySmallStyle
+                        .copyWith(color: t.surface.onBaseMuted),
                   ),
                 ],
               ),
@@ -419,11 +415,8 @@ class _AttentionRow extends StatelessWidget {
             SizedBox(width: t.space.sm),
             Text(
               '${item.action} →',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: t.accent.primary,
-              ),
+              style: t.text.bodySmallStyle.copyWith(
+                  fontWeight: FontWeight.w700, color: t.accent.primary),
             ),
           ],
         ),
@@ -462,11 +455,8 @@ class _HouseTile extends StatelessWidget {
                   child: Text(
                     entry.title,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 14.5,
-                      fontWeight: FontWeight.w600,
-                      color: t.surface.onBase,
-                    ),
+                    style: t.text.subtitleStyle.copyWith(
+                        fontWeight: FontWeight.w600, color: t.surface.onBase),
                   ),
                 ),
               ],
@@ -477,11 +467,10 @@ class _HouseTile extends StatelessWidget {
                 entry.detail!,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 12.5,
-                  color: entry.alert ? t.accent.danger : t.surface.onBaseMuted,
-                  fontFeatures: t.numericFontFeatures,
-                ),
+                style: t.text.bodySmallStyle.copyWith(
+                    color:
+                        entry.alert ? t.accent.danger : t.surface.onBaseMuted,
+                    fontFeatures: t.numericFontFeatures),
               ),
           ],
         ),
@@ -525,22 +514,17 @@ class _SystemRow extends StatelessWidget {
               child: Text(
                 entry.title,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 13.5,
-                  fontWeight: FontWeight.w600,
-                  color: t.surface.onBase,
-                ),
+                style: t.text.bodyStyle.copyWith(
+                    fontWeight: FontWeight.w600, color: t.surface.onBase),
               ),
             ),
             Expanded(
               child: Text(
                 entry.detail ?? '',
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 12.5,
-                  color: t.surface.onBaseMuted,
-                  fontFeatures: t.numericFontFeatures,
-                ),
+                style: t.text.bodySmallStyle.copyWith(
+                    color: t.surface.onBaseMuted,
+                    fontFeatures: t.numericFontFeatures),
               ),
             ),
             if (dot != null) ...[
@@ -569,12 +553,10 @@ class _Eyebrow extends StatelessWidget {
     final t = HcTokens.of(context);
     return Text(
       label.toUpperCase(),
-      style: TextStyle(
-        fontSize: 11,
-        fontWeight: FontWeight.w700,
-        letterSpacing: 1.2,
-        color: t.surface.onBaseMuted,
-      ),
+      style: t.text.captionStyle.copyWith(
+          fontWeight: FontWeight.w700,
+          letterSpacing: 1.2,
+          color: t.surface.onBaseMuted),
     );
   }
 }

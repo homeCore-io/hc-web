@@ -174,18 +174,20 @@ class _ServerLogsPageState extends ConsumerState<_ServerLogsPage> {
                   color: _connected ? t.accent.active : t.accent.danger),
               const SizedBox(width: 6),
               Text(_connected ? 'Live' : 'Reconnecting…',
-                  style: TextStyle(color: t.surface.onBaseMuted, fontSize: 12)),
+                  style: t.text.bodySmallStyle
+                      .copyWith(color: t.surface.onBaseMuted)),
               SizedBox(width: t.space.md),
               SizedBox(
                 width: 160,
                 height: 30,
                 child: TextField(
                   controller: _moduleFilterCtrl,
-                  style: TextStyle(color: t.surface.onBase, fontSize: 12),
+                  style:
+                      t.text.bodySmallStyle.copyWith(color: t.surface.onBase),
                   decoration: InputDecoration(
                     hintText: 'Filter module…',
-                    hintStyle:
-                        TextStyle(color: t.surface.onBaseMuted, fontSize: 12),
+                    hintStyle: t.text.bodySmallStyle
+                        .copyWith(color: t.surface.onBaseMuted),
                     isDense: true,
                     contentPadding:
                         const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
@@ -195,6 +197,7 @@ class _ServerLogsPageState extends ConsumerState<_ServerLogsPage> {
                         borderSide: BorderSide(color: t.accent.active)),
                     suffixIcon: _moduleFilterCtrl.text.isNotEmpty
                         ? IconButton(
+                            tooltip: 'Clear the module filter',
                             icon: Icon(Icons.clear,
                                 size: 14, color: t.surface.onBaseMuted),
                             onPressed: () => _moduleFilterCtrl.clear(),
@@ -210,7 +213,8 @@ class _ServerLogsPageState extends ConsumerState<_ServerLogsPage> {
               // of control as the server level and are not: these hide lines
               // that already arrived.
               Text('Show',
-                  style: TextStyle(color: t.surface.onBaseMuted, fontSize: 11)),
+                  style: t.text.captionStyle
+                      .copyWith(color: t.surface.onBaseMuted)),
               const SizedBox(width: 6),
               for (final level in _levels)
                 Padding(
@@ -283,20 +287,19 @@ class _LevelChip extends StatelessWidget {
     final t = HcTokens.of(context);
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(t.radius.pill),
+      borderRadius: t.radius.pillR,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         decoration: BoxDecoration(
           color: selected
               ? t.accent.active.withValues(alpha: 0.16)
               : Colors.transparent,
-          borderRadius: BorderRadius.circular(t.radius.pill),
+          borderRadius: t.radius.pillR,
           border:
               Border.all(color: selected ? t.accent.active : t.stroke.hairline),
         ),
         child: Text(label,
-            style: TextStyle(
-                fontSize: 11,
+            style: t.text.captionStyle.copyWith(
                 fontWeight: FontWeight.w600,
                 color: selected ? t.accent.active : t.surface.onBaseMuted)),
       ),
@@ -329,7 +332,8 @@ class _ClientErrorsTab extends ConsumerWidget {
           child: Row(
             children: [
               Text('${errors.length} error(s)',
-                  style: TextStyle(color: t.surface.onBaseMuted, fontSize: 12)),
+                  style: t.text.bodySmallStyle
+                      .copyWith(color: t.surface.onBaseMuted)),
               const Spacer(),
               IconButton(
                 icon: Icon(Icons.delete_sweep_outlined,
@@ -361,19 +365,18 @@ class _ClientErrorsTab extends ConsumerWidget {
                       Row(
                         children: [
                           Text(timeStr,
-                              style: TextStyle(
-                                  fontFamily: 'monospace',
-                                  fontSize: 11,
-                                  color: t.surface.onBaseMuted)),
+                              style: t.text
+                                  .resolve(t.text.caption, mono: true)
+                                  .copyWith(color: t.surface.onBaseMuted)),
                           const SizedBox(width: 8),
                           Flexible(
                             child: Text(
                               '${e.statusCode ?? '?'} ${e.method} ${e.url}',
-                              style: TextStyle(
-                                  fontFamily: 'monospace',
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: t.accent.danger),
+                              style: t.text
+                                  .resolve(t.text.bodySmall, mono: true)
+                                  .copyWith(
+                                      fontWeight: FontWeight.w600,
+                                      color: t.accent.danger),
                             ),
                           ),
                         ],
@@ -382,10 +385,9 @@ class _ClientErrorsTab extends ConsumerWidget {
                         Padding(
                           padding: const EdgeInsets.only(top: 2, left: 4),
                           child: Text(e.body,
-                              style: TextStyle(
-                                  fontFamily: 'monospace',
-                                  fontSize: 11,
-                                  color: t.surface.onBaseMuted)),
+                              style: t.text
+                                  .resolve(t.text.caption, mono: true)
+                                  .copyWith(color: t.surface.onBaseMuted)),
                         ),
                     ],
                   ),
@@ -432,10 +434,9 @@ class _LogRow extends ConsumerWidget {
             SizedBox(
               width: 68,
               child: Text(timeStr,
-                  style: TextStyle(
-                      fontFamily: 'monospace',
-                      fontSize: 11,
-                      color: t.surface.onBaseMuted)),
+                  style: t.text
+                      .resolve(t.text.caption, mono: true)
+                      .copyWith(color: t.surface.onBaseMuted)),
             ),
             SizedBox(
               width: 44,
@@ -443,20 +444,17 @@ class _LogRow extends ConsumerWidget {
                 entry.level.length > 4
                     ? entry.level.substring(0, 4)
                     : entry.level,
-                style: TextStyle(
-                    fontFamily: 'monospace',
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: color),
+                style: t.text
+                    .resolve(t.text.caption, mono: true)
+                    .copyWith(fontWeight: FontWeight.w600, color: color),
               ),
             ),
             Expanded(
               child: RichText(
                 text: TextSpan(
-                  style: TextStyle(
-                      fontFamily: 'monospace',
-                      fontSize: 11,
-                      color: t.surface.onBase),
+                  style: t.text
+                      .resolve(t.text.caption, mono: true)
+                      .copyWith(color: t.surface.onBase),
                   children: [
                     TextSpan(
                       text: '${entry.target}  ',

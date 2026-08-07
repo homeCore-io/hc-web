@@ -111,8 +111,7 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
                 size: 15,
                 color: on ? tt.accent.active : tt.surface.onBaseMuted),
             label: Text('Outline',
-                style: TextStyle(
-                    fontSize: 13,
+                style: tt.text.bodyStyle.copyWith(
                     fontWeight: FontWeight.w600,
                     color: on ? tt.accent.active : tt.surface.onBaseMuted)),
             style: TextButton.styleFrom(
@@ -130,8 +129,9 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               ),
-              child: const Text('Dry run',
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+              child: Text('Dry run',
+                  style:
+                      tt.text.bodyStyle.copyWith(fontWeight: FontWeight.w600)),
             );
           }),
       ],
@@ -194,20 +194,16 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
         children: [
           TextFormField(
             initialValue: rule.name,
-            style: TextStyle(
-              fontSize: 26,
-              fontWeight: FontWeight.w700,
-              letterSpacing: -0.6,
-              color: t.surface.onBase,
-            ),
-            decoration: InputDecoration(
-              hintText: 'Name this automation',
-              hintStyle: TextStyle(
-                fontSize: 26,
+            style: t.text.displayStyle.copyWith(
                 fontWeight: FontWeight.w700,
                 letterSpacing: -0.6,
-                color: t.surface.onBaseMuted.withValues(alpha: 0.4),
-              ),
+                color: t.surface.onBase),
+            decoration: InputDecoration(
+              hintText: 'Name this automation',
+              hintStyle: t.text.displayStyle.copyWith(
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.6,
+                  color: t.surface.onBaseMuted.withValues(alpha: 0.4)),
               isDense: true,
               contentPadding: EdgeInsets.zero,
               border: InputBorder.none,
@@ -474,7 +470,7 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: c.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: t.radius.smR,
         border: Border.all(color: c.withValues(alpha: isError ? 0.4 : 0.25)),
       ),
       child: Row(
@@ -484,7 +480,7 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
           const SizedBox(width: 8),
           Expanded(
             child: SelectableText(message,
-                style: TextStyle(fontSize: 13, color: t.surface.onBase)),
+                style: t.text.bodyStyle.copyWith(color: t.surface.onBase)),
           ),
         ],
       ),
@@ -500,7 +496,7 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: c.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: t.radius.smR,
         border: Border.all(color: c.withValues(alpha: 0.3)),
       ),
       child: Row(
@@ -514,7 +510,7 @@ class _AutomationEditorPageState extends ConsumerState<AutomationEditorPage> {
                   ? 'As things stand right now, this rule would fire.'
                   : 'As things stand right now, this rule would not fire — the '
                       'failing condition is marked below.',
-              style: TextStyle(fontSize: 13, color: t.surface.onBase),
+              style: t.text.bodyStyle.copyWith(color: t.surface.onBase),
             ),
           ),
         ],
@@ -634,11 +630,8 @@ class _SaveBar extends StatelessWidget {
                 SizedBox(width: t.space.sm),
                 Text(
                   'Unsaved changes',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: t.surface.onBase,
-                  ),
+                  style: t.text.bodyStyle.copyWith(
+                      fontWeight: FontWeight.w600, color: t.surface.onBase),
                 ),
                 const Spacer(),
                 TextButton(
@@ -929,7 +922,7 @@ class _MetaLine extends ConsumerWidget {
                       setInner(() {});
                       onChanged();
                     },
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: t.radius.smR,
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 4, vertical: 10),
@@ -948,8 +941,8 @@ class _MetaLine extends ConsumerWidget {
                           Text(
                             _runMode(
                                 RunMode(k, maxQueue: rule.runMode.maxQueue)),
-                            style: TextStyle(
-                                fontSize: 13.5, color: t.surface.onBase),
+                            style: t.text.bodyStyle
+                                .copyWith(color: t.surface.onBase),
                           ),
                         ],
                       ),
@@ -1039,12 +1032,10 @@ class _MetaChip extends StatelessWidget {
             ],
             Text(
               label,
-              style: TextStyle(
-                fontSize: 12.5,
-                color: colour,
-                fontWeight: dot ? FontWeight.w600 : FontWeight.w400,
-                fontFeatures: t.numericFontFeatures,
-              ),
+              style: t.text.bodySmallStyle.copyWith(
+                  color: colour,
+                  fontWeight: dot ? FontWeight.w600 : FontWeight.w400,
+                  fontFeatures: t.numericFontFeatures),
             ),
           ],
         ),
@@ -1080,7 +1071,7 @@ class _SectionState extends State<_Section> {
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
         color: t.surface.raised,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: t.radius.mdR,
         border: Border.all(color: t.stroke.hairline),
       ),
       child: Column(
@@ -1088,14 +1079,13 @@ class _SectionState extends State<_Section> {
         children: [
           InkWell(
             onTap: () => setState(() => _open = !_open),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: t.radius.mdR,
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
               child: Row(
                 children: [
                   Text(widget.title,
-                      style: TextStyle(
-                          fontSize: 14,
+                      style: t.text.subtitleStyle.copyWith(
                           fontWeight: FontWeight.w600,
                           color: t.surface.onBase)),
                   const Spacer(),

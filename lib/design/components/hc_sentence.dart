@@ -29,6 +29,10 @@ class HcSentence extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
 
+    // A local scale, not the ramp. The sentence editor sets prose at three
+    // sizes chosen against each other — the ramp's roles are for chrome and
+    // would flatten the difference between a rule's headline and its clauses.
+    // If it ever wants tokens it wants a `prose` role, not these seven.
     final fontSize = switch (size) {
       HcSentenceSize.large => 21.0,
       HcSentenceSize.normal => 17.0,
@@ -101,9 +105,11 @@ class HcClause extends StatelessWidget {
               child: Text(
                 label.toUpperCase(),
                 textAlign: TextAlign.right,
-                style: TextStyle(
-                  fontSize: 10,
+                style: t.text.overlineStyle.copyWith(
                   fontWeight: FontWeight.w700,
+                  // Wider than the ramp: this label sits in its own right
+                  // aligned column, and the extra tracking is what holds it
+                  // apart from the sentence beside it.
                   letterSpacing: 1.8,
                   color: t.surface.onBaseMuted,
                 ),

@@ -5,6 +5,7 @@ import '../../core/api/history_api.dart';
 import '../../core/models/history_entry.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/providers/time_display_provider.dart';
+import '../../design/tokens.dart';
 
 // Provider for device history (keyed by device ID)
 final _historyProvider =
@@ -27,6 +28,7 @@ class DeviceHistoryPage extends ConsumerWidget {
         title: Text('History: $deviceId'),
         actions: [
           IconButton(
+            tooltip: 'Reload history',
             icon: const Icon(Icons.refresh),
             onPressed: () => ref.invalidate(_historyProvider(deviceId)),
           ),
@@ -87,6 +89,7 @@ class _AttributeChart extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final t = HcTokens.of(context);
     final isUtc = ref.watch(timeUtcProvider);
     if (entries.isEmpty) {
       return const Center(child: Text('No data'));
@@ -148,15 +151,15 @@ class _AttributeChart extends ConsumerWidget {
                 getTitlesWidget: (val, meta) {
                   if (isBool) {
                     if (val == 1.0) {
-                      return const Text('ON', style: TextStyle(fontSize: 10));
+                      return Text('ON', style: t.text.overlineStyle);
                     }
                     if (val == 0.0) {
-                      return const Text('OFF', style: TextStyle(fontSize: 10));
+                      return Text('OFF', style: t.text.overlineStyle);
                     }
                     return const SizedBox.shrink();
                   }
                   return Text(val.toStringAsFixed(1),
-                      style: const TextStyle(fontSize: 10));
+                      style: t.text.overlineStyle);
                 },
               ),
             ),
@@ -167,10 +170,13 @@ class _AttributeChart extends ConsumerWidget {
                 interval: (maxX - minX) / 4,
                 getTitlesWidget: (val, meta) {
                   final dt = DateTime.fromMillisecondsSinceEpoch(val.toInt());
-                  final t = isUtc ? dt.toUtc() : dt.toLocal();
+                  // Named `at`, not `t`: `t` is the tokens here, and a DateTime
+                  // shadowing them compiles right up until something asks for
+                  // `t.text`.
+                  final at = isUtc ? dt.toUtc() : dt.toLocal();
                   return Text(
-                      '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}',
-                      style: const TextStyle(fontSize: 10));
+                      '${at.hour.toString().padLeft(2, '0')}:${at.minute.toString().padLeft(2, '0')}',
+                      style: t.text.overlineStyle);
                 },
               ),
             ),

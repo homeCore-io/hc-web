@@ -1,97 +1,27 @@
 import 'package:flutter/material.dart';
 
-// ---------------------------------------------------------------------------
-// SkeletonLoader — provides a shared shimmer animation to all SkeletonBlock
-// children in the subtree. Wrap a loading placeholder with this.
-// ---------------------------------------------------------------------------
-
-class SkeletonLoader extends StatefulWidget {
-  final Widget child;
-  const SkeletonLoader({required this.child, super.key});
-
-  @override
-  State<SkeletonLoader> createState() => _SkeletonLoaderState();
-}
-
-class _SkeletonLoaderState extends State<SkeletonLoader>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1400),
-    )..repeat();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => AnimatedBuilder(
-        animation: _controller,
-        builder: (context, _) => _SkeletonScope(
-          value: _controller.value,
-          child: widget.child,
-        ),
-      );
-}
-
-class _SkeletonScope extends InheritedWidget {
-  final double value;
-  const _SkeletonScope({required this.value, required super.child});
-
-  static double of(BuildContext context) =>
-      context.dependOnInheritedWidgetOfExactType<_SkeletonScope>()?.value ?? 0;
-
-  @override
-  bool updateShouldNotify(_SkeletonScope old) => old.value != value;
-}
+import '../../design/components/hc_surface.dart';
+import '../../design/tokens.dart';
 
 // ---------------------------------------------------------------------------
-// SkeletonBlock — single shimmer rectangle.
+// Loading placeholders.
+//
+// The shimmer itself is HcShimmer, in design/components. This file used to
+// carry its own — a second AnimationController, its own gradient, its own
+// colours off `Theme.of(context).colorScheme` rather than the tokens. Two
+// consequences, both of which showed:
+//
+//   * its highlight read `surfaceContainerLow`, which `hcTheme` never sets, so
+//     the brightest part of every loading state was a Material-derived colour
+//     no skin had chosen; and
+//   * it called `repeat()` unconditionally in `initState`, so the sheen went on
+//     travelling under reduced motion — on every page, before its data arrived,
+//     which is the one moment every page has in common.
+//
+// What was worth keeping was never the mechanism, it was these shapes. So the
+// shapes stayed and the mechanism went: HcShimmer already resolves its colours
+// from the tokens and already stops itself when the skin says not to move.
 // ---------------------------------------------------------------------------
-
-class SkeletonBlock extends StatelessWidget {
-  final double? width;
-  final double height;
-  final double radius;
-
-  const SkeletonBlock({
-    this.width,
-    this.height = 14,
-    this.radius = 6,
-    super.key,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final t = _SkeletonScope.of(context);
-    final cs = Theme.of(context).colorScheme;
-    final base = cs.surfaceContainerHighest;
-    final highlight = cs.surfaceContainerLow;
-
-    // Shimmer sweep: gradient moves left → right over the duration.
-    final sweep = t * 3 - 1; // ranges -1 → 2
-    return Container(
-      width: width,
-      height: height,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(radius),
-        gradient: LinearGradient(
-          begin: Alignment(sweep - 1, 0),
-          end: Alignment(sweep + 1, 0),
-          colors: [base, highlight, base],
-        ),
-      ),
-    );
-  }
-}
 
 // ---------------------------------------------------------------------------
 // SkeletonListTile — placeholder for a single ListTile row.
@@ -102,35 +32,45 @@ class SkeletonListTile extends StatelessWidget {
   const SkeletonListTile({this.withAvatar = true, super.key});
 
   @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        child: Row(
-          children: [
-            if (withAvatar) ...[
-              const SkeletonBlock(width: 40, height: 40, radius: 20),
-              const SizedBox(width: 16),
-            ],
-            Expanded(
-              child: Column(
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    // The row a real one will be, so the list does not jump when data lands.
+    final avatar = t.density.rowHeight * 0.75;
+    return Padding(
+      padding: EdgeInsets.symmetric(
+          horizontal: t.space.md, vertical: t.space.sm + 2),
+      child: Row(
+        children: [
+          if (withAvatar) ...[
+            HcShimmer(
+                width: avatar,
+                height: avatar,
+                radius: BorderRadius.circular(avatar / 2)),
+            SizedBox(width: t.space.md),
+          ],
+          // Fractions of the row rather than of the window: these sit inside
+          // lists and sheets that are routinely narrower than the screen, and
+          // MediaQuery does not know that.
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, c) => Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  SkeletonBlock(
-                      width: MediaQuery.of(context).size.width * 0.45,
-                      height: 14),
-                  const SizedBox(height: 6),
-                  SkeletonBlock(
-                      width: MediaQuery.of(context).size.width * 0.3,
-                      height: 11),
+                  HcShimmer(width: c.maxWidth * 0.45, height: 14),
+                  SizedBox(height: t.space.xs + 2),
+                  HcShimmer(width: c.maxWidth * 0.3, height: 11),
                 ],
               ),
             ),
-          ],
-        ),
-      );
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
-// SkeletonList — N list tile skeletons, wrapped in SkeletonLoader.
+// SkeletonList — N list tile skeletons.
 // ---------------------------------------------------------------------------
 
 class SkeletonList extends StatelessWidget {
@@ -140,13 +80,11 @@ class SkeletonList extends StatelessWidget {
   const SkeletonList({this.count = 8, this.withAvatar = true, super.key});
 
   @override
-  Widget build(BuildContext context) => SkeletonLoader(
-        child: ListView.separated(
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: count,
-          separatorBuilder: (_, __) => const Divider(height: 1),
-          itemBuilder: (_, __) => SkeletonListTile(withAvatar: withAvatar),
-        ),
+  Widget build(BuildContext context) => ListView.separated(
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: count,
+        separatorBuilder: (_, __) => const Divider(height: 1),
+        itemBuilder: (_, __) => SkeletonListTile(withAvatar: withAvatar),
       );
 }
 
@@ -158,28 +96,31 @@ class SkeletonCard extends StatelessWidget {
   const SkeletonCard({super.key});
 
   @override
-  Widget build(BuildContext context) => Card(
-        margin: const EdgeInsets.only(bottom: 12),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Card(
+      margin: EdgeInsets.only(bottom: t.space.sm + 4),
+      child: Padding(
+        padding: EdgeInsets.all(t.density.cardPadding),
+        child: LayoutBuilder(
+          builder: (context, c) => Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SkeletonBlock(
-                  width: MediaQuery.of(context).size.width * 0.5, height: 16),
-              const SizedBox(height: 10),
-              SkeletonBlock(
-                  width: MediaQuery.of(context).size.width * 0.7, height: 12),
-              const SizedBox(height: 6),
-              const SkeletonBlock(height: 12),
+              HcShimmer(width: c.maxWidth * 0.5, height: 16),
+              SizedBox(height: t.space.sm + 2),
+              HcShimmer(width: c.maxWidth * 0.7, height: 12),
+              SizedBox(height: t.space.xs + 2),
+              const HcShimmer(height: 12),
             ],
           ),
         ),
-      );
+      ),
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
-// SkeletonCardList — N cards, wrapped in SkeletonLoader.
+// SkeletonCardList — N cards.
 // ---------------------------------------------------------------------------
 
 class SkeletonCardList extends StatelessWidget {
@@ -187,12 +128,13 @@ class SkeletonCardList extends StatelessWidget {
   const SkeletonCardList({this.count = 6, super.key});
 
   @override
-  Widget build(BuildContext context) => SkeletonLoader(
-        child: ListView.builder(
-          padding: const EdgeInsets.all(16),
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: count,
-          itemBuilder: (_, __) => const SkeletonCard(),
-        ),
-      );
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return ListView.builder(
+      padding: EdgeInsets.all(t.space.md),
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: count,
+      itemBuilder: (_, __) => const SkeletonCard(),
+    );
+  }
 }

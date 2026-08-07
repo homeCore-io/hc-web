@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/models/device_state.dart';
 import '../../core/providers/scenes_provider.dart';
 import '../../core/providers/devices_provider.dart';
+import '../../design/tokens.dart';
 
 // ---------------------------------------------------------------------------
 // Device state entry — the structured representation we edit
@@ -486,6 +487,7 @@ class _DeviceStateCard extends StatefulWidget {
 class _DeviceStateCardState extends State<_DeviceStateCard> {
   @override
   Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
     final entry = widget.entry;
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
@@ -528,8 +530,7 @@ class _DeviceStateCardState extends State<_DeviceStateCard> {
             TextButton.icon(
               onPressed: () => _addAttr(context, entry),
               icon: const Icon(Icons.add, size: 14),
-              label:
-                  const Text('Add attribute', style: TextStyle(fontSize: 12)),
+              label: Text('Add attribute', style: t.text.bodySmallStyle),
               style: TextButton.styleFrom(
                   padding: const EdgeInsets.symmetric(horizontal: 4)),
             ),

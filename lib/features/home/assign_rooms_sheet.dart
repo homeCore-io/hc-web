@@ -184,10 +184,8 @@ class _Row extends StatelessWidget {
                   device.displayName,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.w600,
-                      color: t.surface.onBase),
+                  style: t.text.bodyStyle.copyWith(
+                      fontWeight: FontWeight.w600, color: t.surface.onBase),
                 ),
                 Text(
                   // What it is, so an unhelpful name like "Device 001" is still
@@ -196,8 +194,8 @@ class _Row extends StatelessWidget {
                   '${humanize(device.pluginId.replaceFirst('plugin.', ''))}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style:
-                      TextStyle(fontSize: 11.5, color: t.surface.onBaseMuted),
+                  style: t.text.captionStyle
+                      .copyWith(color: t.surface.onBaseMuted),
                 ),
               ],
             ),
@@ -215,10 +213,8 @@ class _Row extends StatelessWidget {
                 Icon(Icons.check_rounded, size: 15, color: t.accent.success),
                 SizedBox(width: t.space.xs),
                 Text(assignedTo!,
-                    style: TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w600,
-                        color: t.accent.success)),
+                    style: t.text.bodySmallStyle.copyWith(
+                        fontWeight: FontWeight.w600, color: t.accent.success)),
               ],
             )
           else
@@ -271,10 +267,8 @@ class _RoomPicker extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text('Set room',
-                style: TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w600,
-                    color: t.accent.primary)),
+                style: t.text.bodySmallStyle.copyWith(
+                    fontWeight: FontWeight.w600, color: t.accent.primary)),
             SizedBox(width: t.space.xs),
             Icon(HcIcons.caretDown, size: 10, color: t.accent.primary),
           ],

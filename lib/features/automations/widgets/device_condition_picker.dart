@@ -472,8 +472,8 @@ class _DeviceConditionPickerState extends State<DeviceConditionPicker> {
             'Pick something to check. Devices and sensors are on the left; Time, '
             'Hub, Logic and Expression conditions are further down.',
             textAlign: TextAlign.center,
-            style: TextStyle(
-                fontSize: 12.5, height: 1.5, color: t.surface.onBaseMuted),
+            style: t.text.bodySmallStyle
+                .copyWith(height: 1.5, color: t.surface.onBaseMuted),
           ),
         ),
       );
@@ -493,7 +493,7 @@ class _DeviceConditionPickerState extends State<DeviceConditionPicker> {
             height: 40,
             decoration: BoxDecoration(
               color: t.accent.active.withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: t.radius.smR,
               border: Border.all(color: t.accent.active.withValues(alpha: 0.3)),
             ),
             child: Icon(e.icon, size: 21, color: t.accent.active),
@@ -504,14 +504,12 @@ class _DeviceConditionPickerState extends State<DeviceConditionPicker> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(title,
-                    style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: t.surface.onBase)),
+                    style: t.text.subtitleStyle.copyWith(
+                        fontWeight: FontWeight.w600, color: t.surface.onBase)),
                 Text(sub,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                        fontSize: 11.5, color: t.surface.onBaseMuted)),
+                    style: t.text.captionStyle
+                        .copyWith(color: t.surface.onBaseMuted)),
               ],
             ),
           ),
@@ -645,8 +643,8 @@ class _DeviceConditionPickerState extends State<DeviceConditionPicker> {
           SizedBox(height: t.space.sm),
           Text(
             'An overnight window is fine — set From later than Until (e.g. 22:00 to 06:00).',
-            style: TextStyle(
-                fontSize: 11, height: 1.4, color: t.surface.onBaseMuted),
+            style: t.text.captionStyle
+                .copyWith(height: 1.4, color: t.surface.onBaseMuted),
           ),
         ];
       case 'CalendarActive':
@@ -740,8 +738,8 @@ class _DeviceConditionPickerState extends State<DeviceConditionPicker> {
             Text(
               'Distinguishes a change HomeCore made from one someone made at '
               'the wall — the usual way to stop a rule reacting to itself.',
-              style: TextStyle(
-                  fontSize: 11, height: 1.4, color: t.surface.onBaseMuted),
+              style: t.text.captionStyle
+                  .copyWith(height: 1.4, color: t.surface.onBaseMuted),
             ),
           ],
         ];
@@ -764,12 +762,12 @@ class _DeviceConditionPickerState extends State<DeviceConditionPicker> {
             padding: EdgeInsets.all(t.space.md),
             decoration: BoxDecoration(
               color: t.surface.sunken,
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: t.radius.smR,
               border: Border.all(color: t.stroke.hairline),
             ),
             child: Text(note,
-                style: TextStyle(
-                    fontSize: 12.5, height: 1.5, color: t.surface.onBaseMuted)),
+                style: t.text.bodySmallStyle
+                    .copyWith(height: 1.5, color: t.surface.onBaseMuted)),
           ),
         ];
     }
@@ -786,9 +784,9 @@ class _DeviceConditionPickerState extends State<DeviceConditionPicker> {
         '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}';
     return Material(
       color: t.surface.sunken,
-      borderRadius: BorderRadius.circular(9),
+      borderRadius: t.radius.smR,
       child: InkWell(
-        borderRadius: BorderRadius.circular(9),
+        borderRadius: t.radius.smR,
         onTap: () async {
           final picked = await showTimePicker(
             context: context,
@@ -802,23 +800,19 @@ class _DeviceConditionPickerState extends State<DeviceConditionPicker> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(9),
+            borderRadius: t.radius.smR,
             border: Border.all(color: t.stroke.hairline),
           ),
           child: Row(children: [
             Text(label.toUpperCase(),
-                style: TextStyle(
-                    fontSize: 9.5,
+                style: t.text.overlineStyle.copyWith(
                     letterSpacing: 0.8,
                     fontWeight: FontWeight.w800,
                     color: t.surface.onBaseMuted)),
             const Spacer(),
             Text(hhmm,
-                style: TextStyle(
-                    fontFamily: 'monospace',
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: t.accent.active)),
+                style: t.text.resolve(t.text.subtitle, mono: true).copyWith(
+                    fontWeight: FontWeight.w600, color: t.accent.active)),
           ]),
         ),
       ),
@@ -834,7 +828,7 @@ class _DeviceConditionPickerState extends State<DeviceConditionPicker> {
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
         color: t.surface.sunken,
-        borderRadius: BorderRadius.circular(9),
+        borderRadius: t.radius.smR,
         border: Border.all(color: t.stroke.hairline),
       ),
       child: DropdownButtonHideUnderline(
@@ -842,7 +836,7 @@ class _DeviceConditionPickerState extends State<DeviceConditionPicker> {
           value: safe,
           isExpanded: true,
           dropdownColor: t.surface.overlay,
-          style: TextStyle(fontSize: 13.5, color: t.surface.onBase),
+          style: t.text.bodyStyle.copyWith(color: t.surface.onBase),
           items: [
             for (final o in opts)
               DropdownMenuItem(value: o, child: Text(labelFor?.call(o) ?? o)),
@@ -858,21 +852,20 @@ class _DeviceConditionPickerState extends State<DeviceConditionPicker> {
     return Expanded(
       child: Material(
         color: on ? ac.withValues(alpha: 0.14) : t.surface.raised,
-        borderRadius: BorderRadius.circular(9),
+        borderRadius: t.radius.smR,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(9),
+          borderRadius: t.radius.smR,
           child: Container(
             padding: const EdgeInsets.symmetric(vertical: 11),
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(9),
+              borderRadius: t.radius.smR,
               border: Border.all(
                   color: on ? ac.withValues(alpha: 0.4) : t.stroke.hairline),
             ),
             child: Text(label,
-                style: TextStyle(
-                    fontSize: 13,
+                style: t.text.bodyStyle.copyWith(
                     fontWeight: FontWeight.w600,
                     color: on ? ac : t.surface.onBaseMuted)),
           ),
@@ -885,17 +878,17 @@ class _DeviceConditionPickerState extends State<DeviceConditionPicker> {
 
   Widget _preview(HcTokens t, _Entry e) {
     Widget word(String s) =>
-        Text(s, style: TextStyle(fontSize: 13.5, color: t.surface.onBaseMuted));
+        Text(s, style: t.text.bodyStyle.copyWith(color: t.surface.onBaseMuted));
     Widget tok(String s, Color c) => Container(
           padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 2),
           decoration: BoxDecoration(
             color: c.withValues(alpha: 0.14),
-            borderRadius: BorderRadius.circular(7),
+            borderRadius: t.radius.xsR,
             border: Border.all(color: c.withValues(alpha: 0.32)),
           ),
           child: Text(s,
-              style: TextStyle(
-                  fontSize: 13, fontWeight: FontWeight.w600, color: c)),
+              style: t.text.bodyStyle
+                  .copyWith(fontWeight: FontWeight.w600, color: c)),
         );
     final a = t.accent.active;
     final b = t.accent.primary;
@@ -972,7 +965,7 @@ class _DeviceConditionPickerState extends State<DeviceConditionPicker> {
       padding: EdgeInsets.all(t.space.md),
       decoration: BoxDecoration(
         color: t.surface.sunken,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: t.radius.smR,
         border: Border.all(color: t.stroke.hairline),
       ),
       child: Column(

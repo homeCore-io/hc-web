@@ -116,7 +116,6 @@ class _HomeThermostatState extends ConsumerState<HomeThermostat> {
                 icon: const Icon(Icons.unfold_less, size: 18),
                 tooltip: 'Show compact',
                 color: t.surface.onBaseMuted,
-                visualDensity: VisualDensity.compact,
                 onPressed: () => _setLarge(false),
               ),
             ],
@@ -130,6 +129,7 @@ class _HomeThermostatState extends ConsumerState<HomeThermostat> {
               onPanEnd: (_) => _dragging = false,
               child: CustomPaint(
                 painter: _DialPainter(
+                  ring: t.surface.raised,
                   frac: (_sp - _min) / (_max - _min),
                   colour: style.colour,
                   track: t.stroke.hairline,
@@ -141,26 +141,22 @@ class _HomeThermostatState extends ConsumerState<HomeThermostat> {
                     children: [
                       Text(
                         active ? style.verb.toUpperCase() : mode.toUpperCase(),
-                        style: TextStyle(
-                          fontSize: 10.5,
-                          letterSpacing: 1.6,
-                          fontWeight: FontWeight.w700,
-                          color: style.colour,
-                        ),
+                        style: t.text.captionStyle.copyWith(
+                            letterSpacing: 1.6,
+                            fontWeight: FontWeight.w700,
+                            color: style.colour),
                       ),
                       Text(_fmt(_sp),
                           style: TextStyle(
-                            fontSize: 52,
-                            fontWeight: FontWeight.w300,
-                            letterSpacing: -2,
-                            height: 1.05,
-                            color: t.surface.onBase,
-                            fontFeatures: t.numericFontFeatures,
-                          )),
+                              fontSize: t.text.scaled(52),
+                              fontWeight: FontWeight.w300,
+                              letterSpacing: -2,
+                              height: 1.05,
+                              color: t.surface.onBase,
+                              fontFeatures: t.numericFontFeatures)),
                       if (cur != null)
                         Text('Now ${cur.toStringAsFixed(1)}°',
-                            style: TextStyle(
-                                fontSize: 12,
+                            style: t.text.bodySmallStyle.copyWith(
                                 color: t.surface.onBaseMuted,
                                 fontFeatures: t.numericFontFeatures)),
                     ],
@@ -180,10 +176,8 @@ class _HomeThermostatState extends ConsumerState<HomeThermostat> {
                 child: Text(
                   active ? '${style.verb} to ${_fmt(_sp)}' : 'Off',
                   textAlign: TextAlign.center,
-                  style: TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w600,
-                      color: style.colour),
+                  style: t.text.bodySmallStyle.copyWith(
+                      fontWeight: FontWeight.w600, color: style.colour),
                 ),
               ),
               SizedBox(width: t.space.md),
@@ -266,12 +260,12 @@ class _HomeThermostatState extends ConsumerState<HomeThermostat> {
                               frac: (_sp - _min) / (_max - _min),
                               colour: style.colour,
                               track: t.stroke.hairline,
+                              ring: t.surface.raised,
                               stroke: 4,
                             ),
                             child: Center(
                               child: Text(_fmt(_sp),
-                                  style: TextStyle(
-                                      fontSize: 12,
+                                  style: t.text.bodySmallStyle.copyWith(
                                       fontWeight: FontWeight.w700,
                                       color: style.colour,
                                       fontFeatures: t.numericFontFeatures)),
@@ -287,8 +281,7 @@ class _HomeThermostatState extends ConsumerState<HomeThermostat> {
                               Text(widget.device.displayName,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                      fontSize: 13.5,
+                                  style: t.text.bodyStyle.copyWith(
                                       fontWeight: FontWeight.w600,
                                       color: t.surface.onBase)),
                               Text(
@@ -297,8 +290,7 @@ class _HomeThermostatState extends ConsumerState<HomeThermostat> {
                                     : mode[0].toUpperCase() + mode.substring(1),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                    fontSize: 11.5,
+                                style: t.text.captionStyle.copyWith(
                                     fontWeight: FontWeight.w600,
                                     color: style.colour,
                                     fontFeatures: t.numericFontFeatures),
@@ -319,8 +311,7 @@ class _HomeThermostatState extends ConsumerState<HomeThermostat> {
                 width: 34,
                 child: Text(_fmt(_sp),
                     textAlign: TextAlign.center,
-                    style: TextStyle(
-                        fontSize: 14,
+                    style: t.text.subtitleStyle.copyWith(
                         fontWeight: FontWeight.w700,
                         color: t.surface.onBase,
                         fontFeatures: t.numericFontFeatures)),
@@ -340,12 +331,19 @@ class _DialPainter extends CustomPainter {
     required this.frac,
     required this.colour,
     required this.track,
+    required this.ring,
     required this.stroke,
   });
 
   final double frac;
   final Color colour;
   final Color track;
+
+  /// The card behind the dial, drawn as a collar around the knob so it reads as
+  /// a cutout rather than a blob. It was `Colors.white`, which is a collar you
+  /// cannot see on the one skin whose cards are white.
+  final Color ring;
+
   final double stroke;
 
   static const _start = 135 * math.pi / 180;
@@ -378,7 +376,7 @@ class _DialPainter extends CustomPainter {
     final r = (size.width - stroke) / 2;
     final c = Offset(
         size.width / 2 + r * math.cos(a), size.height / 2 + r * math.sin(a));
-    canvas.drawCircle(c, stroke * 0.55 + 3, Paint()..color = Colors.white);
+    canvas.drawCircle(c, stroke * 0.55 + 3, Paint()..color = ring);
     canvas.drawCircle(c, stroke * 0.55, Paint()..color = colour);
   }
 
@@ -441,12 +439,11 @@ class _ModeChip extends StatelessWidget {
             horizontal: t.space.md, vertical: t.space.xs + 1),
         decoration: BoxDecoration(
           color: selected ? colour.withValues(alpha: 0.16) : Colors.transparent,
-          borderRadius: BorderRadius.circular(t.radius.pill),
+          borderRadius: t.radius.pillR,
           border: Border.all(color: selected ? colour : t.stroke.hairline),
         ),
         child: Text(label,
-            style: TextStyle(
-                fontSize: 12.5,
+            style: t.text.bodySmallStyle.copyWith(
                 fontWeight: FontWeight.w600,
                 color: selected ? colour : t.surface.onBaseMuted)),
       ),

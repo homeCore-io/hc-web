@@ -197,7 +197,7 @@ class _Switch extends StatelessWidget {
           padding: const EdgeInsets.all(3),
           decoration: BoxDecoration(
             color: on ? t.accent.active : t.accent.inactive,
-            borderRadius: BorderRadius.circular(t.radius.pill),
+            borderRadius: t.radius.pillR,
           ),
           child: AnimatedAlign(
             duration: t.motion.d(t.motion.fast),

@@ -16,7 +16,7 @@ InputDecoration fieldDecoration(
   String? hint,
 }) {
   OutlineInputBorder border(Color c, [double w = 1]) => OutlineInputBorder(
-        borderRadius: BorderRadius.circular(9),
+        borderRadius: t.radius.smR,
         borderSide: BorderSide(color: c, width: w),
       );
   return InputDecoration(
@@ -30,11 +30,11 @@ InputDecoration fieldDecoration(
     border: border(t.stroke.hairline),
     enabledBorder: border(t.stroke.hairline),
     focusedBorder: border(t.accent.active, 1.5),
-    labelStyle: TextStyle(color: t.surface.onBaseMuted, fontSize: 13),
-    floatingLabelStyle: TextStyle(color: t.accent.active, fontSize: 13),
-    helperStyle: TextStyle(
-        color: t.surface.onBaseMuted.withValues(alpha: 0.85), fontSize: 11),
-    hintStyle: TextStyle(color: t.surface.onBaseMuted, fontSize: 13.5),
+    labelStyle: t.text.bodyStyle.copyWith(color: t.surface.onBaseMuted),
+    floatingLabelStyle: t.text.bodyStyle.copyWith(color: t.accent.active),
+    helperStyle: t.text.captionStyle
+        .copyWith(color: t.surface.onBaseMuted.withValues(alpha: 0.85)),
+    hintStyle: t.text.bodyStyle.copyWith(color: t.surface.onBaseMuted),
   );
 }
 
@@ -64,10 +64,10 @@ class PickerRow extends StatelessWidget {
       color: selected
           ? t.accent.active.withValues(alpha: 0.12)
           : Colors.transparent,
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: t.radius.smR,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: t.radius.smR,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
           child: Column(
@@ -75,16 +75,15 @@ class PickerRow extends StatelessWidget {
             children: [
               Text(
                 title,
-                style: TextStyle(
-                  color: selected ? t.accent.active : t.surface.onBase,
-                  fontSize: 14,
-                ),
+                style: t.text.subtitleStyle.copyWith(
+                    color: selected ? t.accent.active : t.surface.onBase),
               ),
               if (subtitle != null) ...[
                 const SizedBox(height: 2),
                 Text(
                   subtitle!,
-                  style: TextStyle(color: t.surface.onBaseMuted, fontSize: 12),
+                  style: t.text.bodySmallStyle
+                      .copyWith(color: t.surface.onBaseMuted),
                 ),
               ],
             ],
@@ -108,12 +107,10 @@ class RailLabel extends StatelessWidget {
     final t = HcTokens.of(context);
     return Text(
       text.toUpperCase(),
-      style: TextStyle(
-        fontSize: 11,
-        fontWeight: FontWeight.w800,
-        letterSpacing: 0.8,
-        color: color ?? t.surface.onBaseMuted,
-      ),
+      style: t.text.captionStyle.copyWith(
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.8,
+          color: color ?? t.surface.onBaseMuted),
     );
   }
 }

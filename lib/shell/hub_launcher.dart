@@ -126,12 +126,10 @@ class _HubLauncher extends ConsumerWidget {
                     children: [
                       Text(
                         'Pages',
-                        style: TextStyle(
-                          fontSize: 26,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: -0.6,
-                          color: t.surface.onBase,
-                        ),
+                        style: t.text.displayStyle.copyWith(
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -0.6,
+                            color: t.surface.onBase),
                       ),
                       const Spacer(),
                       IconButton(
@@ -175,12 +173,10 @@ class _HubLauncher extends ConsumerWidget {
                   SizedBox(height: t.space.xl),
                   Text(
                     'MANAGE',
-                    style: TextStyle(
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 1.4,
-                      color: t.surface.onBaseMuted,
-                    ),
+                    style: t.text.captionStyle.copyWith(
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 1.4,
+                        color: t.surface.onBaseMuted),
                   ),
                   SizedBox(height: t.space.sm),
                   Wrap(
@@ -224,12 +220,12 @@ class _RailPreference extends ConsumerWidget {
         Expanded(
           child: Text(
             'Show the sidebar rail',
-            style: TextStyle(fontSize: 13, color: t.surface.onBase),
+            style: t.text.bodyStyle.copyWith(color: t.surface.onBase),
           ),
         ),
         Text(
           railVisible ? 'On' : 'Launcher only',
-          style: TextStyle(fontSize: 12, color: t.surface.onBaseMuted),
+          style: t.text.bodySmallStyle.copyWith(color: t.surface.onBaseMuted),
         ),
         SizedBox(width: t.space.sm),
         Switch(
@@ -289,23 +285,19 @@ class _PageCard extends StatelessWidget {
                   name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.2,
-                    color: t.surface.onBase,
-                  ),
+                  style: t.text.titleStyle.copyWith(
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.2,
+                      color: t.surface.onBase),
                 ),
                 SizedBox(height: t.space.xs - 1),
                 Text(
                   subtitle,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: t.surface.onBaseMuted,
-                    fontFeatures: t.numericFontFeatures,
-                  ),
+                  style: t.text.bodySmallStyle.copyWith(
+                      color: t.surface.onBaseMuted,
+                      fontFeatures: t.numericFontFeatures),
                 ),
               ],
             ),
@@ -341,8 +333,8 @@ class _NewPageCard extends StatelessWidget {
                   Icon(HcIcons.plus, size: 24, color: t.surface.onBaseMuted),
                   SizedBox(height: t.space.sm),
                   Text('New page',
-                      style: TextStyle(
-                          fontSize: 14, color: t.surface.onBaseMuted)),
+                      style: t.text.subtitleStyle
+                          .copyWith(color: t.surface.onBaseMuted)),
                 ],
               ),
             ),
@@ -395,13 +387,13 @@ class _ConfigChip extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(t.radius.pill),
+        borderRadius: t.radius.pillR,
         child: Container(
           padding: EdgeInsets.symmetric(
               horizontal: t.space.md, vertical: t.space.sm),
           decoration: BoxDecoration(
             color: t.surface.raised,
-            borderRadius: BorderRadius.circular(t.radius.pill),
+            borderRadius: t.radius.pillR,
             border: Border.all(
               color: selected ? t.accent.active : t.stroke.hairline,
             ),
@@ -415,10 +407,7 @@ class _ConfigChip extends StatelessWidget {
               SizedBox(width: t.space.sm),
               Text(
                 item.label,
-                style: TextStyle(
-                  fontSize: 13,
-                  color: t.surface.onBase,
-                ),
+                style: t.text.bodyStyle.copyWith(color: t.surface.onBase),
               ),
             ],
           ),

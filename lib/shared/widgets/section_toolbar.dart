@@ -23,7 +23,7 @@ class SectionSearchField extends StatelessWidget {
       padding: EdgeInsets.symmetric(horizontal: t.space.md),
       decoration: BoxDecoration(
         color: t.surface.sunken,
-        borderRadius: BorderRadius.circular(t.radius.pill),
+        borderRadius: t.radius.pillR,
         border: Border.all(color: t.stroke.hairline),
       ),
       child: Row(
@@ -34,13 +34,13 @@ class SectionSearchField extends StatelessWidget {
             child: TextField(
               controller: controller,
               onChanged: onChanged,
-              style: TextStyle(fontSize: 13.5, color: t.surface.onBase),
+              style: t.text.bodyStyle.copyWith(color: t.surface.onBase),
               decoration: InputDecoration(
                 isDense: true,
                 border: InputBorder.none,
                 hintText: hint,
                 hintStyle:
-                    TextStyle(color: t.surface.onBaseMuted, fontSize: 13.5),
+                    t.text.bodyStyle.copyWith(color: t.surface.onBaseMuted),
               ),
             ),
           ),
@@ -74,13 +74,12 @@ class SectionChip extends StatelessWidget {
           color: selected
               ? t.accent.active.withValues(alpha: 0.14)
               : Colors.transparent,
-          borderRadius: BorderRadius.circular(t.radius.pill),
+          borderRadius: t.radius.pillR,
           border: Border.all(
               color: selected ? Colors.transparent : t.stroke.hairline),
         ),
         child: Text(label,
-            style: TextStyle(
-                fontSize: 12,
+            style: t.text.bodySmallStyle.copyWith(
                 fontWeight: FontWeight.w600,
                 color: selected ? t.accent.active : t.surface.onBaseMuted)),
       ),
@@ -110,14 +109,15 @@ class SectionMenuButton extends StatelessWidget {
         height: 34,
         padding: const EdgeInsets.symmetric(horizontal: 12),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(t.radius.pill),
+          borderRadius: t.radius.pillR,
           border: Border.all(color: t.stroke.hairline),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(label,
-                style: TextStyle(fontSize: 12, color: t.surface.onBaseMuted)),
+                style: t.text.bodySmallStyle
+                    .copyWith(color: t.surface.onBaseMuted)),
             const SizedBox(width: 3),
             Icon(icon, size: 15, color: t.surface.onBaseMuted),
           ],

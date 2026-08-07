@@ -97,10 +97,8 @@ class SectionScaffold extends StatelessWidget {
                           if (breadcrumbs.isNotEmpty)
                             Text(
                               '${breadcrumbs.join('  ›  ')}  ›',
-                              style: TextStyle(
-                                color: t.surface.onBaseMuted,
-                                fontSize: 11.5,
-                              ),
+                              style: t.text.captionStyle
+                                  .copyWith(color: t.surface.onBaseMuted),
                             ),
                           // One line, ellipsized. Squeezed between a back
                           // arrow and the stats on a narrow window, the
@@ -111,22 +109,18 @@ class SectionScaffold extends StatelessWidget {
                             title,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: t.surface.onBase,
-                              fontSize: 26,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: -0.4,
-                            ),
+                            style: t.text.displayStyle.copyWith(
+                                color: t.surface.onBase,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: -0.4),
                           ),
                           if (subtitle != null)
                             Text(
                               subtitle!,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: t.surface.onBaseMuted,
-                                fontSize: 12.5,
-                              ),
+                              style: t.text.bodySmallStyle
+                                  .copyWith(color: t.surface.onBaseMuted),
                             ),
                         ],
                       ),
@@ -179,21 +173,16 @@ class SectionScaffold extends StatelessWidget {
                       title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: t.surface.onBase,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      style: t.text.titleStyle.copyWith(
+                          color: t.surface.onBase, fontWeight: FontWeight.w600),
                     ),
                     if (subtitle != null)
                       Text(
                         subtitle!,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: t.surface.onBaseMuted,
-                          fontSize: 12,
-                        ),
+                        style: t.text.bodySmallStyle
+                            .copyWith(color: t.surface.onBaseMuted),
                       ),
                   ],
                 ),
@@ -337,12 +326,10 @@ class SectionLabel extends StatelessWidget {
       padding: EdgeInsets.only(bottom: t.space.sm, top: t.space.xs),
       child: Text(
         label.toUpperCase(),
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 1.0,
-          color: t.surface.onBaseMuted,
-        ),
+        style: t.text.captionStyle.copyWith(
+            fontWeight: FontWeight.w700,
+            letterSpacing: 1.0,
+            color: t.surface.onBaseMuted),
       ),
     );
   }

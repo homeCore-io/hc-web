@@ -206,7 +206,7 @@ class _GroupTile extends StatelessWidget {
             height: 34,
             decoration: BoxDecoration(
               color: t.surface.sunken,
-              borderRadius: BorderRadius.circular(9),
+              borderRadius: t.radius.smR,
               border: Border.all(color: t.stroke.hairline),
             ),
             child: Icon(Icons.group_work_outlined,
@@ -219,18 +219,16 @@ class _GroupTile extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(name,
-                    style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: t.surface.onBase)),
+                    style: t.text.subtitleStyle.copyWith(
+                        fontWeight: FontWeight.w600, color: t.surface.onBase)),
                 const SizedBox(height: 2),
                 Text(
                   '${desc != null && desc.isNotEmpty ? '$desc · ' : ''}'
                   '$ruleIds rule${ruleIds == 1 ? '' : 's'}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style:
-                      TextStyle(fontSize: 12.5, color: t.surface.onBaseMuted),
+                  style: t.text.bodySmallStyle
+                      .copyWith(color: t.surface.onBaseMuted),
                 ),
               ],
             ),

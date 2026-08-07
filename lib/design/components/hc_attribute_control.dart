@@ -301,11 +301,9 @@ class HcAttributeControl extends StatelessWidget {
       ),
       child: SelectableText(
         text,
-        style: TextStyle(
-          fontFamily: 'monospace',
-          fontSize: 12,
-          color: t.surface.onBaseMuted,
-        ),
+        style: t.text
+            .resolve(t.text.bodySmall, mono: true)
+            .copyWith(color: t.surface.onBaseMuted),
       ),
     );
   }
@@ -361,6 +359,7 @@ class _GradientSlider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
     final slider = Slider(
       value: value,
       min: min,
@@ -380,7 +379,7 @@ class _GradientSlider extends StatelessWidget {
             height: 6,
             decoration: BoxDecoration(
               gradient: gradient,
-              borderRadius: BorderRadius.circular(3),
+              borderRadius: t.radius.pillR,
             ),
           ),
         ),
@@ -428,8 +427,8 @@ class _ColorPickerState extends State<_ColorPicker> {
         width: 300,
         child: SliderTheme(
           data: SliderTheme.of(context).copyWith(
-            thumbColor: Colors.white,
-            overlayColor: Colors.white.withValues(alpha: 0.12),
+            thumbColor: t.surface.onBase,
+            overlayColor: t.surface.onBase.withValues(alpha: 0.12),
             trackHeight: 8,
           ),
           child: Column(
@@ -440,13 +439,9 @@ class _ColorPickerState extends State<_ColorPicker> {
                 height: 64,
                 decoration: BoxDecoration(
                   color: color,
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                        color: color.withValues(alpha: 0.55),
-                        blurRadius: 18,
-                        spreadRadius: -2),
-                  ],
+                  borderRadius: t.radius.mdR,
+                  boxShadow:
+                      t.glow.halo(color, blur: 18, alpha: 0.55, spread: -2),
                 ),
               ),
               const SizedBox(height: 18),
@@ -492,8 +487,8 @@ class _ColorPickerState extends State<_ColorPicker> {
             SizedBox(
                 width: 84,
                 child: Text(label,
-                    style:
-                        TextStyle(fontSize: 13, color: t.surface.onBaseMuted))),
+                    style: t.text.bodyStyle
+                        .copyWith(color: t.surface.onBaseMuted))),
             Expanded(child: child),
           ],
         ),

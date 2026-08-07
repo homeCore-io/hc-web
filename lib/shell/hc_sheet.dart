@@ -136,7 +136,7 @@ class _Grabber extends StatelessWidget {
         height: 4,
         decoration: BoxDecoration(
           color: t.surface.onBaseMuted.withValues(alpha: 0.35),
-          borderRadius: BorderRadius.circular(2),
+          borderRadius: t.radius.pillR,
         ),
       ),
     );
@@ -172,21 +172,17 @@ class HcSheetHeader extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: TextStyle(
-                    fontSize: 19,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.3,
-                    color: t.surface.onBase,
-                  ),
+                  style: t.text.titleStyle.copyWith(
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.3,
+                      color: t.surface.onBase),
                 ),
                 if (subtitle != null) ...[
                   const SizedBox(height: 2),
                   Text(
                     subtitle!,
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      color: t.surface.onBaseMuted,
-                    ),
+                    style: t.text.bodySmallStyle
+                        .copyWith(color: t.surface.onBaseMuted),
                   ),
                 ],
               ],

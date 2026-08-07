@@ -46,7 +46,7 @@ class HcDialog extends StatelessWidget {
       width: width,
       decoration: BoxDecoration(
         color: t.surface.isGlass ? t.surface.glassTint : t.surface.overlay,
-        borderRadius: BorderRadius.circular(t.radius.lg),
+        borderRadius: t.radius.lgR,
         border: Border.all(color: t.stroke.hairline, width: t.stroke.width),
         boxShadow: t.elevation.overlay,
       ),
@@ -61,11 +61,7 @@ class HcDialog extends StatelessWidget {
               Expanded(
                 child: Text(
                   title,
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: t.surface.onBase,
-                  ),
+                  style: t.text.titleStyle.copyWith(color: t.surface.onBase),
                 ),
               ),
               if (trailing != null) ...[SizedBox(width: t.space.md), trailing!],
@@ -75,11 +71,8 @@ class HcDialog extends StatelessWidget {
             SizedBox(height: t.space.sm),
             Text(
               description!,
-              style: TextStyle(
-                fontSize: 12.5,
-                height: 1.45,
-                color: t.surface.onBaseMuted,
-              ),
+              style:
+                  t.text.bodySmallStyle.copyWith(color: t.surface.onBaseMuted),
             ),
           ],
           SizedBox(height: t.space.md),
@@ -106,7 +99,7 @@ class HcDialog extends StatelessWidget {
       insetPadding: EdgeInsets.all(t.space.lg),
       child: t.surface.isGlass
           ? ClipRRect(
-              borderRadius: BorderRadius.circular(t.radius.lg),
+              borderRadius: t.radius.lgR,
               child: BackdropFilter(
                 filter: ImageFilter.blur(
                   sigmaX: t.surface.glassBlur,
@@ -173,17 +166,17 @@ class HcButton extends StatelessWidget {
       child: Material(
         color:
             filled ? (enabled ? accent : t.surface.raised) : Colors.transparent,
-        borderRadius: BorderRadius.circular(t.radius.pill),
+        borderRadius: t.radius.pillR,
         child: InkWell(
           onTap: onPressed,
-          borderRadius: BorderRadius.circular(t.radius.pill),
+          borderRadius: t.radius.pillR,
           child: Container(
             padding: EdgeInsets.symmetric(
               horizontal: t.space.lg,
               vertical: t.space.sm + 2,
             ),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(t.radius.pill),
+              borderRadius: t.radius.pillR,
               border: filled
                   ? null
                   : Border.all(
@@ -202,11 +195,8 @@ class HcButton extends StatelessWidget {
                 ],
                 Text(
                   label,
-                  style: TextStyle(
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w600,
-                    color: fg,
-                  ),
+                  style: t.text.bodyStyle
+                      .copyWith(fontWeight: FontWeight.w600, color: fg),
                 ),
               ],
             ),

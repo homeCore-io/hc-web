@@ -159,8 +159,8 @@ class _RailToggle extends StatelessWidget {
                         maxLines: 1,
                         softWrap: false,
                         overflow: TextOverflow.clip,
-                        style: TextStyle(
-                            fontSize: 13.5, color: t.surface.onBaseMuted),
+                        style: t.text.bodyStyle
+                            .copyWith(color: t.surface.onBaseMuted),
                       ),
                     ),
                   ),
@@ -230,12 +230,10 @@ class _RailItem extends StatelessWidget {
                         maxLines: 1,
                         softWrap: false,
                         overflow: TextOverflow.clip,
-                        style: TextStyle(
-                          fontSize: 13.5,
-                          fontWeight:
-                              selected ? FontWeight.w600 : FontWeight.w500,
-                          color: selected ? t.surface.onBase : fg,
-                        ),
+                        style: t.text.bodyStyle.copyWith(
+                            fontWeight:
+                                selected ? FontWeight.w600 : FontWeight.w500,
+                            color: selected ? t.surface.onBase : fg),
                       ),
                     ),
                   ),
@@ -258,11 +256,9 @@ class _RailItem extends StatelessWidget {
                           maxLines: 1,
                           softWrap: false,
                           overflow: TextOverflow.clip,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: t.surface.onBaseMuted,
-                          ),
+                          style: t.text.captionStyle.copyWith(
+                              fontWeight: FontWeight.w600,
+                              color: t.surface.onBaseMuted),
                         ),
                       ),
                     ),

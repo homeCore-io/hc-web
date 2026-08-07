@@ -76,12 +76,10 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       SizedBox(width: t.space.sm),
                       Text(
                         'HomeCore',
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: -0.5,
-                          color: t.surface.onBase,
-                        ),
+                        style: t.text.displayStyle.copyWith(
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -0.5,
+                            color: t.surface.onBase),
                       ),
                     ],
                   ),
@@ -107,10 +105,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                         Expanded(
                           child: Text(
                             _error!,
-                            style: TextStyle(
-                              fontSize: 12.5,
-                              color: t.accent.danger,
-                            ),
+                            style: t.text.bodySmallStyle
+                                .copyWith(color: t.accent.danger),
                           ),
                         ),
                       ],
@@ -121,7 +117,12 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     onPressed: loading ? null : _submit,
                     style: FilledButton.styleFrom(
                       backgroundColor: t.accent.active,
-                      foregroundColor: t.surface.base,
+                      // `onPrimary`, not `base`. Both read as "the dark colour"
+                      // on the three dark skins, which is why this was written
+                      // that way — but Soft Home's base is near-white sand, so
+                      // the label came out at 2.1:1 on the amber fill. Ink for a
+                      // fill is what onPrimary is for.
+                      foregroundColor: t.accent.onPrimary,
                       padding: EdgeInsets.symmetric(vertical: t.space.md),
                       shape: RoundedRectangleBorder(
                         borderRadius: t.radius.mdR,
@@ -133,7 +134,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                             width: 16,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
-                              color: t.surface.base,
+                              color: t.accent.onPrimary,
                             ),
                           )
                         : const Text('Sign in'),
@@ -172,12 +173,12 @@ class _Field extends StatelessWidget {
       controller: controller,
       obscureText: obscure,
       autofocus: autofocus,
-      style: TextStyle(fontSize: 14, color: t.surface.onBase),
+      style: t.text.subtitleStyle.copyWith(color: t.surface.onBase),
       validator: (v) => v == null || v.isEmpty ? 'Required' : null,
       onFieldSubmitted: onSubmit == null ? null : (_) => onSubmit!(),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: TextStyle(fontSize: 13, color: t.surface.onBaseMuted),
+        labelStyle: t.text.bodyStyle.copyWith(color: t.surface.onBaseMuted),
         filled: true,
         fillColor: t.surface.raised,
         isDense: true,

@@ -355,7 +355,7 @@ class _Segmented extends StatelessWidget {
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
         color: t.surface.sunken,
-        borderRadius: BorderRadius.circular(9),
+        borderRadius: t.radius.smR,
         border: Border.all(color: t.stroke.hairline),
       ),
       child: Row(
@@ -369,11 +369,10 @@ class _Segmented extends StatelessWidget {
                     const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                 decoration: BoxDecoration(
                   color: index == i ? t.surface.overlay : Colors.transparent,
-                  borderRadius: BorderRadius.circular(7),
+                  borderRadius: t.radius.xsR,
                 ),
                 child: Text(labels[i],
-                    style: TextStyle(
-                        fontSize: 12.5,
+                    style: t.text.bodySmallStyle.copyWith(
                         fontWeight: FontWeight.w600,
                         color: index == i
                             ? t.surface.onBase
@@ -413,15 +412,14 @@ class _TypeChips extends StatelessWidget {
                     color: selected.contains(ty)
                         ? t.accent.active.withValues(alpha: 0.14)
                         : Colors.transparent,
-                    borderRadius: BorderRadius.circular(t.radius.pill),
+                    borderRadius: t.radius.pillR,
                     border: Border.all(
                         color: selected.contains(ty)
                             ? Colors.transparent
                             : t.stroke.hairline),
                   ),
                   child: Text(humanize(ty),
-                      style: TextStyle(
-                          fontSize: 11.5,
+                      style: t.text.captionStyle.copyWith(
                           fontWeight: FontWeight.w600,
                           color: selected.contains(ty)
                               ? t.accent.active
@@ -460,8 +458,8 @@ class _EventRow extends StatelessWidget {
           Container(
             width: 3,
             height: 22,
-            decoration: BoxDecoration(
-                color: color, borderRadius: BorderRadius.circular(3)),
+            decoration:
+                BoxDecoration(color: color, borderRadius: t.radius.pillR),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -471,8 +469,7 @@ class _EventRow extends StatelessWidget {
                   child: Text(subject,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                          fontSize: 13.5,
+                      style: t.text.bodyStyle.copyWith(
                           fontWeight: FontWeight.w500,
                           color: t.surface.onBase)),
                 ),
@@ -483,8 +480,7 @@ class _EventRow extends StatelessWidget {
                     child: Text(detail!,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                            fontSize: 12.5,
+                        style: t.text.bodySmallStyle.copyWith(
                             color: t.surface.onBaseMuted,
                             fontFeatures: t.numericFontFeatures)),
                   ),
@@ -494,8 +490,7 @@ class _EventRow extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           Text(time,
-              style: TextStyle(
-                  fontSize: 11.5,
+              style: t.text.captionStyle.copyWith(
                   color: t.surface.onBaseMuted,
                   fontFeatures: t.numericFontFeatures)),
         ],
@@ -674,15 +669,14 @@ class _HistoryTabState extends ConsumerState<_HistoryTab> {
                         color: limit == l
                             ? t.accent.active.withValues(alpha: 0.14)
                             : Colors.transparent,
-                        borderRadius: BorderRadius.circular(t.radius.pill),
+                        borderRadius: t.radius.pillR,
                         border: Border.all(
                             color: limit == l
                                 ? Colors.transparent
                                 : t.stroke.hairline),
                       ),
                       child: Text('$l',
-                          style: TextStyle(
-                              fontSize: 11.5,
+                          style: t.text.captionStyle.copyWith(
                               fontWeight: FontWeight.w600,
                               fontFeatures: t.numericFontFeatures,
                               color: limit == l

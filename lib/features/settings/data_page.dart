@@ -89,7 +89,8 @@ class _DataPageState extends ConsumerState<DataPage> {
               'The half of a backup worth moving on its own. A whole-house '
               'archive is mostly history and restoring one replaces '
               'everything; these are just the rules and scenes, as JSON.',
-              style: TextStyle(fontSize: 12.5, color: t.surface.onBaseMuted),
+              style:
+                  t.text.bodySmallStyle.copyWith(color: t.surface.onBaseMuted),
             ),
           ),
           HcRows([
@@ -162,7 +163,8 @@ class _DataPageState extends ConsumerState<DataPage> {
             child: Text(
               'An automation can trigger on a calendar event. Core fetches the '
               'feed and expands recurring events itself.',
-              style: TextStyle(fontSize: 12.5, color: t.surface.onBaseMuted),
+              style:
+                  t.text.bodySmallStyle.copyWith(color: t.surface.onBaseMuted),
             ),
           ),
           calendars.when(

@@ -98,14 +98,15 @@ const _midnight = HcTokens(
     success: Color(0xFF6FD1A6),
     warn: Color(0xFFFFC978),
     danger: Color(0xFFFF7B72),
-    offline: Color(0xFF7A4A50),
+    onDanger: Color(0xFF06131F),
+    offline: Color(0xFFAA737A),
   ),
   stroke: HcStroke(
     hairline: Color(0xFF262D38),
     width: 1,
     focus: Color(0xFF7CC4FF),
   ),
-  radius: HcRadii(sm: 8, md: 14, lg: 22, pill: 999),
+  radius: HcRadii(xs: 4, sm: 8, md: 14, lg: 22, pill: 999),
   space: HcSpace(unit: 8),
   motion: HcMotion(
     fast: Duration(milliseconds: 140),
@@ -139,6 +140,25 @@ const _midnight = HcTokens(
       ),
     ],
   ),
+  // The values `metrics.dart` used to hold as literals. They were Midnight's
+  // all along — this is where they were always meant to live.
+  metric: HcMetricTints(
+    temperature: Color(0xFFFF8A5B),
+    humidity: Color(0xFF4CC9F0),
+    illuminance: Color(0xFFFFD166),
+    co2: Color(0xFF6FD1A6),
+    power: Color(0xFFFFB661),
+    reading: Color(0xFF7CC4FF),
+  ),
+  // ── the type scale ─────────────────────────────────────────────────────────
+  //
+  // One number sizes the whole ramp, the way `HcSpace.unit` loosens the whole
+  // grid. It could not be turned on until phase 3: while ~700 literal sizes
+  // remained, scaling only the theme-driven text would have sized a ListTile's
+  // title by the skin while the hand-styled label beside it stayed put.
+  //
+  // Midnight is the reference at 1.0 and everything was drawn against it.
+  text: HcType.scaled(1),
   numericFontFeatures: _tabular,
 );
 
@@ -176,14 +196,15 @@ const _ambientGlass = HcTokens(
     success: Color(0xFF5FD6A2),
     warn: Color(0xFFFFC978),
     danger: Color(0xFFFF7B72),
-    offline: Color(0xFF6B4A52),
+    onDanger: Color(0xFF06131F),
+    offline: Color(0xFFA07680),
   ),
   stroke: HcStroke(
     hairline: Color(0x1FFFFFFF),
     width: 1,
     focus: Color(0xFF7CC4FF),
   ),
-  radius: HcRadii(sm: 10, md: 18, lg: 26, pill: 999),
+  radius: HcRadii(xs: 5, sm: 10, md: 18, lg: 26, pill: 999),
   space: HcSpace(unit: 8),
   motion: HcMotion(
     fast: Duration(milliseconds: 160),
@@ -209,6 +230,19 @@ const _ambientGlass = HcTokens(
       BoxShadow(color: Color(0x99000000), blurRadius: 48, offset: Offset(0, 20))
     ],
   ),
+  // Midnight's tints, with co2 taking this skin's own slightly cooler green so
+  // a reading and a success state agree with each other on the same panel.
+  metric: HcMetricTints(
+    temperature: Color(0xFFFF8A5B),
+    humidity: Color(0xFF4CC9F0),
+    illuminance: Color(0xFFFFD166),
+    co2: Color(0xFF5FD6A2),
+    power: Color(0xFFFFB661),
+    reading: Color(0xFF7CC4FF),
+  ),
+  // A panel on a wall, read from across a dark room: the one skin whose whole
+  // reason for existing is distance.
+  text: HcType.scaled(1.15),
   numericFontFeatures: _tabular,
 );
 
@@ -239,9 +273,23 @@ const _controlRoom = HcTokens(
     active: Color(0xFFFBBF24),
     inactive: Color(0xFF2A2F35),
     success: Color(0xFF34D399),
-    warn: Color(0xFFFBBF24),
+    // Amber-600, where `active` is amber-400. They were the same value, so
+    // "door open" and "motion detected" rendered identically — a caution and a
+    // routine state that this skin, of all of them, shows side by side in dense
+    // rows.
+    //
+    // Deeper rather than brighter, which is not the obvious direction for a
+    // caution. This skin's warm slot is crowded — `active` and the power tint
+    // are both amber-400, illuminance is yellow-300, temperature is orange-400
+    // — and a search of every warm hue that clears 4.5:1 on the card, stays
+    // clear of all three, and is brighter than `active` returns only pale
+    // near-white yellows, which are not a caution colour on an instrument
+    // panel. Between `active` and the loud `danger` is the right rung anyway:
+    // a door being open is worth noticing, not an alarm.
+    warn: Color(0xFFD97706),
     danger: Color(0xFFF87171),
-    offline: Color(0xFF7F3F46),
+    onDanger: Color(0xFF04141D),
+    offline: Color(0xFFB3666E),
   ),
   stroke: HcStroke(
     hairline: Color(0xFF1E2126),
@@ -249,7 +297,7 @@ const _controlRoom = HcTokens(
     focus: Color(0xFF38BDF8),
   ),
   // Sharp corners: this skin is a instrument panel, not a pillow.
-  radius: HcRadii(sm: 3, md: 5, lg: 8, pill: 999),
+  radius: HcRadii(xs: 2, sm: 3, md: 5, lg: 8, pill: 999),
   space: HcSpace(unit: 6),
   motion: HcMotion(
     fast: Duration(milliseconds: 90),
@@ -274,6 +322,20 @@ const _controlRoom = HcTokens(
       BoxShadow(color: Color(0xCC000000), blurRadius: 24, offset: Offset(0, 8))
     ],
   ),
+  // Drawn from this skin's own palette rather than Midnight's warmer one, so a
+  // dense table of readings stays in one family with its switches and chips.
+  metric: HcMetricTints(
+    temperature: Color(0xFFFB923C),
+    humidity: Color(0xFF22D3EE),
+    illuminance: Color(0xFFFDE047),
+    co2: Color(0xFF34D399),
+    power: Color(0xFFFBBF24),
+    reading: Color(0xFF38BDF8),
+  ),
+  // Rows are already 34 high here. Not lower than this: at 0.65 — the ratio
+  // `density.rowHeight` uses — the overline role lands at 6.5px, which is not
+  // small so much as absent.
+  text: HcType.scaled(0.92),
   numericFontFeatures: _tabular,
 );
 
@@ -295,24 +357,50 @@ const _softHome = HcTokens(
     glassTint: Color(0x0A000000),
     glassBlur: 0,
     onBase: Color(0xFF241F1A),
-    onBaseMuted: Color(0xFF8A8078),
+    onBaseMuted: Color(0xFF706861),
   ),
+  // ── ink first, on the one skin where that is a constraint ────────────────
+  //
+  // These were picked as *fills* — a bright warm amber for a device that is on,
+  // a soft green for "clear" — and then used overwhelmingly as text. On the
+  // three dark skins that costs nothing, because anything bright enough to fill
+  // is also bright enough to read on near-black. On a white card it is the
+  // whole problem: `active` measured 1.80 against the surfaces it was written
+  // on, `warn` 2.18, `success` 2.64.
+  //
+  // Counting settled it. `warn`, `success` and `danger` are ink in 108 places
+  // and fill in none, so there was never a trade to make for them. `active` is
+  // ink 107 times and fill 16, and one value covers both jobs: anything that
+  // clears 4.5:1 against white is legible *on* white and also carries white
+  // text, because that is the same measurement read from either side.
+  //
+  // So no new token and no call-site changes — the values were simply wrong for
+  // this ground. The cost is that Soft Home's amber is deeper than it was,
+  // which is what a warm accent on a white ground has to be.
   accent: HcAccents(
-    primary: Color(0xFFC2603F),
+    primary: Color(0xFFA65135),
+    // Dark ink, not white. This is the only light skin, so it is the only one
+    // whose fills are light enough that white text fails on them: white on the
+    // amber `active` — which every primary button and every TextButton label
+    // uses — measured 2.16:1, under even the large-text bar. The same ink as
+    // `onBase` gives 7.57:1. The dark skins keep their near-black ink at 10.8:1
+    // and are untouched; an ink that works is a property of the ground it sits
+    // on, which is why it is per skin rather than an `if`.
     onPrimary: Color(0xFFFFFFFF),
-    active: Color(0xFFE8A33D),
+    active: Color(0xFF925E11),
     inactive: Color(0xFFD8D0C6),
-    success: Color(0xFF5E9E7A),
-    warn: Color(0xFFD9913A),
+    success: Color(0xFF447359),
+    warn: Color(0xFF915C1C),
     danger: Color(0xFFC0524B),
-    offline: Color(0xFFB59A9C),
+    onDanger: Color(0xFFFFFFFF),
+    offline: Color(0xFF936C6F),
   ),
   stroke: HcStroke(
     hairline: Color(0xFFE2DACE),
     width: 1,
     focus: Color(0xFFC2603F),
   ),
-  radius: HcRadii(sm: 12, md: 20, lg: 28, pill: 999),
+  radius: HcRadii(xs: 6, sm: 12, md: 20, lg: 28, pill: 999),
   space: HcSpace(unit: 8),
   motion: HcMotion(
     fast: Duration(milliseconds: 130),
@@ -341,6 +429,28 @@ const _softHome = HcTokens(
           color: Color(0x1F000000), blurRadius: 40, offset: Offset(0, 18)),
     ],
   ),
+  // The reason these are tokens at all. The dark skins' tints are tuned to bleed
+  // against a near-black ground; on warm sand they wash out — the illuminance
+  // gold worst of all, being a light yellow on a light background. Same hues,
+  // taken down to where they carry on this ground.
+  //
+  // They also sit on a deliberate luminance ladder rather than all landing at
+  // the same darkness, which is what `depth_palette.dart` does and for the same
+  // reason: orange against green at equal value is the pair that collapses
+  // under protanopia and deuteranopia. Every confusable pair here — orange/green,
+  // orange/gold, gold/gold, blue/blue — differs in value by at least 1.28:1 as
+  // well as in hue, so they stay apart in greyscale too. All six clear 4.5:1
+  // against both the sand base and the white raised surface.
+  metric: HcMetricTints(
+    temperature: Color(0xFF803B1E),
+    humidity: Color(0xFF266C87),
+    illuminance: Color(0xFF74570B),
+    co2: Color(0xFF2D7B5B),
+    power: Color(0xFF5C370A),
+    reading: Color(0xFF2F4774),
+  ),
+  // Stays at the reference: this skin is generous in spacing, not in type.
+  text: HcType.scaled(1),
   numericFontFeatures: _tabular,
 );
 
@@ -366,17 +476,58 @@ ThemeData hcTheme(HcSkin skin, {bool reduceMotion = false}) {
     secondary: t.accent.active,
     onSecondary: t.accent.onPrimary,
     error: t.accent.danger,
-    onError: Colors.white,
+    onError: t.accent.onDanger,
     surface: t.surface.raised,
     onSurface: t.surface.onBase,
     surfaceContainerHighest: t.surface.sunken,
     outline: t.stroke.hairline,
   );
 
+  // Material's own slots, off the ramp.
+  //
+  // `hcTheme` never set a textTheme, so the 33 places that read
+  // `textTheme.bodySmall` and friends — plus every Material widget that styles
+  // its own text — were sized by Material's defaults and were the one part of
+  // the app a skin could not touch at all. Colours are left unset deliberately:
+  // they already resolve from `colorScheme.onSurface`, and pinning them here
+  // would change what is on screen today for no gain. This is type only.
+  final text = TextTheme(
+    displayLarge: t.text.displayStyle,
+    displayMedium: t.text.displayStyle,
+    displaySmall: t.text.displayStyle,
+    headlineLarge: t.text.displayStyle,
+    headlineMedium: t.text.titleStyle,
+    headlineSmall: t.text.titleStyle,
+    titleLarge: t.text.titleStyle,
+    titleMedium: t.text.subtitleStyle,
+    titleSmall: t.text.subtitleStyle,
+    // `bodyMedium` is the app-wide DefaultTextStyle: it sets the size of every
+    // `Text` that does not state its own. It was pinned at the ramp's 14
+    // through phases 1 and 2, because the text relying on inheritance had been
+    // written against Material's 14 and dropping it shifted layout — it moved a
+    // picker rail enough that a tap landed on the wrong widget.
+    //
+    // Phase 3 gave that text explicit roles, so the ambient default is now the
+    // ramp's body, deliberately rather than by side effect.
+    bodyLarge: t.text.bodyStyle,
+    bodyMedium: t.text.bodyStyle,
+    bodySmall: t.text.bodySmallStyle,
+    labelLarge: t.text.subtitleStyle,
+    labelMedium: t.text.captionStyle,
+    labelSmall: t.text.overlineStyle,
+  );
+
+  // Controls whose label is a button label: 13, but at w600 rather than body's
+  // w400. The ramp carries one weight per role, so the emphasis is stated here
+  // rather than given a near-duplicate role of its own.
+  final controlLabel =
+      t.text.bodyStyle.copyWith(fontWeight: FontWeight.w600, height: 1);
+
   return ThemeData(
     useMaterial3: true,
     brightness: t.brightness,
     colorScheme: scheme,
+    textTheme: text,
     scaffoldBackgroundColor: t.surface.base,
     canvasColor: t.surface.base,
     dividerColor: t.stroke.hairline,
@@ -388,6 +539,27 @@ ThemeData hcTheme(HcSkin skin, {bool reduceMotion = false}) {
     visualDensity: t.density.rowHeight < 40
         ? VisualDensity.compact
         : VisualDensity.standard,
+
+    // `minTapTarget` had never reached a widget. It was declared by all four
+    // skins — 44, 56, 32, 48 — read by none of them, and every icon button in
+    // every skin rendered at Material's default 48. So Ambient Glass, the skin
+    // whose entire reason for existing is a panel read and pressed from across
+    // a room, asked for 56 and got the same 48 as the admin portal. The same
+    // story as the type sizes: a dimension the skin was allowed to have an
+    // opinion about, and no way for that opinion to arrive.
+    //
+    // `padded` is Material's own floor and it clamps *up* to 48, which is why
+    // it had to go for the skins that want less. The tap target is the token's
+    // now, in both directions.
+    materialTapTargetSize: t.density.minTapTarget >= 48
+        ? MaterialTapTargetSize.padded
+        : MaterialTapTargetSize.shrinkWrap,
+    iconButtonTheme: IconButtonThemeData(
+      style: ButtonStyle(
+        minimumSize:
+            WidgetStatePropertyAll(Size.square(t.density.minTapTarget)),
+      ),
+    ),
     cardTheme: CardThemeData(
       color: t.surface.raised,
       elevation: 0,
@@ -443,8 +615,7 @@ ThemeData hcTheme(HcSkin skin, {bool reduceMotion = false}) {
         overlayColor:
             WidgetStatePropertyAll(t.accent.onPrimary.withValues(alpha: 0.10)),
         elevation: const WidgetStatePropertyAll(0),
-        textStyle: const WidgetStatePropertyAll(
-            TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+        textStyle: WidgetStatePropertyAll(controlLabel),
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
@@ -461,8 +632,7 @@ ThemeData hcTheme(HcSkin skin, {bool reduceMotion = false}) {
             )),
         backgroundColor: WidgetStatePropertyAll(t.surface.overlay),
         foregroundColor: WidgetStatePropertyAll(t.surface.onBase),
-        textStyle: const WidgetStatePropertyAll(
-            TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+        textStyle: WidgetStatePropertyAll(controlLabel),
       ),
     ),
     textButtonTheme: TextButtonThemeData(
@@ -471,8 +641,7 @@ ThemeData hcTheme(HcSkin skin, {bool reduceMotion = false}) {
         shape: WidgetStatePropertyAll(
             RoundedRectangleBorder(borderRadius: t.radius.pillR)),
         foregroundColor: WidgetStatePropertyAll(t.accent.active),
-        textStyle: const WidgetStatePropertyAll(
-            TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+        textStyle: WidgetStatePropertyAll(controlLabel),
       ),
     ),
     // Rows and switches, for the same reason: Administration is largely lists
@@ -539,7 +708,7 @@ ThemeData hcTheme(HcSkin skin, {bool reduceMotion = false}) {
     // every failure — each a pale pill in a black house.
     snackBarTheme: SnackBarThemeData(
       backgroundColor: t.surface.overlay,
-      contentTextStyle: TextStyle(color: t.surface.onBase, fontSize: 13),
+      contentTextStyle: t.text.bodyStyle.copyWith(color: t.surface.onBase),
       actionTextColor: t.accent.active,
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(
@@ -558,10 +727,10 @@ ThemeData hcTheme(HcSkin skin, {bool reduceMotion = false}) {
         borderRadius: t.radius.mdR,
         side: BorderSide(color: t.stroke.hairline, width: t.stroke.width),
       ),
-      textStyle: TextStyle(color: t.surface.onBase, fontSize: 13),
+      textStyle: t.text.bodyStyle.copyWith(color: t.surface.onBase),
     ),
     dropdownMenuTheme: DropdownMenuThemeData(
-      textStyle: TextStyle(color: t.surface.onBase, fontSize: 13),
+      textStyle: t.text.bodyStyle.copyWith(color: t.surface.onBase),
       menuStyle: MenuStyle(
         backgroundColor: WidgetStatePropertyAll(t.surface.overlay),
         surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
@@ -587,8 +756,8 @@ ThemeData hcTheme(HcSkin skin, {bool reduceMotion = false}) {
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: t.surface.sunken,
-      hintStyle: TextStyle(color: t.surface.onBaseMuted, fontSize: 13),
-      labelStyle: TextStyle(color: t.surface.onBaseMuted, fontSize: 13),
+      hintStyle: t.text.bodyStyle.copyWith(color: t.surface.onBaseMuted),
+      labelStyle: t.text.bodyStyle.copyWith(color: t.surface.onBaseMuted),
       contentPadding: EdgeInsets.symmetric(
         horizontal: t.space.md,
         vertical: t.space.sm + 2,
@@ -623,7 +792,7 @@ ThemeData hcTheme(HcSkin skin, {bool reduceMotion = false}) {
         borderRadius: t.radius.smR,
         border: Border.all(color: t.stroke.hairline, width: t.stroke.width),
       ),
-      textStyle: TextStyle(color: t.surface.onBase, fontSize: 12),
+      textStyle: t.text.bodySmallStyle.copyWith(color: t.surface.onBase),
     ),
     extensions: [t],
   );

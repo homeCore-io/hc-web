@@ -202,12 +202,10 @@ class _StillCell extends StatelessWidget {
               camera.name,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 10.5,
-                fontWeight: FontWeight.w600,
-                color: Colors.white,
-                shadows: [Shadow(color: Colors.black, blurRadius: 4)],
-              ),
+              style: t.text.captionStyle.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                  shadows: const [Shadow(color: Colors.black, blurRadius: 4)]),
             ),
           ),
         ],

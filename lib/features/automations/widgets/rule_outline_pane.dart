@@ -46,7 +46,7 @@ class RuleOutlinePane extends StatelessWidget {
               margin: const EdgeInsets.only(right: 7),
               decoration: BoxDecoration(
                 color: _clauseColor(clause),
-                borderRadius: BorderRadius.circular(2),
+                borderRadius: t.radius.pillR,
               ),
             ),
             Text(
@@ -55,12 +55,10 @@ class RuleOutlinePane extends StatelessWidget {
                 OutlineClause.ifClause => 'AND IF',
                 OutlineClause.then => 'THEN',
               },
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1.1,
-                color: _clauseColor(clause),
-              ),
+              style: t.text.overlineStyle.copyWith(
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1.1,
+                  color: _clauseColor(clause)),
             ),
           ]),
         ));
@@ -90,8 +88,8 @@ class RuleOutlinePane extends StatelessWidget {
               const RailLabel('Outline'),
               const Spacer(),
               Text('read-only preview',
-                  style:
-                      TextStyle(fontSize: 10.5, color: t.surface.onBaseMuted)),
+                  style: t.text.captionStyle
+                      .copyWith(color: t.surface.onBaseMuted)),
             ]),
           ),
           Expanded(
@@ -162,20 +160,18 @@ class RuleOutlinePane extends StatelessWidget {
                   SizedBox(
                     width: 16,
                     child: Text('${row.ordinal}',
-                        style: TextStyle(
-                            fontSize: 10.5,
+                        style: t.text.captionStyle.copyWith(
                             color: muted.withValues(alpha: 0.55),
                             fontFeatures: t.numericFontFeatures)),
                   ),
                 ],
                 if (row.keyword != null) ...[
                   Text(row.keyword!.toUpperCase(),
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.7,
-                        color: isStructure ? depthColor(row.depth + 1) : muted,
-                      )),
+                      style: t.text.overlineStyle.copyWith(
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.7,
+                          color:
+                              isStructure ? depthColor(row.depth + 1) : muted)),
                   if (row.label.isNotEmpty) SizedBox(width: t.space.xs),
                 ],
                 if (row.label.isNotEmpty)
@@ -184,17 +180,15 @@ class RuleOutlinePane extends StatelessWidget {
                       row.label,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 12.5,
-                        height: 1.3,
-                        color: row.kind == OutlineKind.step ||
-                                row.kind == OutlineKind.condition ||
-                                row.kind == OutlineKind.trigger
-                            ? t.surface.onBase
-                            : muted,
-                        decoration:
-                            row.enabled ? null : TextDecoration.lineThrough,
-                      ),
+                      style: t.text.bodySmallStyle.copyWith(
+                          height: 1.3,
+                          color: row.kind == OutlineKind.step ||
+                                  row.kind == OutlineKind.condition ||
+                                  row.kind == OutlineKind.trigger
+                              ? t.surface.onBase
+                              : muted,
+                          decoration:
+                              row.enabled ? null : TextDecoration.lineThrough),
                     ),
                   )
                 else

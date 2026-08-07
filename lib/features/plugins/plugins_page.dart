@@ -149,15 +149,15 @@ class _UpdateBadge extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
         decoration: BoxDecoration(
           color: c.withValues(alpha: 0.16),
-          borderRadius: BorderRadius.circular(999),
+          borderRadius: t.radius.pillR,
           border: Border.all(color: c.withValues(alpha: 0.45)),
         ),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
           Icon(Icons.arrow_circle_up_outlined, size: 13, color: c),
           const SizedBox(width: 4),
           Text(to,
-              style: TextStyle(
-                  fontSize: 11.5, fontWeight: FontWeight.w700, color: c)),
+              style: t.text.captionStyle
+                  .copyWith(fontWeight: FontWeight.w700, color: c)),
         ]),
       ),
     );
@@ -193,7 +193,7 @@ class _PluginCard extends StatelessWidget {
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: t.surface.sunken,
-                borderRadius: BorderRadius.circular(11),
+                borderRadius: t.radius.smR,
                 border: Border.all(color: t.stroke.hairline),
               ),
               child: Icon(HcIcons.plugins, size: 19, color: color),
@@ -207,16 +207,14 @@ class _PluginCard extends StatelessWidget {
                   Text(p.displayName,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
+                      style: t.text.subtitleStyle.copyWith(
                           color: t.surface.onBase,
-                          fontSize: 15.5,
                           fontWeight: FontWeight.w600)),
                   Text(p.pluginId,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                          color: t.surface.onBaseMuted.withValues(alpha: 0.7),
-                          fontSize: 12)),
+                      style: t.text.bodySmallStyle.copyWith(
+                          color: t.surface.onBaseMuted.withValues(alpha: 0.7))),
                 ],
               ),
             ),
@@ -225,9 +223,8 @@ class _PluginCard extends StatelessWidget {
           const Spacer(),
           Row(children: [
             Text('${p.deviceCount}',
-                style: TextStyle(
+                style: t.text.titleStyle.copyWith(
                     color: t.surface.onBase,
-                    fontSize: 17,
                     fontWeight: FontWeight.w600,
                     fontFeatures: t.numericFontFeatures)),
             const SizedBox(width: 6),
@@ -267,11 +264,10 @@ class _PluginCard extends StatelessWidget {
                       : '${p.problems.length} problems reported',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
+                  style: t.text.bodySmallStyle.copyWith(
                       color: p.problems.any((n) => n.isError)
                           ? t.accent.danger
-                          : t.accent.warn,
-                      fontSize: 12.5),
+                          : t.accent.warn),
                 ),
               ),
             ])
@@ -280,9 +276,8 @@ class _PluginCard extends StatelessWidget {
               pluginHealthLine(p),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                  color: p.isOffline ? t.accent.danger : t.surface.onBaseMuted,
-                  fontSize: 12.5),
+              style: t.text.bodySmallStyle.copyWith(
+                  color: p.isOffline ? t.accent.danger : t.surface.onBaseMuted),
             ),
         ],
       ),
@@ -319,17 +314,18 @@ class _Dot extends StatelessWidget {
   final Color color;
   final bool glow;
   @override
-  Widget build(BuildContext context) => Container(
-        width: 9,
-        height: 9,
-        decoration: BoxDecoration(
-          color: color,
-          shape: BoxShape.circle,
-          boxShadow: glow
-              ? [BoxShadow(color: color.withValues(alpha: 0.7), blurRadius: 9)]
-              : null,
-        ),
-      );
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Container(
+      width: 9,
+      height: 9,
+      decoration: BoxDecoration(
+        color: color,
+        shape: BoxShape.circle,
+        boxShadow: glow ? t.glow.halo(color, blur: 9, alpha: 0.7) : null,
+      ),
+    );
+  }
 }
 
 class _Chip extends StatelessWidget {
@@ -353,9 +349,9 @@ class _Chip extends StatelessWidget {
             color: warn
                 ? t.accent.warn.withValues(alpha: 0.5)
                 : t.stroke.hairline),
-        borderRadius: BorderRadius.circular(t.radius.pill),
+        borderRadius: t.radius.pillR,
       ),
-      child: Text(text, style: TextStyle(color: color, fontSize: 11)),
+      child: Text(text, style: t.text.captionStyle.copyWith(color: color)),
     );
     return tooltip == null ? chip : Tooltip(message: tooltip!, child: chip);
   }

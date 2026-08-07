@@ -215,12 +215,12 @@ class FieldEditor extends StatelessWidget {
             );
             if (picked != null) onChanged(picked);
           },
-          borderRadius: BorderRadius.circular(9),
+          borderRadius: t.radius.smR,
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
               color: t.surface.sunken,
-              borderRadius: BorderRadius.circular(9),
+              borderRadius: t.radius.smR,
               border: Border.all(
                 color: missing ? t.accent.danger : t.stroke.hairline,
               ),
@@ -243,12 +243,10 @@ class FieldEditor extends StatelessWidget {
                           ? 'Pick a device'
                           : refs.labelFor(current),
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: current == null || current.isEmpty
-                            ? t.surface.onBaseMuted
-                            : t.surface.onBase,
-                      ),
+                      style: t.text.subtitleStyle.copyWith(
+                          color: current == null || current.isEmpty
+                              ? t.surface.onBaseMuted
+                              : t.surface.onBase),
                     ),
                     // The stored reference stays visible: two devices can share
                     // a display name, and the rule is written against this.
@@ -256,11 +254,9 @@ class FieldEditor extends StatelessWidget {
                       Text(
                         device.canonicalName ?? device.id,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontFamily: 'monospace',
-                          color: t.surface.onBaseMuted,
-                        ),
+                        style: t.text
+                            .resolve(t.text.caption, mono: true)
+                            .copyWith(color: t.surface.onBaseMuted),
                       ),
                   ],
                 ),
@@ -284,7 +280,7 @@ class FieldEditor extends StatelessWidget {
               current.startsWith('DELETED:')
                   ? 'This device was deleted — pick a replacement.'
                   : 'Unknown device "$current" — it may be offline or removed.',
-              style: TextStyle(fontSize: 11, color: t.accent.danger),
+              style: t.text.captionStyle.copyWith(color: t.accent.danger),
             ),
           ),
       ],
@@ -305,7 +301,8 @@ class FieldEditor extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(top: 2),
             child: Text(field.help!,
-                style: TextStyle(fontSize: 11.5, color: t.surface.onBaseMuted)),
+                style:
+                    t.text.captionStyle.copyWith(color: t.surface.onBaseMuted)),
           ),
         const SizedBox(height: 6),
         Wrap(
@@ -388,6 +385,7 @@ class FieldEditor extends StatelessWidget {
   // -- time ----------------------------------------------------------------
 
   Widget _timeField(BuildContext context) {
+    final t = HcTokens.of(context);
     final text = value?.toString() ?? '00:00:00';
     final parts = text.split(':');
     final h = int.tryParse(parts.elementAtOrNull(0) ?? '') ?? 0;
@@ -399,7 +397,7 @@ class FieldEditor extends StatelessWidget {
         children: [
           Text(
             '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}',
-            style: const TextStyle(fontFamily: 'monospace', fontSize: 16),
+            style: t.text.resolve(t.text.title, mono: true),
           ),
           const Spacer(),
           TextButton(
@@ -423,6 +421,7 @@ class FieldEditor extends StatelessWidget {
   }
 
   Widget _weekdayField(BuildContext context) {
+    final t = HcTokens.of(context);
     const all = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     final selected = {
       for (final d in (value as List? ?? const [])) '$d',
@@ -438,9 +437,8 @@ class FieldEditor extends StatelessWidget {
           children: [
             for (final d in all)
               FilterChip(
-                label: Text(d, style: const TextStyle(fontSize: 11)),
+                label: Text(d, style: t.text.captionStyle),
                 selected: selected.contains(d),
-                visualDensity: VisualDensity.compact,
                 onSelected: (on) {
                   final next = {...selected};
                   if (on) {
@@ -516,7 +514,8 @@ class FieldEditor extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(top: 4),
             child: Text('Fires on any change.',
-                style: TextStyle(fontSize: 11.5, color: t.surface.onBaseMuted)),
+                style:
+                    t.text.captionStyle.copyWith(color: t.surface.onBaseMuted)),
           ),
       ],
     );
@@ -571,30 +570,33 @@ class _JsonFieldState extends State<_JsonField> {
   }
 
   @override
-  Widget build(BuildContext context) => TextField(
-        controller: _c,
-        maxLines: null,
-        style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
-        decoration: widget.label.copyWith(
-          errorText: _error,
-          hintText: '{"on": true}',
-        ),
-        onChanged: (text) {
-          if (text.trim().isEmpty) {
-            setState(() => _error = null);
-            return widget.onChanged(null);
-          }
-          try {
-            final parsed = jsonDecode(text);
-            setState(() => _error = null);
-            widget.onChanged(parsed);
-          } on FormatException {
-            // Hold the last good value; surface the problem without destroying
-            // what they're typing.
-            setState(() => _error = 'Not valid JSON');
-          }
-        },
-      );
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return TextField(
+      controller: _c,
+      maxLines: null,
+      style: t.text.resolve(t.text.body, mono: true),
+      decoration: widget.label.copyWith(
+        errorText: _error,
+        hintText: '{"on": true}',
+      ),
+      onChanged: (text) {
+        if (text.trim().isEmpty) {
+          setState(() => _error = null);
+          return widget.onChanged(null);
+        }
+        try {
+          final parsed = jsonDecode(text);
+          setState(() => _error = null);
+          widget.onChanged(parsed);
+        } on FormatException {
+          // Hold the last good value; surface the problem without destroying
+          // what they're typing.
+          setState(() => _error = 'Not valid JSON');
+        }
+      },
+    );
+  }
 }
 
 String _humanize(String raw) {
@@ -633,14 +635,14 @@ class _StateChoice extends StatelessWidget {
     final accent = t.accent.active;
     return Material(
       color: selected ? accent.withValues(alpha: 0.14) : t.surface.raised,
-      borderRadius: BorderRadius.circular(9),
+      borderRadius: t.radius.smR,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(9),
+        borderRadius: t.radius.smR,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(9),
+            borderRadius: t.radius.smR,
             border: Border.all(
               color: selected ? accent : t.stroke.hairline,
               width: selected ? 1.5 : 1,
@@ -650,11 +652,9 @@ class _StateChoice extends StatelessWidget {
             label,
             textAlign: TextAlign.center,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-              color: selected ? t.surface.onBase : t.surface.onBaseMuted,
-            ),
+            style: t.text.bodyStyle.copyWith(
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                color: selected ? t.surface.onBase : t.surface.onBaseMuted),
           ),
         ),
       ),

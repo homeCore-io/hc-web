@@ -113,9 +113,7 @@ class _HcChipState extends State<HcChip> {
           ],
           Text(
             widget.label,
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
+            style: t.text.subtitleStyle.copyWith(
               color: isValue ? t.accent.primary : t.surface.onBase,
             ),
           ),

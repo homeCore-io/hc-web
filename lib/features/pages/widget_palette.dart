@@ -110,17 +110,15 @@ class _WidgetPalette extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(d.title,
-                                style: TextStyle(
-                                    fontSize: 14,
+                                style: t.text.subtitleStyle.copyWith(
                                     fontWeight: FontWeight.w600,
                                     color: t.surface.onBase)),
                             if (d.description != null)
                               Text(d.description!,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                      fontSize: 12,
-                                      color: t.surface.onBaseMuted)),
+                                  style: t.text.bodySmallStyle
+                                      .copyWith(color: t.surface.onBaseMuted)),
                           ],
                         ),
                       ),

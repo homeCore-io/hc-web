@@ -93,12 +93,10 @@ class _NodeShellState extends State<_NodeShell> {
                   // lose the distinction the author drew.
                   Text(
                     widget.title ?? '',
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.6,
-                      color: color,
-                    ),
+                    style: t.text.captionStyle.copyWith(
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.6,
+                        color: color),
                   ),
                   const Spacer(),
                   controls,
@@ -118,12 +116,10 @@ class _NodeShellState extends State<_NodeShell> {
                     width: 18,
                     child: Text(
                       '${widget.ordinal}',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: t.surface.onBaseMuted.withValues(alpha: 0.55),
-                        fontFeatures: t.numericFontFeatures,
-                      ),
+                      style: t.text.captionStyle.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: t.surface.onBaseMuted.withValues(alpha: 0.55),
+                          fontFeatures: t.numericFontFeatures),
                     ),
                   ),
                 ),
@@ -499,7 +495,7 @@ class _ResultChip extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
         decoration: BoxDecoration(
           color: c.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(4),
+          borderRadius: t.radius.xsR,
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -507,7 +503,7 @@ class _ResultChip extends StatelessWidget {
             Icon(ok ? HcIcons.check : HcIcons.x, size: 12, color: c),
             if (detail != null) ...[
               const SizedBox(width: 4),
-              Text(detail, style: TextStyle(fontSize: 10, color: c)),
+              Text(detail, style: t.text.overlineStyle.copyWith(color: c)),
             ],
           ],
         ),
@@ -596,21 +592,23 @@ class _CheckDeviceButton extends StatelessWidget {
   final String label;
 
   @override
-  Widget build(BuildContext context) => TextButton.icon(
-        icon: const Icon(HcIcons.plus, size: 14),
-        label: Text(label, style: const TextStyle(fontSize: 13)),
-        style: TextButton.styleFrom(
-          visualDensity: VisualDensity.compact,
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        ),
-        onPressed: () async {
-          final node = await showDialog<HcNode>(
-            context: context,
-            builder: (_) => DeviceConditionPicker(refs: refs),
-          );
-          if (node != null) onAdd(node);
-        },
-      );
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return TextButton.icon(
+      icon: const Icon(HcIcons.plus, size: 14),
+      label: Text(label, style: t.text.bodyStyle),
+      style: TextButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      ),
+      onPressed: () async {
+        final node = await showDialog<HcNode>(
+          context: context,
+          builder: (_) => DeviceConditionPicker(refs: refs),
+        );
+        if (node != null) onAdd(node);
+      },
+    );
+  }
 }
 
 /// The only "Add action" path: open the multi-pane action picker and drop the
@@ -624,24 +622,26 @@ class _AddActionButton extends StatelessWidget {
   final String label;
 
   @override
-  Widget build(BuildContext context) => Align(
-        alignment: Alignment.centerLeft,
-        child: TextButton.icon(
-          icon: const Icon(HcIcons.plus, size: 14),
-          label: Text(label, style: const TextStyle(fontSize: 13)),
-          style: TextButton.styleFrom(
-            visualDensity: VisualDensity.compact,
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          ),
-          onPressed: () async {
-            final node = await showDialog<HcNode>(
-              context: context,
-              builder: (_) => DeviceActionPicker(refs: refs),
-            );
-            if (node != null) onAdd(node);
-          },
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: TextButton.icon(
+        icon: const Icon(HcIcons.plus, size: 14),
+        label: Text(label, style: t.text.bodyStyle),
+        style: TextButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         ),
-      );
+        onPressed: () async {
+          final node = await showDialog<HcNode>(
+            context: context,
+            builder: (_) => DeviceActionPicker(refs: refs),
+          );
+          if (node != null) onAdd(node);
+        },
+      ),
+    );
+  }
 }
 
 /// One action. Recurses through every nesting field the vocabulary has.

@@ -336,15 +336,10 @@ class _Header extends ConsumerWidget {
           alignment: Alignment.center,
           decoration: BoxDecoration(
             color: t.surface.sunken,
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: t.radius.mdR,
             border: Border.all(color: t.stroke.hairline),
             boxShadow: plugin.isActive
-                ? [
-                    BoxShadow(
-                        color: color.withValues(alpha: 0.35),
-                        blurRadius: 18,
-                        spreadRadius: -6)
-                  ]
+                ? t.glow.halo(color, blur: 18, alpha: 0.35, spread: -6)
                 : null,
           ),
           child: Icon(HcIcons.plugins, size: 23, color: color),
@@ -357,14 +352,13 @@ class _Header extends ConsumerWidget {
             Text(plugin.displayName,
                 style: TextStyle(
                     color: t.surface.onBase,
-                    fontSize: 22,
+                    fontSize: t.text.scaled(22),
                     fontWeight: FontWeight.w700,
                     letterSpacing: -0.4)),
             Text(
               '${plugin.pluginId}${plugin.managed ? ' · local child' : ' · remote'}${plugin.version != null ? ' · running v${plugin.version}' : ''}',
-              style: TextStyle(
+              style: t.text.bodySmallStyle.copyWith(
                   color: t.surface.onBaseMuted,
-                  fontSize: 12.5,
                   fontFeatures: t.numericFontFeatures),
             ),
           ],
@@ -417,14 +411,12 @@ class _Header extends ConsumerWidget {
         padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
         decoration: BoxDecoration(
           color: t.accent.active.withValues(alpha: 0.14),
-          borderRadius: BorderRadius.circular(t.radius.pill),
+          borderRadius: t.radius.pillR,
           border: Border.all(color: t.accent.active.withValues(alpha: 0.38)),
         ),
         child: Text(s,
-            style: TextStyle(
-                color: t.accent.active,
-                fontSize: 11.5,
-                fontWeight: FontWeight.w700)),
+            style: t.text.captionStyle
+                .copyWith(color: t.accent.active, fontWeight: FontWeight.w700)),
       );
 
   Widget _ghostBtn(HcTokens t, IconData ic, String label, VoidCallback onTap) =>
@@ -460,9 +452,8 @@ class _Rail extends StatelessWidget {
           padding: EdgeInsets.fromLTRB(
               t.space.sm, t.space.md, t.space.sm, t.space.xs),
           child: Text(it.group.toUpperCase(),
-              style: TextStyle(
+              style: t.text.captionStyle.copyWith(
                   color: t.surface.onBaseMuted.withValues(alpha: 0.6),
-                  fontSize: 10.5,
                   letterSpacing: 1.6,
                   fontWeight: FontWeight.w700)),
         ));
@@ -489,10 +480,8 @@ class _Rail extends StatelessWidget {
                 const SizedBox(width: 11),
                 Expanded(
                     child: Text(it.label,
-                        style: TextStyle(
-                            color: fg,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500))),
+                        style: t.text.subtitleStyle
+                            .copyWith(color: fg, fontWeight: FontWeight.w500))),
                 if (it.badge != null) _badge(t, it.badge!),
               ]),
             ),
@@ -516,14 +505,12 @@ class _Rail extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
         decoration: BoxDecoration(
           color: t.accent.active.withValues(alpha: 0.14),
-          borderRadius: BorderRadius.circular(t.radius.pill),
+          borderRadius: t.radius.pillR,
           border: Border.all(color: t.accent.active.withValues(alpha: 0.38)),
         ),
         child: Text(s,
-            style: TextStyle(
-                color: t.accent.active,
-                fontSize: 10,
-                fontWeight: FontWeight.w700)),
+            style: t.text.overlineStyle
+                .copyWith(color: t.accent.active, fontWeight: FontWeight.w700)),
       );
 }
 
@@ -542,13 +529,11 @@ class _PaneScaffold extends StatelessWidget {
           EdgeInsets.fromLTRB(t.space.lg, t.space.lg, t.space.lg, t.space.xl),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(title,
-            style: TextStyle(
-                color: t.surface.onBase,
-                fontSize: 17,
-                fontWeight: FontWeight.w700)),
+            style: t.text.titleStyle.copyWith(
+                color: t.surface.onBase, fontWeight: FontWeight.w700)),
         const SizedBox(height: 3),
         Text(subtitle,
-            style: TextStyle(color: t.surface.onBaseMuted, fontSize: 13)),
+            style: t.text.bodyStyle.copyWith(color: t.surface.onBaseMuted)),
         const SizedBox(height: 20),
         child,
       ]),
@@ -635,10 +620,8 @@ class _NoticeCard extends StatelessWidget {
                 if (notice.remedy != null && notice.remedy!.isNotEmpty) ...[
                   const SizedBox(height: 6),
                   Text(notice.remedy!,
-                      style: TextStyle(
-                          color: t.surface.onBaseMuted,
-                          fontSize: 12.5,
-                          height: 1.4)),
+                      style: t.text.bodySmallStyle
+                          .copyWith(color: t.surface.onBaseMuted, height: 1.4)),
                 ],
               ],
             ),
@@ -784,9 +767,8 @@ class _OverviewPane extends ConsumerWidget {
         if (hasActions) ...[
           const SizedBox(height: 24),
           Text('ACTIONS',
-              style: TextStyle(
+              style: t.text.captionStyle.copyWith(
                   color: t.surface.onBaseMuted,
-                  fontSize: 11,
                   letterSpacing: 1.3,
                   fontWeight: FontWeight.w700)),
           const SizedBox(height: 12),
@@ -815,9 +797,8 @@ class _OverviewPane extends ConsumerWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(label.toUpperCase(),
-                  style: TextStyle(
+                  style: t.text.captionStyle.copyWith(
                       color: t.surface.onBaseMuted,
-                      fontSize: 11,
                       letterSpacing: 0.4,
                       fontWeight: FontWeight.w600)),
               const SizedBox(height: 9),
@@ -830,11 +811,7 @@ class _OverviewPane extends ConsumerWidget {
                           color: valueColor,
                           shape: BoxShape.circle,
                           boxShadow: dot && valueColor != t.surface.onBaseMuted
-                              ? [
-                                  BoxShadow(
-                                      color: valueColor.withValues(alpha: 0.6),
-                                      blurRadius: 8)
-                                ]
+                              ? t.glow.halo(valueColor, blur: 8)
                               : null)),
                   const SizedBox(width: 8),
                 ],
@@ -844,7 +821,7 @@ class _OverviewPane extends ConsumerWidget {
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                           color: valueColor,
-                          fontSize: 23,
+                          fontSize: t.text.scaled(23),
                           fontWeight: FontWeight.w700,
                           letterSpacing: -0.5,
                           fontFeatures: t.numericFontFeatures)),
@@ -855,8 +832,8 @@ class _OverviewPane extends ConsumerWidget {
                 Text(sub,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style:
-                        TextStyle(color: t.surface.onBaseMuted, fontSize: 12)),
+                    style: t.text.bodySmallStyle
+                        .copyWith(color: t.surface.onBaseMuted)),
               ],
             ]),
       ),
@@ -881,7 +858,7 @@ class _OverviewPane extends ConsumerWidget {
             alignment: Alignment.center,
             decoration: BoxDecoration(
               color: t.accent.active.withValues(alpha: 0.16),
-              borderRadius: BorderRadius.circular(11),
+              borderRadius: t.radius.smR,
             ),
             child:
                 Icon(Icons.upgrade_rounded, color: t.accent.active, size: 22),
@@ -893,14 +870,13 @@ class _OverviewPane extends ConsumerWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text('Update available — v$update',
-                      style: TextStyle(
+                      style: t.text.subtitleStyle.copyWith(
                           color: t.surface.onBase,
-                          fontSize: 14,
                           fontWeight: FontWeight.w700)),
                   const SizedBox(height: 2),
                   Text('A newer version is published in the registry.',
-                      style: TextStyle(
-                          color: t.surface.onBaseMuted, fontSize: 12.5)),
+                      style: t.text.bodySmallStyle
+                          .copyWith(color: t.surface.onBaseMuted)),
                 ]),
           ),
           const SizedBox(width: 12),
@@ -943,15 +919,13 @@ class _OverviewPane extends ConsumerWidget {
               // all of *this* plugin's devices, not the whole house.
               onTap: () => context.go(
                   '/devices?plugin=${Uri.encodeComponent(plugin.pluginId)}'),
-              borderRadius: BorderRadius.circular(6),
+              borderRadius: t.radius.xsR,
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                 child: Row(mainAxisSize: MainAxisSize.min, children: [
                   Text('View all',
-                      style: TextStyle(
-                          color: t.accent.active,
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w600)),
+                      style: t.text.bodySmallStyle.copyWith(
+                          color: t.accent.active, fontWeight: FontWeight.w600)),
                   const SizedBox(width: 3),
                   Icon(Icons.arrow_forward_rounded,
                       size: 13, color: t.accent.active),
@@ -965,10 +939,10 @@ class _OverviewPane extends ConsumerWidget {
                 devices.isEmpty && plugin.deviceCount == 0
                     ? 'No devices registered yet.'
                     : '${plugin.deviceCount} device${plugin.deviceCount == 1 ? '' : 's'} registered.',
-                style: TextStyle(color: t.surface.onBaseMuted, fontSize: 13))
+                style: t.text.bodyStyle.copyWith(color: t.surface.onBaseMuted))
           else ...[
             ClipRRect(
-              borderRadius: BorderRadius.circular(5),
+              borderRadius: t.radius.xsR,
               child: SizedBox(
                 height: 9,
                 child: Row(children: [
@@ -992,9 +966,8 @@ class _OverviewPane extends ConsumerWidget {
                           shape: BoxShape.circle)),
                   const SizedBox(width: 6),
                   Text('${breakdown[i].value} ${breakdown[i].key}',
-                      style: TextStyle(
+                      style: t.text.bodySmallStyle.copyWith(
                           color: t.surface.onBase,
-                          fontSize: 12.5,
                           fontFeatures: t.numericFontFeatures)),
                 ]),
             ]),
@@ -1033,16 +1006,15 @@ class _OverviewPane extends ConsumerWidget {
           {Color? valueColor, bool mono = false}) =>
       Row(children: [
         Text(label,
-            style: TextStyle(color: t.surface.onBaseMuted, fontSize: 13)),
+            style: t.text.bodyStyle.copyWith(color: t.surface.onBaseMuted)),
         const SizedBox(width: 12),
         Expanded(
           child: Text(value,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.right,
-              style: TextStyle(
+              style: t.text.bodyStyle.copyWith(
                   color: valueColor ?? t.surface.onBase,
-                  fontSize: 13,
                   fontWeight: FontWeight.w600,
                   fontFeatures: mono ? t.numericFontFeatures : null)),
         ),
@@ -1059,9 +1031,8 @@ class _OverviewPane extends ConsumerWidget {
       );
 
   Widget _cardLabel(HcTokens t, String s) => Text(s.toUpperCase(),
-      style: TextStyle(
+      style: t.text.captionStyle.copyWith(
           color: t.surface.onBaseMuted,
-          fontSize: 11,
           letterSpacing: 1.1,
           fontWeight: FontWeight.w700));
 
@@ -1179,14 +1150,12 @@ class _ConfigSectionPane extends ConsumerWidget {
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(section.isEmpty ? 'Configuration' : section,
-                style: TextStyle(
-                    color: t.surface.onBase,
-                    fontSize: 17,
-                    fontWeight: FontWeight.w700)),
+                style: t.text.titleStyle.copyWith(
+                    color: t.surface.onBase, fontWeight: FontWeight.w700)),
             const SizedBox(height: 3),
             Text(
                 'Operator settings — changes apply on save${plugin.managed ? ' (restarts the plugin)' : ''}.',
-                style: TextStyle(color: t.surface.onBaseMuted, fontSize: 13)),
+                style: t.text.bodyStyle.copyWith(color: t.surface.onBaseMuted)),
             const SizedBox(height: 14),
             ...body,
           ]),
@@ -1197,7 +1166,7 @@ class _ConfigSectionPane extends ConsumerWidget {
           width: double.infinity,
           padding: const EdgeInsets.fromLTRB(24, 10, 24, 0),
           child: Text(error!,
-              style: TextStyle(color: t.accent.danger, fontSize: 12.5)),
+              style: t.text.bodySmallStyle.copyWith(color: t.accent.danger)),
         ),
       if (edits.isNotEmpty) _saveBar(context, t, doc),
     ]);
@@ -1217,15 +1186,11 @@ class _ConfigSectionPane extends ConsumerWidget {
               decoration: BoxDecoration(
                   color: t.accent.active,
                   shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(color: t.accent.active, blurRadius: 8)
-                  ])),
+                  boxShadow: t.glow.halo(t.accent.active, blur: 8, alpha: 1))),
           const SizedBox(width: 9),
           Text('${edits.length} unsaved change${edits.length == 1 ? '' : 's'}',
-              style: TextStyle(
-                  color: t.accent.active,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600)),
+              style: t.text.bodyStyle.copyWith(
+                  color: t.accent.active, fontWeight: FontWeight.w600)),
           const Spacer(),
           TextButton(
               onPressed: saving ? null : onDiscard,
@@ -1265,9 +1230,8 @@ class _ConfigSectionPane extends ConsumerWidget {
                 Row(children: [
                   Flexible(
                       child: Text(f.label ?? f.name,
-                          style: TextStyle(
+                          style: t.text.subtitleStyle.copyWith(
                               color: t.surface.onBase,
-                              fontSize: 14.5,
                               fontWeight: FontWeight.w600))),
                   if (f.required)
                     Text(' *', style: TextStyle(color: t.accent.active)),
@@ -1276,8 +1240,8 @@ class _ConfigSectionPane extends ConsumerWidget {
                   Padding(
                       padding: const EdgeInsets.only(top: 3),
                       child: Text(f.help!,
-                          style: TextStyle(
-                              color: t.surface.onBaseMuted, fontSize: 12.5))),
+                          style: t.text.bodySmallStyle
+                              .copyWith(color: t.surface.onBaseMuted))),
               ]),
         ),
         const SizedBox(width: 18),
@@ -1386,7 +1350,7 @@ class _ConfigSectionPane extends ConsumerWidget {
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
                     color: t.surface.sunken,
-                    borderRadius: BorderRadius.circular(11),
+                    borderRadius: t.radius.smR,
                     border: Border.all(color: t.stroke.hairline)),
                 child: Icon(Icons.router_rounded,
                     size: 19, color: t.surface.onBaseMuted)),
@@ -1397,17 +1361,15 @@ class _ConfigSectionPane extends ConsumerWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                   Text(primary(m),
-                      style: TextStyle(
+                      style: t.text.subtitleStyle.copyWith(
                           color: t.surface.onBase,
-                          fontSize: 14.5,
                           fontWeight: FontWeight.w600)),
                   if (sub(m) != null)
                     Padding(
                         padding: const EdgeInsets.only(top: 2),
                         child: Text(sub(m)!,
-                            style: TextStyle(
+                            style: t.text.bodySmallStyle.copyWith(
                                 color: t.surface.onBaseMuted,
-                                fontSize: 12,
                                 fontFeatures: t.numericFontFeatures))),
                 ])),
             if (paired(m))
@@ -1415,15 +1377,13 @@ class _ConfigSectionPane extends ConsumerWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
                 decoration: BoxDecoration(
                     color: t.accent.active.withValues(alpha: 0.14),
-                    borderRadius: BorderRadius.circular(t.radius.pill)),
+                    borderRadius: t.radius.pillR),
                 child: Row(mainAxisSize: MainAxisSize.min, children: [
                   Icon(HcIcons.check, size: 11, color: t.accent.active),
                   const SizedBox(width: 4),
                   Text('Paired',
-                      style: TextStyle(
-                          color: t.accent.active,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600)),
+                      style: t.text.captionStyle.copyWith(
+                          color: t.accent.active, fontWeight: FontWeight.w600)),
                 ]),
               ),
           ]),
@@ -1435,13 +1395,12 @@ class _ConfigSectionPane extends ConsumerWidget {
         padding: EdgeInsets.all(t.space.xl),
         child: Column(children: [
           Text(title,
-              style: TextStyle(
-                  color: t.surface.onBase,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600)),
+              style: t.text.subtitleStyle.copyWith(
+                  color: t.surface.onBase, fontWeight: FontWeight.w600)),
           const SizedBox(height: 6),
           Text(sub,
-              style: TextStyle(color: t.surface.onBaseMuted, fontSize: 12.5)),
+              style:
+                  t.text.bodySmallStyle.copyWith(color: t.surface.onBaseMuted)),
         ]),
       );
 }
@@ -1460,7 +1419,7 @@ class _Segmented extends StatelessWidget {
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
           color: t.surface.sunken,
-          borderRadius: BorderRadius.circular(9),
+          borderRadius: t.radius.smR,
           border: Border.all(color: t.stroke.hairline)),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
         for (final o in options)
@@ -1470,13 +1429,12 @@ class _Segmented extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 6),
               decoration: BoxDecoration(
                   color: value == o ? t.accent.active : Colors.transparent,
-                  borderRadius: BorderRadius.circular(6)),
+                  borderRadius: t.radius.xsR),
               child: Text(o.toUpperCase(),
-                  style: TextStyle(
+                  style: t.text.bodySmallStyle.copyWith(
                       color: value == o
                           ? t.accent.onPrimary
                           : t.surface.onBaseMuted,
-                      fontSize: 12.5,
                       fontWeight: FontWeight.w600)),
             ),
           ),
@@ -1498,13 +1456,13 @@ class _Dropdown extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
       decoration: BoxDecoration(
           color: t.surface.sunken,
-          borderRadius: BorderRadius.circular(9),
+          borderRadius: t.radius.smR,
           border: Border.all(color: t.stroke.hairline)),
       child: DropdownButton<String>(
         value: options.contains(value) ? value : null,
         underline: const SizedBox.shrink(),
         dropdownColor: t.surface.overlay,
-        style: TextStyle(color: t.surface.onBase, fontSize: 14),
+        style: t.text.subtitleStyle.copyWith(color: t.surface.onBase),
         icon: Icon(Icons.expand_more_rounded,
             color: t.surface.onBaseMuted, size: 18),
         items: [
@@ -1542,7 +1500,7 @@ class _NumInputState extends State<_NumInput> {
     return Container(
       decoration: BoxDecoration(
           color: t.surface.sunken,
-          borderRadius: BorderRadius.circular(9),
+          borderRadius: t.radius.smR,
           border: Border.all(color: t.stroke.hairline)),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
         SizedBox(
@@ -1552,10 +1510,8 @@ class _NumInputState extends State<_NumInput> {
             textAlign: TextAlign.right,
             keyboardType: TextInputType.number,
             onChanged: widget.onChanged,
-            style: TextStyle(
-                color: t.surface.onBase,
-                fontSize: 14,
-                fontFeatures: t.numericFontFeatures),
+            style: t.text.subtitleStyle.copyWith(
+                color: t.surface.onBase, fontFeatures: t.numericFontFeatures),
             decoration: const InputDecoration(
                 isDense: true,
                 border: InputBorder.none,
@@ -1567,8 +1523,8 @@ class _NumInputState extends State<_NumInput> {
           Padding(
               padding: const EdgeInsets.only(right: 12, left: 2),
               child: Text(widget.unit!,
-                  style:
-                      TextStyle(color: t.surface.onBaseMuted, fontSize: 12.5))),
+                  style: t.text.bodySmallStyle
+                      .copyWith(color: t.surface.onBaseMuted))),
       ]),
     );
   }
@@ -1601,7 +1557,7 @@ class _TextInputState extends State<_TextInput> {
       child: TextField(
         controller: _c,
         onChanged: widget.onChanged,
-        style: TextStyle(color: t.surface.onBase, fontSize: 14),
+        style: t.text.subtitleStyle.copyWith(color: t.surface.onBase),
         decoration: InputDecoration(
             isDense: true,
             filled: true,
@@ -1609,10 +1565,10 @@ class _TextInputState extends State<_TextInput> {
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
             enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(9),
+                borderRadius: t.radius.smR,
                 borderSide: BorderSide(color: t.stroke.hairline)),
             focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(9),
+                borderRadius: t.radius.smR,
                 borderSide: BorderSide(color: t.stroke.focus))),
       ),
     );
@@ -1645,16 +1601,17 @@ class _SecretInputState extends State<_SecretInput> {
         controller: _c,
         obscureText: !_reveal,
         onChanged: widget.onChanged,
-        style: TextStyle(color: t.surface.onBase, fontSize: 14),
+        style: t.text.subtitleStyle.copyWith(color: t.surface.onBase),
         decoration: InputDecoration(
             isDense: true,
             filled: true,
             fillColor: t.surface.sunken,
             hintText: widget.stored ? '•••• stored' : null,
-            hintStyle: TextStyle(color: t.surface.onBaseMuted, fontSize: 13),
+            hintStyle: t.text.bodyStyle.copyWith(color: t.surface.onBaseMuted),
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
             suffixIcon: IconButton(
+                tooltip: 'Show or hide this secret',
                 icon: Icon(
                     _reveal
                         ? Icons.visibility_off_rounded
@@ -1663,10 +1620,10 @@ class _SecretInputState extends State<_SecretInput> {
                     color: t.surface.onBaseMuted),
                 onPressed: () => setState(() => _reveal = !_reveal)),
             enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(9),
+                borderRadius: t.radius.smR,
                 borderSide: BorderSide(color: t.stroke.hairline)),
             focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(9),
+                borderRadius: t.radius.smR,
                 borderSide: BorderSide(color: t.stroke.focus))),
       ),
     );
@@ -1721,7 +1678,7 @@ class _EnablePane extends ConsumerWidget {
                 plugin.enabled
                     ? 'Enabled — running under supervision'
                     : 'Disabled — not started',
-                style: TextStyle(color: t.surface.onBase, fontSize: 14)),
+                style: t.text.subtitleStyle.copyWith(color: t.surface.onBase)),
           ),
           Switch(
             value: plugin.enabled,
@@ -1749,9 +1706,8 @@ class _UpdatePane extends ConsumerWidget {
       subtitle: 'A newer version is available in the registry.',
       child: Row(children: [
         Text('v${plugin.installedVersion} → v$version',
-            style: TextStyle(
+            style: t.text.subtitleStyle.copyWith(
                 color: t.surface.onBase,
-                fontSize: 15,
                 fontWeight: FontWeight.w600,
                 fontFeatures: t.numericFontFeatures)),
         const SizedBox(width: 16),
@@ -1864,8 +1820,8 @@ class _LogsPaneState extends ConsumerState<_LogsPane> {
               ),
               SizedBox(width: t.space.sm),
               Text(_connected ? 'Live' : 'Reconnecting…',
-                  style:
-                      TextStyle(color: t.surface.onBaseMuted, fontSize: 12.5)),
+                  style: t.text.bodySmallStyle
+                      .copyWith(color: t.surface.onBaseMuted)),
               const Spacer(),
               for (final l in _levels) ...[
                 _LogLevelPick(
@@ -1910,8 +1866,8 @@ class _LogsPaneState extends ConsumerState<_LogsPane> {
                               'Logging in its configuration.'
                           : 'Waiting for the log stream…',
                       textAlign: TextAlign.center,
-                      style: TextStyle(
-                          color: t.surface.onBaseMuted, fontSize: 12.5),
+                      style: t.text.bodySmallStyle
+                          .copyWith(color: t.surface.onBaseMuted),
                     ),
                   ),
                 )
@@ -1952,29 +1908,23 @@ class _LogRow extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('${two(ts.hour)}:${two(ts.minute)}:${two(ts.second)}',
-              style: TextStyle(
+              style: t.text.resolve(t.text.caption, mono: true).copyWith(
                   color: t.surface.onBaseMuted,
-                  fontSize: 11.5,
-                  fontFamily: 'monospace',
                   fontFeatures: t.numericFontFeatures)),
           SizedBox(width: t.space.sm),
           SizedBox(
             width: 46,
             child: Text(entry.level,
-                style: TextStyle(
-                    color: colour,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    fontFamily: 'monospace')),
+                style: t.text
+                    .resolve(t.text.caption, mono: true)
+                    .copyWith(color: colour, fontWeight: FontWeight.w700)),
           ),
           Expanded(
             child: SelectableText(
               entry.message,
-              style: TextStyle(
-                  color: t.surface.onBase,
-                  fontSize: 12,
-                  fontFamily: 'monospace',
-                  height: 1.35),
+              style: t.text
+                  .resolve(t.text.bodySmall, mono: true)
+                  .copyWith(color: t.surface.onBase, height: 1.35),
             ),
           ),
         ],
@@ -2004,13 +1954,12 @@ class _LogLevelPick extends StatelessWidget {
           color: selected
               ? t.accent.active.withValues(alpha: 0.14)
               : Colors.transparent,
-          borderRadius: BorderRadius.circular(t.radius.pill),
+          borderRadius: t.radius.pillR,
           border:
               Border.all(color: selected ? t.accent.active : t.stroke.hairline),
         ),
         child: Text(label,
-            style: TextStyle(
-                fontSize: 10.5,
+            style: t.text.captionStyle.copyWith(
                 fontWeight: FontWeight.w700,
                 color: selected ? t.accent.active : t.surface.onBaseMuted)),
       ),
@@ -2048,7 +1997,7 @@ class _UninstallPaneState extends ConsumerState<_UninstallPane> {
           '${p.deviceCount > 0 ? ', removes its ${p.deviceCount} device${p.deviceCount == 1 ? '' : 's'}' : ''}, '
           'and clears its learned state. Its configuration and installed files '
           'are deleted too, unless you keep them below.',
-          style: TextStyle(color: t.surface.onBaseMuted, fontSize: 13.5),
+          style: t.text.bodyStyle.copyWith(color: t.surface.onBaseMuted),
         ),
         const SizedBox(height: 14),
         HcRows([

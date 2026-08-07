@@ -230,11 +230,8 @@ class _DashboardWidgetCard extends ConsumerWidget {
               widgetModel.title,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: t.surface.onBase,
-              ),
+              style: t.text.bodyStyle.copyWith(
+                  fontWeight: FontWeight.w600, color: t.surface.onBase),
             ),
           if (widgetModel.subtitle != null &&
               widgetModel.subtitle!.isNotEmpty) ...[
@@ -243,7 +240,7 @@ class _DashboardWidgetCard extends ConsumerWidget {
               widgetModel.subtitle!,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: 11, color: t.surface.onBaseMuted),
+              style: t.text.captionStyle.copyWith(color: t.surface.onBaseMuted),
             ),
           ],
           SizedBox(height: t.space.sm),
@@ -579,7 +576,7 @@ class _TokenChip extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(t.radius.pill),
+        borderRadius: t.radius.pillR,
         onTap: onTap,
         child: AnimatedContainer(
           duration: t.motion.d(t.motion.fast),
@@ -589,7 +586,7 @@ class _TokenChip extends StatelessWidget {
             color: selected
                 ? t.accent.active.withValues(alpha: 0.14)
                 : t.surface.sunken,
-            borderRadius: BorderRadius.circular(t.radius.pill),
+            borderRadius: t.radius.pillR,
             border: Border.all(
               color: selected
                   ? t.accent.active.withValues(alpha: 0.6)
@@ -605,8 +602,8 @@ class _TokenChip extends StatelessWidget {
                 SizedBox(width: t.space.xs),
               ],
               Text(label,
-                  style: TextStyle(
-                      fontSize: 12.5, fontWeight: FontWeight.w600, color: fg)),
+                  style: t.text.bodySmallStyle
+                      .copyWith(fontWeight: FontWeight.w600, color: fg)),
             ],
           ),
         ),
@@ -717,7 +714,8 @@ class _EventFeedWidgetState extends ConsumerState<_EventFeedWidget> {
               size: 15, color: t.surface.onBaseMuted),
           SizedBox(width: t.space.sm),
           Text('No events yet — activity will stream in here.',
-              style: TextStyle(color: t.surface.onBaseMuted, fontSize: 12.5)),
+              style:
+                  t.text.bodySmallStyle.copyWith(color: t.surface.onBaseMuted)),
         ],
       );
     }
@@ -751,8 +749,7 @@ class _EventFeedWidgetState extends ConsumerState<_EventFeedWidget> {
           SizedBox(
             width: 56,
             child: Text(clock,
-                style: TextStyle(
-                    fontSize: 11.5,
+                style: t.text.captionStyle.copyWith(
                     color: t.surface.onBaseMuted,
                     fontFeatures: t.numericFontFeatures)),
           ),
@@ -771,23 +768,20 @@ class _EventFeedWidgetState extends ConsumerState<_EventFeedWidget> {
                 Text(humanize(e.type),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w600,
-                        color: t.surface.onBase)),
+                    style: t.text.bodySmallStyle.copyWith(
+                        fontWeight: FontWeight.w600, color: t.surface.onBase)),
                 if (detail.isNotEmpty)
                   Text(detail,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                          fontSize: 11, color: t.surface.onBaseMuted)),
+                      style: t.text.captionStyle
+                          .copyWith(color: t.surface.onBaseMuted)),
               ],
             ),
           ),
           SizedBox(width: t.space.sm),
           Text(_relTime(e.timestamp),
-              style: TextStyle(
-                  fontSize: 10.5,
+              style: t.text.captionStyle.copyWith(
                   color: t.surface.onBaseMuted,
                   fontFeatures: t.numericFontFeatures)),
         ],
@@ -909,7 +903,8 @@ class _MarkdownWidget extends StatelessWidget {
           style: TextStyle(color: t.surface.onBaseMuted));
     }
     return DefaultTextStyle.merge(
-      style: TextStyle(color: t.surface.onBase, height: 1.4, fontSize: 14),
+      style:
+          t.text.subtitleStyle.copyWith(color: t.surface.onBase, height: 1.4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: _renderMarkdown(markdown, t),
@@ -1113,6 +1108,7 @@ class _CameraVideoWidgetState extends State<_CameraVideoWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
     final url = widget.widgetModel.config['url'] as String? ?? '';
     final sourceType =
         widget.widgetModel.config['source_type'] as String? ?? 'image_refresh';
@@ -1141,7 +1137,7 @@ class _CameraVideoWidgetState extends State<_CameraVideoWidget> {
         const SizedBox(height: 8),
         if (sourceType == 'image_refresh' || sourceType == 'mjpeg')
           ClipRRect(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: t.radius.mdR,
             child: Image.network(
               resolvedUrl,
               fit: BoxFit.cover,
@@ -1168,6 +1164,7 @@ class _WebEmbedWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
     final url = widgetModel.config['url'] as String? ?? '';
     final sandboxProfile =
         widgetModel.config['sandbox_profile'] as String? ?? 'readonly_embed';
@@ -1192,7 +1189,7 @@ class _WebEmbedWidget extends StatelessWidget {
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             color: Theme.of(context).colorScheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: t.radius.mdR,
           ),
           child: const Text(
             'Web embeds are configured and ready for policy-backed rendering. This dashboard shows the target URL and sandbox profile until full inline embed support is enabled.',
@@ -1285,6 +1282,7 @@ class _HistoryChartContent extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final t = HcTokens.of(context);
     final isUtc = ref.watch(timeUtcProvider);
     final isBool = entries.any((e) => e.value is bool);
     final isNumeric = entries.any((e) => e.value is num);
@@ -1363,18 +1361,16 @@ class _HistoryChartContent extends ConsumerWidget {
                     getTitlesWidget: (value, meta) {
                       if (isBool) {
                         if (value == 1) {
-                          return const Text('ON',
-                              style: TextStyle(fontSize: 10));
+                          return Text('ON', style: t.text.overlineStyle);
                         }
                         if (value == 0) {
-                          return const Text('OFF',
-                              style: TextStyle(fontSize: 10));
+                          return Text('OFF', style: t.text.overlineStyle);
                         }
                         return const SizedBox.shrink();
                       }
                       return Text(
                         value.toStringAsFixed(1),
-                        style: const TextStyle(fontSize: 10),
+                        style: t.text.overlineStyle,
                       );
                     },
                   ),
@@ -1390,7 +1386,7 @@ class _HistoryChartContent extends ConsumerWidget {
                       final shown = isUtc ? dt.toUtc() : dt.toLocal();
                       return Text(
                         '${shown.hour.toString().padLeft(2, '0')}:${shown.minute.toString().padLeft(2, '0')}',
-                        style: const TextStyle(fontSize: 10),
+                        style: t.text.overlineStyle,
                       );
                     },
                   ),
@@ -1971,12 +1967,10 @@ class _SystemTile extends StatelessWidget {
               SizedBox(width: t.space.sm),
               Text(
                 label.toUpperCase(),
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: t.surface.onBaseMuted,
-                  letterSpacing: 0.8,
-                ),
+                style: t.text.captionStyle.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: t.surface.onBaseMuted,
+                    letterSpacing: 0.8),
               ),
             ],
           ),
@@ -1997,7 +1991,7 @@ class _SystemTile extends StatelessWidget {
             detail,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontSize: 11, color: t.surface.onBaseMuted),
+            style: t.text.captionStyle.copyWith(color: t.surface.onBaseMuted),
           ),
           if (meter != null) ...[
             SizedBox(height: t.space.sm),
@@ -2028,7 +2022,7 @@ class _MeterBar extends StatelessWidget {
             width: box.maxWidth,
             decoration: BoxDecoration(
               color: t.surface.onBaseMuted.withValues(alpha: 0.16),
-              borderRadius: BorderRadius.circular(999),
+              borderRadius: t.radius.pillR,
             ),
           ),
           Container(
@@ -2036,7 +2030,7 @@ class _MeterBar extends StatelessWidget {
             width: box.maxWidth * frac,
             decoration: BoxDecoration(
               color: color,
-              borderRadius: BorderRadius.circular(999),
+              borderRadius: t.radius.pillR,
             ),
           ),
         ],

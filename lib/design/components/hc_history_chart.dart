@@ -46,7 +46,7 @@ class HcHistoryChart extends StatelessWidget {
         child: Center(
           child: Text(
             'Not enough history yet',
-            style: TextStyle(fontSize: 12, color: t.surface.onBaseMuted),
+            style: t.text.bodySmallStyle.copyWith(color: t.surface.onBaseMuted),
           ),
         ),
       );
@@ -92,6 +92,9 @@ class HcHistoryChart extends StatelessWidget {
                 interval: (maxY - minY) <= 0 ? 1 : (maxY - minY) / 2,
                 getTitlesWidget: (v, _) => Text(
                   v.toStringAsFixed(v.abs() < 10 ? 1 : 0),
+                  // Below the ramp's floor, deliberately: axis ticks are
+                  // furniture for the line, not text to read, and the ramp's
+                  // smallest role would crowd a 34px gutter.
                   style: TextStyle(fontSize: 9, color: t.surface.onBaseMuted),
                 ),
               ),
@@ -110,6 +113,9 @@ class HcHistoryChart extends StatelessWidget {
                       DateTime.fromMillisecondsSinceEpoch(v.toInt()).toLocal();
                   return Text(
                     '${dt.hour.toString().padLeft(2, '0')}:00',
+                    // Below the ramp's floor, deliberately: axis ticks are
+                    // furniture for the line, not text to read, and the ramp's
+                    // smallest role would crowd a 34px gutter.
                     style: TextStyle(fontSize: 9, color: t.surface.onBaseMuted),
                   );
                 },

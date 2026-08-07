@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 
 import '../core/providers/events_provider.dart';
 import '../design/tokens.dart';
+import 'command_failure_banner.dart';
 import 'session_status.dart';
 
 /// True while the UI is running as a wall panel.
@@ -144,6 +145,12 @@ class _WallChromeState extends ConsumerState<WallChrome> {
                 child: Column(
                   children: [
                     _statusBar(context, t),
+                    // Under the status bar, which already says whether the
+                    // socket is up. This says whether the house took the last
+                    // instruction — the same question about writes rather than
+                    // reads, and the one a panel nobody is watching most needs
+                    // to still be saying two minutes later.
+                    const CommandFailureBanner(),
                     Expanded(child: widget.child),
                   ],
                 ),
@@ -172,17 +179,16 @@ class _WallChromeState extends ConsumerState<WallChrome> {
           Text(
             _hhmm(_now),
             style: TextStyle(
-              fontSize: 34,
-              fontWeight: FontWeight.w200,
-              height: 1,
-              color: t.surface.onBase,
-              fontFeatures: t.numericFontFeatures,
-            ),
+                fontSize: t.text.scaled(34),
+                fontWeight: FontWeight.w200,
+                height: 1,
+                color: t.surface.onBase,
+                fontFeatures: t.numericFontFeatures),
           ),
           SizedBox(width: t.space.md),
           Text(
             _dayLabel(_now),
-            style: TextStyle(fontSize: 14, color: t.surface.onBaseMuted),
+            style: t.text.subtitleStyle.copyWith(color: t.surface.onBaseMuted),
           ),
           const Spacer(),
 
@@ -196,7 +202,7 @@ class _WallChromeState extends ConsumerState<WallChrome> {
               ),
               decoration: BoxDecoration(
                 color: t.accent.danger.withValues(alpha: 0.18),
-                borderRadius: BorderRadius.circular(t.radius.pill),
+                borderRadius: t.radius.pillR,
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -205,7 +211,7 @@ class _WallChromeState extends ConsumerState<WallChrome> {
                   SizedBox(width: t.space.sm),
                   Text(
                     'Not live — showing last known state',
-                    style: TextStyle(color: t.accent.danger, fontSize: 13),
+                    style: t.text.bodyStyle.copyWith(color: t.accent.danger),
                   ),
                 ],
               ),
@@ -231,20 +237,17 @@ class _WallChromeState extends ConsumerState<WallChrome> {
                 Text(
                   _hhmm(_now),
                   style: TextStyle(
-                    fontSize: 96,
-                    fontWeight: FontWeight.w100,
-                    height: 1,
-                    color: t.surface.onBaseMuted.withValues(alpha: 0.55),
-                    fontFeatures: t.numericFontFeatures,
-                  ),
+                      fontSize: t.text.scaled(96),
+                      fontWeight: FontWeight.w100,
+                      height: 1,
+                      color: t.surface.onBaseMuted.withValues(alpha: 0.55),
+                      fontFeatures: t.numericFontFeatures),
                 ),
                 SizedBox(height: t.space.sm),
                 Text(
                   _dayLabel(_now),
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: t.surface.onBaseMuted.withValues(alpha: 0.4),
-                  ),
+                  style: t.text.titleStyle.copyWith(
+                      color: t.surface.onBaseMuted.withValues(alpha: 0.4)),
                 ),
               ],
             ),

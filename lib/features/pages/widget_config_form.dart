@@ -111,7 +111,7 @@ class _ConfigFormState extends ConsumerState<_ConfigForm> {
           Padding(
             padding: EdgeInsets.symmetric(horizontal: t.space.lg),
             child: Text(_error!,
-                style: TextStyle(color: t.accent.danger, fontSize: 12.5)),
+                style: t.text.bodySmallStyle.copyWith(color: t.accent.danger)),
           ),
         Padding(
           padding: EdgeInsets.all(t.space.lg),
@@ -152,10 +152,8 @@ class _ConfigFormState extends ConsumerState<_ConfigForm> {
       child: Row(
         children: [
           Text(_title(f),
-              style: TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w600,
-                  color: t.surface.onBase)),
+              style: t.text.bodySmallStyle.copyWith(
+                  fontWeight: FontWeight.w600, color: t.surface.onBase)),
           if (f.required) Text(' *', style: TextStyle(color: t.accent.danger)),
         ],
       ),
@@ -170,7 +168,7 @@ class _ConfigFormState extends ConsumerState<_ConfigForm> {
     return Padding(
       padding: EdgeInsets.only(top: t.space.xs),
       child: Text(f.help!,
-          style: TextStyle(fontSize: 11, color: t.surface.onBaseMuted)),
+          style: t.text.captionStyle.copyWith(color: t.surface.onBaseMuted)),
     );
   }
 
@@ -207,7 +205,7 @@ class _ConfigFormState extends ConsumerState<_ConfigForm> {
       children: [
         Expanded(
             child: Text(_title(f),
-                style: TextStyle(fontSize: 13, color: t.surface.onBase))),
+                style: t.text.bodyStyle.copyWith(color: t.surface.onBase))),
         Switch(
           value: _config[f.name] == true,
           onChanged: (v) => _set(f.name, v),
@@ -322,7 +320,7 @@ class _ConfigFormState extends ConsumerState<_ConfigForm> {
         border: Border.all(color: t.stroke.hairline, width: t.stroke.width),
       ),
       child: Text(message,
-          style: TextStyle(fontSize: 12, color: t.surface.onBaseMuted)),
+          style: t.text.bodySmallStyle.copyWith(color: t.surface.onBaseMuted)),
     );
   }
 
@@ -491,12 +489,12 @@ class _DevicePickerState extends State<_DevicePicker> {
                 dense: true,
                 value: on,
                 title: Text(d.displayName,
-                    style: TextStyle(fontSize: 13.5, color: t.surface.onBase)),
+                    style: t.text.bodyStyle.copyWith(color: t.surface.onBase)),
                 subtitle: (d.effectiveArea ?? '').isEmpty
                     ? null
                     : Text(humanize(d.effectiveArea!),
-                        style: TextStyle(
-                            fontSize: 11, color: t.surface.onBaseMuted)),
+                        style: t.text.captionStyle
+                            .copyWith(color: t.surface.onBaseMuted)),
                 onChanged: (_) => setState(() {
                   if (widget.single) {
                     _selected

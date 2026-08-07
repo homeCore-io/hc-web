@@ -93,12 +93,10 @@ class GluePage extends ConsumerWidget {
                       padding: EdgeInsets.only(bottom: t.space.sm),
                       child: Text(
                         glueTypeFor(entry.key)?.label ?? humanize(entry.key),
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 1.1,
-                          color: t.accent.active,
-                        ),
+                        style: t.text.bodySmallStyle.copyWith(
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 1.1,
+                            color: t.accent.active),
                       ),
                     ),
                     Wrap(
@@ -233,8 +231,8 @@ class GluePage extends ConsumerWidget {
                 ),
                 SizedBox(height: t.space.sm),
                 Text(type.blurb,
-                    style:
-                        TextStyle(fontSize: 12, color: t.surface.onBaseMuted)),
+                    style: t.text.bodySmallStyle
+                        .copyWith(color: t.surface.onBaseMuted)),
                 SizedBox(height: t.space.md),
                 TextField(
                   controller: nameCtrl,
@@ -302,11 +300,9 @@ class GluePage extends ConsumerWidget {
                       : clash
                           ? 'A helper with the id $id already exists.'
                           : 'Rules will refer to it as $id',
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    fontFamily: id.isEmpty ? null : 'monospace',
-                    color: clash ? t.accent.danger : t.surface.onBaseMuted,
-                  ),
+                  style: t.text.captionStyle.copyWith(
+                      fontFamily: id.isEmpty ? null : 'monospace',
+                      color: clash ? t.accent.danger : t.surface.onBaseMuted),
                 ),
               ],
             ),
@@ -448,10 +444,9 @@ class GluePage extends ConsumerWidget {
                   // The id never changes: rules refer to it, and renaming the
                   // key would break them for a cosmetic edit.
                   device.id,
-                  style: TextStyle(
-                      fontSize: 11.5,
-                      fontFamily: 'monospace',
-                      color: t.surface.onBaseMuted),
+                  style: t.text
+                      .resolve(t.text.caption, mono: true)
+                      .copyWith(color: t.surface.onBaseMuted),
                 ),
                 if (type != null && type.config != GlueConfig.none) ...[
                   SizedBox(height: t.space.md),
@@ -501,8 +496,8 @@ class GluePage extends ConsumerWidget {
                     child: Text(
                       'A ${type?.label.toLowerCase() ?? 'helper'} of this kind '
                       'has nothing to configure beyond its name.',
-                      style:
-                          TextStyle(fontSize: 12, color: t.surface.onBaseMuted),
+                      style: t.text.bodySmallStyle
+                          .copyWith(color: t.surface.onBaseMuted),
                     ),
                   ),
               ],
@@ -628,7 +623,7 @@ class GluePage extends ConsumerWidget {
           SizedBox(height: t.space.xs),
           Text(
             '= ${_durationSecs(durationCtrl.text, durationUnit)} seconds',
-            style: TextStyle(fontSize: 11.5, color: t.surface.onBaseMuted),
+            style: t.text.captionStyle.copyWith(color: t.surface.onBaseMuted),
           ),
           SizedBox(height: t.space.md),
           const RailLabel('When it finishes'),
@@ -684,7 +679,8 @@ class GluePage extends ConsumerWidget {
           ),
           const SizedBox(height: 4),
           Text('Leave empty for no limit.',
-              style: TextStyle(fontSize: 11.5, color: t.surface.onBaseMuted)),
+              style:
+                  t.text.captionStyle.copyWith(color: t.surface.onBaseMuted)),
         ];
 
       case GlueConfig.datetime:
@@ -866,7 +862,8 @@ class GluePage extends ConsumerWidget {
               padding: const EdgeInsets.only(top: 4),
               child: Text(
                 'The first option becomes the initial value.',
-                style: TextStyle(fontSize: 11.5, color: t.surface.onBaseMuted),
+                style:
+                    t.text.captionStyle.copyWith(color: t.surface.onBaseMuted),
               ),
             ),
         ];
@@ -1006,16 +1003,14 @@ class _TypeChip extends StatelessWidget {
           color: selected
               ? t.accent.active.withValues(alpha: 0.16)
               : t.surface.raised,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: t.radius.smR,
           border:
               Border.all(color: selected ? t.accent.active : t.stroke.hairline),
         ),
         child: Text(label,
-            style: TextStyle(
-              fontSize: 12.5,
-              fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-              color: selected ? t.surface.onBase : t.surface.onBaseMuted,
-            )),
+            style: t.text.bodySmallStyle.copyWith(
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                color: selected ? t.surface.onBase : t.surface.onBaseMuted)),
       ),
     );
   }
@@ -1042,16 +1037,14 @@ class _HelperCard extends ConsumerWidget {
                 children: [
                   Text(device.displayName,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                          fontSize: 15,
+                      style: t.text.subtitleStyle.copyWith(
                           fontWeight: FontWeight.w600,
                           color: t.surface.onBase)),
                   Text(device.id,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                          fontSize: 11,
-                          fontFamily: 'monospace',
-                          color: t.surface.onBaseMuted)),
+                      style: t.text
+                          .resolve(t.text.caption, mono: true)
+                          .copyWith(color: t.surface.onBaseMuted)),
                 ],
               ),
             ),
@@ -1079,7 +1072,8 @@ class _HelperCard extends ConsumerWidget {
               summary,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: 12.5, color: t.surface.onBaseMuted),
+              style:
+                  t.text.bodySmallStyle.copyWith(color: t.surface.onBaseMuted),
             ),
             SizedBox(height: t.space.sm),
           ],
@@ -1092,8 +1086,8 @@ class _HelperCard extends ConsumerWidget {
                   Expanded(
                     child: Text(humanize(e.key),
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                            fontSize: 12, color: t.surface.onBaseMuted)),
+                        style: t.text.bodySmallStyle
+                            .copyWith(color: t.surface.onBaseMuted)),
                   ),
                   const SizedBox(width: 8),
                   // Constrained and ellipsised: an unbounded value is what
@@ -1104,8 +1098,7 @@ class _HelperCard extends ConsumerWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       textAlign: TextAlign.right,
-                      style: TextStyle(
-                          fontSize: 12,
+                      style: t.text.bodySmallStyle.copyWith(
                           fontFeatures: t.numericFontFeatures,
                           color: t.surface.onBase),
                     ),

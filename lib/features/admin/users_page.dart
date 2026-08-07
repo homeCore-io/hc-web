@@ -98,17 +98,15 @@ class _UserRow extends StatelessWidget {
           backgroundColor: t.surface.sunken,
           child: Text(
             user.username.isEmpty ? '?' : user.username[0].toUpperCase(),
-            style: TextStyle(color: t.surface.onBase, fontSize: 14),
+            style: t.text.subtitleStyle.copyWith(color: t.surface.onBase),
           ),
         ),
         SizedBox(width: t.space.md),
         Expanded(
           child: Row(children: [
             Text(user.username,
-                style: TextStyle(
-                    color: t.surface.onBase,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600)),
+                style: t.text.subtitleStyle.copyWith(
+                    color: t.surface.onBase, fontWeight: FontWeight.w600)),
             if (isSelf) ...[
               SizedBox(width: t.space.sm),
               _Tag('you', accent: t.accent.active),
@@ -212,7 +210,7 @@ class _UserDetail extends ConsumerWidget {
       constraints: const BoxConstraints(maxHeight: 720),
       decoration: BoxDecoration(
         color: t.surface.overlay,
-        borderRadius: BorderRadius.circular(t.radius.lg),
+        borderRadius: t.radius.lgR,
         border: Border.all(color: t.stroke.hairline),
       ),
       child: Column(
@@ -234,10 +232,8 @@ class _UserDetail extends ConsumerWidget {
               SizedBox(width: t.space.md),
               Expanded(
                 child: Text(user.username,
-                    style: TextStyle(
-                        color: t.surface.onBase,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700)),
+                    style: t.text.titleStyle.copyWith(
+                        color: t.surface.onBase, fontWeight: FontWeight.w700)),
               ),
               if (!isSelf)
                 IconButton(
@@ -246,6 +242,7 @@ class _UserDetail extends ConsumerWidget {
                   onPressed: () => _deleteUser(context, ref),
                 ),
               IconButton(
+                tooltip: 'Close',
                 icon: Icon(Icons.close, color: t.surface.onBaseMuted),
                 onPressed: () => Navigator.of(context).pop(),
               ),
@@ -351,7 +348,8 @@ class _PasswordSectionState extends ConsumerState<_PasswordSection> {
                     ? 'Change your own password. You will need your current one.'
                     : 'Set a new password for ${widget.user.username}. They are '
                         'not told — pass it on yourself.',
-                style: TextStyle(color: t.surface.onBaseMuted, fontSize: 12.5),
+                style: t.text.bodySmallStyle
+                    .copyWith(color: t.surface.onBaseMuted),
               ),
             ),
             SizedBox(width: t.space.md),
@@ -394,7 +392,7 @@ class _PasswordSectionState extends ConsumerState<_PasswordSection> {
           if (_error != null) ...[
             SizedBox(height: t.space.sm),
             Text(_error!,
-                style: TextStyle(color: t.accent.danger, fontSize: 12.5)),
+                style: t.text.bodySmallStyle.copyWith(color: t.accent.danger)),
           ],
           SizedBox(height: t.space.md),
           Row(
@@ -523,11 +521,11 @@ class _PasswordFieldState extends State<_PasswordField> {
       obscureText: _hidden,
       autofillHints: const [],
       onSubmitted: widget.onSubmitted,
-      style: TextStyle(color: t.surface.onBase, fontSize: 13.5),
+      style: t.text.bodyStyle.copyWith(color: t.surface.onBase),
       decoration: InputDecoration(
         labelText: widget.label,
         helperText: widget.helper,
-        helperStyle: TextStyle(color: t.surface.onBaseMuted, fontSize: 11.5),
+        helperStyle: t.text.captionStyle.copyWith(color: t.surface.onBaseMuted),
         isDense: true,
         suffixIcon: IconButton(
           icon: Icon(
@@ -568,7 +566,8 @@ class _RoleSection extends ConsumerWidget {
           if (scopes.isNotEmpty) ...[
             SizedBox(height: t.space.md),
             Text('Grants these permissions',
-                style: TextStyle(color: t.surface.onBaseMuted, fontSize: 12)),
+                style: t.text.bodySmallStyle
+                    .copyWith(color: t.surface.onBaseMuted)),
             SizedBox(height: t.space.sm),
             Wrap(
               spacing: 6,
@@ -613,11 +612,12 @@ class _DashboardAccessSection extends ConsumerWidget {
           child: const Center(child: CircularProgressIndicator()),
         ),
         error: (e, _) => Text('Could not load dashboards: $e',
-            style: TextStyle(color: t.accent.danger, fontSize: 12.5)),
+            style: t.text.bodySmallStyle.copyWith(color: t.accent.danger)),
         data: (dashboards) {
           if (dashboards.isEmpty) {
             return Text('No dashboards yet.',
-                style: TextStyle(color: t.surface.onBaseMuted, fontSize: 12.5));
+                style: t.text.bodySmallStyle
+                    .copyWith(color: t.surface.onBaseMuted));
           }
           return Column(
             children: [
@@ -660,7 +660,8 @@ class _DashboardAccessRow extends ConsumerWidget {
         ),
         if (isOwner)
           Text('Full',
-              style: TextStyle(color: t.surface.onBaseMuted, fontSize: 12))
+              style:
+                  t.text.bodySmallStyle.copyWith(color: t.surface.onBaseMuted))
         else
           _LevelToggle(
             level: level,
@@ -700,19 +701,18 @@ class _LevelToggle extends StatelessWidget {
       final on = level == value;
       return InkWell(
         onTap: () => onChanged(value),
-        borderRadius: BorderRadius.circular(t.radius.pill),
+        borderRadius: t.radius.pillR,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
           decoration: BoxDecoration(
             color: on
                 ? t.accent.active.withValues(alpha: 0.16)
                 : Colors.transparent,
-            borderRadius: BorderRadius.circular(t.radius.pill),
+            borderRadius: t.radius.pillR,
             border: Border.all(color: on ? t.accent.active : t.stroke.hairline),
           ),
           child: Text(label,
-              style: TextStyle(
-                  fontSize: 11,
+              style: t.text.captionStyle.copyWith(
                   fontWeight: FontWeight.w600,
                   color: on ? t.accent.active : t.surface.onBaseMuted)),
         ),
@@ -751,13 +751,14 @@ class _AccessKeysSection extends ConsumerWidget {
           child: const Center(child: CircularProgressIndicator()),
         ),
         error: (e, _) => Text('Could not load keys: $e',
-            style: TextStyle(color: t.accent.danger, fontSize: 12.5)),
+            style: t.text.bodySmallStyle.copyWith(color: t.accent.danger)),
         data: (keys) {
           final mine =
               keys.where((k) => k.ownerUid == user.id && !k.isRevoked).toList();
           if (mine.isEmpty) {
             return Text('No keys.',
-                style: TextStyle(color: t.surface.onBaseMuted, fontSize: 12.5));
+                style: t.text.bodySmallStyle
+                    .copyWith(color: t.surface.onBaseMuted));
           }
           return Column(
             children: [for (final k in mine) _KeyRow(keySummary: k)],
@@ -794,12 +795,11 @@ class _KeyRow extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(keySummary.label,
-                  style: TextStyle(color: t.surface.onBase, fontSize: 13.5)),
+                  style: t.text.bodyStyle.copyWith(color: t.surface.onBase)),
               Text(
                   'hc_sk_${keySummary.prefix}…  ·  ${keySummary.scopes.length} scopes',
-                  style: TextStyle(
+                  style: t.text.captionStyle.copyWith(
                       color: t.surface.onBaseMuted,
-                      fontSize: 11,
                       fontFeatures: t.numericFontFeatures)),
             ],
           ),
@@ -878,8 +878,8 @@ Future<void> _showCreateKey(BuildContext context, WidgetRef ref, UserEntry user,
               SizedBox(height: t.space.sm),
               if (ownerScopes.isEmpty)
                 Text('This user\'s role grants no scopes.',
-                    style:
-                        TextStyle(color: t.surface.onBaseMuted, fontSize: 12.5))
+                    style: t.text.bodySmallStyle
+                        .copyWith(color: t.surface.onBaseMuted))
               else
                 Wrap(
                   spacing: 6,
@@ -943,8 +943,9 @@ Future<void> _showTokenOnce(BuildContext context, CreatedApiKey key) {
         ],
         child: SelectableText(
           key.token,
-          style: TextStyle(
-              fontFamily: 'monospace', fontSize: 13, color: t.surface.onBase),
+          style: t.text
+              .resolve(t.text.body, mono: true)
+              .copyWith(color: t.surface.onBase),
         ),
       );
     },
@@ -968,8 +969,7 @@ class _Section extends StatelessWidget {
         Row(children: [
           Expanded(
             child: Text(title.toUpperCase(),
-                style: TextStyle(
-                    fontSize: 11,
+                style: t.text.captionStyle.copyWith(
                     fontWeight: FontWeight.w700,
                     letterSpacing: 1.0,
                     color: t.surface.onBaseMuted)),
@@ -1054,14 +1054,13 @@ class _ScopeChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         color: t.surface.sunken,
-        borderRadius: BorderRadius.circular(t.radius.pill),
+        borderRadius: t.radius.pillR,
         border: Border.all(color: t.stroke.hairline),
       ),
       child: Text(label,
-          style: TextStyle(
-              color: t.surface.onBaseMuted,
-              fontSize: 11,
-              fontFamily: 'monospace')),
+          style: t.text
+              .resolve(t.text.caption, mono: true)
+              .copyWith(color: t.surface.onBaseMuted)),
     );
   }
 }
@@ -1077,20 +1076,19 @@ class _SelectableScope extends StatelessWidget {
     final t = HcTokens.of(context);
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(t.radius.pill),
+      borderRadius: t.radius.pillR,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
         decoration: BoxDecoration(
           color:
               on ? t.accent.active.withValues(alpha: 0.16) : t.surface.sunken,
-          borderRadius: BorderRadius.circular(t.radius.pill),
+          borderRadius: t.radius.pillR,
           border: Border.all(color: on ? t.accent.active : t.stroke.hairline),
         ),
         child: Text(label,
-            style: TextStyle(
-                color: on ? t.accent.active : t.surface.onBaseMuted,
-                fontSize: 11,
-                fontFamily: 'monospace')),
+            style: t.text
+                .resolve(t.text.caption, mono: true)
+                .copyWith(color: on ? t.accent.active : t.surface.onBaseMuted)),
       ),
     );
   }
@@ -1108,13 +1106,13 @@ class _Tag extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
         color: accent?.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(t.radius.pill),
+        borderRadius: t.radius.pillR,
         border: Border.all(
             color: accent?.withValues(alpha: 0.5) ?? t.stroke.hairline),
       ),
       child: Text(label,
-          style:
-              TextStyle(color: c, fontSize: 11, fontWeight: FontWeight.w600)),
+          style: t.text.captionStyle
+              .copyWith(color: c, fontWeight: FontWeight.w600)),
     );
   }
 }

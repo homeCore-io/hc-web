@@ -153,7 +153,7 @@ class _PickerPanelState extends State<PickerPanel> {
             width: w,
             decoration: BoxDecoration(
               color: t.surface.overlay,
-              borderRadius: BorderRadius.circular(t.radius.lg),
+              borderRadius: t.radius.lgR,
               border:
                   Border.all(color: t.stroke.hairline, width: t.stroke.width),
               boxShadow: t.elevation.overlay,
@@ -212,11 +212,9 @@ class _PickerPanelState extends State<PickerPanel> {
               onTap: i <= step ? () => setState(() => _step = i) : null,
               child: Text(
                 widget.panes[steps[i]].compactLabel!,
-                style: TextStyle(
-                  fontSize: 11.5,
-                  fontWeight: i == step ? FontWeight.w700 : FontWeight.w400,
-                  color: i == step ? t.accent.active : t.surface.onBaseMuted,
-                ),
+                style: t.text.captionStyle.copyWith(
+                    fontWeight: i == step ? FontWeight.w700 : FontWeight.w400,
+                    color: i == step ? t.accent.active : t.surface.onBaseMuted),
               ),
             ),
           ],
@@ -236,15 +234,13 @@ class _PickerPanelState extends State<PickerPanel> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(widget.kicker,
-                            style: TextStyle(
-                                fontSize: 10.5,
+                            style: t.text.captionStyle.copyWith(
                                 letterSpacing: 1.4,
                                 fontWeight: FontWeight.w800,
                                 color: t.accent.active)),
                         const SizedBox(height: 3),
                         Text(widget.title,
-                            style: TextStyle(
-                                fontSize: 17,
+                            style: t.text.titleStyle.copyWith(
                                 fontWeight: FontWeight.w600,
                                 color: t.surface.onBase)),
                         SizedBox(height: t.space.sm),
@@ -255,15 +251,13 @@ class _PickerPanelState extends State<PickerPanel> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(widget.kicker,
-                              style: TextStyle(
-                                  fontSize: 10.5,
+                              style: t.text.captionStyle.copyWith(
                                   letterSpacing: 1.4,
                                   fontWeight: FontWeight.w800,
                                   color: t.accent.active)),
                           const SizedBox(height: 3),
                           Text(widget.title,
-                              style: TextStyle(
-                                  fontSize: 17,
+                              style: t.text.titleStyle.copyWith(
                                   fontWeight: FontWeight.w600,
                                   color: t.surface.onBase)),
                         ],
@@ -291,7 +285,8 @@ class _PickerPanelState extends State<PickerPanel> {
           Expanded(
             child: Text(widget.footerHint,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 11.5, color: t.surface.onBaseMuted)),
+                style:
+                    t.text.captionStyle.copyWith(color: t.surface.onBaseMuted)),
           )
         else
           const Spacer(),
@@ -348,22 +343,22 @@ class _FooterBtn extends StatelessWidget {
       opacity: enabled ? 1 : 0.6,
       child: Material(
         color: bg,
-        borderRadius: BorderRadius.circular(t.radius.pill),
+        borderRadius: t.radius.pillR,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(t.radius.pill),
+          borderRadius: t.radius.pillR,
           child: Container(
             padding: EdgeInsets.symmetric(
                 horizontal: t.space.lg, vertical: t.space.sm + 1),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(t.radius.pill),
+              borderRadius: t.radius.pillR,
               border: primary
                   ? null
                   : Border.all(color: t.stroke.hairline, width: t.stroke.width),
             ),
             child: Text(label,
-                style: TextStyle(
-                    fontSize: 13.5, fontWeight: FontWeight.w600, color: fg)),
+                style: t.text.bodyStyle
+                    .copyWith(fontWeight: FontWeight.w600, color: fg)),
           ),
         ),
       ),
@@ -378,7 +373,7 @@ Widget pickerSeg(HcTokens t,
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
         color: t.surface.sunken,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: t.radius.smR,
         border: Border.all(color: t.stroke.hairline),
       ),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -389,18 +384,16 @@ Widget pickerSeg(HcTokens t,
 
 Widget _seg(HcTokens t, String label, bool on, VoidCallback onTap) => Material(
       color: on ? t.surface.raised : Colors.transparent,
-      borderRadius: BorderRadius.circular(7),
+      borderRadius: t.radius.xsR,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(7),
+        borderRadius: t.radius.xsR,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 6),
           child: Text(label,
-              style: TextStyle(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w600,
-                color: on ? t.surface.onBase : t.surface.onBaseMuted,
-              )),
+              style: t.text.bodySmallStyle.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: on ? t.surface.onBase : t.surface.onBaseMuted)),
         ),
       ),
     );
@@ -434,10 +427,8 @@ class PickerRail extends StatelessWidget {
                 SizedBox(width: t.space.xs),
                 Expanded(
                   child: Text(note!,
-                      style: TextStyle(
-                          fontSize: 10.5,
-                          height: 1.4,
-                          color: t.surface.onBaseMuted)),
+                      style: t.text.captionStyle
+                          .copyWith(height: 1.4, color: t.surface.onBaseMuted)),
                 ),
               ]),
             ),
@@ -477,14 +468,12 @@ Widget pickerRailRow(HcTokens t,
           Expanded(
             child: Text(label,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 13,
-                  color: selected ? t.surface.onBase : t.surface.onBaseMuted,
-                )),
+                style: t.text.bodyStyle.copyWith(
+                    color:
+                        selected ? t.surface.onBase : t.surface.onBaseMuted)),
           ),
           Text('$count',
-              style: TextStyle(
-                  fontSize: 11.5,
+              style: t.text.captionStyle.copyWith(
                   color: selected ? t.accent.active : t.surface.onBaseMuted)),
         ]),
       ),
@@ -565,7 +554,7 @@ Widget pickerDeviceRow(HcTokens t,
             height: 34,
             decoration: BoxDecoration(
               color: t.surface.raised,
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: t.radius.smR,
               border: Border.all(color: t.stroke.hairline),
             ),
             child: Icon(icon,
@@ -579,13 +568,12 @@ Widget pickerDeviceRow(HcTokens t,
               children: [
                 Text(label,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 13.5, color: t.surface.onBase)),
+                    style: t.text.bodyStyle.copyWith(color: t.surface.onBase)),
                 Text(sub,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                        fontSize: 11,
-                        fontFamily: 'monospace',
-                        color: t.surface.onBaseMuted)),
+                    style: t.text
+                        .resolve(t.text.caption, mono: true)
+                        .copyWith(color: t.surface.onBaseMuted)),
               ],
             ),
           ),
@@ -595,12 +583,12 @@ Widget pickerDeviceRow(HcTokens t,
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
                 color: tone.withValues(alpha: 0.10),
-                borderRadius: BorderRadius.circular(999),
+                borderRadius: t.radius.pillR,
                 border: Border.all(color: tone.withValues(alpha: 0.28)),
               ),
               child: Text(chip,
-                  style: TextStyle(
-                      fontSize: 11, fontWeight: FontWeight.w600, color: tone)),
+                  style: t.text.captionStyle
+                      .copyWith(fontWeight: FontWeight.w600, color: tone)),
             ),
           ],
         ]),
