@@ -265,6 +265,7 @@ void main() {
       // The tokens' own definitions.
       'skins.dart': 'the four skins state their elevation here',
       'tokens.dart': 'HcGlow.halo builds the shadow',
+      'skin_seeds.dart': 'derives elevation — this is where shadows come from',
       // Already gate on t.glow themselves, predating halo().
       'section_scaffold.dart': 'guarded by t.glow',
       'session_status.dart': 'guarded by t.glow',

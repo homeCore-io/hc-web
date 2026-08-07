@@ -200,11 +200,51 @@ not on a white page.
 
 ## 6. Build order
 
-1. **Extract the derivation.** `HcTokens deriveTokens(SkinSeeds)`, pure, no
-   Flutter dependency beyond `Color`/`Curve`. Prove it by deriving all four
-   built-ins from seeds and asserting equality with the existing `const`s — a
-   ratchet in itself, and it forces the seed set to be genuinely sufficient
-   before any UI exists.
+1. ~~**Extract the derivation.**~~ **DONE 2026-08-07** —
+   `lib/design/skin_seeds.dart`, proved by `test/design/skin_seeds_test.dart`:
+   all four shipped skins rebuild from their seeds, field for field.
+
+   **The premise in §3 was wrong, and measuring it is the main result.** Twelve
+   controls cannot *generate* these skins. No single ratio reproduces all four
+   corner scales — Midnight wants .29/.57/1.57 where Control Room wants
+   .4/.6/1.6 — and no lightness step off a ground reproduces the surfaces. They
+   were tuned by eye. A formula contorted to reach `0x141922` from `0x0B0E13`
+   would be curve-fitting wearing the clothes of a rule, and it would make
+   every future skin worse to hide that.
+
+   **So the split is by kind, not by count: a palette is chosen, shape is
+   computed.** That still buys most of what §3 wanted — ~48 of 74 tokens
+   derived from ~26 seeds — and the compression sits where it matters:
+
+   | derived | from |
+   |---|---|
+   | the 28-field type ramp | one number |
+   | density (4) | one preset |
+   | motion (6) | one preset |
+   | `accent.onDanger` | `onPrimary` — identical in **all four** skins |
+   | `metric.co2/power/reading` | `success/active/primary` — holds in every dark skin |
+   | card + overlay shadows | brightness and glow |
+   | `radius.pill`, `stroke.width`, tabular figures | constant by definition |
+
+   Two rules were *discovered* by the diff rather than assumed, and both are
+   now load-bearing: onDanger and onPrimary answer the same question ("ink on a
+   saturated fill"), and a sensor's colour is the accent for what it measures.
+
+   **What the seeds gained, and why.** Writing it found four places the plan's
+   model was too coarse: a focus ring can differ from the accent (Soft Home
+   rings brighter, to out-shout a light page); glass is *two* decisions, since
+   Soft Home has a tint with no blur; and density and motion needed per-skin
+   overrides, because Soft Home sits between `comfortable` and `wall` and its
+   timings are `standard` off by 10ms and 40ms — too small to be a preset, too
+   real to round away without changing what ships.
+
+   **The seeds are flat and serializable** — no nested Flutter objects except
+   the two overrides — which is the shape step 3 needs to put a skin in core.
+
+   Still to do here: §6 step 2, lifting the ratchets into
+   `SkinReport validate(HcTokens)` so the same assertions run on a data skin.
+   Nothing in step 1 changes a shipped pixel — `skins.dart` still holds the
+   four `const`s, and the seeds are proved *against* them.
 2. **Reuse the ratchets as a runtime validator.** Lift the assertions out of
    `token_ratchet_test.dart` and `metrics_test.dart` into
    `SkinReport validate(HcTokens)` returning measured findings. The tests then
