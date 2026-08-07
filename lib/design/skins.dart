@@ -273,7 +273,20 @@ const _controlRoom = HcTokens(
     active: Color(0xFFFBBF24),
     inactive: Color(0xFF2A2F35),
     success: Color(0xFF34D399),
-    warn: Color(0xFFFBBF24),
+    // Amber-600, where `active` is amber-400. They were the same value, so
+    // "door open" and "motion detected" rendered identically — a caution and a
+    // routine state that this skin, of all of them, shows side by side in dense
+    // rows.
+    //
+    // Deeper rather than brighter, which is not the obvious direction for a
+    // caution. This skin's warm slot is crowded — `active` and the power tint
+    // are both amber-400, illuminance is yellow-300, temperature is orange-400
+    // — and a search of every warm hue that clears 4.5:1 on the card, stays
+    // clear of all three, and is brighter than `active` returns only pale
+    // near-white yellows, which are not a caution colour on an instrument
+    // panel. Between `active` and the loud `danger` is the right rung anyway:
+    // a door being open is worth noticing, not an alarm.
+    warn: Color(0xFFD97706),
     danger: Color(0xFFF87171),
     onDanger: Color(0xFF04141D),
     offline: Color(0xFFB3666E),

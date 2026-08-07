@@ -146,6 +146,13 @@ void main() {
             reason: skin.name);
         expect(HcMetricRole.active.color(t), isNot(HcMetricRole.idle.color(t)),
             reason: skin.name);
+        // Control Room shipped `warn` and `active` as the same amber, so a
+        // door standing open and a room with someone in it were the same
+        // colour — on the one skin built to show dense rows of both at once.
+        // These two co-occur constantly; they are not allowed to collapse.
+        expect(
+            HcMetricRole.caution.color(t), isNot(HcMetricRole.active.color(t)),
+            reason: '${skin.name} paints "open" and "occupied" alike');
       }
     });
 
