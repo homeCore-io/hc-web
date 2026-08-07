@@ -339,12 +339,7 @@ class _Header extends ConsumerWidget {
             borderRadius: t.radius.mdR,
             border: Border.all(color: t.stroke.hairline),
             boxShadow: plugin.isActive
-                ? [
-                    BoxShadow(
-                        color: color.withValues(alpha: 0.35),
-                        blurRadius: 18,
-                        spreadRadius: -6)
-                  ]
+                ? t.glow.halo(color, blur: 18, alpha: 0.35, spread: -6)
                 : null,
           ),
           child: Icon(HcIcons.plugins, size: 23, color: color),
@@ -816,11 +811,7 @@ class _OverviewPane extends ConsumerWidget {
                           color: valueColor,
                           shape: BoxShape.circle,
                           boxShadow: dot && valueColor != t.surface.onBaseMuted
-                              ? [
-                                  BoxShadow(
-                                      color: valueColor.withValues(alpha: 0.6),
-                                      blurRadius: 8)
-                                ]
+                              ? t.glow.halo(valueColor, blur: 8)
                               : null)),
                   const SizedBox(width: 8),
                 ],
@@ -1195,9 +1186,7 @@ class _ConfigSectionPane extends ConsumerWidget {
               decoration: BoxDecoration(
                   color: t.accent.active,
                   shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(color: t.accent.active, blurRadius: 8)
-                  ])),
+                  boxShadow: t.glow.halo(t.accent.active, blur: 8, alpha: 1))),
           const SizedBox(width: 9),
           Text('${edits.length} unsaved change${edits.length == 1 ? '' : 's'}',
               style: t.text.bodyStyle.copyWith(

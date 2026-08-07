@@ -386,11 +386,8 @@ class _HouseState extends ConsumerState<_House> {
                     decoration: BoxDecoration(
                       color: t.accent.active,
                       borderRadius: t.radius.pillR,
-                      boxShadow: [
-                        BoxShadow(
-                            color: t.accent.active.withValues(alpha: 0.5),
-                            blurRadius: 6),
-                      ],
+                      boxShadow:
+                          t.glow.halo(t.accent.active, blur: 6, alpha: 0.5),
                     ),
                   ),
                 ),
@@ -1620,13 +1617,7 @@ class _DragChip extends StatelessWidget {
           color: t.surface.raised,
           borderRadius: t.radius.mdR,
           border: Border.all(color: t.accent.active, width: 1.5),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.35),
-              blurRadius: 16,
-              offset: const Offset(0, 6),
-            ),
-          ],
+          boxShadow: t.elevation.overlay,
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,

@@ -314,17 +314,18 @@ class _Dot extends StatelessWidget {
   final Color color;
   final bool glow;
   @override
-  Widget build(BuildContext context) => Container(
-        width: 9,
-        height: 9,
-        decoration: BoxDecoration(
-          color: color,
-          shape: BoxShape.circle,
-          boxShadow: glow
-              ? [BoxShadow(color: color.withValues(alpha: 0.7), blurRadius: 9)]
-              : null,
-        ),
-      );
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Container(
+      width: 9,
+      height: 9,
+      decoration: BoxDecoration(
+        color: color,
+        shape: BoxShape.circle,
+        boxShadow: glow ? t.glow.halo(color, blur: 9, alpha: 0.7) : null,
+      ),
+    );
+  }
 }
 
 class _Chip extends StatelessWidget {

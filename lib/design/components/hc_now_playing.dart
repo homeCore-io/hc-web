@@ -315,13 +315,10 @@ class _Cover extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: t.radius.mdR,
         color: t.surface.sunken,
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0xB3000000),
-            blurRadius: 40,
-            offset: Offset(0, 18),
-          ),
-        ],
+        // The skin's own overlay depth. This was a hardcoded 0xB3000000 at
+        // blur 40 — a drop shadow in the middle of the design system, on the
+        // one skin that says depth comes from hairlines rather than shadows.
+        boxShadow: t.elevation.overlay,
       ),
       clipBehavior: Clip.antiAlias,
       child: Image.network(

@@ -440,12 +440,8 @@ class _ColorPickerState extends State<_ColorPicker> {
                 decoration: BoxDecoration(
                   color: color,
                   borderRadius: t.radius.mdR,
-                  boxShadow: [
-                    BoxShadow(
-                        color: color.withValues(alpha: 0.55),
-                        blurRadius: 18,
-                        spreadRadius: -2),
-                  ],
+                  boxShadow:
+                      t.glow.halo(color, blur: 18, alpha: 0.55, spread: -2),
                 ),
               ),
               const SizedBox(height: 18),

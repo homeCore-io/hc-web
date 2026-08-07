@@ -581,6 +581,39 @@ class HcGlow {
 
   bool get enabled => strength > 0;
 
+  /// A coloured halo, if this skin has one.
+  ///
+  /// The glow language was a token from the start — `strength` 0 is how Control
+  /// Room says "no bloom" and 0.35 is how Soft Home says "a gentle warm bleed
+  /// rather than the wall panel's full one" — but seven widgets drew haloes
+  /// with a hand-picked alpha and blur and never asked. Control Room, whose own
+  /// description is *near-black, hairlines, no bloom*, glowed anyway: an unsaved
+  /// -changes dot, a scene swatch, an attribute tile, a room pill.
+  ///
+  /// The blur stays with the caller because it belongs to the thing being lit —
+  /// a 7px status dot and an 84px tile do not want the same halo, and
+  /// [radius] is the wall panel's full bloom, not a size for everything. What
+  /// the skin decides is whether there is a halo at all and how much of one, so
+  /// only the alpha is scaled. On the two skins that glow fully this is exactly
+  /// what the hand-written shadows already drew.
+  List<BoxShadow> halo(
+    Color color, {
+    required double blur,
+    double alpha = 0.6,
+    double spread = 0,
+    Offset offset = Offset.zero,
+  }) =>
+      enabled
+          ? [
+              BoxShadow(
+                color: color.withValues(alpha: alpha * strength),
+                blurRadius: blur,
+                spreadRadius: spread,
+                offset: offset,
+              ),
+            ]
+          : const [];
+
   HcGlow lerp(HcGlow o, double t) => HcGlow(
         strength: lerpDouble(strength, o.strength, t),
         radius: lerpDouble(radius, o.radius, t),

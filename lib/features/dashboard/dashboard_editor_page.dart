@@ -1093,13 +1093,8 @@ class _InteractivePlacementTile extends StatelessWidget {
             borderRadius: t.radius.mdR,
             border: Border.all(color: accentColor, width: isSelected ? 2 : 1),
             boxShadow: isSelected
-                ? [
-                    BoxShadow(
-                      color: accentColor.withValues(alpha: 0.18),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    ),
-                  ]
+                ? t.glow.halo(accentColor,
+                    blur: 10, alpha: 0.18, offset: const Offset(0, 4))
                 : null,
           ),
           child: Stack(

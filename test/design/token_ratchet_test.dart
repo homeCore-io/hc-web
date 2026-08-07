@@ -233,4 +233,72 @@ void main() {
         reason: 'these text colours are under 4.5:1 on the surface they sit '
             'on:\n  ${failures.join('\n  ')}');
   });
+
+  test('a skin that refuses bloom gets none', () {
+    // `HcGlow.strength` was a token from the start — 0 is how Control Room says
+    // "near-black, hairlines, no bloom", 0.35 is Soft Home's "gentle warm bleed
+    // rather than the wall panel's full one" — and nine widgets drew coloured
+    // haloes with a hand-picked alpha and blur without ever asking. So the skin
+    // whose entire description is *no bloom* glowed: an unsaved-changes dot, a
+    // scene swatch, an attribute tile, a room pill, a plugin card.
+    //
+    // `halo()` is the only way to draw one now, and this is what it must do at
+    // the ends of the range.
+    for (final skin in HcSkin.values) {
+      final g = skin.tokens.glow;
+      final shadows = g.halo(const Color(0xFFFFB661), blur: 8);
+      if (g.strength == 0) {
+        expect(shadows, isEmpty,
+            reason: '${skin.name} sets glow.strength 0 and still drew a halo');
+      } else {
+        expect(shadows, hasLength(1), reason: skin.name);
+        // The caller's blur is preserved — a 7px status dot and an 84px tile
+        // do not want the same halo, so the skin scales the alpha, not the size.
+        expect(shadows.single.blurRadius, 8, reason: skin.name);
+      }
+    }
+  });
+
+  test('no widget draws its own shadow behind the tokens', () {
+    // Elevation and glow are both skins' decisions: Control Room sets
+    // `elevation.card` to an empty list because its depth comes from hairlines,
+    // and a widget with its own BoxShadow overrides that silently.
+    const allowed = <String, String>{
+      // The tokens' own definitions.
+      'skins.dart': 'the four skins state their elevation here',
+      'tokens.dart': 'HcGlow.halo builds the shadow',
+      // Already gate on t.glow themselves, predating halo().
+      'section_scaffold.dart': 'guarded by t.glow',
+      'session_status.dart': 'guarded by t.glow',
+      'device_sheet.dart': 'guarded by t.glow',
+      'appearance_page.dart': 'guarded by t.glow — previews every skin at once',
+      'hc_sentence.dart': 'guarded by t.glow',
+      'hc_chip.dart': 'guarded by t.glow',
+      'hc_surface.dart': 'guarded by t.glow',
+      // Text legibility over a live colour wheel, not elevation: the label sits
+      // on whatever hue the user is dragging through.
+      'color_light_controls.dart': 'text shadows over arbitrary colours',
+    };
+
+    final offenders = <String>[];
+    for (final f
+        in Directory('lib').listSync(recursive: true).whereType<File>()) {
+      if (!f.path.endsWith('.dart')) continue;
+      final name = f.uri.pathSegments.last;
+      if (allowed.containsKey(name)) continue;
+      final lines = f.readAsLinesSync();
+      for (var i = 0; i < lines.length; i++) {
+        if (lines[i].contains('BoxShadow(')) {
+          offenders.add('${f.path}:${i + 1}');
+        }
+      }
+    }
+
+    expect(offenders, isEmpty,
+        reason: 'these draw a shadow the skin did not ask for:\n'
+            '  ${offenders.join('\n  ')}\n'
+            'Use t.glow.halo(...) for a coloured halo, or t.elevation.card / '
+            '.overlay for depth. If it is genuinely neither, add it to '
+            '`allowed` above with the reason.');
+  });
 }

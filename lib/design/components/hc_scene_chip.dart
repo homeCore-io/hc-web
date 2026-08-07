@@ -157,15 +157,14 @@ class _Dot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
     return Container(
       width: 11,
       height: 11,
       decoration: BoxDecoration(
         color: color,
         shape: BoxShape.circle,
-        boxShadow: [
-          BoxShadow(color: color.withValues(alpha: 0.6), blurRadius: 6),
-        ],
+        boxShadow: t.glow.halo(color, blur: 6),
       ),
     );
   }
@@ -218,13 +217,8 @@ class _AuroraChipState extends State<_AuroraChip>
               transform: GradientRotation(_c.value * 6.2831853),
             ),
             borderRadius: t.radius.smR,
-            boxShadow: [
-              BoxShadow(
-                color: widget.palette.dot.withValues(alpha: 0.45),
-                blurRadius: 18,
-                spreadRadius: -4,
-              ),
-            ],
+            boxShadow: t.glow
+                .halo(widget.palette.dot, blur: 18, alpha: 0.45, spread: -4),
           ),
           padding: const EdgeInsets.all(1.6),
           child: child,
