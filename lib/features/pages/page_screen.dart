@@ -188,6 +188,36 @@ class _PageScreenState extends ConsumerState<PageScreen> {
     ];
   }
 
+  /// Where the selected layout's cards would sit if it still followed [source].
+  ///
+  /// Only meaningful for a layout that has diverged: one still following is
+  /// identical to its own ghost, and drawing an outline exactly under every
+  /// card is noise dressed as information. So the ghost appears precisely when
+  /// there is a divergence to see, which is also precisely when the question
+  /// "did I mean to diverge?" is worth asking.
+  List<GridItem> _ghostFor(DashboardBreakpoint selected,
+      DashboardBreakpoint source, List<DashboardLayout> layouts) {
+    if (selected == source) return const [];
+    final layout = layouts.where((l) => l.breakpoint == selected).firstOrNull;
+    if (layout == null || layout.derivedFrom != null) return const [];
+
+    final sourceLayout =
+        layouts.where((l) => l.breakpoint == source).firstOrNull;
+    if (sourceLayout == null) return const [];
+
+    final derived = deriveLayout(
+      layout,
+      [
+        for (final p in sourceLayout.placements)
+          GridItem(id: p.widgetId, x: p.x, y: p.y, w: p.w, h: p.h),
+      ],
+    );
+    return [
+      for (final p in derived.placements)
+        GridItem(id: p.widgetId, x: p.x, y: p.y, w: p.w, h: p.h),
+    ];
+  }
+
   /// Moves to another breakpoint mid-edit. A read, not a write: selecting a
   /// layout must never be what takes it over.
   void _selectBreakpoint(DashboardBreakpoint next) {
@@ -470,6 +500,10 @@ class _PageScreenState extends ConsumerState<PageScreen> {
                               rowHeight: rowHeight,
                               gap: gap,
                               editing: _editing,
+                              ghostItems: _editing && _draftLayouts != null
+                                  ? _ghostFor(
+                                      breakpoint, source, _draftLayouts!)
+                                  : const [],
                               onMove: (id, x, y) => _apply(
                                   (e, its) => e.move(its, id, x, y), columns),
                               onResize: (id, w, h) => _apply(

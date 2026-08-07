@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:hc_web/core/models/dashboard.dart';
 import 'package:hc_web/core/providers/dashboards_provider.dart';
 import 'package:hc_web/design/skins.dart';
+import 'package:hc_web/features/pages/page_grid.dart';
 import 'package:hc_web/features/pages/page_screen.dart';
 
 /// `PageScreen` had no widget coverage at all, which is how it reached a state
@@ -369,6 +370,81 @@ void main() {
           dashboard: _derivedDashboard());
       expect(find.text('Desktop'), findsNothing);
       expect(find.text('Follows'), findsNothing);
+    });
+  });
+
+  group('the ghost underlay', () {
+    // Counted rather than pixel-matched: what matters is whether the drawing is
+    // there at all, and asserting on painted pixels would pin the dash pattern
+    // rather than the behaviour.
+    int ghostCount(WidgetTester tester) => tester
+        .widgetList<PageGrid>(find.byType(PageGrid))
+        .fold(0, (n, g) => n + g.ghostItems.length);
+
+    testWidgets('a hand-made layout shows what it diverged from',
+        (tester) async {
+      await _pumpAt(tester,
+          location: '/pages/kitchen',
+          size: const Size(1400, 900),
+          dashboard: _derivedDashboard());
+      await tester.tap(find.byTooltip('Edit this page'));
+      await tester.pumpAndSettle();
+      // tv is authored, so there is a divergence from desktop to show.
+      await tester.tap(find.text('Wall'));
+      await tester.pumpAndSettle();
+      expect(ghostCount(tester), greaterThan(0));
+    });
+
+    testWidgets('a following layout has no ghost', (tester) async {
+      // It *is* its ghost. An outline under every card is noise dressed as
+      // information.
+      await _pumpAt(tester,
+          location: '/pages/kitchen',
+          size: const Size(1400, 900),
+          dashboard: _derivedDashboard());
+      await tester.tap(find.byTooltip('Edit this page'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Mobile'));
+      await tester.pumpAndSettle();
+      expect(ghostCount(tester), 0);
+    });
+
+    testWidgets('the source layout has no ghost', (tester) async {
+      // Desktop cannot diverge from itself.
+      await _pumpAt(tester,
+          location: '/pages/kitchen',
+          size: const Size(1400, 900),
+          dashboard: _derivedDashboard());
+      await tester.tap(find.byTooltip('Edit this page'));
+      await tester.pumpAndSettle();
+      expect(_selectedSegment(tester), 'Desktop');
+      expect(ghostCount(tester), 0);
+    });
+
+    testWidgets('reverting a layout removes its ghost', (tester) async {
+      await _pumpAt(tester,
+          location: '/pages/kitchen',
+          size: const Size(1400, 900),
+          dashboard: _derivedDashboard());
+      await tester.tap(find.byTooltip('Edit this page'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Wall'));
+      await tester.pumpAndSettle();
+      expect(ghostCount(tester), greaterThan(0));
+
+      await tester.tap(find.text('Follow desktop again'));
+      await tester.pumpAndSettle();
+      expect(ghostCount(tester), 0,
+          reason:
+              'it follows desktop now, so there is nothing to diverge from');
+    });
+
+    testWidgets('there is no ghost in view mode', (tester) async {
+      await _pumpAt(tester,
+          location: '/pages/kitchen',
+          size: const Size(1400, 900),
+          dashboard: _derivedDashboard());
+      expect(ghostCount(tester), 0);
     });
   });
 

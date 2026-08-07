@@ -348,7 +348,28 @@ fixes and should land before any redesign work.
    same fact in two places, and it overflowed at phone width. The header says
    *Editing*; the bar says which; a line under the bar says what else the save
    will touch. 17 widget tests.
-5. **The ghost underlay.** The signature bet, built here rather than deferred.
+5. ~~**The ghost underlay.**~~ **DONE 2026-08-07** — and it is an *overlay*,
+   not an underlay. §3.2 said "renders behind yours", which is what the word
+   implies and what was built first. Rendering it proved that wrong: a layout
+   diverges precisely by putting cards somewhere else, so the new arrangement
+   almost always covers the old one. The wall layout's full-width card hid
+   every outline of the three-column arrangement it replaced, and the feature
+   drew nothing at all. On top it is onion-skinning — how every design tool
+   shows a previous position — and it stays non-interactive, unfilled and
+   dashed, so it reads as an annotation rather than as another card.
+
+   Two more corrections from looking at it. It was drawn in `accent.active`,
+   which **means *this device is on*** — borrowing a semantic token for a
+   drawing about layout is a breach of brief principle 2, so it is
+   `surface.onBaseMuted` now. And the plan's own rule — *label only where the
+   ghost has no card of its own on top of it* — got dropped when the layer
+   moved; without it "CARD A" landed beside Card C's title and the two read as
+   one confused heading. Restored.
+
+   The ghost appears only where there is a divergence to see: never on the
+   source, never on a layout still following (it *is* its own ghost), and it
+   disappears the moment you revert. 5 tests, and drawing one unconditionally
+   fails two of them.
 6. **Unplaced-card handling** — the warning row, *Place it* / *Hide on this
    breakpoint*.
 7. **Consolidate.** Redirect `/dashboards`, `/dashboards/:id`,

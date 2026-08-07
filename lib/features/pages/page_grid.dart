@@ -22,6 +22,7 @@ class PageGrid extends StatefulWidget {
     required this.rowHeight,
     required this.gap,
     required this.editing,
+    this.ghostItems = const [],
     this.onMove,
     this.onResize,
     this.onRemove,
@@ -34,6 +35,15 @@ class PageGrid extends StatefulWidget {
   final double rowHeight;
   final double gap;
   final bool editing;
+
+  /// Where these cards would sit if this layout still followed another one.
+  ///
+  /// Drawn over the real ones as a dashed outline, so the question the whole
+  /// per-device feature exists to answer — *what am I diverging from, and did I
+  /// mean to?* — is answerable by looking, rather than by holding two
+  /// arrangements in your head or opening a second window. Empty when there is
+  /// nothing to diverge from, which is most of the time.
+  final List<GridItem> ghostItems;
 
   final void Function(String id, int x, int y)? onMove;
   final void Function(String id, int w, int h)? onResize;
@@ -206,6 +216,7 @@ class _PageGridState extends State<PageGrid> {
                     ),
                   ),
                 ),
+
               for (final item in items)
                 AnimatedPositioned(
                   key: ValueKey(item.id),
@@ -235,6 +246,67 @@ class _PageGridState extends State<PageGrid> {
                     ),
                   ),
                 ),
+
+              // The ghost, ON TOP of the cards.
+              //
+              // It was drawn behind them first, which is what the plan
+              // described and what "underlay" implies — and rendering it showed
+              // that behind means *invisible* in exactly the case that matters.
+              // A layout diverges by putting cards somewhere else, so the new
+              // arrangement almost always covers the old one: a full-width card
+              // hid every outline of the three-column arrangement it replaced,
+              // and the feature drew nothing at all.
+              //
+              // On top it is onion-skinning, which is how every design tool
+              // shows a previous position. It stays non-interactive, has no
+              // fill, and is dashed, so it reads as an annotation over the
+              // arrangement rather than as another card.
+              if (widget.editing && widget.ghostItems.isNotEmpty) ...[
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: CustomPaint(
+                      painter: _GhostOutlines(
+                        items: widget.ghostItems,
+                        stepX: stepX,
+                        stepY: stepY,
+                        cellW: cellW,
+                        rowHeight: widget.rowHeight,
+                        gap: widget.gap,
+                        radius: t.radius.md,
+                        // Neutral, not accent. `accent.active` means *this
+                        // device is on* (brief principle 2) — borrowing it for
+                        // a drawing about layout would make the ghost read as
+                        // state and put a second meaning on a semantic token.
+                        color: t.surface.onBaseMuted,
+                      ),
+                    ),
+                  ),
+                ),
+                // A label only where no real card sits under it. Over one it
+                // lands beside that card's own title and the two read as a
+                // single confused heading — which is precisely what it looked
+                // like before this condition came back.
+                for (final g in widget.ghostItems)
+                  if (!items.any((i) =>
+                      i.x < g.right &&
+                      i.right > g.x &&
+                      i.y < g.bottom &&
+                      i.bottom > g.y))
+                    Positioned(
+                      left: leftOf(g) + t.space.sm,
+                      top: topOf(g) + t.space.xs,
+                      width: (widthOf(g) - t.space.sm * 2).clamp(0, 400),
+                      child: IgnorePointer(
+                        child: Text(
+                          widget.widgetsById[g.id]?.title ?? '',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: t.text.captionStyle
+                              .copyWith(color: t.surface.onBaseMuted),
+                        ),
+                      ),
+                    ),
+              ],
             ],
           ),
         );
@@ -280,6 +352,91 @@ class _ColumnGuides extends CustomPainter {
       old.columns != columns ||
       old.cellW != cellW ||
       old.gap != gap ||
+      old.color != color;
+}
+
+/// The ghost arrangement, as dashed outlines.
+///
+/// Dashed rather than a faint solid: a solid box reads as another card, and the
+/// one thing this must never be mistaken for is something you can grab. Dashes
+/// say "not real" in a way no opacity value does — which matters more now that
+/// it is drawn over the cards rather than under them.
+///
+/// One painter for every outline rather than a widget each — they are a
+/// drawing, none of them is interactive, and a dozen `Positioned` boxes with
+/// custom borders would cost layout on every drag frame for no benefit.
+class _GhostOutlines extends CustomPainter {
+  const _GhostOutlines({
+    required this.items,
+    required this.stepX,
+    required this.stepY,
+    required this.cellW,
+    required this.rowHeight,
+    required this.gap,
+    required this.radius,
+    required this.color,
+  });
+
+  final List<GridItem> items;
+  final double stepX;
+  final double stepY;
+  final double cellW;
+  final double rowHeight;
+  final double gap;
+  final double radius;
+  final Color color;
+
+  static const _dash = 6.0;
+  static const _skip = 5.0;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1
+      ..color = color.withValues(alpha: color.a * 0.7);
+
+    for (final i in items) {
+      final rect = Rect.fromLTWH(
+        i.x * stepX,
+        i.y * stepY,
+        i.w * cellW + (i.w - 1) * gap,
+        i.h * rowHeight + (i.h - 1) * gap,
+      );
+      final path = Path()
+        ..addRRect(RRect.fromRectAndRadius(rect, Radius.circular(radius)));
+      canvas.drawPath(_dashed(path), paint);
+    }
+  }
+
+  /// Walks the path and keeps every other stretch. `PathMetric.extractPath` is
+  /// the only way to dash a rounded rect in Flutter — there is no dash style on
+  /// Paint — and doing it per frame is fine because the ghost does not move.
+  Path _dashed(Path source) {
+    final out = Path();
+    for (final metric in source.computeMetrics()) {
+      var distance = 0.0;
+      while (distance < metric.length) {
+        final next = distance + _dash;
+        out.addPath(
+          metric.extractPath(distance, next.clamp(0, metric.length)),
+          Offset.zero,
+        );
+        distance = next + _skip;
+      }
+    }
+    return out;
+  }
+
+  @override
+  bool shouldRepaint(_GhostOutlines old) =>
+      old.items != items ||
+      old.stepX != stepX ||
+      old.stepY != stepY ||
+      old.cellW != cellW ||
+      old.rowHeight != rowHeight ||
+      old.gap != gap ||
+      old.radius != radius ||
       old.color != color;
 }
 
