@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hc_web/core/models/device_state.dart';
 import 'package:hc_web/core/devices/metrics.dart';
+import 'package:hc_web/design/skin_validator.dart';
 import 'package:hc_web/design/skins.dart';
 import 'package:hc_web/design/tokens.dart';
 
@@ -120,39 +121,24 @@ void main() {
       // A multisensor shows these side by side, so they have to read apart.
       // State roles are deliberately *not* in this set: a co2 reading and a
       // "safe" state may share a green because they never appear together.
-      const tints = [
-        HcMetricRole.temperature,
-        HcMetricRole.humidity,
-        HcMetricRole.illuminance,
-        HcMetricRole.co2,
-        HcMetricRole.power,
-        HcMetricRole.reading,
-      ];
+      //
+      // Measured by `skin_validator.dart` so a data-defined skin gets the same
+      // check — step 2 of theme-editor-plan.md.
       for (final skin in HcSkin.values) {
-        final seen = tints.map((r) => r.color(skin.tokens)).toSet();
-        expect(seen.length, tints.length,
+        expect(
+            validateSkin(skin.tokens).of(SkinCheck.metricDistinctness), isEmpty,
             reason: '${skin.name} gives two metrics the same tint');
       }
     });
 
     test('a fault never looks like the reassuring answer', () {
-      // The one pair that must never collapse: alarm against safe. If a leak
-      // reads the same colour as a dry sensor the widget is worse than useless.
+      // The pairs that must never collapse: alarm against safe, and — the one
+      // Control Room actually shipped — `warn` and `active` as the same amber,
+      // so a door standing open and a room with someone in it were one colour
+      // on the skin built to show dense rows of both at once.
       for (final skin in HcSkin.values) {
-        final t = skin.tokens;
-        expect(HcMetricRole.alarm.color(t), isNot(HcMetricRole.safe.color(t)),
+        expect(validateSkin(skin.tokens).of(SkinCheck.roleCollapse), isEmpty,
             reason: skin.name);
-        expect(HcMetricRole.caution.color(t), isNot(HcMetricRole.safe.color(t)),
-            reason: skin.name);
-        expect(HcMetricRole.active.color(t), isNot(HcMetricRole.idle.color(t)),
-            reason: skin.name);
-        // Control Room shipped `warn` and `active` as the same amber, so a
-        // door standing open and a room with someone in it were the same
-        // colour — on the one skin built to show dense rows of both at once.
-        // These two co-occur constantly; they are not allowed to collapse.
-        expect(
-            HcMetricRole.caution.color(t), isNot(HcMetricRole.active.color(t)),
-            reason: '${skin.name} paints "open" and "occupied" alike');
       }
     });
 

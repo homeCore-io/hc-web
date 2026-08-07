@@ -245,10 +245,36 @@ not on a white page.
    `SkinReport validate(HcTokens)` so the same assertions run on a data skin.
    Nothing in step 1 changes a shipped pixel — `skins.dart` still holds the
    four `const`s, and the seeds are proved *against* them.
-2. **Reuse the ratchets as a runtime validator.** Lift the assertions out of
-   `token_ratchet_test.dart` and `metrics_test.dart` into
-   `SkinReport validate(HcTokens)` returning measured findings. The tests then
-   call the same function — one implementation, two callers, no drift.
+2. ~~**Reuse the ratchets as a runtime validator.**~~ **DONE 2026-08-07** —
+   `lib/design/skin_validator.dart`. `validateSkin(HcTokens)` returns a
+   `SkinReport` of measured `SkinFinding`s across six checks: contrast, role
+   collapse, sensor-tint distinctness, bloom, the type floor and the tap-target
+   floor.
+
+   **The drift is actually closed**, not just intended to be: the assertions
+   were *removed* from `token_ratchet_test.dart`, `metrics_test.dart` and
+   `skin_reach_test.dart`, which now call `validateSkin`. `dart:math` is no
+   longer imported by the ratchet file — the duplicated luminance maths is gone
+   rather than merely shadowed, which is the check that the move really
+   happened.
+
+   **Findings, not booleans.** Each carries the measured number, the required
+   one, and the direction that fixes it — "`1.42:1` against the card surface,
+   needs 4.5. Lighten it, or darken what it sits on." A validator that answers
+   true/false can only be obeyed; one that says which pair failed and by how
+   much can be used by someone standing at a colour picker. That is §4's live
+   report, already available.
+
+   **`canSave` implements §5's floor.** Only one finding blocks: body ink
+   failing against its own ground, because that is the skin you cannot read the
+   controls in to fix. A poor `warn` is a bad skin and saves with a warning.
+
+   All four shipped skins come back clean. 14 new tests, half of them
+   deliberately bad skins — a validator nobody has watched reject anything
+   might be returning an empty list. Verified by planting the two failures that
+   really shipped: Midnight's `offline` at 2.3:1, and Control Room's `warn`
+   collapsed into `active` so an open door and an occupied room were one
+   colour. Both are caught through the delegating tests.
 3. **Core's `/skins`.** Model, handlers, OpenAPI entry, and the version stamp
    (`docs/openapi.yaml` — see the release conventions; it is the third file).
 4. **Load and fall back.** Provider, chain from §5, applied through the existing
