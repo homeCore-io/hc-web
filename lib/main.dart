@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'app.dart';
-import 'features/dashboard/dashboard_view_page.dart';
+import 'features/dashboard/builtin_cards.dart';
 
 void main() {
   // The built-in cards go through the same registry a plugin's card would, so

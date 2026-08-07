@@ -1,13 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../core/dashboard/breakpoints.dart';
 import '../../core/dashboard/grid_engine.dart';
+import '../../core/dashboard/layout_write.dart';
 import '../../core/dashboard/widget_registry.dart';
 import '../../core/models/dashboard.dart';
 import '../../core/providers/dashboards_provider.dart';
 import '../../design/components/hc_controls.dart';
 import '../../design/hc_icons.dart';
 import '../../design/tokens.dart';
+import '../../shell/shell_scope.dart';
+import 'breakpoint_bar.dart';
 import 'page_actions.dart';
 import 'page_grid.dart';
 import 'widget_config_form.dart';
@@ -29,8 +34,17 @@ class PageScreen extends ConsumerStatefulWidget {
 }
 
 class _PageScreenState extends ConsumerState<PageScreen> {
-  /// The working layout while editing — null means view mode. A working copy so
-  /// Cancel leaves the saved page exactly as it was.
+  /// Every layout, in whatever state the edit has left them — null means view
+  /// mode. A working copy so Cancel leaves the saved page exactly as it was.
+  ///
+  /// The draft holds *all* the layouts rather than just the one on screen,
+  /// because the breakpoint bar lets you move between them in a single session.
+  /// It is kept as the true projection at all times: each gesture runs
+  /// `writeArrangement` immediately, so switching breakpoints is a read and
+  /// Save is a push, and neither has to reconstruct what the other did.
+  List<DashboardLayout>? _draftLayouts;
+
+  /// The selected breakpoint's arrangement, as the grid works in.
   List<GridItem>? _draftItems;
   Map<String, DashboardWidgetModel>? _draftWidgets;
   bool _saving = false;
@@ -41,17 +55,53 @@ class _PageScreenState extends ConsumerState<PageScreen> {
   static const _defaultRowHeight = 120.0;
   static const _defaultGap = 12.0;
 
-  DashboardLayout _desktopLayout(DashboardDefinition d) {
-    if (d.layouts.isEmpty) {
-      return const DashboardLayout(
-        breakpoint: DashboardBreakpoint.desktop,
-        columns: _defaultColumns,
+  /// The breakpoint being arranged. Set when editing starts so a window resize
+  /// mid-edit cannot silently retarget the save, and thereafter only by the
+  /// breakpoint bar.
+  DashboardBreakpoint? _editingBreakpoint;
+
+  /// Which breakpoints the person actually rearranged.
+  ///
+  /// Selecting a layout is not editing it. A derived layout must survive being
+  /// looked at — it only stops following when someone moves something in it,
+  /// and that distinction is the difference between a switcher you can explore
+  /// and one that quietly detaches everything you click on.
+  final Set<DashboardBreakpoint> _touched = {};
+
+  /// Cards added during this edit, and not yet settled on every hand-arranged
+  /// layout.
+  ///
+  /// A new card reaches the breakpoint you added it on and every layout
+  /// following that one, because those have no arrangement of their own to
+  /// disturb. It does **not** barge into a layout someone arranged by hand —
+  /// that would reflow their work to make room for something they have not
+  /// looked at yet. Instead it is announced there, with both ways out.
+  ///
+  /// Session-scoped on purpose: the question "where does this new card go on
+  /// the phone?" belongs to the session that added it. Once answered — placed
+  /// or left off — it is answered, and a card deliberately left off stays off,
+  /// because [reconcileWidgetSet] no longer re-adds what it did not add.
+  final Set<String> _pendingPlacement = {};
+
+  /// `breakpoint:widgetId` pairs already decided — placed here, or deliberately
+  /// left off here.
+  final Set<String> _settled = {};
+
+  /// The layout for [wanted], falling back through [availableBreakpoint] and
+  /// finally to an empty desktop layout for a dashboard that has none.
+  DashboardLayout _layoutFor(
+      DashboardDefinition d, DashboardBreakpoint wanted) {
+    final available = availableBreakpoint(d, wanted);
+    if (available == null) {
+      return DashboardLayout(
+        breakpoint: wanted,
+        columns: wanted == DashboardBreakpoint.mobile ? 4 : _defaultColumns,
         rowHeight: _defaultRowHeight,
         gap: _defaultGap,
-        placements: [],
+        placements: const [],
       );
     }
-    return d.layoutFor(DashboardBreakpoint.desktop);
+    return d.layoutFor(available);
   }
 
   List<GridItem> _itemsFrom(DashboardDefinition d, DashboardLayout layout) {
@@ -70,18 +120,23 @@ class _PageScreenState extends ConsumerState<PageScreen> {
     ];
   }
 
-  void _startEditing(DashboardDefinition d) {
-    final layout = _desktopLayout(d);
+  void _startEditing(DashboardDefinition d, DashboardBreakpoint breakpoint) {
+    final layout = _layoutFor(d, breakpoint);
     var items = _itemsFrom(d, layout);
 
-    // A widget with no placement (some dashboards carry them) would be dropped
-    // on the first save. Give it one now via the engine, so editing preserves
-    // every card rather than quietly losing the un-placed ones.
+    // A widget placed on *no* layout at all would be dropped on the first save,
+    // so it is given a home here. A widget missing from only *this* layout is a
+    // different thing entirely — someone left it off this breakpoint — and
+    // force-placing it would undo that decision simply because you opened the
+    // layout to look at it. Only the orphans get rescued.
     final engine =
         GridEngine(columns: layout.columns <= 0 ? 12 : layout.columns);
-    final placed = items.map((i) => i.id).toSet();
+    final placedSomewhere = {
+      for (final l in d.layouts)
+        for (final p in l.placements) p.widgetId,
+    };
     for (final w in d.widgets) {
-      if (placed.contains(w.id)) continue;
+      if (placedSomewhere.contains(w.id)) continue;
       final hint =
           WidgetRegistry.lookup(w.type)?.sizeHint ?? const WidgetSizeHint();
       items = engine.add(
@@ -98,16 +153,137 @@ class _PageScreenState extends ConsumerState<PageScreen> {
       );
     }
 
+    // Every breakpoint the document has, plus the one being edited if it was
+    // missing. The draft is the whole set from here on.
+    final layouts = [...d.layouts];
+    if (!layouts.any((l) => l.breakpoint == breakpoint)) {
+      layouts.add(_layoutFor(d, breakpoint));
+    }
+
     setState(() {
+      _draftLayouts = layouts;
       _draftItems = items;
       _draftWidgets = {for (final w in d.widgets) w.id: w};
+      _editingBreakpoint = breakpoint;
+      _touched.clear();
+      _pendingPlacement.clear();
+      _settled.clear();
     });
+  }
+
+  /// Records an edit to the selected breakpoint and reprojects the draft.
+  ///
+  /// Every gesture goes through here, so `_draftLayouts` is always what a save
+  /// would write — including the recomputed followers. That is what lets the
+  /// bar switch breakpoints by simply reading, and what stops Save from having
+  /// to replay anything.
+  void _commit(List<GridItem> items) {
+    final selected = _editingBreakpoint!;
+    _touched.add(selected);
+    _draftItems = items;
+    // `placeEverywhere` is deliberately empty: nothing lands in a hand-arranged
+    // layout without being asked for. A new card reaches the breakpoint it was
+    // added on and everything following it; elsewhere it is announced, and the
+    // notice row is what places it.
+    _draftLayouts = writeArrangement(
+      layouts: _draftLayouts!,
+      items: items,
+      edited: selected,
+    );
   }
 
   void _apply(List<GridItem> Function(GridEngine e, List<GridItem> items) op,
       int columns) {
     final engine = GridEngine(columns: columns);
-    setState(() => _draftItems = op(engine, _draftItems!));
+    setState(() => _commit(op(engine, _draftItems!)));
+  }
+
+  /// A draft layout's placements as grid items, with each card's size hints
+  /// reattached from the registry — the engine needs them to refuse a resize
+  /// below a card's minimum.
+  List<GridItem> _draftItemsFor(DashboardBreakpoint b) {
+    final layout = _draftLayouts!.firstWhere((l) => l.breakpoint == b);
+    return [
+      for (final p in layout.placements)
+        if (_draftWidgets![p.widgetId] case final w?)
+          GridItem(
+            id: p.widgetId,
+            x: p.x,
+            y: p.y,
+            w: p.w,
+            h: p.h,
+            minW: WidgetRegistry.lookup(w.type)?.sizeHint.minW ?? 1,
+            minH: WidgetRegistry.lookup(w.type)?.sizeHint.minH ?? 1,
+          ),
+    ];
+  }
+
+  /// Where the selected layout's cards would sit if it still followed [source].
+  ///
+  /// Only meaningful for a layout that has diverged: one still following is
+  /// identical to its own ghost, and drawing an outline exactly under every
+  /// card is noise dressed as information. So the ghost appears precisely when
+  /// there is a divergence to see, which is also precisely when the question
+  /// "did I mean to diverge?" is worth asking.
+  List<GridItem> _ghostFor(DashboardBreakpoint selected,
+      DashboardBreakpoint source, List<DashboardLayout> layouts) {
+    if (selected == source) return const [];
+    final layout = layouts.where((l) => l.breakpoint == selected).firstOrNull;
+    if (layout == null || layout.derivedFrom != null) return const [];
+
+    final sourceLayout =
+        layouts.where((l) => l.breakpoint == source).firstOrNull;
+    if (sourceLayout == null) return const [];
+
+    final derived = deriveLayout(
+      layout,
+      [
+        for (final p in sourceLayout.placements)
+          GridItem(id: p.widgetId, x: p.x, y: p.y, w: p.w, h: p.h),
+      ],
+    );
+    return [
+      for (final p in derived.placements)
+        GridItem(id: p.widgetId, x: p.x, y: p.y, w: p.w, h: p.h),
+    ];
+  }
+
+  /// Moves to another breakpoint mid-edit. A read, not a write: selecting a
+  /// layout must never be what takes it over.
+  void _selectBreakpoint(DashboardBreakpoint next) {
+    if (next == _editingBreakpoint) return;
+    setState(() {
+      _editingBreakpoint = next;
+      _draftItems = _draftItemsFor(next);
+    });
+  }
+
+  /// Hands the selected layout back to [source] and shows the result at once,
+  /// so "follow desktop again" is a thing you see rather than a thing you are
+  /// told happened.
+  void _revertSelected(DashboardBreakpoint source) {
+    final selected = _editingBreakpoint!;
+    final sourceLayout =
+        _draftLayouts!.where((l) => l.breakpoint == source).firstOrNull;
+    if (sourceLayout == null) return;
+
+    final sourceItems = [
+      for (final p in sourceLayout.placements)
+        GridItem(id: p.widgetId, x: p.x, y: p.y, w: p.w, h: p.h),
+    ];
+
+    setState(() {
+      _draftLayouts = [
+        for (final l in _draftLayouts!)
+          if (l.breakpoint == selected)
+            revertToDerived(l, source, sourceItems)
+          else
+            l,
+      ];
+      _touched.remove(selected);
+      // Reload from the draft so the reverted arrangement is on screen at once.
+      _draftItems = _draftItemsFor(selected);
+    });
   }
 
   Future<void> _addWidget(int columns) async {
@@ -127,15 +303,72 @@ class _PageScreenState extends ConsumerState<PageScreen> {
     );
     setState(() {
       _draftWidgets = {...?_draftWidgets, created.id: created};
-      _draftItems = engine.add(_draftItems!, item);
+      _pendingPlacement.add(created.id);
+      _commit(engine.add(_draftItems!, item));
     });
+  }
+
+  /// Cards this session added that the selected layout has no place for.
+  ///
+  /// Only hand-arranged layouts can be in this state: a following one is
+  /// recomputed whole and always has everything.
+  List<DashboardWidgetModel> _unplacedHere(DashboardBreakpoint selected) {
+    if (_draftLayouts == null || _pendingPlacement.isEmpty) return const [];
+    final layout =
+        _draftLayouts!.where((l) => l.breakpoint == selected).firstOrNull;
+    if (layout == null || layout.derivedFrom != null) return const [];
+    final placed = {for (final p in layout.placements) p.widgetId};
+    return [
+      for (final id in _pendingPlacement)
+        if (!placed.contains(id) &&
+            !_settled.contains(_settledKey(selected, id)))
+          if (_draftWidgets?[id] case final w?) w,
+    ];
+  }
+
+  /// A decision is per layout, not per card: leaving a card off the phone says
+  /// nothing about whether it belongs on the wall, and a single global "dealt
+  /// with" flag would silently answer for every other hand-arranged layout.
+  static String _settledKey(DashboardBreakpoint b, String id) =>
+      '${b.name}:$id';
+
+  /// Puts a pending card on the selected layout, at the first place it fits.
+  void _placeHere(String id, DashboardBreakpoint selected, int columns) {
+    final hint =
+        WidgetRegistry.lookup(_draftWidgets?[id]?.type ?? '')?.sizeHint ??
+            const WidgetSizeHint();
+    final engine = GridEngine(columns: columns);
+    setState(() {
+      _settled.add(_settledKey(selected, id));
+      _commit(engine.add(
+        _draftItems!,
+        GridItem(
+          id: id,
+          x: 0,
+          y: 0,
+          w: hint.recommendedW.clamp(1, columns),
+          h: hint.recommendedH,
+          minW: hint.minW.clamp(1, columns),
+          minH: hint.minH,
+        ),
+      ));
+    });
+  }
+
+  /// Leaves a pending card off the selected layout for good.
+  ///
+  /// Nothing to undo in the document — it is already absent — so this only
+  /// stops the asking. The absence persists because the reconcile no longer
+  /// re-adds what it did not add.
+  void _keepOffHere(String id, DashboardBreakpoint selected) {
+    setState(() => _settled.add(_settledKey(selected, id)));
   }
 
   void _removeWidget(String id, int columns) {
     final engine = GridEngine(columns: columns);
     setState(() {
-      _draftItems = engine.remove(_draftItems!, id);
       _draftWidgets = {...?_draftWidgets}..remove(id);
+      _commit(engine.remove(_draftItems!, id));
     });
   }
 
@@ -155,28 +388,70 @@ class _PageScreenState extends ConsumerState<PageScreen> {
     });
   }
 
+  /// One line saying what saving will do besides write the layout on screen.
+  ///
+  /// Read off the *draft*, not the saved document, so it keeps up with a
+  /// session that has already taken a layout over or handed one back.
+  String? _editConsequence(DashboardBreakpoint edited) {
+    final layouts = _draftLayouts ?? const [];
+    final followers = layouts
+        .where((l) => l.derivedFrom == edited && l.breakpoint != edited)
+        .map((l) => breakpointLabel(l.breakpoint).toLowerCase())
+        .toList();
+    final derivedFrom =
+        layouts.where((l) => l.breakpoint == edited).firstOrNull?.derivedFrom;
+
+    if (derivedFrom != null) {
+      return _touched.contains(edited)
+          ? 'No longer follows ${breakpointLabel(derivedFrom).toLowerCase()}'
+          : 'Follows ${breakpointLabel(derivedFrom).toLowerCase()} — '
+              'editing stops that';
+    }
+    if (followers.isEmpty) return null;
+    return '${followers.join(', ')} follow${followers.length == 1 ? 's' : ''} it';
+  }
+
+  /// Drops the whole draft in one place. Leaving `_editingBreakpoint` set after
+  /// a save would aim the *next* edit at the breakpoint the last one used.
+  void _exitEditing() {
+    setState(() {
+      _draftLayouts = null;
+      _draftItems = null;
+      _draftWidgets = null;
+      _editingBreakpoint = null;
+      _touched.clear();
+      _pendingPlacement.clear();
+      _settled.clear();
+    });
+  }
+
   Future<void> _save(DashboardDefinition d) async {
-    final items = _draftItems!;
-    // Derive the widget list from the placed items, so placements and widgets
-    // are always the same set — a widget with no placement, or a placement with
-    // no widget, is exactly what core 400s on.
+    // Keep only widgets placed on at least one layout. Core rejects a
+    // placement naming a widget that does not exist; it does NOT require every
+    // widget to appear on every layout — an earlier comment here claimed both
+    // and only the first half is true, which is what made leaving a card off
+    // one breakpoint look impossible. Gathered across the draft layouts rather
+    // than the on-screen arrangement: after switching breakpoints the screen
+    // shows one layout and the document carries four.
+    final placed = {
+      for (final l in _draftLayouts!)
+        for (final p in l.placements) p.widgetId,
+    };
     final widgets = [
-      for (final i in items)
-        if (_draftWidgets![i.id] case final w?) w,
+      for (final entry in _draftWidgets!.entries)
+        if (placed.contains(entry.key)) entry.value,
     ];
     setState(() => _saving = true);
     try {
-      // Every breakpoint is rebuilt from the same set of cards, each normalised
-      // to its own column count, so no layout can reference a widget that no
-      // longer exists (or miss one that now does).
-      final layouts = _rebuildLayouts(d, items);
+      // No rebuild here: every gesture already reprojected the draft through
+      // writeArrangement, so this is a push of what the bar has been showing.
       final next = d.copyWith(
         widgets: widgets,
-        layouts: layouts,
+        layouts: _draftLayouts,
         updatedAt: DateTime.now(),
       );
       await ref.read(dashboardsProvider.notifier).updateDashboard(next);
-      if (mounted) setState(() => _draftItems = null);
+      if (mounted) _exitEditing();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
@@ -185,26 +460,6 @@ class _PageScreenState extends ConsumerState<PageScreen> {
     } finally {
       if (mounted) setState(() => _saving = false);
     }
-  }
-
-  List<DashboardLayout> _rebuildLayouts(
-      DashboardDefinition d, List<GridItem> items) {
-    final breakpoints = d.layouts.isEmpty ? [_desktopLayout(d)] : d.layouts;
-    return [
-      for (final l in breakpoints)
-        () {
-          final columns = l.columns <= 0 ? _defaultColumns : l.columns;
-          final packed = GridEngine(columns: columns).normalize(items);
-          return l.copyWith(
-            columns: columns,
-            placements: [
-              for (final i in packed)
-                DashboardWidgetPlacement(
-                    widgetId: i.id, x: i.x, y: i.y, w: i.w, h: i.h),
-            ],
-          );
-        }(),
-    ];
   }
 
   @override
@@ -225,59 +480,149 @@ class _PageScreenState extends ConsumerState<PageScreen> {
       );
     }
 
-    final layout = _desktopLayout(dashboard);
-    final columns = layout.columns <= 0 ? _defaultColumns : layout.columns;
-    final rowHeight =
-        layout.rowHeight <= 0 ? _defaultRowHeight : layout.rowHeight;
-    final gap = layout.gap;
+    // The shell, not the viewport, decides which layout this is — brief
+    // principle 4. `/wall/...` gets the wall layout at any width.
+    final shell = shellFor(GoRouterState.of(context).matchedLocation);
 
-    final items = _draftItems ?? _itemsFrom(dashboard, layout);
-    final widgetsById =
-        _draftWidgets ?? {for (final w in dashboard.widgets) w.id: w};
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // While editing, the breakpoint is pinned to the one editing started
+        // on: a window resize mid-drag must not retarget the save at a
+        // different layout.
+        final breakpoint = _editingBreakpoint ??
+            resolveDashboardBreakpoint(
+              shell: shell,
+              width: constraints.maxWidth,
+            );
 
-    return Scaffold(
-      bottomNavigationBar: _editing
-          ? _EditBar(
-              saving: _saving,
-              onAdd: () => _addWidget(columns),
-              onCancel: () => setState(() => _draftItems = null),
-              onSave: () => _save(dashboard),
-            )
-          : null,
-      body: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _Header(
-              dashboard: dashboard,
-              editing: _editing,
-              onEdit: () => _startEditing(dashboard),
+        // While editing, geometry comes from the draft: the bar can move to a
+        // breakpoint with a different column count, and reading the saved
+        // document would draw the new arrangement on the old grid.
+        final layout = _draftLayouts
+                ?.where((l) => l.breakpoint == breakpoint)
+                .firstOrNull ??
+            _layoutFor(dashboard, breakpoint);
+        final columns = layout.columns <= 0 ? _defaultColumns : layout.columns;
+        final rowHeight =
+            layout.rowHeight <= 0 ? _defaultRowHeight : layout.rowHeight;
+        final gap = layout.gap;
+
+        final items = _draftItems ?? _itemsFrom(dashboard, layout);
+        final widgetsById =
+            _draftWidgets ?? {for (final w in dashboard.widgets) w.id: w};
+
+        // Desktop is the layout the others may follow. If the page has none,
+        // nothing can follow anything and the bar offers no revert.
+        final source = _draftLayouts
+                ?.where((l) => l.breakpoint == DashboardBreakpoint.desktop)
+                .firstOrNull
+                ?.breakpoint ??
+            DashboardBreakpoint.desktop;
+        final canRevert = _editing &&
+            breakpoint != source &&
+            (_draftLayouts ?? const []).any((l) => l.breakpoint == source) &&
+            layout.derivedFrom == null;
+
+        return Scaffold(
+          bottomNavigationBar: _editing
+              ? _EditBar(
+                  saving: _saving,
+                  onAdd: () => _addWidget(columns),
+                  onCancel: _exitEditing,
+                  onSave: () => _save(dashboard),
+                )
+              : null,
+          body: SafeArea(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _Header(
+                  dashboard: dashboard,
+                  editing: _editing,
+                  onEdit: () => _startEditing(dashboard, breakpoint),
+                ),
+                if (_editing && _draftLayouts != null)
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(
+                        t.space.lg, 0, t.space.lg, t.space.sm),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        BreakpointBar(
+                          layouts: _draftLayouts!,
+                          selected: breakpoint,
+                          source: source,
+                          onSelect: _selectBreakpoint,
+                          onRevert:
+                              canRevert ? () => _revertSelected(source) : null,
+                        ),
+                        // Under the bar, at full width, because it is a
+                        // sentence about the thing directly above it — and
+                        // because a save whose side effects are not named is
+                        // what this whole area is recovering from.
+                        if (_editConsequence(breakpoint) case final line?) ...[
+                          SizedBox(height: t.space.xs),
+                          Text(
+                            line,
+                            style: t.text.captionStyle
+                                .copyWith(color: t.surface.onBaseMuted),
+                          ),
+                        ],
+                        if (_unplacedHere(breakpoint) case final missing
+                            when missing.isNotEmpty) ...[
+                          SizedBox(height: t.space.sm),
+                          for (final w in missing)
+                            _UnplacedNotice(
+                              widget_: w,
+                              breakpointLabel:
+                                  breakpointLabel(breakpoint).toLowerCase(),
+                              onPlace: () =>
+                                  _placeHere(w.id, breakpoint, columns),
+                              onKeepOff: () => _keepOffHere(w.id, breakpoint),
+                            ),
+                        ],
+                      ],
+                    ),
+                  ),
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: EdgeInsets.fromLTRB(
+                        t.space.lg, 0, t.space.lg, t.space.xl),
+                    child: items.isEmpty
+                        ? _EmptyPage(editing: _editing)
+                        // While editing, draw the layout at a width that
+                        // breakpoint would really have. In view mode the actual
+                        // viewport is the truth and must not be framed.
+                        : _PreviewFrame(
+                            width:
+                                _editing ? previewWidthFor(breakpoint) : null,
+                            child: PageGrid(
+                              items: items,
+                              widgetsById: widgetsById,
+                              columns: columns,
+                              rowHeight: rowHeight,
+                              gap: gap,
+                              editing: _editing,
+                              ghostItems: _editing && _draftLayouts != null
+                                  ? _ghostFor(
+                                      breakpoint, source, _draftLayouts!)
+                                  : const [],
+                              onMove: (id, x, y) => _apply(
+                                  (e, its) => e.move(its, id, x, y), columns),
+                              onResize: (id, w, h) => _apply(
+                                  (e, its) => e.resize(its, id, w, h), columns),
+                              onRemove: (id) => _removeWidget(id, columns),
+                              onConfigure: _configureWidget,
+                            ),
+                          ),
+                  ),
+                ),
+              ],
             ),
-            Expanded(
-              child: SingleChildScrollView(
-                padding:
-                    EdgeInsets.fromLTRB(t.space.lg, 0, t.space.lg, t.space.xl),
-                child: items.isEmpty
-                    ? _EmptyPage(editing: _editing)
-                    : PageGrid(
-                        items: items,
-                        widgetsById: widgetsById,
-                        columns: columns,
-                        rowHeight: rowHeight,
-                        gap: gap,
-                        editing: _editing,
-                        onMove: (id, x, y) =>
-                            _apply((e, its) => e.move(its, id, x, y), columns),
-                        onResize: (id, w, h) => _apply(
-                            (e, its) => e.resize(its, id, w, h), columns),
-                        onRemove: (id) => _removeWidget(id, columns),
-                        onConfigure: _configureWidget,
-                      ),
-              ),
-            ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }
@@ -313,8 +658,13 @@ class _Header extends ConsumerWidget {
             ),
           ),
           if (editing)
-            Text('Editing',
-                style: t.text.bodyStyle.copyWith(color: t.accent.active))
+            // Just the mode. Which layout is being arranged, and what follows
+            // it, is the breakpoint bar's job — saying it twice in two places
+            // is how the two drift apart.
+            Text(
+              'Editing',
+              style: t.text.bodyStyle.copyWith(color: t.accent.active),
+            )
           else ...[
             HcIconButton(
               icon: HcIcons.pencil,
@@ -381,10 +731,21 @@ class _EditBar extends StatelessWidget {
         top: false,
         child: Row(
           children: [
-            OutlinedButton.icon(
-              onPressed: saving ? null : onAdd,
-              icon: const Icon(HcIcons.plus, size: 15),
-              label: const Text('Add widget'),
+            // Flexible, not fixed: at phone width the three actions plus the
+            // rail padding overflow the bar, and the label is the only part
+            // that can give. Found by the first widget test to pump this screen
+            // narrow — the bar has always been able to overflow, but /pages
+            // never resolved to mobile before, so nothing ever rendered it there.
+            Flexible(
+              child: OutlinedButton.icon(
+                onPressed: saving ? null : onAdd,
+                icon: const Icon(HcIcons.plus, size: 15),
+                label: const Text(
+                  'Add widget',
+                  overflow: TextOverflow.ellipsis,
+                  softWrap: false,
+                ),
+              ),
             ),
             const Spacer(),
             TextButton(
@@ -402,6 +763,84 @@ class _EditBar extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// "This card is not on this layout" — with both ways out.
+///
+/// A card added while arranging one breakpoint does not force itself into a
+/// layout someone arranged by hand; that would reflow their work to make room
+/// for something they have not seen. So it is said out loud here instead, once
+/// per card, and answering makes it stop.
+class _UnplacedNotice extends StatelessWidget {
+  const _UnplacedNotice({
+    required this.widget_,
+    required this.breakpointLabel,
+    required this.onPlace,
+    required this.onKeepOff,
+  });
+
+  final DashboardWidgetModel widget_;
+  final String breakpointLabel;
+  final VoidCallback onPlace;
+  final VoidCallback onKeepOff;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Container(
+      margin: EdgeInsets.only(bottom: t.space.xs),
+      padding:
+          EdgeInsets.symmetric(horizontal: t.space.sm, vertical: t.space.xs),
+      decoration: BoxDecoration(
+        color: t.surface.raised,
+        borderRadius: BorderRadius.circular(t.radius.sm),
+        border: Border.all(color: t.stroke.hairline, width: t.stroke.width),
+      ),
+      child: Wrap(
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: t.space.sm,
+        runSpacing: t.space.xs,
+        children: [
+          Text(
+            '${widget_.title} is not on the $breakpointLabel layout',
+            style: t.text.bodySmallStyle.copyWith(color: t.surface.onBase),
+          ),
+          TextButton(
+            onPressed: onPlace,
+            child: Text('Place it',
+                style: t.text.captionStyle.copyWith(color: t.accent.active)),
+          ),
+          TextButton(
+            onPressed: onKeepOff,
+            child: Text('Leave it off',
+                style:
+                    t.text.captionStyle.copyWith(color: t.surface.onBaseMuted)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Holds the canvas to a device-plausible width while editing a layout narrower
+/// than the screen, and gets out of the way entirely otherwise.
+class _PreviewFrame extends StatelessWidget {
+  const _PreviewFrame({required this.width, required this.child});
+
+  final double? width;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (width == null) return child;
+    return Align(
+      alignment: Alignment.topCenter,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: width!),
+        child: child,
       ),
     );
   }

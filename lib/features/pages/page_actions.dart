@@ -78,6 +78,11 @@ Future<void> createPage(BuildContext context, WidgetRef ref) async {
     isDefault: false,
     createdAt: now,
     updatedAt: now,
+    // Desktop is the one you draw; the other three follow it until someone
+    // arranges one by hand, at which point that one stops following. A page
+    // created with desktop alone would render on a phone through the fallback
+    // chain — legible, but nobody could then give the phone its own order
+    // without the derived layouts existing first.
     layouts: const [
       DashboardLayout(
         breakpoint: DashboardBreakpoint.desktop,
@@ -85,6 +90,30 @@ Future<void> createPage(BuildContext context, WidgetRef ref) async {
         rowHeight: 120,
         gap: 12,
         placements: [],
+      ),
+      DashboardLayout(
+        breakpoint: DashboardBreakpoint.mobile,
+        columns: 4,
+        rowHeight: 100,
+        gap: 8,
+        placements: [],
+        derivedFrom: DashboardBreakpoint.desktop,
+      ),
+      DashboardLayout(
+        breakpoint: DashboardBreakpoint.tablet,
+        columns: 8,
+        rowHeight: 120,
+        gap: 12,
+        placements: [],
+        derivedFrom: DashboardBreakpoint.desktop,
+      ),
+      DashboardLayout(
+        breakpoint: DashboardBreakpoint.tv,
+        columns: 12,
+        rowHeight: 180,
+        gap: 16,
+        placements: [],
+        derivedFrom: DashboardBreakpoint.desktop,
       ),
     ],
     widgets: const [],

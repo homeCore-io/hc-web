@@ -25,7 +25,7 @@ class DashboardPage extends ConsumerWidget {
 
         final target = defaultDashboard ?? dashboards.first;
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (context.mounted) context.go('/dashboards/${target.id}');
+          if (context.mounted) context.go('/pages/${target.id}');
         });
         return const Scaffold(body: SizedBox.shrink());
       },

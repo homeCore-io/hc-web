@@ -35,6 +35,21 @@ T _enumByName<T>(List<T> values, String? raw, T fallback) {
   );
 }
 
+/// Sentinel for `copyWith` parameters where null is a meaningful value rather
+/// than "leave it as it was".
+const Object _unchanged = Object();
+
+/// A breakpoint name, or null for absent *or unrecognised*.
+DashboardBreakpoint? _breakpointOrNull(Object? raw) {
+  if (raw is! String) return null;
+  for (final value in DashboardBreakpoint.values) {
+    if (_normalizeEnumName(_enumName(value)) == _normalizeEnumName(raw)) {
+      return value;
+    }
+  }
+  return null;
+}
+
 class DashboardWidgetPlacement {
   final String widgetId;
   final int x;
@@ -91,20 +106,41 @@ class DashboardLayout {
   final double gap;
   final List<DashboardWidgetPlacement> placements;
 
+  /// Which breakpoint this layout is computed from, or null when a person
+  /// arranged it.
+  ///
+  /// Null means *authored*, and that is deliberately the value every layout
+  /// that predates this field reads as: authored is the interpretation that
+  /// makes the editor leave a layout alone. Erring the other way would let a
+  /// save repack arrangements nobody asked it to touch, which is the bug this
+  /// whole area is recovering from.
+  ///
+  /// A layout stops being derived the moment someone edits it — see
+  /// `core/dashboard/layout_write.dart`.
+  final DashboardBreakpoint? derivedFrom;
+
+  bool get isDerived => derivedFrom != null;
+
   const DashboardLayout({
     required this.breakpoint,
     required this.columns,
     required this.rowHeight,
     required this.gap,
     required this.placements,
+    this.derivedFrom,
   });
 
+  /// `derivedFrom` needs an explicit sentinel because null is a meaningful
+  /// value for it: `copyWith(derivedFrom: null)` cannot mean "clear it" when
+  /// null is also "unchanged". Taking a layout over is exactly that clear, and
+  /// it would silently no-op.
   DashboardLayout copyWith({
     DashboardBreakpoint? breakpoint,
     int? columns,
     double? rowHeight,
     double? gap,
     List<DashboardWidgetPlacement>? placements,
+    Object? derivedFrom = _unchanged,
   }) {
     return DashboardLayout(
       breakpoint: breakpoint ?? this.breakpoint,
@@ -112,6 +148,9 @@ class DashboardLayout {
       rowHeight: rowHeight ?? this.rowHeight,
       gap: gap ?? this.gap,
       placements: placements ?? this.placements,
+      derivedFrom: identical(derivedFrom, _unchanged)
+          ? this.derivedFrom
+          : derivedFrom as DashboardBreakpoint?,
     );
   }
 
@@ -121,6 +160,12 @@ class DashboardLayout {
         'row_height': rowHeight,
         'gap': gap,
         'placements': placements.map((p) => p.toJson()).toList(),
+        // Omitted rather than null when authored, matching core, which declares
+        // it `skip_serializing_if = "Option::is_none"`. Every layout in the
+        // wild is authored; a null on each of four layouts on every save is
+        // noise in the payload and in every later diff of a stored document.
+        if (derivedFrom != null)
+          'derived_from': _toSnakeCase(_enumName(derivedFrom!)),
       };
 
   factory DashboardLayout.fromJson(Map<String, dynamic> json) =>
@@ -138,6 +183,14 @@ class DashboardLayout {
             .map((item) => DashboardWidgetPlacement.fromJson(
                 Map<String, dynamic>.from(item)))
             .toList(),
+        // Not `_enumByName`, which substitutes a fallback. Absent must stay
+        // absent — it is the difference between "a person arranged this" and
+        // "recompute it from desktop" — and so must a value this build does not
+        // recognise. If a later core names a breakpoint this one has never
+        // heard of, coercing it to desktop would make the client recompute the
+        // layout from the wrong source; reading it as authored merely leaves it
+        // alone, which is the failure worth having.
+        derivedFrom: _breakpointOrNull(json['derived_from']),
       );
 }
 

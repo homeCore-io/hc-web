@@ -25,8 +25,6 @@ import 'features/automations/automation_editor_page.dart';
 import 'features/automations/automation_groups_page.dart';
 import 'features/automations/automation_list_page.dart';
 import 'features/dashboard/dashboard_page.dart';
-import 'features/dashboard/dashboard_editor_page.dart';
-import 'features/dashboard/dashboard_view_page.dart';
 import 'features/dashboard/dashboards_page.dart';
 import 'features/devices/device_detail_page.dart';
 import 'features/devices/device_history_page.dart';
@@ -38,6 +36,7 @@ import 'features/modes/modes_page.dart';
 import 'features/pages/page_screen.dart';
 import 'features/scenes/scene_editor_page.dart';
 import 'features/scenes/scenes_page.dart';
+import 'shell/retired_routes.dart';
 import 'shell/shell_scope.dart';
 import 'features/home/home_page.dart';
 import 'features/manage/manage_page.dart';
@@ -95,7 +94,7 @@ GoRouter _buildRouter(Ref ref) {
           GoRoute(
             path: '/wall/:id',
             builder: (_, state) =>
-                DashboardViewPage(dashboardId: state.pathParameters['id']!),
+                PageScreen(dashboardId: state.pathParameters['id']!),
           ),
           // The house is the app's one primary surface, and it is where you
           // land. `/dashboard` used to bounce you here through a redirector.
@@ -131,19 +130,26 @@ GoRouter _buildRouter(Ref ref) {
             path: '/dashboards',
             builder: (_, __) => const DashboardsPage(),
           ),
+          // The old CMS is gone: `/pages/:id` is the one surface, view and edit
+          // in a mode. These stay as redirects rather than being deleted for
+          // the same reason /config and /data did — they were live, they are in
+          // bookmarks and on wall panels, and a URL that used to work should
+          // keep working rather than land on the router's error page.
+          //
+          // `new/edit` has no equivalent to redirect to: creating a page is an
+          // action now (hub launcher → New page), not a URL you can visit. It
+          // goes to the list, which is where you would have been heading.
           GoRoute(
             path: '/dashboards/new/edit',
-            builder: (_, __) => const DashboardEditorPage(dashboardId: 'new'),
+            redirect: (_, state) => retiredDashboardRoute(state.uri.path),
           ),
           GoRoute(
             path: '/dashboards/:id',
-            builder: (_, state) =>
-                DashboardViewPage(dashboardId: state.pathParameters['id']!),
+            redirect: (_, state) => retiredDashboardRoute(state.uri.path),
           ),
           GoRoute(
             path: '/dashboards/:id/edit',
-            builder: (_, state) =>
-                DashboardEditorPage(dashboardId: state.pathParameters['id']!),
+            redirect: (_, state) => retiredDashboardRoute(state.uri.path),
           ),
           GoRoute(
               path: '/automations/groups',
