@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hc_web/core/dashboard/widget_registry.dart';
 import 'package:hc_web/core/models/dashboard.dart';
-import 'package:hc_web/features/dashboard/dashboard_view_page.dart';
+import 'package:hc_web/features/dashboard/builtin_cards.dart';
 
 /// The default dashboard on a live HomeCore, captured from `GET /dashboards`.
 /// Note the `house_status_hero` — a type core ships and the old Dart enum never

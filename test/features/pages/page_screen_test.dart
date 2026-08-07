@@ -6,7 +6,7 @@ import 'package:hc_web/core/dashboard/widget_registry.dart';
 import 'package:hc_web/core/models/dashboard.dart';
 import 'package:hc_web/core/providers/dashboards_provider.dart';
 import 'package:hc_web/design/skins.dart';
-import 'package:hc_web/features/dashboard/dashboard_view_page.dart';
+import 'package:hc_web/features/dashboard/builtin_cards.dart';
 import 'package:hc_web/features/pages/page_grid.dart';
 import 'package:hc_web/features/pages/page_screen.dart';
 

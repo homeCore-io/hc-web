@@ -403,19 +403,41 @@ fixes and should land before any redesign work.
 
    9 new tests; three older ones rewritten because step 6 deliberately changes
    their contract. Both failure modes planted and watched to fail.
-7. **Consolidate.** Redirect `/dashboards`, `/dashboards/:id`,
-   `/dashboards/:id/edit` and `/dashboard` to their `/pages` equivalents.
-   Delete `dashboard_editor_page.dart` and `dashboard_view_page.dart` — about
-   4200 lines, including the entire off-system surface from §1.3. Keep
-   `camera_card.dart` if `/pages` still uses it; check before deleting.
-   `/wall/:id` keeps its own route and gains the wall resolution from step 2.
+7. ~~**Consolidate.**~~ **DONE 2026-08-07**, and two of this step's own
+   assumptions were wrong.
 
-   **`dashboard_view_page.dart` is not only a view.** It also holds
-   `registerBuiltinDashboardWidgets` — every card type the app has, ~140 lines
-   of `WidgetDescriptor` from line 1452. That must move to its own file *first*
-   (`core/dashboard/builtin_widgets.dart` is the obvious home, beside the
-   registry it fills), or deleting the page takes the whole card vocabulary
-   with it. Found while writing step 6's tests.
+   **"Delete ~4200 lines including dashboard_view_page.dart" was wrong.** That
+   file is 2049 lines of which only **233** — `DashboardViewPage`,
+   `_DashboardGridLayout`, `_DashboardWidgetCard` — were the old viewer. The
+   other 1816 are the **card library**: every card widget the app renders, plus
+   `registerBuiltinDashboardWidgets`, whose builders close over those private
+   classes. The file was named for the surface that happened to sit on top of
+   it. It is now `builtin_cards.dart` with the viewer removed, which is what it
+   was really always for.
+
+   **"Redirect `/dashboards` too" was also wrong**, and would have dropped three
+   capabilities silently. The list is the only surface with **reload from disk**,
+   **import**, and **new from template** — none of which `page_actions.dart`
+   has. It stays, with Open/Edit collapsed to one button (they now go to the
+   same place) and *New Dashboard* rewired from the dead `/dashboards/new/edit`
+   URL to `createPage`.
+
+   Deleted: `dashboard_editor_page.dart`, 2185 lines, entirely replaced.
+   Net **−2441**.
+
+   `/dashboards/:id` and `/dashboards/:id/edit` both redirect to `/pages/:id`;
+   `/dashboards/new/edit` goes to the list, since creating a page is an action
+   now and not a URL. `/wall/:id` renders `PageScreen`, so the wall layout can
+   finally be arranged *on the wall*. The mapping lives in
+   `shell/retired_routes.dart` as a pure function — **not** in `app.dart`,
+   which imports the whole app and therefore cannot be loaded by the VM test
+   runner at all. A redirect is runtime behaviour nothing else checks, and
+   these URLs are on wall panels.
+
+   **What is left off-system:** `dashboards_page.dart` — 0 `HcIcons` against 15
+   raw `Icons.*`, 2 `Theme.of`, 0 token references. It is now the *only*
+   dashboard surface a skin does not reach. §6's ratchet would catch it; that
+   ratchet is still unwritten.
 
 Steps 1–2 are correctness. 3–6 are the feature John asked for. 7 is what makes
 it maintainable, and it is why this is one plan and not two.

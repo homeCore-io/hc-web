@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'dart:convert';
 import '../../core/models/dashboard.dart';
 import '../../core/providers/dashboards_provider.dart';
+import '../pages/page_actions.dart';
 
 class DashboardsPage extends ConsumerWidget {
   const DashboardsPage({super.key});
@@ -46,9 +47,9 @@ class DashboardsPage extends ConsumerWidget {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => context.go('/dashboards/new/edit'),
+        onPressed: () => createPage(context, ref),
         icon: const Icon(Icons.add),
-        label: const Text('New Dashboard'),
+        label: const Text('New page'),
       ),
       body: dashboardsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -133,15 +134,9 @@ class _DashboardCard extends ConsumerWidget {
               runSpacing: 8,
               children: [
                 FilledButton.icon(
-                  onPressed: () => context.go('/dashboards/${dashboard.id}'),
+                  onPressed: () => context.go('/pages/${dashboard.id}'),
                   icon: const Icon(Icons.open_in_new),
                   label: const Text('Open'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: () =>
-                      context.go('/dashboards/${dashboard.id}/edit'),
-                  icon: const Icon(Icons.edit_outlined),
-                  label: const Text('Edit'),
                 ),
                 OutlinedButton.icon(
                   onPressed: () =>
