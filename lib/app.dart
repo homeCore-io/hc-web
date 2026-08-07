@@ -5,6 +5,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'core/providers/auth_provider.dart';
 import 'core/providers/nav_prefs_provider.dart';
 import 'core/providers/skin_provider.dart';
+import 'core/providers/skins_provider.dart';
+import 'design/skin_resolve.dart';
 import 'features/admin/areas_page.dart';
 import 'features/admin/audit_page.dart';
 import 'features/admin/logs_page.dart';
@@ -283,19 +285,25 @@ class HomecoreApp extends ConsumerWidget {
     // — login, and the kiosk camera wall — render in this one, so a chosen skin
     // has to reach here too or it would stop at the app's edges.
     //
-    // Midnight when nothing is chosen: the design was drawn dark.
-    final skin = ref.watch(skinOverrideProvider) ?? HcSkin.midnight;
+    // Midnight when nothing is chosen: the design was drawn dark. This is the
+    // theme *outside* the shell — the login page and the kiosk wall — so it
+    // resolves against no particular shell.
+    final tokens = resolveSkin(
+      choice: ref.watch(skinOverrideProvider),
+      shell: HcShell.touch,
+      skins: ref.watch(skinsProvider).value ?? const [],
+    );
 
     return MaterialApp.router(
       title: 'HomeCore',
-      theme: hcTheme(skin),
-      darkTheme: hcTheme(skin),
+      theme: hcThemeFromTokens(tokens),
+      darkTheme: hcThemeFromTokens(tokens),
       // MediaQuery does not exist above MaterialApp, so reduced motion cannot be
       // read where `theme:` is built. Re-applying it here gives the shell-less
       // routes the same treatment ShellScope gives everything else.
       builder: (context, child) => Theme(
-        data: hcTheme(
-          skin,
+        data: hcThemeFromTokens(
+          tokens,
           reduceMotion: MediaQuery.maybeDisableAnimationsOf(context) ?? false,
         ),
         child: child ?? const SizedBox.shrink(),

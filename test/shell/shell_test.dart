@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hc_web/design/skin_resolve.dart';
 import 'package:hc_web/design/skins.dart';
 import 'package:hc_web/core/providers/skin_provider.dart';
 import 'package:hc_web/design/tokens.dart';
@@ -295,5 +296,5 @@ void main() {
 /// than a value, so the choice is expressed by overriding build().
 class _FixedSkin extends SkinOverrideNotifier {
   @override
-  HcSkin? build() => HcSkin.controlRoom;
+  SkinChoice build() => const SkinChoice.builtIn(HcSkin.controlRoom);
 }

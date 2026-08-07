@@ -464,10 +464,17 @@ const _softHome = HcTokens(
 /// Material's own colours are derived *from* the tokens rather than seeded
 /// independently, so a stray stock widget still lands in the right palette
 /// instead of announcing itself in default indigo.
-ThemeData hcTheme(HcSkin skin, {bool reduceMotion = false}) {
-  final t = reduceMotion
-      ? skin.tokens.copyWith(motion: HcMotion.reduced)
-      : skin.tokens;
+ThemeData hcTheme(HcSkin skin, {bool reduceMotion = false}) =>
+    hcThemeFromTokens(skin.tokens, reduceMotion: reduceMotion);
+
+/// The same theme, from tokens that need not belong to a built-in.
+///
+/// Split out for step 4 of `theme-editor-plan.md`: a skin loaded from core is
+/// an `HcTokens` with no enum behind it, and it has to reach the app through
+/// exactly this path or it would be a second-class skin that some widgets
+/// honoured and others did not.
+ThemeData hcThemeFromTokens(HcTokens tokens, {bool reduceMotion = false}) {
+  final t = reduceMotion ? tokens.copyWith(motion: HcMotion.reduced) : tokens;
 
   final scheme = ColorScheme(
     brightness: t.brightness,

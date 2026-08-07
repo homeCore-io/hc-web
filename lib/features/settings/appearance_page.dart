@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers/skin_provider.dart';
 import '../../design/components/hc_surface.dart';
+import '../../design/skin_resolve.dart';
 import '../../design/skins.dart';
 import '../../design/tokens.dart';
 import '../../shared/widgets/section_scaffold.dart';
@@ -35,14 +36,16 @@ class AppearancePage extends ConsumerWidget {
             EdgeInsets.fromLTRB(t.space.lg, t.space.sm, t.space.lg, t.space.xl),
         children: [
           _Option(
-            selected: chosen == null,
+            selected: chosen.isNone,
             label: 'Follow the surface',
             description:
                 'Ambient Glass on a wall panel, Midnight everywhere else. '
                 'A panel across a dark room and a phone in your hand are not '
                 'the same screen, and this lets them differ.',
             preview: const _FollowPreview(),
-            onTap: () => ref.read(skinOverrideProvider.notifier).choose(null),
+            onTap: () => ref
+                .read(skinOverrideProvider.notifier)
+                .choose(const SkinChoice.none()),
           ),
           Padding(
             padding: EdgeInsets.symmetric(vertical: t.space.md),
@@ -52,12 +55,13 @@ class AppearancePage extends ConsumerWidget {
             Padding(
               padding: EdgeInsets.only(bottom: t.space.sm),
               child: _Option(
-                selected: chosen == skin,
+                selected: chosen.builtIn == skin,
                 label: skin.label,
                 description: skin.description,
                 preview: _SkinPreview(skin: skin),
-                onTap: () =>
-                    ref.read(skinOverrideProvider.notifier).choose(skin),
+                onTap: () => ref
+                    .read(skinOverrideProvider.notifier)
+                    .choose(SkinChoice.builtIn(skin)),
               ),
             ),
         ],
