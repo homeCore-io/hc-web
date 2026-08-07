@@ -7,7 +7,9 @@ import 'package:go_router/go_router.dart';
 import '../../core/api/events_history_api.dart';
 import '../../core/api/history_api.dart';
 import '../../core/text/humanize.dart';
+import '../../core/dashboard/breakpoints.dart';
 import '../../core/dashboard/widget_registry.dart';
+import '../../shell/shell_scope.dart';
 import 'camera_card.dart';
 import '../../core/devices/presentation.dart';
 import '../../design/hc_icons.dart';
@@ -90,8 +92,15 @@ class DashboardViewPage extends ConsumerWidget {
             },
             child: LayoutBuilder(
               builder: (context, constraints) {
+                // Shell, not viewport: `/wall/:id` renders here too, and a wall
+                // panel wants the wall layout whatever width it reports. See
+                // core/dashboard/breakpoints.dart.
+                final wanted = resolveDashboardBreakpoint(
+                  shell: shellFor(GoRouterState.of(context).matchedLocation),
+                  width: constraints.maxWidth,
+                );
                 final breakpoint =
-                    dashboardBreakpointForWidth(constraints.maxWidth);
+                    availableBreakpoint(dashboard, wanted) ?? wanted;
                 final layout = normalizeDashboardLayout(
                   dashboard.layoutFor(breakpoint),
                   dashboard.widgets,
