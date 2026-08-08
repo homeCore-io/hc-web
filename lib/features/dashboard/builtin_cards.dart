@@ -44,7 +44,13 @@ import '../../core/providers/modes_provider.dart';
 import '../../core/providers/scenes_provider.dart';
 import '../../core/providers/time_display_provider.dart';
 
-List<DeviceState> _selectDevices(
+/// Which devices a device-oriented card shows, for a given config.
+///
+/// Public because it is the single answer to that question: the card renders
+/// from it, and anything that previews or counts a card must call the same
+/// function or the two will disagree — which is exactly how a card that
+/// matches nothing gets shipped.
+List<DeviceState> selectDevicesForConfig(
     List<DeviceState> all, Map<String, dynamic> config) {
   final selectionMode = config['selection_mode'] as String? ?? 'query';
   // Device grids/lists are for real, physical devices. Never surface the
@@ -63,23 +69,48 @@ List<DeviceState> _selectDevices(
       selected = base.where((device) => ids.contains(device.id)).toList();
       break;
     case 'area':
-      final areaName = config['area_name'] as String?;
-      if (areaName != null && areaName.isNotEmpty) {
-        selected =
-            base.where((device) => device.effectiveArea == areaName).toList();
+      // Normalize BOTH sides, the way core does.
+      //
+      // Core stores areas normalized (`normalize_name_segment`: "Living Room"
+      // → "living_room") but device-side values arrive from plugins in
+      // whatever shape the bridge uses, and a stored card can carry either —
+      // the shipped Living Room template asks for "Living Room" and matched
+      // zero devices on every house because this compared raw strings with
+      // `==`. Comparing normalized forms makes the template, an imported page
+      // and a plugin's own spelling all resolve to the same room.
+      final areaName = normalizeAreaName(config['area_name'] as String?);
+      if (areaName.isNotEmpty) {
+        selected = base
+            .where(
+                (device) => normalizeAreaName(device.effectiveArea) == areaName)
+            .toList();
       }
       break;
     case 'query':
     default:
-      final query = (config['query'] as String? ?? '').toLowerCase();
-      if (query.isNotEmpty) {
-        selected = base.where((device) {
-          return device.displayName.toLowerCase().contains(query) ||
-              device.id.toLowerCase().contains(query) ||
-              (device.canonicalName?.toLowerCase().contains(query) ?? false) ||
-              (device.deviceType?.toLowerCase().contains(query) ?? false) ||
-              (device.title?.toLowerCase().contains(query) ?? false);
-        }).toList();
+      // Comma-separated terms, matched as OR.
+      //
+      // This was one literal substring, which meant the shipped Security
+      // template — `query: "door,motion,lock,camera"` — searched every device
+      // for that exact text and matched nothing, on every house. Anyone typing
+      // a list means "any of these"; nobody means the string with the commas
+      // in it.
+      final terms = (config['query'] as String? ?? '')
+          .toLowerCase()
+          .split(',')
+          .map((t) => t.trim())
+          .where((t) => t.isNotEmpty)
+          .toList();
+      if (terms.isNotEmpty) {
+        bool matches(DeviceState device, String q) =>
+            device.displayName.toLowerCase().contains(q) ||
+            device.id.toLowerCase().contains(q) ||
+            (device.canonicalName?.toLowerCase().contains(q) ?? false) ||
+            (device.deviceType?.toLowerCase().contains(q) ?? false) ||
+            (device.title?.toLowerCase().contains(q) ?? false);
+        selected = base
+            .where((device) => terms.any((q) => matches(device, q)))
+            .toList();
       }
       break;
   }
@@ -196,7 +227,7 @@ class _DeviceGridWidget extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final devices = _selectDevices(
+    final devices = selectDevicesForConfig(
       ref.watch(devicesProvider).value ?? const <DeviceState>[],
       widgetModel.config,
     );
@@ -249,7 +280,7 @@ class _DeviceListWidget extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final devices = _selectDevices(
+    final devices = selectDevicesForConfig(
       ref.watch(devicesProvider).value ?? const <DeviceState>[],
       widgetModel.config,
     );
@@ -271,7 +302,7 @@ class _DeviceTileWidget extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final devices = _selectDevices(
+    final devices = selectDevicesForConfig(
       ref.watch(devicesProvider).value ?? const <DeviceState>[],
       widgetModel.config,
     );
@@ -647,7 +678,7 @@ class _MediaPlayerDashboardWidget extends ConsumerWidget {
     // "compact" mode, hiding half the house; the card scrolls, so show them all.
     final limit = widgetModel.config['limit'] as int?;
     final unlimited = {...widgetModel.config}..remove('limit');
-    var devices = _selectDevices(
+    var devices = selectDevicesForConfig(
       ref.watch(devicesProvider).value ?? const <DeviceState>[],
       unlimited,
     ).where((device) => device.isMediaPlayer).toList();

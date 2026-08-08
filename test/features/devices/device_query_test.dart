@@ -153,6 +153,52 @@ void main() {
       expect(unassigned(withScenes).map((d) => d.id), ['stray']);
     });
 
+    test('a rain gauge is not a device missing a room', () {
+      // The live house reported "10 devices have no room". Three of them were
+      // an Ecowitt lightning detector, a rain gauge and the weather station
+      // itself: they measure the sky, and no answer to "which room?" is right
+      // for them. Same class as the scenes above — a count that is partly
+      // noise gets the whole card ignored.
+      final withWeather = [
+        ..._house,
+        _d('ecowitt_lightning',
+            name: 'Lightning Sensor',
+            type: 'lightning_sensor',
+            plugin: 'plugin.ecowitt'),
+        _d('ecowitt_rain',
+            name: 'Rain Sensor', type: 'rain_sensor', plugin: 'plugin.ecowitt'),
+        _d('ecowitt_weather',
+            name: 'Weather Station',
+            type: 'weather_station',
+            plugin: 'plugin.ecowitt'),
+      ];
+      expect(unassigned(withWeather).map((d) => d.id), ['stray']);
+    });
+
+    test('but a temp channel from the same station IS missing a room', () {
+      // The other seven of those ten were Temp/Humidity channels, and each one
+      // sits physically somewhere. Excluding the plugin would have silenced
+      // seven correct prompts to keep three wrong ones quiet, so the rule is
+      // keyed on the type that cannot have a room, not on who supplies it.
+      final withChannels = [
+        ..._house,
+        _d('ecowitt_temp_1',
+            name: 'Temp/Humidity Ch 1',
+            type: 'temperature_sensor',
+            plugin: 'plugin.ecowitt'),
+      ];
+      expect(unassigned(withChannels).map((d) => d.id),
+          ['stray', 'ecowitt_temp_1']);
+    });
+
+    test('the sky sensors get their own heading, not the No room bucket', () {
+      // Excluded from the count but filed under "No room" would be the same
+      // nag by another route.
+      final rain = _d('ecowitt_rain', type: 'rain_sensor');
+      expect(groupKeyOf(rain, DeviceGroup.room), kOutdoorGroup);
+      expect(groupKeyOf(_d('stray2'), DeviceGroup.room), 'No room');
+    });
+
     test('built-in virtual devices are not either', () {
       final withVirtuals = [
         ..._house,
