@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class HomecoreClient {
@@ -9,6 +10,14 @@ class HomecoreClient {
   /// Bare client used only for the /auth/refresh call — it has no auth
   /// interceptor, so refreshing can't recurse back through [onError].
   late final Dio _refreshDio;
+
+  /// The refresh client, for tests that need to stub the network.
+  ///
+  /// Exposed rather than made public outright: the refresh path is half of the
+  /// stale-token behaviour and cannot be exercised without stubbing it, but
+  /// nothing in the app should be reaching for it.
+  @visibleForTesting
+  Dio get refreshDioForTest => _refreshDio;
 
   /// In-flight refresh, shared by concurrent 401s so a burst of expired
   /// requests triggers exactly one /auth/refresh rather than a stampede.
@@ -49,6 +58,7 @@ class HomecoreClient {
       onError: (error, handler) async {
         final ro = error.requestOptions;
         final is401 = error.response?.statusCode == 401;
+        final is403 = error.response?.statusCode == 403;
         final isAuthPath = ro.path.contains('/auth/');
         final alreadyRetried = ro.extra['__retried'] == true;
 
@@ -69,6 +79,29 @@ class HomecoreClient {
           await clearToken();
           onUnauthorized?.call();
           return handler.next(error);
+        }
+
+        // A 403 on a normal request: try ONE refresh, then replay.
+        //
+        // Scopes are frozen into the access token at login, so a release that
+        // adds one leaves every existing session refused by a role that plainly
+        // grants it — which is what happened to `skins:write` in 0.1.30. A 403
+        // is not a 401, so the branch above never saw it, and the session had
+        // no way to heal short of signing out. `/auth/refresh` re-issues from
+        // the user's role, so one refresh is the whole cure.
+        //
+        // Unlike the 401 path this never logs you out. A 403 that survives a
+        // refresh is a real permissions answer — "you may not do that" — and
+        // signing someone out for asking would be worse than the refusal.
+        if (is403 && !isAuthPath && !alreadyRetried && await hasToken()) {
+          if (await _refreshOnce()) {
+            try {
+              ro.extra['__retried'] = true;
+              return handler.resolve(await dio.fetch(ro));
+            } catch (_) {
+              // Still refused. Fall through and report it as the answer.
+            }
+          }
         }
 
         if (!is401) {
