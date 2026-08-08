@@ -14,6 +14,7 @@ import '../../design/tokens.dart';
 import '../../shell/shell_scope.dart';
 import 'breakpoint_bar.dart';
 import 'card_inspector.dart';
+import 'card_library.dart';
 import 'page_actions.dart';
 import 'page_grid.dart';
 import 'widget_config_form.dart';
@@ -385,6 +386,38 @@ class _PageScreenState extends ConsumerState<PageScreen> {
     });
   }
 
+  /// Puts a card the library produced on the page.
+  ///
+  /// Shares everything below the palette with [_addWidget] — the size hint, the
+  /// engine placement, the pending-placement bookkeeping — because a card is a
+  /// card however it was chosen.
+  void _placeCard(DashboardWidgetModel created, int columns,
+      {int? atX, int? atY}) {
+    final engine = GridEngine(columns: columns);
+    final hint =
+        WidgetRegistry.lookup(created.type)?.sizeHint ?? const WidgetSizeHint();
+    final x = atX == null
+        ? 0
+        : atX.clamp(0, (columns - hint.recommendedW).clamp(0, columns));
+    final item = GridItem(
+      id: created.id,
+      x: x,
+      y: atY ?? 0,
+      w: hint.recommendedW,
+      h: hint.recommendedH,
+      minW: hint.minW,
+      minH: hint.minH,
+    );
+    setState(() {
+      _draftWidgets = {...?_draftWidgets, created.id: created};
+      _pendingPlacement.add(created.id);
+      _commit(engine.add(_draftItems!, item));
+      // Select what was just placed: the next thing anyone does to a new card
+      // is look at it, and the inspector is where that happens.
+      _selectedCard = created.id;
+    });
+  }
+
   /// Applies a config edit to the draft as it is made.
   ///
   /// No commit step: the page's own Cancel and Done already govern the draft,
@@ -693,23 +726,31 @@ class _PageScreenState extends ConsumerState<PageScreen> {
                                 ),
                         ),
                       ),
+                      // One rail, and what is in it follows what you are
+                      // doing: the card you selected, or everything you could
+                      // add if you have not selected one.
                       if (hasInspector && _editing)
-                        if (_draftWidgets?[_selectedCard] case final selected?)
-                          Padding(
-                            padding: EdgeInsets.only(
-                                right: t.space.lg, bottom: t.space.xl),
-                            child: CardInspector(
-                              model: selected,
-                              onChanged: (config) =>
-                                  _configureLive(selected.id, config),
-                              onRemove: () {
-                                _removeWidget(selected.id, columns);
-                                setState(() => _selectedCard = null);
-                              },
-                              onClose: () =>
-                                  setState(() => _selectedCard = null),
-                            ),
-                          ),
+                        Padding(
+                          padding: EdgeInsets.only(
+                              right: t.space.lg, bottom: t.space.xl),
+                          child: switch (_draftWidgets?[_selectedCard]) {
+                            final sel? => CardInspector(
+                                model: sel,
+                                onChanged: (config) =>
+                                    _configureLive(sel.id, config),
+                                onRemove: () {
+                                  _removeWidget(sel.id, columns);
+                                  setState(() => _selectedCard = null);
+                                },
+                                onClose: () =>
+                                    setState(() => _selectedCard = null),
+                              ),
+                            null => CardLibrary(
+                                onPick: (created) =>
+                                    _placeCard(created, columns),
+                              ),
+                          },
+                        ),
                     ],
                   ),
                 ),
