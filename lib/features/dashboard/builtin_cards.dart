@@ -334,18 +334,24 @@ class _WithSelectionSummary extends StatelessWidget {
     final line = selection.summary;
     if (line == null) return child;
     final t = HcTokens.of(context);
+    // Above the contents, not below them.
+    //
+    // Under the grid it was outside the card's cell and clipped away — the
+    // sentence existed, passed its test, and was invisible on the page, which
+    // is the exact failure mode it was written to cure. A card's height is
+    // fixed by its placement; only the top of it is guaranteed to be seen.
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (selection.shown.isNotEmpty) child,
         Padding(
-          padding: EdgeInsets.only(top: t.space.xs),
+          padding: EdgeInsets.only(bottom: t.space.xs),
           child: Text(
             line,
             style: t.text.captionStyle.copyWith(color: t.surface.onBaseMuted),
           ),
         ),
+        if (selection.shown.isNotEmpty) Flexible(child: child),
       ],
     );
   }

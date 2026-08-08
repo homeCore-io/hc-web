@@ -13,6 +13,7 @@ import '../../design/hc_icons.dart';
 import '../../design/tokens.dart';
 import '../../shell/shell_scope.dart';
 import 'breakpoint_bar.dart';
+import 'card_inspector.dart';
 import 'page_actions.dart';
 import 'page_grid.dart';
 import 'widget_config_form.dart';
@@ -47,6 +48,9 @@ class _PageScreenState extends ConsumerState<PageScreen> {
   /// The selected breakpoint's arrangement, as the grid works in.
   List<GridItem>? _draftItems;
   Map<String, DashboardWidgetModel>? _draftWidgets;
+
+  /// The card the inspector is showing, when there is room for one.
+  String? _selectedCard;
   bool _saving = false;
 
   bool get _editing => _draftItems != null;
@@ -381,6 +385,18 @@ class _PageScreenState extends ConsumerState<PageScreen> {
     });
   }
 
+  /// Applies a config edit to the draft as it is made.
+  ///
+  /// No commit step: the page's own Cancel and Done already govern the draft,
+  /// and the card is visible while you edit it.
+  void _configureLive(String id, Map<String, dynamic> config) {
+    final model = _draftWidgets?[id];
+    if (model == null) return;
+    setState(() {
+      _draftWidgets = {...?_draftWidgets, id: model.copyWith(config: config)};
+    });
+  }
+
   Future<void> _configureWidget(String id) async {
     final model = _draftWidgets?[id];
     if (model == null) return;
@@ -427,12 +443,17 @@ class _PageScreenState extends ConsumerState<PageScreen> {
       _draftLayouts = null;
       _draftItems = null;
       _draftWidgets = null;
+      _selectedCard = null;
       _editingBreakpoint = null;
       _touched.clear();
       _pendingPlacement.clear();
       _settled.clear();
     });
   }
+
+  static String _cardLabel(DashboardWidgetModel w) => w.title.isNotEmpty
+      ? w.title
+      : (WidgetRegistry.lookup(w.type)?.title ?? w.type);
 
   Future<void> _save(DashboardDefinition d) async {
     // Keep only widgets placed on at least one layout. Core rejects a
@@ -450,6 +471,25 @@ class _PageScreenState extends ConsumerState<PageScreen> {
       for (final entry in _draftWidgets!.entries)
         if (placed.contains(entry.key)) entry.value,
     ];
+    // Every card's own validator, the same check core runs.
+    //
+    // The config sheet used to run this on its Done, which is what kept a bad
+    // card from ever reaching the save. Moving options into the inspector took
+    // that Done away and, with it, the guard — so a card left half-configured
+    // (mode Area with no area picked) would have gone to core, which rejects
+    // the WHOLE dashboard on the first invalid widget and loses every other
+    // edit in the draft. Named per card, because "invalid" without a card name
+    // is unactionable on a page of eight.
+    for (final w in widgets) {
+      final message = WidgetRegistry.lookup(w.type)?.validate?.call(w.config);
+      if (message != null) {
+        setState(() => _selectedCard = w.id);
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('${_cardLabel(w)}: $message')));
+        return;
+      }
+    }
+
     setState(() => _saving = true);
     try {
       // No rebuild here: every gesture already reprojected the draft through
@@ -512,6 +552,12 @@ class _PageScreenState extends ConsumerState<PageScreen> {
                 .firstOrNull ??
             _layoutFor(dashboard, breakpoint);
         final columns = layout.columns <= 0 ? _defaultColumns : layout.columns;
+
+        // Room for the canvas AND a 320px panel beside it. Below this the
+        // sheet is still the only thing that fits, and the phone keeps the
+        // editing it already had — the brief is explicit that the seated
+        // session must not cost the other two.
+        final hasInspector = constraints.maxWidth >= 1100;
         final rowHeight =
             layout.rowHeight <= 0 ? _defaultRowHeight : layout.rowHeight;
         final gap = layout.gap;
@@ -595,42 +641,76 @@ class _PageScreenState extends ConsumerState<PageScreen> {
                     ),
                   ),
                 Expanded(
-                  child: SingleChildScrollView(
-                    padding: EdgeInsets.fromLTRB(
-                        t.space.lg, 0, t.space.lg, t.space.xl),
-                    // An empty page in edit mode still gets a board: you
-                    // cannot arrange on a surface that is not drawn, and the
-                    // old empty state was a sentence pointing at a button in
-                    // the far corner.
-                    child: items.isEmpty && !_editing
-                        ? const _EmptyPage(editing: false)
-                        // While editing, draw the layout at a width that
-                        // breakpoint would really have. In view mode the actual
-                        // viewport is the truth and must not be framed.
-                        : _PreviewFrame(
-                            width:
-                                _editing ? previewWidthFor(breakpoint) : null,
-                            child: PageGrid(
-                              items: items,
-                              widgetsById: widgetsById,
-                              columns: columns,
-                              rowHeight: rowHeight,
-                              gap: gap,
-                              editing: _editing,
-                              ghostItems: _editing && _draftLayouts != null
-                                  ? _ghostFor(
-                                      breakpoint, source, _draftLayouts!)
-                                  : const [],
-                              onMove: (id, x, y) => _apply(
-                                  (e, its) => e.move(its, id, x, y), columns),
-                              onResize: (id, w, h) => _apply(
-                                  (e, its) => e.resize(its, id, w, h), columns),
-                              onRemove: (id) => _removeWidget(id, columns),
-                              onConfigure: _configureWidget,
-                              onAddAt: (x, y) =>
-                                  _addWidget(columns, atX: x, atY: y),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: SingleChildScrollView(
+                          padding: EdgeInsets.fromLTRB(
+                              t.space.lg, 0, t.space.lg, t.space.xl),
+                          // An empty page in edit mode still gets a board: you
+                          // cannot arrange on a surface that is not drawn, and the
+                          // old empty state was a sentence pointing at a button in
+                          // the far corner.
+                          child: items.isEmpty && !_editing
+                              ? const _EmptyPage(editing: false)
+                              // While editing, draw the layout at a width that
+                              // breakpoint would really have. In view mode the actual
+                              // viewport is the truth and must not be framed.
+                              : _PreviewFrame(
+                                  width: _editing
+                                      ? previewWidthFor(breakpoint)
+                                      : null,
+                                  child: PageGrid(
+                                    items: items,
+                                    widgetsById: widgetsById,
+                                    columns: columns,
+                                    rowHeight: rowHeight,
+                                    gap: gap,
+                                    editing: _editing,
+                                    ghostItems: _editing &&
+                                            _draftLayouts != null
+                                        ? _ghostFor(
+                                            breakpoint, source, _draftLayouts!)
+                                        : const [],
+                                    onMove: (id, x, y) => _apply(
+                                        (e, its) => e.move(its, id, x, y),
+                                        columns),
+                                    onResize: (id, w, h) => _apply(
+                                        (e, its) => e.resize(its, id, w, h),
+                                        columns),
+                                    onRemove: (id) =>
+                                        _removeWidget(id, columns),
+                                    // Wide enough for a panel: select the card and
+                                    // let the inspector show it. Narrower, the sheet
+                                    // is still the only place it fits.
+                                    onConfigure: (id) => hasInspector
+                                        ? setState(() => _selectedCard = id)
+                                        : _configureWidget(id),
+                                    onAddAt: (x, y) =>
+                                        _addWidget(columns, atX: x, atY: y),
+                                  ),
+                                ),
+                        ),
+                      ),
+                      if (hasInspector && _editing)
+                        if (_draftWidgets?[_selectedCard] case final selected?)
+                          Padding(
+                            padding: EdgeInsets.only(
+                                right: t.space.lg, bottom: t.space.xl),
+                            child: CardInspector(
+                              model: selected,
+                              onChanged: (config) =>
+                                  _configureLive(selected.id, config),
+                              onRemove: () {
+                                _removeWidget(selected.id, columns);
+                                setState(() => _selectedCard = null);
+                              },
+                              onClose: () =>
+                                  setState(() => _selectedCard = null),
                             ),
                           ),
+                    ],
                   ),
                 ),
               ],
