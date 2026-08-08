@@ -113,10 +113,15 @@ HcSkin builtInNamed(String name) => switch (name) {
 
 /// Applies a skin's individual token overrides.
 ///
-/// The escape hatch for the ~48 tokens the derivation computes. Every path is
-/// named explicitly rather than reflected over: a typo in a stored override
-/// should do nothing at all, and a map that silently accepted `acccent.warn`
-/// would be a setting that appears to save and never applies.
+/// The escape hatch for the values the derivation computes — the 48 paths in
+/// `skin_catalogue.dart`, which names each one and the rule it came from.
+///
+/// Every path is named explicitly rather than reflected over: a typo in a
+/// stored override should do nothing at all, and a map that silently accepted
+/// `acccent.warn` would be a setting that appears to save and never applies.
+/// A test walks the catalogue and asserts each path actually moves its token,
+/// because a list of overridable values and the code that applies them are
+/// exactly the two things that drift apart.
 HcTokens applySkinOverrides(HcTokens t, Map<String, String> overrides) {
   if (overrides.isEmpty) return t;
 
@@ -125,13 +130,20 @@ HcTokens applySkinOverrides(HcTokens t, Map<String, String> overrides) {
     return raw == null ? null : parseSkinColour(raw);
   }
 
+  // Same contract as a colour that will not parse: nothing happens, and the
+  // derived value stands. An override is a preference, never a reason to fail.
+  double? n(String path) {
+    final raw = overrides[path];
+    return raw == null ? null : double.tryParse(raw);
+  }
+
   final surface = HcSurfaces(
     base: c('surface.base') ?? t.surface.base,
     raised: c('surface.raised') ?? t.surface.raised,
     sunken: c('surface.sunken') ?? t.surface.sunken,
     overlay: c('surface.overlay') ?? t.surface.overlay,
     glassTint: c('surface.glassTint') ?? t.surface.glassTint,
-    glassBlur: t.surface.glassBlur,
+    glassBlur: n('surface.glassBlur') ?? t.surface.glassBlur,
     onBase: c('surface.onBase') ?? t.surface.onBase,
     onBaseMuted: c('surface.onBaseMuted') ?? t.surface.onBaseMuted,
   );
@@ -157,14 +169,70 @@ HcTokens applySkinOverrides(HcTokens t, Map<String, String> overrides) {
     reading: c('metric.reading') ?? t.metric.reading,
   );
 
+  // A role with its size replaced. Weight, height and tracking are not
+  // overridable — see `unexposed` for why — so they carry through.
+  HcTextRole role(String path, HcTextRole r) {
+    final size = n(path);
+    return size == null
+        ? r
+        : HcTextRole(
+            size: size,
+            weight: r.weight,
+            height: r.height,
+            tracking: r.tracking);
+  }
+
   return t.copyWith(
     surface: surface,
     accent: accent,
     metric: metric,
     stroke: HcStroke(
       hairline: c('stroke.hairline') ?? t.stroke.hairline,
-      width: t.stroke.width,
+      width: n('stroke.width') ?? t.stroke.width,
       focus: c('stroke.focus') ?? t.stroke.focus,
+    ),
+    radius: HcRadii(
+      xs: n('radius.xs') ?? t.radius.xs,
+      sm: n('radius.sm') ?? t.radius.sm,
+      md: n('radius.md') ?? t.radius.md,
+      lg: n('radius.lg') ?? t.radius.lg,
+      // Not overridable: 999 is a sentinel meaning "fully round", not a size.
+      pill: t.radius.pill,
+    ),
+    space: HcSpace(unit: n('space.unit') ?? t.space.unit),
+    glow: HcGlow(
+      strength: n('glow.strength') ?? t.glow.strength,
+      radius: n('glow.radius') ?? t.glow.radius,
+    ),
+    density: HcDensity(
+      rowHeight: n('density.rowHeight') ?? t.density.rowHeight,
+      controlHeight: n('density.controlHeight') ?? t.density.controlHeight,
+      minTapTarget: n('density.minTapTarget') ?? t.density.minTapTarget,
+      cardPadding: n('density.cardPadding') ?? t.density.cardPadding,
+    ),
+    motion: HcMotion(
+      fast: _ms(n('motion.fastMs'), t.motion.fast),
+      base: _ms(n('motion.baseMs'), t.motion.base),
+      slow: _ms(n('motion.slowMs'), t.motion.slow),
+      curve: t.motion.curve,
+      emphasized: t.motion.emphasized,
+      // Follows the viewer's reduce-motion preference, not the skin's opinion.
+      enabled: t.motion.enabled,
+    ),
+    text: HcType(
+      family: t.text.family,
+      monoFamily: t.text.monoFamily,
+      scale: n('text.scale') ?? t.text.scale,
+      display: role('text.display.size', t.text.display),
+      title: role('text.title.size', t.text.title),
+      subtitle: role('text.subtitle.size', t.text.subtitle),
+      body: role('text.body.size', t.text.body),
+      bodySmall: role('text.bodySmall.size', t.text.bodySmall),
+      caption: role('text.caption.size', t.text.caption),
+      overline: role('text.overline.size', t.text.overline),
     ),
   );
 }
+
+Duration _ms(double? value, Duration fallback) =>
+    value == null ? fallback : Duration(milliseconds: value.round());

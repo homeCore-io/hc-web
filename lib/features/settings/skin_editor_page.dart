@@ -7,6 +7,7 @@ import '../../design/components/hc_dialog.dart';
 import '../../design/components/hc_surface.dart';
 import '../../design/hc_icons.dart';
 import '../../design/skin_resolve.dart';
+import 'skin_advanced.dart';
 import '../../design/skin_seeds.dart';
 import '../../design/skin_validator.dart';
 import '../../design/skins.dart';
@@ -114,8 +115,11 @@ class _SkinEditorPageState extends ConsumerState<SkinEditorPage> {
     }
 
     // Everything downstream reads from this one derivation, so the preview and
-    // the report can never disagree about what is being edited.
-    final edited = applySkinOverrides(deriveTokens(seeds), _overrides);
+    // the report can never disagree about what is being edited. `derived` is
+    // kept separately because the advanced panel needs the value each override
+    // replaced — that is what "reset to derived" resets to.
+    final derived = deriveTokens(seeds);
+    final edited = applySkinOverrides(derived, _overrides);
     final report = validateSkin(edited);
 
     return SectionScaffold(
@@ -130,6 +134,15 @@ class _SkinEditorPageState extends ConsumerState<SkinEditorPage> {
             dirty: _dirty,
             onSave: _save,
             canSave: report.canSave,
+            advanced: SkinAdvanced(
+              derived: derived,
+              edited: edited,
+              overrides: _overrides,
+              onChanged: (next) => setState(() {
+                _overrides = next;
+                _dirty = true;
+              }),
+            ),
           );
           final preview = _PreviewPane(tokens: edited, report: report);
 
@@ -182,6 +195,7 @@ class _Controls extends StatelessWidget {
     required this.dirty,
     required this.onSave,
     required this.canSave,
+    required this.advanced,
   });
 
   final SkinSeeds seeds;
@@ -190,6 +204,11 @@ class _Controls extends StatelessWidget {
   final bool dirty;
   final VoidCallback onSave;
   final bool canSave;
+
+  /// Last on the page, and shut by default. The seeds are how a skin is meant
+  /// to be made; a panel of forty-eight fields offered first would make the
+  /// derivation look like something to work around.
+  final Widget advanced;
 
   @override
   Widget build(BuildContext context) {
@@ -338,6 +357,7 @@ class _Controls extends StatelessWidget {
               style: t.text.captionStyle.copyWith(color: t.accent.danger),
             ),
           ),
+        advanced,
       ],
     );
   }
