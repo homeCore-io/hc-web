@@ -153,6 +153,104 @@ class SkinSeeds {
   /// chosen rather than picked from the vocabulary.
   final HcDensity? densityOverride;
   final HcMotion? motionOverride;
+
+  /// One seed changed, the rest carried.
+  ///
+  /// The editor's whole edit loop is this method: a control changes exactly one
+  /// seed, `deriveTokens` recomputes all 74 tokens from the result, and the
+  /// preview and the report re-render from that. Nothing accumulates — there is
+  /// no partial state that could drift out of step with what is displayed.
+  ///
+  /// The three nullable design fields ([focus], [metric], and the two
+  /// overrides) cannot be *cleared* through here — passing null means "leave
+  /// it", the standard `copyWith` contract. Nothing in the editor clears them:
+  /// [metric] and the overrides have no control at all (they ride in the
+  /// document's `overrides` map), and clearing [focus] would mean asking for a
+  /// derived focus ring, which is a reset rather than an edit and belongs with
+  /// the rest of the reset-to-derived work in step 7.
+  SkinSeeds copyWith({
+    String? name,
+    Brightness? brightness,
+    Color? ground,
+    Color? raised,
+    Color? sunken,
+    Color? overlay,
+    Color? ink,
+    Color? inkMuted,
+    Color? accent,
+    Color? onAccent,
+    Color? active,
+    Color? inactive,
+    Color? success,
+    Color? warn,
+    Color? danger,
+    Color? offline,
+    Color? hairline,
+    Color? focus,
+    (double, double, double, double)? corners,
+    double? spaceUnit,
+    double? typeScale,
+    double? glowStrength,
+    double? glowRadius,
+    SkinDensity? density,
+    SkinMotion? motion,
+    SkinGlass? glass,
+    HcMetricTints? metric,
+    HcDensity? densityOverride,
+    HcMotion? motionOverride,
+  }) =>
+      SkinSeeds(
+        name: name ?? this.name,
+        brightness: brightness ?? this.brightness,
+        ground: ground ?? this.ground,
+        raised: raised ?? this.raised,
+        sunken: sunken ?? this.sunken,
+        overlay: overlay ?? this.overlay,
+        ink: ink ?? this.ink,
+        inkMuted: inkMuted ?? this.inkMuted,
+        accent: accent ?? this.accent,
+        onAccent: onAccent ?? this.onAccent,
+        active: active ?? this.active,
+        inactive: inactive ?? this.inactive,
+        success: success ?? this.success,
+        warn: warn ?? this.warn,
+        danger: danger ?? this.danger,
+        offline: offline ?? this.offline,
+        hairline: hairline ?? this.hairline,
+        focus: focus ?? this.focus,
+        corners: corners ?? this.corners,
+        spaceUnit: spaceUnit ?? this.spaceUnit,
+        typeScale: typeScale ?? this.typeScale,
+        glowStrength: glowStrength ?? this.glowStrength,
+        glowRadius: glowRadius ?? this.glowRadius,
+        density: density ?? this.density,
+        motion: motion ?? this.motion,
+        glass: glass ?? this.glass,
+        metric: metric ?? this.metric,
+        densityOverride: densityOverride ?? this.densityOverride,
+        motionOverride: motionOverride ?? this.motionOverride,
+      );
+}
+
+/// The four corners, moved together, keeping their proportions.
+///
+/// The editor offers one corner control rather than four, and this is what it
+/// drives. Four independent sliders would let three drift out of relation with
+/// the fourth, and the relation is what the scale *is* — Control Room stays
+/// sharp-shouldered as it grows, Soft Home stays generous as it tightens. The
+/// individual values are still reachable as overrides, where changing one on
+/// purpose is the whole point.
+///
+/// [md] is the handle because it is the card radius: the one a person is
+/// looking at while they drag.
+(double, double, double, double) scaleCorners(
+    (double, double, double, double) corners, double md) {
+  // A skin already at zero has no proportions left to keep, so fall back to a
+  // plausible ramp rather than multiplying zero by anything.
+  if (corners.$3 <= 0) return (md * 0.3, md * 0.6, md, md * 1.4);
+  final k = md / corners.$3;
+  double r(double v) => (v * k).roundToDouble();
+  return (r(corners.$1), r(corners.$2), md.roundToDouble(), r(corners.$4));
 }
 
 /// Glass is two decisions, not one: Soft Home carries a tint with no blur at

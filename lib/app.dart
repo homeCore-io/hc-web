@@ -13,6 +13,7 @@ import 'features/admin/logs_page.dart';
 import 'features/admin/system_page.dart';
 import 'features/admin/users_page.dart';
 import 'features/settings/appearance_page.dart';
+import 'features/settings/skin_editor_page.dart';
 import 'features/settings/data_page.dart';
 import 'features/settings/maintenance_page.dart';
 import 'features/settings/notifications_page.dart';
@@ -254,6 +255,10 @@ GoRouter _buildRouter(Ref ref) {
               GoRoute(
                   path: '/admin/appearance',
                   builder: (_, __) => const AppearancePage()),
+              GoRoute(
+                  path: '/admin/appearance/:id',
+                  builder: (_, s) =>
+                      SkinEditorPage(skinId: s.pathParameters['id']!)),
               GoRoute(path: '/areas', builder: (_, __) => const AreasPage()),
               GoRoute(
                   path: '/admin/data', builder: (_, __) => const DataPage()),

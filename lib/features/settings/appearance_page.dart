@@ -2,6 +2,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/providers/skin_provider.dart';
 import '../../design/components/hc_surface.dart';
@@ -102,6 +103,11 @@ class AppearancePage extends ConsumerWidget {
                     .read(skinOverrideProvider.notifier)
                     .choose(SkinChoice.data(doc.id)),
                 actions: [
+                  // First, and the only one that opens something. The other
+                  // three are housekeeping; this is what the gallery is for.
+                  _Action(
+                      label: 'Edit',
+                      onTap: () => context.go('/admin/appearance/${doc.id}')),
                   _Action(
                       label: 'Rename',
                       onTap: () => renameSkin(context, ref, doc)),
