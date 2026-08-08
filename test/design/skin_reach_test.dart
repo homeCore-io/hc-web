@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hc_web/design/skin_validator.dart';
 import 'package:hc_web/design/skins.dart';
 import 'package:hc_web/design/tokens.dart';
 import 'package:hc_web/shared/widgets/section_scaffold.dart';
@@ -140,10 +141,11 @@ void main() {
       expect(body(HcSkin.controlRoom), lessThan(body(HcSkin.midnight)));
 
       // ...but the floor still has to be legible. At `density.rowHeight`'s own
-      // ratio (0.65) the overline role would land at 6.5px.
+      // ratio (0.65) the overline role would land at 6.5px. Measured by
+      // `skin_validator.dart`, so a data-defined skin cannot scale itself
+      // under the floor either.
       for (final s in HcSkin.values) {
-        final t = s.tokens.text;
-        expect(t.overline.size * t.scale, greaterThanOrEqualTo(9),
+        expect(validateSkin(s.tokens).of(SkinCheck.typeFloor), isEmpty,
             reason: '${s.name} scales its smallest role below legibility');
       }
     });

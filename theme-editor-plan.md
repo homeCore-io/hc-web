@@ -200,21 +200,114 @@ not on a white page.
 
 ## 6. Build order
 
-1. **Extract the derivation.** `HcTokens deriveTokens(SkinSeeds)`, pure, no
-   Flutter dependency beyond `Color`/`Curve`. Prove it by deriving all four
-   built-ins from seeds and asserting equality with the existing `const`s — a
-   ratchet in itself, and it forces the seed set to be genuinely sufficient
-   before any UI exists.
-2. **Reuse the ratchets as a runtime validator.** Lift the assertions out of
-   `token_ratchet_test.dart` and `metrics_test.dart` into
-   `SkinReport validate(HcTokens)` returning measured findings. The tests then
-   call the same function — one implementation, two callers, no drift.
+1. ~~**Extract the derivation.**~~ **DONE 2026-08-07** —
+   `lib/design/skin_seeds.dart`, proved by `test/design/skin_seeds_test.dart`:
+   all four shipped skins rebuild from their seeds, field for field.
+
+   **The premise in §3 was wrong, and measuring it is the main result.** Twelve
+   controls cannot *generate* these skins. No single ratio reproduces all four
+   corner scales — Midnight wants .29/.57/1.57 where Control Room wants
+   .4/.6/1.6 — and no lightness step off a ground reproduces the surfaces. They
+   were tuned by eye. A formula contorted to reach `0x141922` from `0x0B0E13`
+   would be curve-fitting wearing the clothes of a rule, and it would make
+   every future skin worse to hide that.
+
+   **So the split is by kind, not by count: a palette is chosen, shape is
+   computed.** That still buys most of what §3 wanted — ~48 of 74 tokens
+   derived from ~26 seeds — and the compression sits where it matters:
+
+   | derived | from |
+   |---|---|
+   | the 28-field type ramp | one number |
+   | density (4) | one preset |
+   | motion (6) | one preset |
+   | `accent.onDanger` | `onPrimary` — identical in **all four** skins |
+   | `metric.co2/power/reading` | `success/active/primary` — holds in every dark skin |
+   | card + overlay shadows | brightness and glow |
+   | `radius.pill`, `stroke.width`, tabular figures | constant by definition |
+
+   Two rules were *discovered* by the diff rather than assumed, and both are
+   now load-bearing: onDanger and onPrimary answer the same question ("ink on a
+   saturated fill"), and a sensor's colour is the accent for what it measures.
+
+   **What the seeds gained, and why.** Writing it found four places the plan's
+   model was too coarse: a focus ring can differ from the accent (Soft Home
+   rings brighter, to out-shout a light page); glass is *two* decisions, since
+   Soft Home has a tint with no blur; and density and motion needed per-skin
+   overrides, because Soft Home sits between `comfortable` and `wall` and its
+   timings are `standard` off by 10ms and 40ms — too small to be a preset, too
+   real to round away without changing what ships.
+
+   **The seeds are flat and serializable** — no nested Flutter objects except
+   the two overrides — which is the shape step 3 needs to put a skin in core.
+
+   Still to do here: §6 step 2, lifting the ratchets into
+   `SkinReport validate(HcTokens)` so the same assertions run on a data skin.
+   Nothing in step 1 changes a shipped pixel — `skins.dart` still holds the
+   four `const`s, and the seeds are proved *against* them.
+2. ~~**Reuse the ratchets as a runtime validator.**~~ **DONE 2026-08-07** —
+   `lib/design/skin_validator.dart`. `validateSkin(HcTokens)` returns a
+   `SkinReport` of measured `SkinFinding`s across six checks: contrast, role
+   collapse, sensor-tint distinctness, bloom, the type floor and the tap-target
+   floor.
+
+   **The drift is actually closed**, not just intended to be: the assertions
+   were *removed* from `token_ratchet_test.dart`, `metrics_test.dart` and
+   `skin_reach_test.dart`, which now call `validateSkin`. `dart:math` is no
+   longer imported by the ratchet file — the duplicated luminance maths is gone
+   rather than merely shadowed, which is the check that the move really
+   happened.
+
+   **Findings, not booleans.** Each carries the measured number, the required
+   one, and the direction that fixes it — "`1.42:1` against the card surface,
+   needs 4.5. Lighten it, or darken what it sits on." A validator that answers
+   true/false can only be obeyed; one that says which pair failed and by how
+   much can be used by someone standing at a colour picker. That is §4's live
+   report, already available.
+
+   **`canSave` implements §5's floor.** Only one finding blocks: body ink
+   failing against its own ground, because that is the skin you cannot read the
+   controls in to fix. A poor `warn` is a bad skin and saves with a warning.
+
+   All four shipped skins come back clean. 14 new tests, half of them
+   deliberately bad skins — a validator nobody has watched reject anything
+   might be returning an empty list. Verified by planting the two failures that
+   really shipped: Midnight's `offline` at 2.3:1, and Control Room's `warn`
+   collapsed into `active` so an open door and an occupied room were one
+   colour. Both are caught through the delegating tests.
 3. **Core's `/skins`.** Model, handlers, OpenAPI entry, and the version stamp
    (`docs/openapi.yaml` — see the release conventions; it is the third file).
 4. **Load and fall back.** Provider, chain from §5, applied through the existing
    skin provider so a data skin reaches the whole app exactly as a built-in
    does. Verify the reach, do not assume it.
-5. **The gallery** — user skins beside built-ins, duplicate / rename / delete.
+5. ~~**The gallery**~~ **DONE 2026-08-07.** Appearance now lists *Built in* and
+   *Yours*. Built-ins carry **Duplicate** and no edit control — you cannot
+   change Midnight, you fork it — which is §4's blank-page answer without a
+   mode: a new skin always starts as something that already works.
+
+   **The built-in seed table moved to `lib`** (`design/builtin_seeds.dart`).
+   The gallery needs it to fork, and as a side effect `skin_seeds_test.dart`
+   now proves the *shipped* seeds reproduce the *shipped* skins rather than
+   proving a test-local copy does — the same words, a stronger claim.
+
+   **A test asserting a fork is pixel-identical to its parent found two real
+   gaps**, neither visible by reading:
+
+   - `seedsToJson` dropped `metric`, so forking Control Room or Soft Home lost
+     their sensor hues. Fixed by writing them through `overrides`, which is
+     exactly what that escape hatch exists for — the seed format has no
+     `metric` field on purpose.
+   - Soft Home's hand-tuned density and motion **cannot be forked at all.**
+     They live in client-side override fields the wire format has no room for,
+     deliberately, because a preset invented for one skin compresses nothing.
+     A fork lands on `comfortable`: four pixels and forty milliseconds off. The
+     test states this rather than asserting around it. If it ever matters the
+     fix is a `roomy` preset in the vocabulary, not a wider wire format.
+
+   Ids are generated, never typed — a skin named `midnight` would be shadowed
+   by the built-in and could save but never be worn. Deleting the skin you are
+   wearing is allowed and clears the preference, so a recycled id cannot be
+   silently inherited.
 6. **The editor** — twelve controls, live preview, live report. The signature
    bet ships here.
 7. **Advanced disclosure** — the 62 derived values, each overridable, each

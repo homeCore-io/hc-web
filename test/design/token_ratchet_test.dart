@@ -1,8 +1,8 @@
 import 'dart:io';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hc_web/design/skin_validator.dart';
 import 'package:hc_web/design/skins.dart';
 
 /// The app takes its values from the tokens. This is what keeps it there.
@@ -158,100 +158,41 @@ void main() {
   });
 
   test('text colours clear WCAG AA against the surfaces they sit on', () {
-    // Computed from the tokens, so a palette edit cannot quietly undo this.
-    // Two of these were real and shipped: "Offline" was the faintest text in
-    // every skin at 2.3-2.6:1 — the fault state, least readable — and Soft
-    // Home wrote white on its amber `active` fill at 2.16:1, which is every
-    // primary button and every TextButton label in the one light skin.
+    // The measurement moved to `skin_validator.dart` and this calls it, so a
+    // skin loaded from data gets the identical check — see step 2 of
+    // theme-editor-plan.md. Two of these were real and shipped: "Offline" was
+    // the faintest text in every skin at 2.3-2.6:1 — the fault state, least
+    // readable — and Soft Home wrote white on its amber `active` fill at
+    // 2.16:1, which is every primary button in the one light skin.
     //
-    // The bar is 4.5 rather than 3.0 because the ramp runs 10-26px and the
-    // scale takes the small end to 9.2px: almost none of this app is large
-    // text by WCAG's definition.
-    double lum(int argb) {
-      double ch(int c) {
-        final s = c / 255;
-        return s <= 0.04045
-            ? s / 12.92
-            : math.pow((s + 0.055) / 1.055, 2.4).toDouble();
-      }
-
-      return 0.2126 * ch((argb >> 16) & 0xFF) +
-          0.7152 * ch((argb >> 8) & 0xFF) +
-          0.0722 * ch(argb & 0xFF);
-    }
-
-    double ratio(Color a, Color b) {
-      // ignore: deprecated_member_use
-      final la = lum(a.value), lb = lum(b.value);
-      final hi = la > lb ? la : lb, lo = la > lb ? lb : la;
-      return (hi + 0.05) / (lo + 0.05);
-    }
-
-    // Nothing is deferred any more.
-    //
-    // This list used to hold six Soft Home pairs — `active` at 2.16 on a card,
-    // `warn`, `success`, `onBaseMuted`, `primary` — carried with reasons rather
-    // than silently passing. They were all the same mistake: colours chosen as
-    // fills and then used as ink, on the one skin whose surfaces are light
-    // enough for that to matter. Retuning the values closed all six without a
-    // new token or a single call-site change.
-    //
-    // If something goes back in here, it needs a reason next to it and a note
-    // in the brief — not a shrug.
-    const deferred = <String>{};
-
+    // Nothing is deferred any more. This list used to hold six Soft Home
+    // pairs, carried with reasons rather than silently passing; retuning the
+    // values closed all six. If something goes back, it needs a reason beside
+    // it and a note in the brief — not a shrug.
     final failures = <String>[];
     for (final skin in HcSkin.values) {
-      final t = skin.tokens;
-      final n = t.name;
-      void check(String label, Color fg, Color bg) {
-        if (deferred.contains('$n:$label')) return;
-        final r = ratio(fg, bg);
-        if (r < 4.5) failures.add('$n $label ${r.toStringAsFixed(2)}');
+      for (final f in validateSkin(skin.tokens).of(SkinCheck.contrast)) {
+        failures.add('${skin.tokens.name} ${f.field} '
+            '${f.measured!.toStringAsFixed(2)}');
       }
-
-      for (final (label, fg) in [
-        ('onBase', t.surface.onBase),
-        ('onBaseMuted', t.surface.onBaseMuted),
-        ('active', t.accent.active),
-        ('primary', t.accent.primary),
-        ('success', t.accent.success),
-        ('warn', t.accent.warn),
-        ('danger', t.accent.danger),
-        ('offline', t.accent.offline),
-      ]) {
-        check(label, fg, t.surface.raised);
-      }
-      // The ink a filled button writes in, on the fill it writes on.
-      check('onPrimaryOnActive', t.accent.onPrimary, t.accent.active);
-      check('onPrimaryOnPrimary', t.accent.onPrimary, t.accent.primary);
     }
-
     expect(failures, isEmpty,
         reason: 'these text colours are under 4.5:1 on the surface they sit '
             'on:\n  ${failures.join('\n  ')}');
   });
 
   test('a skin that refuses bloom gets none', () {
-    // `HcGlow.strength` was a token from the start — 0 is how Control Room says
-    // "near-black, hairlines, no bloom", 0.35 is Soft Home's "gentle warm bleed
-    // rather than the wall panel's full one" — and nine widgets drew coloured
-    // haloes with a hand-picked alpha and blur without ever asking. So the skin
-    // whose entire description is *no bloom* glowed: an unsaved-changes dot, a
-    // scene swatch, an attribute tile, a room pill, a plugin card.
-    //
-    // `halo()` is the only way to draw one now, and this is what it must do at
-    // the ends of the range.
+    // `HcGlow.strength` 0 is how Control Room says "no bloom", and nine widgets
+    // drew coloured haloes with a hand-picked alpha without ever asking — so
+    // the skin whose entire description is *no bloom* glowed. `halo()` is the
+    // only way to draw one now; the validator holds both ends of the range.
     for (final skin in HcSkin.values) {
-      final g = skin.tokens.glow;
-      final shadows = g.halo(const Color(0xFFFFB661), blur: 8);
-      if (g.strength == 0) {
-        expect(shadows, isEmpty,
-            reason: '${skin.name} sets glow.strength 0 and still drew a halo');
-      } else {
-        expect(shadows, hasLength(1), reason: skin.name);
-        // The caller's blur is preserved — a 7px status dot and an 84px tile
-        // do not want the same halo, so the skin scales the alpha, not the size.
+      expect(validateSkin(skin.tokens).of(SkinCheck.bloom), isEmpty,
+          reason: skin.name);
+      // The caller's blur is preserved — a 7px status dot and an 84px tile do
+      // not want the same halo, so the skin scales the alpha, not the size.
+      final shadows = skin.tokens.glow.halo(const Color(0xFFFFB661), blur: 8);
+      if (skin.tokens.glow.strength > 0) {
         expect(shadows.single.blurRadius, 8, reason: skin.name);
       }
     }
@@ -265,6 +206,7 @@ void main() {
       // The tokens' own definitions.
       'skins.dart': 'the four skins state their elevation here',
       'tokens.dart': 'HcGlow.halo builds the shadow',
+      'skin_seeds.dart': 'derives elevation — this is where shadows come from',
       // Already gate on t.glow themselves, predating halo().
       'section_scaffold.dart': 'guarded by t.glow',
       'session_status.dart': 'guarded by t.glow',

@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../design/skin_resolve.dart';
 import '../../design/skins.dart';
 
 /// Public because the picker names it in its own copy, and because a stored
@@ -17,30 +18,31 @@ const kSkinKey = 'skin';
 /// Persisted like the rest of the local UI preferences. A skin is the most
 /// visible choice in the app and the last one anyone would want to remake on
 /// every reload.
-class SkinOverrideNotifier extends Notifier<HcSkin?> {
+class SkinOverrideNotifier extends Notifier<SkinChoice> {
   @override
-  HcSkin? build() {
+  SkinChoice build() {
     _load();
-    return null;
+    return const SkinChoice.none();
   }
 
   Future<void> _load() async {
     final p = await SharedPreferences.getInstance();
-    if (ref.mounted) state = decodeSkin(p.getString(kSkinKey));
+    if (ref.mounted) state = SkinChoice.fromStored(p.getString(kSkinKey));
   }
 
   /// Pick a skin for the whole app, or pass null to hand each shell back its
   /// own default.
-  Future<void> choose(HcSkin? skin) async {
+  Future<void> choose(SkinChoice skin) async {
     state = skin;
     final p = await SharedPreferences.getInstance();
     // Absent means "no choice", so clearing removes the key rather than
     // storing a sentinel — otherwise the stored value and the default would
     // be two ways of saying the same thing and could drift apart.
-    if (skin == null) {
+    final stored = skin.stored;
+    if (stored == null) {
       await p.remove(kSkinKey);
     } else {
-      await p.setString(kSkinKey, skin.name);
+      await p.setString(kSkinKey, stored);
     }
   }
 }
@@ -59,5 +61,5 @@ HcSkin? decodeSkin(String? stored) {
   return null;
 }
 
-final skinOverrideProvider =
-    NotifierProvider<SkinOverrideNotifier, HcSkin?>(SkinOverrideNotifier.new);
+final skinOverrideProvider = NotifierProvider<SkinOverrideNotifier, SkinChoice>(
+    SkinOverrideNotifier.new);

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hc_web/core/providers/skin_provider.dart';
+import 'package:hc_web/design/skin_resolve.dart';
 import 'package:hc_web/design/skins.dart';
 import 'package:hc_web/design/tokens.dart';
 import 'package:hc_web/features/settings/appearance_page.dart';
@@ -28,9 +29,13 @@ Widget _host() => ProviderScope(
       child: Consumer(
         builder: (context, ref, _) {
           // Stands in for ShellScope: the app's skin, applied above the page.
-          final skin = ref.watch(skinOverrideProvider) ?? HcSkin.midnight;
+          final tokens = resolveSkin(
+            choice: ref.watch(skinOverrideProvider),
+            shell: HcShell.touch,
+            skins: const [],
+          );
           return MaterialApp(
-            theme: hcTheme(skin),
+            theme: hcThemeFromTokens(tokens),
             home: const Column(
               children: [
                 _Probe(),

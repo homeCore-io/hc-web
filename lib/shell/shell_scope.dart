@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 
 import '../design/skins.dart';
 import '../core/providers/skin_provider.dart';
+import '../core/providers/skins_provider.dart';
+import '../design/skin_resolve.dart';
 import '../design/hc_icons.dart';
 import 'command_palette.dart';
 import 'touch_chrome.dart';
@@ -43,11 +45,18 @@ class ShellScope extends ConsumerWidget {
     final location = GoRouterState.of(context).matchedLocation;
     final shell = shellFor(location);
 
-    final skin = ref.watch(skinOverrideProvider) ?? HcSkin.defaultFor(shell);
+    // A data skin reaches the app through exactly the path a built-in does —
+    // one `Theme` above the chrome — so there is no way for a widget to honour
+    // one kind of skin and not the other.
+    final tokens = resolveSkin(
+      choice: ref.watch(skinOverrideProvider),
+      shell: shell,
+      skins: ref.watch(skinsProvider).value ?? const [],
+    );
     final reduceMotion = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
 
     return Theme(
-      data: hcTheme(skin, reduceMotion: reduceMotion),
+      data: hcThemeFromTokens(tokens, reduceMotion: reduceMotion),
       // The theme must be applied *above* the chrome, or the chrome would draw
       // itself in the previous skin for one frame on every navigation.
       child: Builder(

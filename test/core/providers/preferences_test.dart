@@ -8,6 +8,7 @@ import 'package:hc_web/core/providers/room_collapse_provider.dart';
 import 'package:hc_web/core/providers/skin_provider.dart';
 import 'package:hc_web/core/providers/thermostat_prefs_provider.dart';
 import 'package:hc_web/core/providers/time_display_provider.dart';
+import 'package:hc_web/design/skin_resolve.dart';
 import 'package:hc_web/design/skins.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -208,13 +209,14 @@ final _prefs = <_Pref>[
     name: 'skin',
     key: 'skin',
     read: (c) => c.read(skinOverrideProvider),
-    // Null is a real choice, not a missing one: each shell picks its own.
-    fallback: null,
+    // "No choice" is a real choice, not a missing one: each shell picks its own.
+    fallback: const SkinChoice.none(),
     seed: 'controlRoom',
-    loaded: HcSkin.controlRoom,
-    mutate: (c) =>
-        c.read(skinOverrideProvider.notifier).choose(HcSkin.softHome),
-    afterMutation: HcSkin.softHome,
+    loaded: const SkinChoice.builtIn(HcSkin.controlRoom),
+    mutate: (c) => c
+        .read(skinOverrideProvider.notifier)
+        .choose(const SkinChoice.builtIn(HcSkin.softHome)),
+    afterMutation: const SkinChoice.builtIn(HcSkin.softHome),
     readBack: (p) => p.getString('skin'),
     // Stored by enum name, so the value stays readable and survives the enum
     // being reordered.
@@ -430,25 +432,43 @@ void main() {
       SharedPreferences.setMockInitialValues({'skin': 'softHome'});
       final c = ProviderContainer();
       addTearDown(c.dispose);
-      await _settleUntil(() => c.read(skinOverrideProvider) == HcSkin.softHome);
+      await _settleUntil(() =>
+          c.read(skinOverrideProvider) ==
+          const SkinChoice.builtIn(HcSkin.softHome));
 
-      await c.read(skinOverrideProvider.notifier).choose(null);
-      expect(c.read(skinOverrideProvider), isNull);
+      await c
+          .read(skinOverrideProvider.notifier)
+          .choose(const SkinChoice.none());
+      expect(c.read(skinOverrideProvider).isNone, isTrue);
 
       final store = await SharedPreferences.getInstance();
       expect(store.getKeys().contains('skin'), isFalse,
           reason: 'clearing the skin left something behind');
     });
 
-    test('a skin that no longer exists reads as no choice', () async {
-      // Retiring a skin must not lock out whoever had chosen it. Throwing here
-      // would fail every provider read on startup.
+    test('a skin that no longer exists still dresses the app', () async {
+      // Retiring a skin must not lock out whoever had chosen it. It now reads
+      // as a data-skin id rather than as "no choice" — but the guarantee that
+      // matters is unchanged, and it is about the tokens rather than the
+      // stored value: an id nothing knows resolves to the shell's own default,
+      // exactly as no choice does.
       SharedPreferences.setMockInitialValues({'skin': 'artDeco'});
       final c = ProviderContainer();
       addTearDown(c.dispose);
       c.read(skinOverrideProvider);
       await _settle();
-      expect(c.read(skinOverrideProvider), isNull);
+
+      for (final shell in HcShell.values) {
+        expect(
+          resolveSkin(
+            choice: c.read(skinOverrideProvider),
+            shell: shell,
+            skins: const [],
+          ).name,
+          HcSkin.defaultFor(shell).tokens.name,
+          reason: 'a retired skin left $shell undressed',
+        );
+      }
     });
 
     test('every skin round-trips through storage', () async {
@@ -457,13 +477,16 @@ void main() {
         final c = ProviderContainer();
         c.read(skinOverrideProvider);
         await _settle();
-        await c.read(skinOverrideProvider.notifier).choose(skin);
+        await c
+            .read(skinOverrideProvider.notifier)
+            .choose(SkinChoice.builtIn(skin));
         c.dispose();
 
         final reloaded = ProviderContainer();
         addTearDown(reloaded.dispose);
-        await _settleUntil(() => reloaded.read(skinOverrideProvider) == skin);
-        expect(reloaded.read(skinOverrideProvider), skin,
+        await _settleUntil(() =>
+            reloaded.read(skinOverrideProvider) == SkinChoice.builtIn(skin));
+        expect(reloaded.read(skinOverrideProvider), SkinChoice.builtIn(skin),
             reason: '${skin.name} did not survive a reload');
       }
     });
