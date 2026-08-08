@@ -23,9 +23,14 @@ class HomecoreClient {
   void Function(int? statusCode, String method, String url, String body)?
       onApiError;
 
-  HomecoreClient() {
+  /// [baseUrl] is relative on purpose: one build artifact runs anywhere, with
+  /// the API served same-origin by nginx in production and by `tool/dev.mjs` in
+  /// development. Dio only permits a relative base on the web, though, so a VM
+  /// test cannot construct this at all without overriding it — which is part of
+  /// why `lib/app.dart` had no test.
+  HomecoreClient({String baseUrl = '/api/v1'}) {
     final opts = BaseOptions(
-      baseUrl: '/api/v1',
+      baseUrl: baseUrl,
       connectTimeout: const Duration(seconds: 10),
       receiveTimeout: const Duration(seconds: 10),
     );

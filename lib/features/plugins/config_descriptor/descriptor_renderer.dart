@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:web/web.dart' as web;
+
+import '../../../core/web/browser_env.dart';
 
 import '../../../core/text/humanize.dart';
 import '../../../design/tokens.dart';
@@ -651,14 +652,14 @@ class _ConfigDescriptorRendererState extends State<ConfigDescriptorRenderer> {
           ),
           icon: const Icon(Icons.open_in_new, size: 16),
           label: const Text('Open'),
-          onPressed: () => web.window.open(url, '_blank'),
+          onPressed: () => openInNewTab(url),
         ),
       ]),
     );
   }
 
   String _hrefFor(String template) {
-    var s = template.replaceAll('{client_host}', web.window.location.hostname);
+    var s = template.replaceAll('{client_host}', pageHostname);
     s = s.replaceAllMapped(RegExp(r'\{([a-zA-Z0-9_.]+)\}'), (m) {
       final key = m.group(1)!;
       return '${_get(key) ?? _defaults[key] ?? ''}';
