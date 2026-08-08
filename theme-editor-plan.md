@@ -280,7 +280,34 @@ not on a white page.
 4. **Load and fall back.** Provider, chain from §5, applied through the existing
    skin provider so a data skin reaches the whole app exactly as a built-in
    does. Verify the reach, do not assume it.
-5. **The gallery** — user skins beside built-ins, duplicate / rename / delete.
+5. ~~**The gallery**~~ **DONE 2026-08-07.** Appearance now lists *Built in* and
+   *Yours*. Built-ins carry **Duplicate** and no edit control — you cannot
+   change Midnight, you fork it — which is §4's blank-page answer without a
+   mode: a new skin always starts as something that already works.
+
+   **The built-in seed table moved to `lib`** (`design/builtin_seeds.dart`).
+   The gallery needs it to fork, and as a side effect `skin_seeds_test.dart`
+   now proves the *shipped* seeds reproduce the *shipped* skins rather than
+   proving a test-local copy does — the same words, a stronger claim.
+
+   **A test asserting a fork is pixel-identical to its parent found two real
+   gaps**, neither visible by reading:
+
+   - `seedsToJson` dropped `metric`, so forking Control Room or Soft Home lost
+     their sensor hues. Fixed by writing them through `overrides`, which is
+     exactly what that escape hatch exists for — the seed format has no
+     `metric` field on purpose.
+   - Soft Home's hand-tuned density and motion **cannot be forked at all.**
+     They live in client-side override fields the wire format has no room for,
+     deliberately, because a preset invented for one skin compresses nothing.
+     A fork lands on `comfortable`: four pixels and forty milliseconds off. The
+     test states this rather than asserting around it. If it ever matters the
+     fix is a `roomy` preset in the vocabulary, not a wider wire format.
+
+   Ids are generated, never typed — a skin named `midnight` would be shadowed
+   by the built-in and could save but never be worn. Deleting the skin you are
+   wearing is allowed and clears the preference, so a recycled id cannot be
+   silently inherited.
 6. **The editor** — twelve controls, live preview, live report. The signature
    bet ships here.
 7. **Advanced disclosure** — the 62 derived values, each overridable, each

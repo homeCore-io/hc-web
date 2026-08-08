@@ -5,6 +5,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers/skin_provider.dart';
 import '../../design/components/hc_surface.dart';
+import '../../core/models/skin_document.dart';
+import '../../core/providers/skins_provider.dart';
+import '../../design/components/hc_dialog.dart';
+import 'skin_actions.dart';
 import '../../design/skin_resolve.dart';
 import '../../design/skins.dart';
 import '../../design/tokens.dart';
@@ -27,6 +31,7 @@ class AppearancePage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final t = HcTokens.of(context);
     final chosen = ref.watch(skinOverrideProvider);
+    final mine = ref.watch(skinsProvider).value ?? const <SkinDocument>[];
 
     return SectionScaffold(
       title: 'Appearance',
@@ -51,6 +56,7 @@ class AppearancePage extends ConsumerWidget {
             padding: EdgeInsets.symmetric(vertical: t.space.md),
             child: Divider(height: 1, color: t.stroke.hairline),
           ),
+          const _Heading(text: 'Built in'),
           for (final skin in HcSkin.values)
             Padding(
               padding: EdgeInsets.only(bottom: t.space.sm),
@@ -62,6 +68,52 @@ class AppearancePage extends ConsumerWidget {
                 onTap: () => ref
                     .read(skinOverrideProvider.notifier)
                     .choose(SkinChoice.builtIn(skin)),
+                // No edit control, on purpose. A built-in is the floor the
+                // whole fallback chain rests on; you fork it instead, and the
+                // fork starts as something that already works rather than as a
+                // form full of empty colour fields.
+                actions: [
+                  _Action(
+                    label: 'Duplicate',
+                    onTap: () => duplicateBuiltIn(context, ref, skin),
+                  ),
+                ],
+              ),
+            ),
+          if (mine.isNotEmpty) ...[
+            SizedBox(height: t.space.md),
+            const _Heading(text: 'Yours'),
+          ],
+          for (final doc in mine)
+            Padding(
+              padding: EdgeInsets.only(bottom: t.space.sm),
+              child: _Option(
+                selected: chosen.dataId == doc.id,
+                label: doc.name,
+                description: 'Made from ${_baseLabel(doc.base)}.',
+                preview: _TokensPreview(
+                  tokens: resolveSkin(
+                    choice: SkinChoice.data(doc.id),
+                    shell: HcShell.touch,
+                    skins: mine,
+                  ),
+                ),
+                onTap: () => ref
+                    .read(skinOverrideProvider.notifier)
+                    .choose(SkinChoice.data(doc.id)),
+                actions: [
+                  _Action(
+                      label: 'Rename',
+                      onTap: () => renameSkin(context, ref, doc)),
+                  _Action(
+                      label: 'Duplicate',
+                      onTap: () => duplicateSkin(context, ref, doc)),
+                  _Action(
+                    label: 'Delete',
+                    danger: true,
+                    onTap: () => deleteSkin(context, ref, doc),
+                  ),
+                ],
               ),
             ),
         ],
@@ -77,6 +129,7 @@ class _Option extends StatelessWidget {
     required this.description,
     required this.preview,
     required this.onTap,
+    this.actions = const [],
   });
 
   final bool selected;
@@ -84,6 +137,7 @@ class _Option extends StatelessWidget {
   final String description;
   final Widget preview;
   final VoidCallback onTap;
+  final List<Widget> actions;
 
   @override
   Widget build(BuildContext context) {
@@ -120,6 +174,10 @@ class _Option extends StatelessWidget {
                     style: t.text.bodyStyle
                         .copyWith(color: t.surface.onBaseMuted, height: 1.4),
                   ),
+                  if (actions.isNotEmpty) ...[
+                    SizedBox(height: t.space.xs),
+                    Wrap(spacing: t.space.xs, children: actions),
+                  ],
                 ],
               ),
             ),
@@ -285,4 +343,97 @@ class _FollowPreview extends StatelessWidget {
           ],
         ),
       );
+}
+
+/// A group label in the gallery.
+class _Heading extends StatelessWidget {
+  const _Heading({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Padding(
+      padding: EdgeInsets.only(bottom: t.space.xs),
+      child: Text(
+        text.toUpperCase(),
+        style: t.text.overlineStyle.copyWith(color: t.surface.onBaseMuted),
+      ),
+    );
+  }
+}
+
+/// One of the small actions under a skin.
+class _Action extends StatelessWidget {
+  const _Action(
+      {required this.label, required this.onTap, this.danger = false});
+
+  final String label;
+  final VoidCallback onTap;
+  final bool danger;
+
+  @override
+  Widget build(BuildContext context) => HcButton(
+        label: label,
+        kind: danger ? HcButtonKind.danger : HcButtonKind.ghost,
+        onPressed: onTap,
+      );
+}
+
+String _baseLabel(String base) => switch (base) {
+      'midnight' => 'Midnight',
+      'ambient_glass' => 'Ambient Glass',
+      'control_room' => 'Control Room',
+      'soft_home' => 'Soft Home',
+      _ => base,
+    };
+
+/// The same preview as [_SkinPreview], for a skin that has no enum behind it.
+class _TokensPreview extends StatelessWidget {
+  const _TokensPreview({required this.tokens});
+
+  final HcTokens tokens;
+
+  /// Matches [_SkinPreview] — the two sit in one list and must be one size.
+  static const width = 84.0;
+  static const height = 58.0;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        color: tokens.surface.base,
+        borderRadius: BorderRadius.circular(tokens.radius.sm),
+        border: Border.all(color: tokens.stroke.hairline, width: 1),
+      ),
+      child: Center(
+        child: Container(
+          width: width * 0.62,
+          height: height * 0.44,
+          decoration: BoxDecoration(
+            color: tokens.surface.raised,
+            borderRadius: BorderRadius.circular(tokens.radius.xs),
+            border: Border.all(color: tokens.stroke.hairline, width: 1),
+          ),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Padding(
+              padding: const EdgeInsets.only(left: 6),
+              child: Container(
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(
+                  color: tokens.accent.active,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }

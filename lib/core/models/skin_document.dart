@@ -179,3 +179,74 @@ Color? parseSkinColour(String value) {
     return null;
   }
 }
+
+/// Seeds back to the wire form core stores.
+///
+/// The inverse of [SkinDocument.toSeeds], and the reason the gallery can
+/// duplicate a built-in at all: a fork starts as the parent's seeds written out
+/// as JSON. Round-tripping through here is tested, because a duplicate that
+/// silently differed from its parent would be a very quiet bug — you would only
+/// notice by comparing two skins side by side.
+Map<String, dynamic> seedsToJson(SkinSeeds s) => {
+      'brightness': s.brightness == Brightness.dark ? 'dark' : 'light',
+      'ground': _hex(s.ground),
+      'raised': _hex(s.raised),
+      'sunken': _hex(s.sunken),
+      'overlay': _hex(s.overlay),
+      'ink': _hex(s.ink),
+      'ink_muted': _hex(s.inkMuted),
+      'accent': _hex(s.accent),
+      'on_accent': _hex(s.onAccent),
+      'active': _hex(s.active),
+      'inactive': _hex(s.inactive),
+      'success': _hex(s.success),
+      'warn': _hex(s.warn),
+      'danger': _hex(s.danger),
+      'offline': _hex(s.offline),
+      'hairline': _hex(s.hairline),
+      if (s.focus != null) 'focus': _hex(s.focus!),
+      'corners': [s.corners.$1, s.corners.$2, s.corners.$3, s.corners.$4],
+      'space_unit': s.spaceUnit,
+      'type_scale': s.typeScale,
+      'glow_strength': s.glowStrength,
+      'glow_radius': s.glowRadius,
+      'density': s.density.name,
+      'motion': s.motion.name,
+      'glass': s.glass.name,
+    };
+
+/// `#AARRGGBB` when there is transparency to carry, `#RRGGBB` otherwise —
+/// core accepts both, and the short form is the one a person can read.
+String _hex(Color c) {
+  final v = c.toARGB32();
+  final a = (v >> 24) & 0xFF;
+  final rgb = (v & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase();
+  return a == 0xFF
+      ? '#$rgb'
+      : '#${a.toRadixString(16).padLeft(2, '0').toUpperCase()}$rgb';
+}
+
+/// A skin's own sensor hues, as overrides.
+///
+/// The seed wire format has no `metric` field, and deliberately so: the three
+/// tints with a rule derive from the accents, and the other three come from the
+/// shared sensor palette. But Control Room and Soft Home both name all six —
+/// Control Room because the shared palette is tuned for a bloom it does not
+/// have, Soft Home because a light ground needs darker hues — and forking one
+/// of them has to carry that or the fork is not a copy.
+///
+/// They go through `overrides`, which is what that escape hatch is for. Found
+/// by a test asserting a fork is pixel-identical to its parent, which it was
+/// not: `metric.temperature` came back as the shared default.
+Map<String, String> metricOverrides(SkinSeeds s) {
+  final m = s.metric;
+  if (m == null) return const {};
+  return {
+    'metric.temperature': _hex(m.temperature),
+    'metric.humidity': _hex(m.humidity),
+    'metric.illuminance': _hex(m.illuminance),
+    'metric.co2': _hex(m.co2),
+    'metric.power': _hex(m.power),
+    'metric.reading': _hex(m.reading),
+  };
+}
