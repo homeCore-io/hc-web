@@ -61,7 +61,23 @@ GoRouter _buildRouter(Ref ref) {
     initialLocation: '/',
     refreshListenable: notifier,
     redirect: (context, state) async {
-      final isLoggedIn = await ref.read(authProvider.future);
+      // Read the CURRENT state, not `authProvider.future`.
+      //
+      // `.future` is itself a provider, and reading it from here handed back a
+      // future that had already completed with the value from the first read.
+      // Signing out set the state to `AsyncData(false)`, `_RouterNotifier`
+      // fired, this redirect re-ran — and still saw `true`, so it left you on
+      // the page you had just signed out of. That is the whole Sign out bug:
+      // every part worked except the one that asked.
+      //
+      // The await is kept for the first resolution only, so the app does not
+      // flash the house before bouncing to login on a cold load. Once there is
+      // a value, the live one is what counts — which is safe precisely because
+      // `_RouterNotifier` re-runs this on every change.
+      final auth = ref.read(authProvider);
+      final isLoggedIn = auth.hasValue
+          ? auth.requireValue
+          : await ref.read(authProvider.future);
       final isLoginPage = state.matchedLocation == '/login';
       if (!isLoggedIn && !isLoginPage) return '/login';
       if (isLoggedIn && isLoginPage) return '/';

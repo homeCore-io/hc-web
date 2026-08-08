@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+
+import '../../core/web/browser_env.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:web/web.dart' as web;
 
 import '../../design/hc_icons.dart';
 import '../../design/tokens.dart';
@@ -364,7 +365,7 @@ class _KioskLinkDialogState extends State<_KioskLinkDialog> {
   String _nameOf(Camera c) => go2rtcStreamName(c.url) ?? c.id;
 
   String _link() {
-    final origin = web.window.location.origin;
+    final origin = pageOrigin;
     final layout = switch (_layout) {
       WallLayout.spotlight => 'spotlight',
       WallLayout.grid => 'grid',
