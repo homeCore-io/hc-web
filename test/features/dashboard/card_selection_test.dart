@@ -120,6 +120,45 @@ void main() {
     });
   });
 
+  group('what a card says it is showing', () {
+    test('a truncated card names both numbers', () {
+      final sel = selectDevicesWithCount(
+          _house, {'selection_mode': 'query', 'query': '', 'limit': 2});
+      expect(sel.shown.length, 2);
+      expect(sel.matched, 6, reason: 'counted before the limit, not after');
+      expect(sel.truncated, isTrue);
+      expect(sel.summary, 'showing 2 of 6');
+    });
+
+    test('a card showing everything it matched says nothing', () {
+      final sel = selectDevicesWithCount(
+          _house, {'selection_mode': 'query', 'query': '', 'limit': 50});
+      expect(sel.truncated, isFalse);
+      expect(sel.summary, isNull,
+          reason: 'a line under every card would be noise; it earns its place '
+              'only when something was left out');
+    });
+
+    test('a card that matches nothing says so', () {
+      // The state both shipped templates were in, and the reason neither was
+      // noticed: an empty card is indistinguishable from one you configured
+      // wrong until it tells you it matched nothing.
+      final sel = selectDevicesWithCount(
+          _house, {'selection_mode': 'area', 'area_name': 'Basement'});
+      expect(sel.matched, 0);
+      expect(sel.summary, 'No devices match');
+    });
+
+    test('the limit does not change what counts as matching', () {
+      // `limit` slices the result; it must never narrow the query, or the
+      // reported total would be the slice and the sentence would be circular.
+      final a = selectDevicesWithCount(
+          _house, {'selection_mode': 'query', 'query': 'lamp', 'limit': 1});
+      expect(a.matched, 2);
+      expect(a.shown.length, 1);
+    });
+  });
+
   group('normalizeAreaName', () {
     test('matches core\'s rule', () {
       expect(normalizeAreaName('Living Room'), 'living_room');
