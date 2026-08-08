@@ -71,6 +71,9 @@ class _CardLibraryState extends ConsumerState<CardLibrary> {
   bool _matches(String label) =>
       _query.isEmpty || label.toLowerCase().contains(_query.toLowerCase());
 
+  DashboardWidgetModel _entryCard(_Entry e) =>
+      _model(type: e.type, title: e.label, config: e.config);
+
   DashboardWidgetModel _model({
     required String type,
     required String title,
@@ -84,7 +87,9 @@ class _CardLibraryState extends ConsumerState<CardLibrary> {
         config: config,
       );
 
-  void _placeRoom(_Room room) => widget.onPick(_model(
+  void _placeRoom(_Room room) => widget.onPick(_roomCard(room));
+
+  DashboardWidgetModel _roomCard(_Room room) => _model(
         type: 'device_grid',
         // Titled with the room, because that is what the user picked. A card
         // called "Device grid" would be naming its renderer at them.
@@ -95,7 +100,7 @@ class _CardLibraryState extends ConsumerState<CardLibrary> {
           'show_offline': true,
           'limit': 12,
         },
-      ));
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -132,7 +137,11 @@ class _CardLibraryState extends ConsumerState<CardLibrary> {
                   if (shownRooms.isNotEmpty) ...[
                     const _Heading(label: 'Rooms'),
                     for (final room in shownRooms)
-                      _RoomRow(room: room, onTap: () => _placeRoom(room)),
+                      _RoomRow(
+                        room: room,
+                        onTap: () => _placeRoom(room),
+                        payload: () => _roomCard(room),
+                      ),
                     SizedBox(height: t.space.md),
                   ] else if (_query.isEmpty && rooms.isEmpty)
                     Padding(
@@ -153,11 +162,8 @@ class _CardLibraryState extends ConsumerState<CardLibrary> {
                         _PlainRow(
                           label: entry.label,
                           hint: entry.hint,
-                          onTap: () => widget.onPick(_model(
-                            type: entry.type,
-                            title: entry.label,
-                            config: entry.config,
-                          )),
+                          onTap: () => widget.onPick(_entryCard(entry)),
+                          payload: () => _entryCard(entry),
                         ),
                     SizedBox(height: t.space.md),
                   ],
@@ -274,82 +280,136 @@ class _Heading extends StatelessWidget {
 
 /// A room, with the two numbers that make it a real thing rather than a label.
 class _RoomRow extends StatelessWidget {
-  const _RoomRow({required this.room, required this.onTap});
+  const _RoomRow(
+      {required this.room, required this.onTap, required this.payload});
   final _Room room;
   final VoidCallback onTap;
+  final DashboardWidgetModel Function() payload;
 
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(t.radius.sm),
-      child: Padding(
-        padding:
-            EdgeInsets.symmetric(vertical: t.space.xs, horizontal: t.space.xs),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(room.label,
-                  style:
-                      t.text.bodySmallStyle.copyWith(color: t.surface.onBase)),
-            ),
-            Text(
-              '${room.total}',
-              style: t.text.bodySmallStyle.copyWith(
-                  color: t.surface.onBaseMuted,
-                  fontFeatures: t.numericFontFeatures),
-            ),
-            SizedBox(width: t.space.sm),
-            SizedBox(
-              width: 44,
-              child: Text(
-                room.on > 0 ? '${room.on} on' : '',
-                textAlign: TextAlign.right,
-                style: t.text.captionStyle.copyWith(
-                    color:
-                        room.on > 0 ? t.accent.active : t.surface.onBaseMuted,
+    return _DragRow(
+      payload: payload,
+      label: room.label,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(t.radius.sm),
+        child: Padding(
+          padding: EdgeInsets.symmetric(
+              vertical: t.space.xs, horizontal: t.space.xs),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(room.label,
+                    style: t.text.bodySmallStyle
+                        .copyWith(color: t.surface.onBase)),
+              ),
+              Text(
+                '${room.total}',
+                style: t.text.bodySmallStyle.copyWith(
+                    color: t.surface.onBaseMuted,
                     fontFeatures: t.numericFontFeatures),
               ),
-            ),
-          ],
+              SizedBox(width: t.space.sm),
+              SizedBox(
+                width: 44,
+                child: Text(
+                  room.on > 0 ? '${room.on} on' : '',
+                  textAlign: TextAlign.right,
+                  style: t.text.captionStyle.copyWith(
+                      color:
+                          room.on > 0 ? t.accent.active : t.surface.onBaseMuted,
+                      fontFeatures: t.numericFontFeatures),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-class _PlainRow extends StatelessWidget {
-  const _PlainRow(
-      {required this.label, required this.hint, required this.onTap});
+/// Makes a library row draggable onto the canvas.
+///
+/// Click still places — dragging is the addition, not the replacement, because
+/// pointing at where a thing goes is the difference between arranging a page
+/// and correcting one afterwards. The payload is built on drag start so every
+/// drop is a distinct card.
+class _DragRow extends StatelessWidget {
+  const _DragRow(
+      {required this.payload, required this.label, required this.child});
+
+  final DashboardWidgetModel Function() payload;
   final String label;
-  final String hint;
-  final VoidCallback onTap;
+  final Widget child;
 
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(t.radius.sm),
-      child: Padding(
-        padding:
-            EdgeInsets.symmetric(vertical: t.space.xs, horizontal: t.space.xs),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(label,
-                  style:
-                      t.text.bodySmallStyle.copyWith(color: t.surface.onBase)),
-            ),
-            Flexible(
-              child: Text(hint,
-                  textAlign: TextAlign.right,
-                  overflow: TextOverflow.ellipsis,
-                  style: t.text.captionStyle
-                      .copyWith(color: t.surface.onBaseMuted)),
-            ),
-          ],
+    return Draggable<Object>(
+      data: payload(),
+      dragAnchorStrategy: pointerDragAnchorStrategy,
+      feedback: Material(
+        color: Colors.transparent,
+        child: Container(
+          padding: EdgeInsets.symmetric(
+              horizontal: t.space.sm, vertical: t.space.xs),
+          decoration: BoxDecoration(
+            color: t.surface.overlay,
+            borderRadius: BorderRadius.circular(t.radius.sm),
+            border: Border.all(color: t.accent.active, width: t.stroke.width),
+          ),
+          child: Text(label,
+              style: t.text.bodySmallStyle.copyWith(color: t.surface.onBase)),
+        ),
+      ),
+      childWhenDragging: Opacity(opacity: 0.4, child: child),
+      child: child,
+    );
+  }
+}
+
+class _PlainRow extends StatelessWidget {
+  const _PlainRow(
+      {required this.label,
+      required this.hint,
+      required this.onTap,
+      required this.payload});
+  final String label;
+  final String hint;
+  final VoidCallback onTap;
+  final DashboardWidgetModel Function() payload;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return _DragRow(
+      payload: payload,
+      label: label,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(t.radius.sm),
+        child: Padding(
+          padding: EdgeInsets.symmetric(
+              vertical: t.space.xs, horizontal: t.space.xs),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(label,
+                    style: t.text.bodySmallStyle
+                        .copyWith(color: t.surface.onBase)),
+              ),
+              Flexible(
+                child: Text(hint,
+                    textAlign: TextAlign.right,
+                    overflow: TextOverflow.ellipsis,
+                    style: t.text.captionStyle
+                        .copyWith(color: t.surface.onBaseMuted)),
+              ),
+            ],
+          ),
         ),
       ),
     );

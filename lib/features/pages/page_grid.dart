@@ -28,6 +28,8 @@ class PageGrid extends StatefulWidget {
     this.onRemove,
     this.onConfigure,
     this.onAddAt,
+    this.selectedId,
+    this.onDropCard,
   });
 
   final List<GridItem> items;
@@ -58,11 +60,22 @@ class PageGrid extends StatefulWidget {
   /// is the difference between arranging a page and correcting one.
   final void Function(int x, int y)? onAddAt;
 
+  /// The card the rail is showing. Marked on the canvas, because a panel that
+  /// names a card while nothing on the board says which one is a panel about
+  /// nothing you can see.
+  final String? selectedId;
+
+  /// A card dragged in from the library, dropped at a cell.
+  final void Function(Object payload, int x, int y)? onDropCard;
+
   @override
   State<PageGrid> createState() => _PageGridState();
 }
 
 class _PageGridState extends State<PageGrid> {
+  /// The cell a dragged-in card is hovering over, in grid units.
+  (int, int)? _dropCell;
+
   // A gesture (move or resize) works from an immutable snapshot of the layout
   // taken at its start, so the arrangement depends only on where the pointer is
   // *now* — not on the path it took to get there. The engine reflows that
@@ -217,25 +230,66 @@ class _PageGridState extends State<PageGrid> {
               // above them.
               if (widget.editing)
                 Positioned.fill(
-                  // Behind the cards in the Stack on purpose: a card gets the
-                  // tap first, and only bare canvas reaches this.
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTapUp: widget.onAddAt == null
-                        ? null
-                        : (details) {
-                            final p = details.localPosition;
-                            final x =
-                                (p.dx / stepX).floor().clamp(0, columns - 1);
-                            final y = (p.dy / stepY).floor();
-                            widget.onAddAt!(x, y < 0 ? 0 : y);
-                          },
-                    child: CustomPaint(
-                      painter: _ColumnGuides(
-                        columns: columns,
-                        cellW: cellW,
-                        gap: widget.gap,
-                        color: t.stroke.hairline,
+                  // The whole board is a drop target while editing. Tracking
+                  // the cell under the pointer is what makes dropping feel like
+                  // placing rather than like submitting: you see where it will
+                  // land before you let go.
+                  child: DragTarget<Object>(
+                    onMove: (details) {
+                      final box = context.findRenderObject() as RenderBox?;
+                      if (box == null) return;
+                      final local = box.globalToLocal(details.offset);
+                      final x =
+                          (local.dx / stepX).floor().clamp(0, columns - 1);
+                      final y = (local.dy / stepY).floor();
+                      final cell = (x, y < 0 ? 0 : y);
+                      if (_dropCell != cell) setState(() => _dropCell = cell);
+                    },
+                    onLeave: (_) => setState(() => _dropCell = null),
+                    onAcceptWithDetails: (details) {
+                      final cell = _dropCell;
+                      setState(() => _dropCell = null);
+                      if (cell != null) {
+                        widget.onDropCard?.call(details.data, cell.$1, cell.$2);
+                      }
+                    },
+                    builder: (context, _, __) => GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTapUp: widget.onAddAt == null
+                          ? null
+                          : (details) {
+                              final p = details.localPosition;
+                              final x =
+                                  (p.dx / stepX).floor().clamp(0, columns - 1);
+                              final y = (p.dy / stepY).floor();
+                              widget.onAddAt!(x, y < 0 ? 0 : y);
+                            },
+                      child: CustomPaint(
+                        painter: _ColumnGuides(
+                          columns: columns,
+                          cellW: cellW,
+                          gap: widget.gap,
+                          color: t.stroke.hairline,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+
+              // Where the dragged card would land. Drawn over the guides and
+              // under the cards, so it reads as part of the board.
+              if (_dropCell case final cell?)
+                Positioned(
+                  left: cell.$1 * stepX,
+                  top: cell.$2 * stepY,
+                  width: cellW * 4 + widget.gap * 3,
+                  height: widget.rowHeight * 2 + widget.gap,
+                  child: IgnorePointer(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: t.accent.active.withValues(alpha: 0.08),
+                        borderRadius: t.radius.mdR,
+                        border: Border.all(color: t.accent.active, width: 2),
                       ),
                     ),
                   ),
@@ -259,6 +313,7 @@ class _PageGridState extends State<PageGrid> {
                       editing: widget.editing,
                       simplified: gesturing,
                       dragging: _dragId == item.id || _resizeId == item.id,
+                      selected: widget.selectedId == item.id,
                       onRemove: () => widget.onRemove?.call(item.id),
                       onConfigure: () => widget.onConfigure?.call(item.id),
                       onDragStart: () => startDrag(item),
@@ -478,6 +533,7 @@ class _Cell extends StatelessWidget {
     required this.editing,
     required this.simplified,
     required this.dragging,
+    required this.selected,
     required this.onRemove,
     required this.onConfigure,
     required this.onDragStart,
@@ -493,6 +549,7 @@ class _Cell extends StatelessWidget {
   final bool editing;
   final bool simplified;
   final bool dragging;
+  final bool selected;
   final VoidCallback onRemove;
   final VoidCallback onConfigure;
   final VoidCallback onDragStart;
@@ -536,7 +593,8 @@ class _Cell extends StatelessWidget {
                   );
 
     final card = HcSurface(
-      selected: dragging,
+      // Lifted OR chosen. Both mean "this is the one you are working on".
+      selected: dragging || selected,
       padding: EdgeInsets.all(t.space.md),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
