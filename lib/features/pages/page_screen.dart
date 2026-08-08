@@ -134,8 +134,8 @@ class _PageScreenState extends ConsumerState<PageScreen> {
     // different thing entirely — someone left it off this breakpoint — and
     // force-placing it would undo that decision simply because you opened the
     // layout to look at it. Only the orphans get rescued.
-    final engine =
-        GridEngine(columns: layout.columns <= 0 ? 12 : layout.columns);
+    final engine = GridEngine(
+        columns: layout.columns <= 0 ? 12 : layout.columns, flow: layout.flow);
     final placedSomewhere = {
       for (final l in d.layouts)
         for (final p in l.placements) p.widgetId,
@@ -197,10 +197,49 @@ class _PageScreenState extends ConsumerState<PageScreen> {
     );
   }
 
+  /// The flow of the layout being edited. Everything that moves a card must
+  /// run under it, or a free layout gets repacked by whichever call site
+  /// forgot.
+  GridFlow get _editedFlow =>
+      _draftLayouts
+          ?.where((l) => l.breakpoint == _editingBreakpoint)
+          .firstOrNull
+          ?.flow ??
+      GridFlow.packed;
+
+  GridEngine _engine(int columns) =>
+      GridEngine(columns: columns, flow: _editedFlow);
+
   void _apply(List<GridItem> Function(GridEngine e, List<GridItem> items) op,
-      int columns) {
-    final engine = GridEngine(columns: columns);
-    setState(() => _commit(op(engine, _draftItems!)));
+      int columns,
+      {bool byHand = false}) {
+    setState(() {
+      if (byHand) _goFree();
+      _commit(op(_engine(columns), _draftItems!));
+    });
+  }
+
+  /// Arranging by hand makes this layout keep its gaps.
+  ///
+  /// The same shape as the rule that makes a derived layout authored: nothing
+  /// flips it but a person moving something. Opening the page, switching
+  /// breakpoints and resizing the window all leave it alone, and a layout
+  /// nobody has arranged keeps packing, which is what every existing document
+  /// expects.
+  ///
+  /// It is not a toggle because a toggle would have to be found. Leaving a gap
+  /// and having it stay is the whole feature; discovering it by doing it is
+  /// better than discovering a checkbox.
+  void _goFree() {
+    final selected = _editingBreakpoint;
+    if (selected == null || _draftLayouts == null) return;
+    _draftLayouts = [
+      for (final l in _draftLayouts!)
+        if (l.breakpoint == selected && l.flow != GridFlow.free)
+          l.copyWith(flow: GridFlow.free)
+        else
+          l,
+    ];
   }
 
   /// A draft layout's placements as grid items, with each card's size hints
@@ -298,7 +337,7 @@ class _PageScreenState extends ConsumerState<PageScreen> {
   Future<void> _addWidget(int columns, {int? atX, int? atY}) async {
     final created = await showWidgetPalette(context);
     if (created == null || !mounted) return;
-    final engine = GridEngine(columns: columns);
+    final engine = _engine(columns);
     final hint =
         WidgetRegistry.lookup(created.type)?.sizeHint ?? const WidgetSizeHint();
     // Clamped so a card dropped near the right edge lands whole rather than
@@ -318,7 +357,9 @@ class _PageScreenState extends ConsumerState<PageScreen> {
     setState(() {
       _draftWidgets = {...?_draftWidgets, created.id: created};
       _pendingPlacement.add(created.id);
-      _commit(engine.add(_draftItems!, item));
+      _commit(atX == null
+          ? engine.add(_draftItems!, item)
+          : engine.addAt(_draftItems!, item, atX, atY ?? 0));
     });
   }
 
@@ -351,7 +392,7 @@ class _PageScreenState extends ConsumerState<PageScreen> {
     final hint =
         WidgetRegistry.lookup(_draftWidgets?[id]?.type ?? '')?.sizeHint ??
             const WidgetSizeHint();
-    final engine = GridEngine(columns: columns);
+    final engine = _engine(columns);
     setState(() {
       _settled.add(_settledKey(selected, id));
       _commit(engine.add(
@@ -379,7 +420,7 @@ class _PageScreenState extends ConsumerState<PageScreen> {
   }
 
   void _removeWidget(String id, int columns) {
-    final engine = GridEngine(columns: columns);
+    final engine = _engine(columns);
     setState(() {
       _draftWidgets = {...?_draftWidgets}..remove(id);
       _commit(engine.remove(_draftItems!, id));
@@ -393,7 +434,7 @@ class _PageScreenState extends ConsumerState<PageScreen> {
   /// card however it was chosen.
   void _placeCard(DashboardWidgetModel created, int columns,
       {int? atX, int? atY}) {
-    final engine = GridEngine(columns: columns);
+    final engine = _engine(columns);
     final hint =
         WidgetRegistry.lookup(created.type)?.sizeHint ?? const WidgetSizeHint();
     final x = atX == null
@@ -411,7 +452,9 @@ class _PageScreenState extends ConsumerState<PageScreen> {
     setState(() {
       _draftWidgets = {...?_draftWidgets, created.id: created};
       _pendingPlacement.add(created.id);
-      _commit(engine.add(_draftItems!, item));
+      _commit(atX == null
+          ? engine.add(_draftItems!, item)
+          : engine.addAt(_draftItems!, item, atX, atY ?? 0));
       // Select what was just placed: the next thing anyone does to a new card
       // is look at it, and the inspector is where that happens.
       _selectedCard = created.id;

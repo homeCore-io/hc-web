@@ -80,6 +80,9 @@ List<DashboardLayout> writeArrangement({
 /// makes it safe to run on every save.
 DashboardLayout deriveLayout(DashboardLayout l, List<GridItem> source) {
   final columns = l.columns <= 0 ? kDefaultColumns : l.columns;
+  // Always packed, whatever the source was. Deriving one breakpoint from
+  // another IS repacking: a phone layout that preserved a desktop's whitespace
+  // would be a screen of mostly nothing.
   final packed = GridEngine(columns: columns).normalize([
     for (final i in source)
       GridItem(
@@ -97,6 +100,7 @@ DashboardLayout deriveLayout(DashboardLayout l, List<GridItem> source) {
   ]);
   return l.copyWith(
     columns: columns,
+    flow: GridFlow.packed,
     placements: [
       for (final i in packed)
         DashboardWidgetPlacement(
@@ -121,7 +125,11 @@ DashboardLayout revertToDerived(
 /// normalised so the client cannot author something core would 400 on.
 DashboardLayout _write(DashboardLayout l, List<GridItem> items) {
   final columns = l.columns <= 0 ? kDefaultColumns : l.columns;
-  final packed = GridEngine(columns: columns).normalize(items);
+  // Normalised under the layout's OWN flow. Running the packed normalize over a
+  // free layout on the way to core would close every gap at save time — the
+  // arrangement would look right until you reloaded, which is the worst shape
+  // for a bug of this kind.
+  final packed = GridEngine(columns: columns, flow: l.flow).normalize(items);
   return l.copyWith(
     columns: columns,
     placements: [
