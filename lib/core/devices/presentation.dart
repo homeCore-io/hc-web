@@ -413,3 +413,28 @@ bool isOn(DeviceState d) {
   final level = levelOf(d);
   return level != null && level > 0;
 }
+
+/// An area name reduced to its canonical form — the client's mirror of core's
+/// `normalize_name_segment`.
+///
+/// "Living Room", "living room" and "LIVING-ROOM" are all `living_room`. Core
+/// normalizes on the way in, so stored areas are already in this shape; what
+/// needs normalizing is everything else — a plugin's own spelling, a hand-typed
+/// value, a page exported from a house that spelled it differently.
+///
+/// Kept identical to core's rule on purpose: every non-alphanumeric character
+/// becomes a separator, runs collapse, empties drop.
+String normalizeAreaName(String? value) {
+  if (value == null || value.isEmpty) return '';
+  final buffer = StringBuffer();
+  for (final rune in value.runes) {
+    final c = String.fromCharCode(rune);
+    final isAlnum = RegExp(r'[A-Za-z0-9]').hasMatch(c);
+    buffer.write(isAlnum ? c.toLowerCase() : '_');
+  }
+  return buffer
+      .toString()
+      .split('_')
+      .where((part) => part.isNotEmpty)
+      .join('_');
+}

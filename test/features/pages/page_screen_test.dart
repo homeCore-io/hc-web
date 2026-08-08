@@ -69,6 +69,29 @@ DashboardDefinition _derivedDashboard() => DashboardDefinition(
       ],
     );
 
+DashboardDefinition _emptyDashboard() => DashboardDefinition(
+      id: 'kitchen',
+      name: 'Kitchen',
+      description: null,
+      ownerUserId: 'u',
+      visibility: DashboardVisibility.private,
+      tags: const [],
+      icon: 'grid',
+      isDefault: false,
+      createdAt: DateTime.utc(2026),
+      updatedAt: DateTime.utc(2026),
+      widgets: const [],
+      layouts: [
+        const DashboardLayout(
+          breakpoint: DashboardBreakpoint.desktop,
+          columns: 12,
+          rowHeight: 120,
+          gap: 12,
+          placements: [],
+        ),
+      ],
+    );
+
 DashboardDefinition _dashboard() => DashboardDefinition(
       id: 'kitchen',
       name: 'Kitchen',
@@ -565,6 +588,29 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.textContaining('is not on the'), findsNothing);
     });
+  });
+
+  testWidgets('an empty page in edit mode gets a board, not a sentence',
+      (tester) async {
+    // You cannot arrange on a surface that is not drawn. The old empty state
+    // was a sentence pointing at a button in the opposite corner, and the grid
+    // only appeared once a card existed to infer it from.
+    await _pumpAt(tester,
+        location: '/pages/kitchen',
+        size: const Size(1400, 900),
+        dashboard: _emptyDashboard());
+
+    expect(find.text('This page is empty. Tap the pencil to add widgets.'),
+        findsOneWidget);
+    expect(find.byType(PageGrid), findsNothing, reason: 'not while viewing');
+
+    await tester.tap(find.byTooltip('Edit this page'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(PageGrid), findsOneWidget,
+        reason: 'editing an empty page must still show the board');
+    expect(find.text('Add a widget to get started.'), findsNothing,
+        reason: 'the board replaces the sentence');
   });
 
   testWidgets('cancelling leaves edit mode', (tester) async {

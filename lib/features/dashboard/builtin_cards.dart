@@ -44,7 +44,13 @@ import '../../core/providers/modes_provider.dart';
 import '../../core/providers/scenes_provider.dart';
 import '../../core/providers/time_display_provider.dart';
 
-List<DeviceState> _selectDevices(
+/// Which devices a device-oriented card shows, for a given config.
+///
+/// Public because it is the single answer to that question: the card renders
+/// from it, and anything that previews or counts a card must call the same
+/// function or the two will disagree — which is exactly how a card that
+/// matches nothing gets shipped.
+List<DeviceState> selectDevicesForConfig(
     List<DeviceState> all, Map<String, dynamic> config) {
   final selectionMode = config['selection_mode'] as String? ?? 'query';
   // Device grids/lists are for real, physical devices. Never surface the
@@ -63,23 +69,48 @@ List<DeviceState> _selectDevices(
       selected = base.where((device) => ids.contains(device.id)).toList();
       break;
     case 'area':
-      final areaName = config['area_name'] as String?;
-      if (areaName != null && areaName.isNotEmpty) {
-        selected =
-            base.where((device) => device.effectiveArea == areaName).toList();
+      // Normalize BOTH sides, the way core does.
+      //
+      // Core stores areas normalized (`normalize_name_segment`: "Living Room"
+      // → "living_room") but device-side values arrive from plugins in
+      // whatever shape the bridge uses, and a stored card can carry either —
+      // the shipped Living Room template asks for "Living Room" and matched
+      // zero devices on every house because this compared raw strings with
+      // `==`. Comparing normalized forms makes the template, an imported page
+      // and a plugin's own spelling all resolve to the same room.
+      final areaName = normalizeAreaName(config['area_name'] as String?);
+      if (areaName.isNotEmpty) {
+        selected = base
+            .where(
+                (device) => normalizeAreaName(device.effectiveArea) == areaName)
+            .toList();
       }
       break;
     case 'query':
     default:
-      final query = (config['query'] as String? ?? '').toLowerCase();
-      if (query.isNotEmpty) {
-        selected = base.where((device) {
-          return device.displayName.toLowerCase().contains(query) ||
-              device.id.toLowerCase().contains(query) ||
-              (device.canonicalName?.toLowerCase().contains(query) ?? false) ||
-              (device.deviceType?.toLowerCase().contains(query) ?? false) ||
-              (device.title?.toLowerCase().contains(query) ?? false);
-        }).toList();
+      // Comma-separated terms, matched as OR.
+      //
+      // This was one literal substring, which meant the shipped Security
+      // template — `query: "door,motion,lock,camera"` — searched every device
+      // for that exact text and matched nothing, on every house. Anyone typing
+      // a list means "any of these"; nobody means the string with the commas
+      // in it.
+      final terms = (config['query'] as String? ?? '')
+          .toLowerCase()
+          .split(',')
+          .map((t) => t.trim())
+          .where((t) => t.isNotEmpty)
+          .toList();
+      if (terms.isNotEmpty) {
+        bool matches(DeviceState device, String q) =>
+            device.displayName.toLowerCase().contains(q) ||
+            device.id.toLowerCase().contains(q) ||
+            (device.canonicalName?.toLowerCase().contains(q) ?? false) ||
+            (device.deviceType?.toLowerCase().contains(q) ?? false) ||
+            (device.title?.toLowerCase().contains(q) ?? false);
+        selected = base
+            .where((device) => terms.any((q) => matches(device, q)))
+            .toList();
       }
       break;
   }
@@ -94,6 +125,46 @@ List<DeviceState> _selectDevices(
     selected = selected.take(limit).toList();
   }
   return selected;
+}
+
+/// What a card shows, and how many it left out.
+///
+/// A card that renders twelve of thirty-one and says nothing is lying about the
+/// house by omission — the same failure as rendering stale data confidently.
+/// The count is also what makes a card that matches *nothing* visible: "0
+/// devices" is the line that would have caught both shipped templates.
+@immutable
+class DeviceSelection {
+  const DeviceSelection({required this.shown, required this.matched});
+
+  final List<DeviceState> shown;
+
+  /// How many matched before `limit` was applied.
+  final int matched;
+
+  bool get truncated => matched > shown.length;
+
+  /// The sentence a card puts under its contents, or null when the card is
+  /// showing everything it matched and there is nothing to explain.
+  String? get summary {
+    if (matched == 0) return 'No devices match';
+    if (!truncated) return null;
+    return 'showing ${shown.length} of $matched';
+  }
+}
+
+/// [selectDevicesForConfig], with the pre-limit count kept.
+DeviceSelection selectDevicesWithCount(
+    List<DeviceState> all, Map<String, dynamic> config) {
+  final unlimited = {...config}..remove('limit');
+  final matched = selectDevicesForConfig(all, unlimited);
+  final limit = config['limit'] as int?;
+  return DeviceSelection(
+    shown: limit != null && matched.length > limit
+        ? matched.take(limit).toList()
+        : matched,
+    matched: matched.length,
+  );
 }
 
 class _StatSummaryWidget extends ConsumerWidget {
@@ -196,10 +267,12 @@ class _DeviceGridWidget extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final devices = _selectDevices(
-      ref.watch(devicesProvider).value ?? const <DeviceState>[],
-      widgetModel.config,
-    );
+    final async = ref.watch(devicesProvider);
+    // "No devices match" is a claim about the house, and it is false while the
+    // house is still arriving. Say nothing until there is something to say.
+    if (async.value == null) return const SizedBox.shrink();
+    final selection = selectDevicesWithCount(async.value!, widgetModel.config);
+    final devices = selection.shown;
     return LayoutBuilder(
       builder: (context, constraints) {
         final targetWidth = veryCompact
@@ -209,35 +282,71 @@ class _DeviceGridWidget extends ConsumerWidget {
                 : 180.0;
         final columns =
             (constraints.maxWidth / targetWidth).floor().clamp(1, 4);
-        return GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: devices.length,
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: columns,
-            mainAxisSpacing: 12,
-            crossAxisSpacing: 12,
-            childAspectRatio: veryCompact ? 1.9 : 1.7,
+        return _WithSelectionSummary(
+          selection: selection,
+          child: GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: devices.length,
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: columns,
+              mainAxisSpacing: 12,
+              crossAxisSpacing: 12,
+              childAspectRatio: veryCompact ? 1.9 : 1.7,
+            ),
+            itemBuilder: (context, index) {
+              final device = devices[index];
+              final notifier = ref.read(devicesProvider.notifier);
+              return HcTile(
+                device: device,
+                onTap: () => showDeviceSheet(context, device.id),
+                // Media players open their sheet for transport controls; a bare
+                // on/off would be wrong for a speaker.
+                onToggle: device.isMediaPlayer
+                    ? null
+                    : () => notifier.command(device.id, {'on': !isOn(device)}),
+                onLevel: device.isMediaPlayer
+                    ? null
+                    : (v) => notifier.command(
+                        device.id, {'brightness_pct': (v * 100).round()}),
+              );
+            },
           ),
-          itemBuilder: (context, index) {
-            final device = devices[index];
-            final notifier = ref.read(devicesProvider.notifier);
-            return HcTile(
-              device: device,
-              onTap: () => showDeviceSheet(context, device.id),
-              // Media players open their sheet for transport controls; a bare
-              // on/off would be wrong for a speaker.
-              onToggle: device.isMediaPlayer
-                  ? null
-                  : () => notifier.command(device.id, {'on': !isOn(device)}),
-              onLevel: device.isMediaPlayer
-                  ? null
-                  : (v) => notifier.command(
-                      device.id, {'brightness_pct': (v * 100).round()}),
-            );
-          },
         );
       },
+    );
+  }
+}
+
+/// A card's contents, with the sentence that says what was left out.
+///
+/// Silent truncation is the thing this exists to stop: a grid capped at 12 out
+/// of 31 looked exactly like a grid that matched 12, and a grid matching none
+/// looked like an empty card you had configured wrong.
+class _WithSelectionSummary extends StatelessWidget {
+  const _WithSelectionSummary({required this.selection, required this.child});
+
+  final DeviceSelection selection;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final line = selection.summary;
+    if (line == null) return child;
+    final t = HcTokens.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (selection.shown.isNotEmpty) child,
+        Padding(
+          padding: EdgeInsets.only(top: t.space.xs),
+          child: Text(
+            line,
+            style: t.text.captionStyle.copyWith(color: t.surface.onBaseMuted),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -249,18 +358,22 @@ class _DeviceListWidget extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final devices = _selectDevices(
-      ref.watch(devicesProvider).value ?? const <DeviceState>[],
-      widgetModel.config,
-    );
+    final async = ref.watch(devicesProvider);
+    if (async.value == null) return const SizedBox.shrink();
+    final selection = selectDevicesWithCount(async.value!, widgetModel.config);
+    final devices = selection.shown;
     final t = HcTokens.of(context);
-    return Column(
-      children: [
-        for (var i = 0; i < devices.length; i++) ...[
-          if (i > 0) Divider(height: 1, thickness: 1, color: t.stroke.hairline),
-          HomeEntityRow(device: devices[i]),
+    return _WithSelectionSummary(
+      selection: selection,
+      child: Column(
+        children: [
+          for (var i = 0; i < devices.length; i++) ...[
+            if (i > 0)
+              Divider(height: 1, thickness: 1, color: t.stroke.hairline),
+            HomeEntityRow(device: devices[i]),
+          ],
         ],
-      ],
+      ),
     );
   }
 }
@@ -271,7 +384,7 @@ class _DeviceTileWidget extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final devices = _selectDevices(
+    final devices = selectDevicesForConfig(
       ref.watch(devicesProvider).value ?? const <DeviceState>[],
       widgetModel.config,
     );
@@ -647,7 +760,7 @@ class _MediaPlayerDashboardWidget extends ConsumerWidget {
     // "compact" mode, hiding half the house; the card scrolls, so show them all.
     final limit = widgetModel.config['limit'] as int?;
     final unlimited = {...widgetModel.config}..remove('limit');
-    var devices = _selectDevices(
+    var devices = selectDevicesForConfig(
       ref.watch(devicesProvider).value ?? const <DeviceState>[],
       unlimited,
     ).where((device) => device.isMediaPlayer).toList();

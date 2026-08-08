@@ -7,6 +7,9 @@ import '../../core/models/device_state.dart';
 /// which is for physical devices that *should* have one.
 const kSystemGroup = 'System';
 
+/// Heading for devices that measure the sky rather than a room.
+const kOutdoorGroup = 'Outdoor & whole house';
+
 /// How the device list is organised. Pure logic — no widgets — so the rules that
 /// make 167 devices navigable are testable on their own.
 enum DeviceGroup { room, type, plugin, status, none }
@@ -120,12 +123,36 @@ List<DeviceProblem> problemsIn(List<DeviceState> devices) {
 ///   "28 devices have no room" when 11 physical devices did, and the other 17
 ///   were Hue and Lutron scenes that will never have one. A number that is
 ///   mostly noise gets the whole card ignored.
+/// - **Whole-house and outdoor measurements.** A rain gauge, a lightning
+///   detector and a weather station measure the sky, not a room, and no answer
+///   to "which room?" is right for them. On this house that was 3 of the 10
+///   reported — the other 7 are real sensors that genuinely are somewhere and
+///   the nag is correct about them, which is why this excludes three types
+///   rather than the plugin that happens to supply them.
 List<DeviceState> unassigned(List<DeviceState> devices) => devices
-    .where((d) =>
-        (d.effectiveArea ?? '').isEmpty &&
-        !d.isSystem &&
-        facetOf(d, d.schema) != DeviceFacet.scene)
+    .where((d) => (d.effectiveArea ?? '').isEmpty && belongsInARoom(d))
     .toList();
+
+/// Device types that measure the outdoors or the house as a whole.
+///
+/// Keyed on type rather than on plugin: an Ecowitt temp/humidity channel sits
+/// in a room like any other sensor and should be assigned one, while its
+/// sibling rain gauge never will be. Excluding `plugin.ecowitt` would have
+/// silenced both and lost seven real prompts.
+const roomlessDeviceTypes = {
+  'lightning_sensor',
+  'rain_sensor',
+  'weather_station',
+};
+
+/// Whether "which room is this in?" is a question worth asking about [d].
+///
+/// One predicate, used by both the count and the filter chip, because the two
+/// had drifted: the chip's rule omitted the scene guard the count had.
+bool belongsInARoom(DeviceState d) =>
+    !d.isSystem &&
+    facetOf(d, d.schema) != DeviceFacet.scene &&
+    !roomlessDeviceTypes.contains(d.deviceType);
 
 /// Matches a device against a query string.
 ///
@@ -159,7 +186,8 @@ bool _passesFilter(DeviceState d, DeviceFilter f) {
     DeviceFilter.media => facet == DeviceFacet.mediaPlayer,
     DeviceFilter.offline => !d.available,
     DeviceFilter.lowBattery => hasLowBattery(d),
-    DeviceFilter.unassigned => (d.effectiveArea ?? '').isEmpty && !d.isSystem,
+    DeviceFilter.unassigned =>
+      (d.effectiveArea ?? '').isEmpty && belongsInARoom(d),
   };
 }
 
@@ -171,6 +199,12 @@ String groupKeyOf(DeviceState d, DeviceGroup g) => switch (g) {
       // exactly the nag 0a3da46 removed from the banner but left in the
       // grouping. Give them their own heading instead.
       DeviceGroup.room when d.isSystem => kSystemGroup,
+      // Listed apart from "No room" for the same reason they are not counted:
+      // being unassigned is their permanent, correct state, and filing them
+      // under the bucket that means "you have work to do here" is a nag by
+      // another route.
+      DeviceGroup.room when roomlessDeviceTypes.contains(d.deviceType) =>
+        kOutdoorGroup,
       DeviceGroup.room =>
         (d.effectiveArea ?? '').isEmpty ? 'No room' : d.effectiveArea!,
       DeviceGroup.type => facetOf(d, d.schema).label,

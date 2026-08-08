@@ -286,16 +286,25 @@ class _PageScreenState extends ConsumerState<PageScreen> {
     });
   }
 
-  Future<void> _addWidget(int columns) async {
+  /// Adds a card, at ([atX], [atY]) when the canvas was pointed at.
+  ///
+  /// Without a target this is the old behaviour — the engine's first fit — and
+  /// that is still right for the button, which is not pointing anywhere.
+  Future<void> _addWidget(int columns, {int? atX, int? atY}) async {
     final created = await showWidgetPalette(context);
     if (created == null || !mounted) return;
     final engine = GridEngine(columns: columns);
     final hint =
         WidgetRegistry.lookup(created.type)?.sizeHint ?? const WidgetSizeHint();
+    // Clamped so a card dropped near the right edge lands whole rather than
+    // hanging off the board and being reflowed somewhere surprising.
+    final x = atX == null
+        ? 0
+        : atX.clamp(0, (columns - hint.recommendedW).clamp(0, columns));
     final item = GridItem(
       id: created.id,
-      x: 0,
-      y: 0,
+      x: x,
+      y: atY ?? 0,
       w: hint.recommendedW,
       h: hint.recommendedH,
       minW: hint.minW,
@@ -589,8 +598,12 @@ class _PageScreenState extends ConsumerState<PageScreen> {
                   child: SingleChildScrollView(
                     padding: EdgeInsets.fromLTRB(
                         t.space.lg, 0, t.space.lg, t.space.xl),
-                    child: items.isEmpty
-                        ? _EmptyPage(editing: _editing)
+                    // An empty page in edit mode still gets a board: you
+                    // cannot arrange on a surface that is not drawn, and the
+                    // old empty state was a sentence pointing at a button in
+                    // the far corner.
+                    child: items.isEmpty && !_editing
+                        ? const _EmptyPage(editing: false)
                         // While editing, draw the layout at a width that
                         // breakpoint would really have. In view mode the actual
                         // viewport is the truth and must not be framed.
@@ -614,6 +627,8 @@ class _PageScreenState extends ConsumerState<PageScreen> {
                                   (e, its) => e.resize(its, id, w, h), columns),
                               onRemove: (id) => _removeWidget(id, columns),
                               onConfigure: _configureWidget,
+                              onAddAt: (x, y) =>
+                                  _addWidget(columns, atX: x, atY: y),
                             ),
                           ),
                   ),

@@ -27,6 +27,7 @@ class PageGrid extends StatefulWidget {
     this.onResize,
     this.onRemove,
     this.onConfigure,
+    this.onAddAt,
   });
 
   final List<GridItem> items;
@@ -49,6 +50,13 @@ class PageGrid extends StatefulWidget {
   final void Function(String id, int w, int h)? onResize;
   final void Function(String id)? onRemove;
   final void Function(String id)? onConfigure;
+
+  /// A tap on empty canvas, in grid cells.
+  ///
+  /// The canvas used to be inert: cards appended at the engine's first fit and
+  /// you dragged them where you meant. Pointing at the place you want something
+  /// is the difference between arranging a page and correcting one.
+  final void Function(int x, int y)? onAddAt;
 
   @override
   State<PageGrid> createState() => _PageGridState();
@@ -106,7 +114,11 @@ class _PageGridState extends State<PageGrid> {
         final maxRow =
             items.fold<int>(0, (m, i) => i.bottom > m ? i.bottom : m);
         final height = maxRow <= 0
-            ? widget.rowHeight
+            // An empty page still needs a board. Four rows is enough to read as
+            // a grid and to aim at, without pretending the page is longer than
+            // it is.
+            ? widget.rowHeight * (widget.editing ? 4 : 1) +
+                (widget.editing ? widget.gap * 3 : 0)
             : maxRow * widget.rowHeight + (maxRow - 1) * widget.gap;
 
         void startDrag(GridItem item) => setState(() {
@@ -205,7 +217,19 @@ class _PageGridState extends State<PageGrid> {
               // above them.
               if (widget.editing)
                 Positioned.fill(
-                  child: IgnorePointer(
+                  // Behind the cards in the Stack on purpose: a card gets the
+                  // tap first, and only bare canvas reaches this.
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTapUp: widget.onAddAt == null
+                        ? null
+                        : (details) {
+                            final p = details.localPosition;
+                            final x =
+                                (p.dx / stepX).floor().clamp(0, columns - 1);
+                            final y = (p.dy / stepY).floor();
+                            widget.onAddAt!(x, y < 0 ? 0 : y);
+                          },
                     child: CustomPaint(
                       painter: _ColumnGuides(
                         columns: columns,
