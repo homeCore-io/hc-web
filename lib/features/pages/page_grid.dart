@@ -28,6 +28,9 @@ class PageGrid extends StatefulWidget {
     this.onRemove,
     this.onConfigure,
     this.onAddAt,
+    this.selectedId,
+    this.onDropCard,
+    this.onMenu,
   });
 
   final List<GridItem> items;
@@ -58,11 +61,29 @@ class PageGrid extends StatefulWidget {
   /// is the difference between arranging a page and correcting one.
   final void Function(int x, int y)? onAddAt;
 
+  /// The card the rail is showing. Marked on the canvas, because a panel that
+  /// names a card while nothing on the board says which one is a panel about
+  /// nothing you can see.
+  final String? selectedId;
+
+  /// A card dragged in from the library, dropped at a cell.
+  final void Function(Object payload, int x, int y)? onDropCard;
+
+  /// A right-click on a card, at the pointer.
+  ///
+  /// The convention that carries the most weight in a pointer-driven tool, and
+  /// the one this editor never had: every card action was a small round button
+  /// you had to find and hit, or nothing.
+  final void Function(String id, Offset globalPosition)? onMenu;
+
   @override
   State<PageGrid> createState() => _PageGridState();
 }
 
 class _PageGridState extends State<PageGrid> {
+  /// The cell a dragged-in card is hovering over, in grid units.
+  (int, int)? _dropCell;
+
   // A gesture (move or resize) works from an immutable snapshot of the layout
   // taken at its start, so the arrangement depends only on where the pointer is
   // *now* — not on the path it took to get there. The engine reflows that
@@ -217,25 +238,66 @@ class _PageGridState extends State<PageGrid> {
               // above them.
               if (widget.editing)
                 Positioned.fill(
-                  // Behind the cards in the Stack on purpose: a card gets the
-                  // tap first, and only bare canvas reaches this.
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTapUp: widget.onAddAt == null
-                        ? null
-                        : (details) {
-                            final p = details.localPosition;
-                            final x =
-                                (p.dx / stepX).floor().clamp(0, columns - 1);
-                            final y = (p.dy / stepY).floor();
-                            widget.onAddAt!(x, y < 0 ? 0 : y);
-                          },
-                    child: CustomPaint(
-                      painter: _ColumnGuides(
-                        columns: columns,
-                        cellW: cellW,
-                        gap: widget.gap,
-                        color: t.stroke.hairline,
+                  // The whole board is a drop target while editing. Tracking
+                  // the cell under the pointer is what makes dropping feel like
+                  // placing rather than like submitting: you see where it will
+                  // land before you let go.
+                  child: DragTarget<Object>(
+                    onMove: (details) {
+                      final box = context.findRenderObject() as RenderBox?;
+                      if (box == null) return;
+                      final local = box.globalToLocal(details.offset);
+                      final x =
+                          (local.dx / stepX).floor().clamp(0, columns - 1);
+                      final y = (local.dy / stepY).floor();
+                      final cell = (x, y < 0 ? 0 : y);
+                      if (_dropCell != cell) setState(() => _dropCell = cell);
+                    },
+                    onLeave: (_) => setState(() => _dropCell = null),
+                    onAcceptWithDetails: (details) {
+                      final cell = _dropCell;
+                      setState(() => _dropCell = null);
+                      if (cell != null) {
+                        widget.onDropCard?.call(details.data, cell.$1, cell.$2);
+                      }
+                    },
+                    builder: (context, _, __) => GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTapUp: widget.onAddAt == null
+                          ? null
+                          : (details) {
+                              final p = details.localPosition;
+                              final x =
+                                  (p.dx / stepX).floor().clamp(0, columns - 1);
+                              final y = (p.dy / stepY).floor();
+                              widget.onAddAt!(x, y < 0 ? 0 : y);
+                            },
+                      child: CustomPaint(
+                        painter: _ColumnGuides(
+                          columns: columns,
+                          cellW: cellW,
+                          gap: widget.gap,
+                          color: t.stroke.hairline,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+
+              // Where the dragged card would land. Drawn over the guides and
+              // under the cards, so it reads as part of the board.
+              if (_dropCell case final cell?)
+                Positioned(
+                  left: cell.$1 * stepX,
+                  top: cell.$2 * stepY,
+                  width: cellW * 4 + widget.gap * 3,
+                  height: widget.rowHeight * 2 + widget.gap,
+                  child: IgnorePointer(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: t.accent.active.withValues(alpha: 0.08),
+                        borderRadius: t.radius.mdR,
+                        border: Border.all(color: t.accent.active, width: 2),
                       ),
                     ),
                   ),
@@ -259,8 +321,17 @@ class _PageGridState extends State<PageGrid> {
                       editing: widget.editing,
                       simplified: gesturing,
                       dragging: _dragId == item.id || _resizeId == item.id,
+                      selected: widget.selectedId == item.id,
+                      // Only while resizing. During a move the position is
+                      // already legible from where the card is; during a
+                      // resize the number of cells is exactly what you are
+                      // aiming at and the only thing you cannot read off the
+                      // screen.
+                      sizeLabel:
+                          _resizeId == item.id ? '${item.w}×${item.h}' : null,
                       onRemove: () => widget.onRemove?.call(item.id),
                       onConfigure: () => widget.onConfigure?.call(item.id),
+                      onMenu: (pos) => widget.onMenu?.call(item.id, pos),
                       onDragStart: () => startDrag(item),
                       onDragUpdate: updateDrag,
                       onDragEnd: endDrag,
@@ -478,8 +549,11 @@ class _Cell extends StatelessWidget {
     required this.editing,
     required this.simplified,
     required this.dragging,
+    required this.selected,
+    required this.sizeLabel,
     required this.onRemove,
     required this.onConfigure,
+    required this.onMenu,
     required this.onDragStart,
     required this.onDragUpdate,
     required this.onDragEnd,
@@ -493,8 +567,13 @@ class _Cell extends StatelessWidget {
   final bool editing;
   final bool simplified;
   final bool dragging;
+  final bool selected;
+
+  /// `4×2` while this card is being resized, else null.
+  final String? sizeLabel;
   final VoidCallback onRemove;
   final VoidCallback onConfigure;
+  final void Function(Offset globalPosition) onMenu;
   final VoidCallback onDragStart;
   final ValueChanged<Offset> onDragUpdate;
   final VoidCallback onDragEnd;
@@ -536,7 +615,8 @@ class _Cell extends StatelessWidget {
                   );
 
     final card = HcSurface(
-      selected: dragging,
+      // Lifted OR chosen. Both mean "this is the one you are working on".
+      selected: dragging || selected,
       padding: EdgeInsets.all(t.space.md),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -571,6 +651,10 @@ class _Cell extends StatelessWidget {
             onPanStart: (_) => onDragStart(),
             onPanUpdate: (d) => onDragUpdate(d.delta),
             onPanEnd: (_) => onDragEnd(),
+            onSecondaryTapDown: (d) => onMenu(d.globalPosition),
+            // A long press is the same gesture on a touchscreen, and the
+            // in-place editor runs there too.
+            onLongPressStart: (d) => onMenu(d.globalPosition),
             child: MouseRegion(
               cursor: SystemMouseCursors.move,
               child: DecoratedBox(
@@ -590,12 +674,39 @@ class _Cell extends StatelessWidget {
           right: 4,
           child: Row(
             children: [
-              _RoundButton(icon: HcIcons.sliders, onTap: onConfigure),
+              _RoundButton(
+                  icon: HcIcons.sliders,
+                  onTap: onConfigure,
+                  label: 'Card options'),
               const SizedBox(width: 4),
-              _RoundButton(icon: HcIcons.x, onTap: onRemove),
+              _RoundButton(
+                  icon: HcIcons.x, onTap: onRemove, label: 'Remove card'),
             ],
           ),
         ),
+        if (sizeLabel case final label?)
+          Positioned(
+            key: const Key('resize-readout'),
+            left: 6,
+            bottom: 6,
+            child: IgnorePointer(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: t.surface.overlay,
+                  borderRadius: BorderRadius.circular(t.radius.xs),
+                  border:
+                      Border.all(color: t.accent.active, width: t.stroke.width),
+                ),
+                child: Text(
+                  label,
+                  style: t.text.captionStyle.copyWith(
+                      color: t.surface.onBase,
+                      fontFeatures: t.numericFontFeatures),
+                ),
+              ),
+            ),
+          ),
         // Resize from the bottom-right.
         Positioned(
           right: 0,
@@ -607,12 +718,17 @@ class _Cell extends StatelessWidget {
             onPanEnd: (_) => onResizeEnd(),
             child: MouseRegion(
               cursor: SystemMouseCursors.resizeDownRight,
-              child: Container(
-                width: 22,
-                height: 22,
-                alignment: Alignment.center,
-                child: Icon(HcIcons.grip,
-                    size: 13, color: t.accent.active.withValues(alpha: 0.8)),
+              child: Semantics(
+                // A bare corner to drag was invisible to assistive tech and
+                // unnamed to everyone else.
+                label: 'Resize card',
+                child: Container(
+                  width: 22,
+                  height: 22,
+                  alignment: Alignment.center,
+                  child: Icon(HcIcons.grip,
+                      size: 13, color: t.accent.active.withValues(alpha: 0.8)),
+                ),
               ),
             ),
           ),
@@ -623,23 +739,32 @@ class _Cell extends StatelessWidget {
 }
 
 class _RoundButton extends StatelessWidget {
-  const _RoundButton({required this.icon, required this.onTap});
+  const _RoundButton(
+      {required this.icon, required this.onTap, required this.label});
 
   final IconData icon;
   final VoidCallback onTap;
 
+  /// A bare glyph on a card told a screen reader nothing and a pointer user
+  /// only what a caret-in-a-circle suggests. Both of these are destructive or
+  /// mode-changing, so both say which.
+  final String label;
+
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
-    return Material(
-      color: t.surface.base,
-      shape: const CircleBorder(),
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(5),
-          child: Icon(icon, size: 13, color: t.surface.onBase),
+    return Tooltip(
+      message: label,
+      child: Material(
+        color: t.surface.base,
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(5),
+            child: Icon(icon, size: 13, color: t.surface.onBase),
+          ),
         ),
       ),
     );

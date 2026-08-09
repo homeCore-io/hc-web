@@ -24,46 +24,28 @@ Future<Map<String, dynamic>?> showWidgetConfig(
   return showHcSheet<Map<String, dynamic>>(
     context,
     title: descriptor.title,
-    child: _ConfigForm(descriptor: descriptor, initial: initial),
+    child: _ConfigSheet(descriptor: descriptor, initial: initial),
   );
 }
 
-class _ConfigForm extends ConsumerStatefulWidget {
-  const _ConfigForm({required this.descriptor, required this.initial});
+/// The sheet host: header, the form, and Cancel/Done.
+///
+/// Buffers, because the sheet covers the card being edited — committing live
+/// under an opaque panel would change something you cannot see. The inspector
+/// is the opposite case and behaves the opposite way.
+class _ConfigSheet extends StatefulWidget {
+  const _ConfigSheet({required this.descriptor, required this.initial});
 
   final WidgetDescriptor descriptor;
   final Map<String, dynamic> initial;
 
   @override
-  ConsumerState<_ConfigForm> createState() => _ConfigFormState();
+  State<_ConfigSheet> createState() => _ConfigSheetState();
 }
 
-class _ConfigFormState extends ConsumerState<_ConfigForm> {
-  late final Map<String, dynamic> _config = {...widget.initial};
+class _ConfigSheetState extends State<_ConfigSheet> {
+  late Map<String, dynamic> _config = {...widget.initial};
   String? _error;
-
-  void _set(String name, Object? value) => setState(() {
-        if (value == null) {
-          _config.remove(name);
-        } else {
-          _config[name] = value;
-        }
-        _error = null;
-      });
-
-  /// The device-selection cluster shares one widget but only one of its three
-  /// "how" fields applies at a time. Gate them on the chosen mode so the form
-  /// shows the one field that matters, not all three.
-  bool _visible(WidgetConfigField f) {
-    final mode = _config['selection_mode'];
-    if (mode == null) return true;
-    return switch (f.name) {
-      'device_ids' => mode == 'manual',
-      'area_name' => mode == 'area',
-      'query' => mode == 'query',
-      _ => true,
-    };
-  }
 
   void _save() {
     final message = widget.descriptor.validate?.call(_config);
@@ -77,35 +59,23 @@ class _ConfigFormState extends ConsumerState<_ConfigForm> {
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
-    final fields = widget.descriptor.configFields.where(_visible).toList();
-
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        HcSheetHeader(
-          title: 'Configure',
-          subtitle: widget.descriptor.title,
-        ),
+        HcSheetHeader(title: 'Configure', subtitle: widget.descriptor.title),
         Flexible(
-          child: fields.isEmpty
-              ? Padding(
-                  padding: EdgeInsets.all(t.space.lg),
-                  child: Text('This widget has no options.',
-                      style: TextStyle(color: t.surface.onBaseMuted)),
-                )
-              : ListView(
-                  shrinkWrap: true,
-                  padding: EdgeInsets.fromLTRB(
-                      t.space.lg, 0, t.space.lg, t.space.md),
-                  children: [
-                    for (final f in fields)
-                      Padding(
-                        padding: EdgeInsets.only(bottom: t.space.md),
-                        child: _field(f),
-                      ),
-                  ],
-                ),
+          child: SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(t.space.lg, 0, t.space.lg, t.space.md),
+            child: WidgetConfigForm(
+              descriptor: widget.descriptor,
+              initial: widget.initial,
+              onChanged: (c) => setState(() {
+                _config = c;
+                _error = null;
+              }),
+            ),
+          ),
         ),
         if (_error != null)
           Padding(
@@ -129,6 +99,89 @@ class _ConfigFormState extends ConsumerState<_ConfigForm> {
       ],
     );
   }
+}
+
+/// A card's settings, with no chrome of its own.
+///
+/// Split out of the sheet so the inspector can host the same controls beside
+/// the canvas. The two hosts differ in *when* an edit counts, which is the
+/// whole reason they are different surfaces: the sheet buffers and commits on
+/// Done because it covers the card you are editing, and the inspector applies
+/// every change immediately because you can see the card while you make it.
+class WidgetConfigForm extends ConsumerStatefulWidget {
+  const WidgetConfigForm({
+    super.key,
+    required this.descriptor,
+    required this.initial,
+    required this.onChanged,
+  });
+
+  final WidgetDescriptor descriptor;
+  final Map<String, dynamic> initial;
+
+  /// Every edit, valid or not — the host decides what to do with an invalid
+  /// one. Nothing is buffered here.
+  final ValueChanged<Map<String, dynamic>> onChanged;
+
+  @override
+  ConsumerState<WidgetConfigForm> createState() => _WidgetConfigFormState();
+}
+
+class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
+  late final Map<String, dynamic> _config = {...widget.initial};
+  String? _error;
+
+  void _set(String name, Object? value) => setState(() {
+        if (value == null) {
+          _config.remove(name);
+        } else {
+          _config[name] = value;
+        }
+        widget.onChanged({..._config});
+        _error = null;
+      });
+
+  /// The device-selection cluster shares one widget but only one of its three
+  /// "how" fields applies at a time. Gate them on the chosen mode so the form
+  /// shows the one field that matters, not all three.
+  bool _visible(WidgetConfigField f) {
+    final mode = _config['selection_mode'];
+    if (mode == null) return true;
+    return switch (f.name) {
+      'device_ids' => mode == 'manual',
+      'area_name' => mode == 'area',
+      'query' => mode == 'query',
+      _ => true,
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    final fields = widget.descriptor.configFields.where(_visible).toList();
+
+    if (fields.isEmpty) {
+      return Text('This widget has no options.',
+          style: t.text.bodySmallStyle.copyWith(color: t.surface.onBaseMuted));
+    }
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final f in fields)
+          Padding(
+            padding: EdgeInsets.only(bottom: t.space.md),
+            child: _field(f),
+          ),
+        if (_error != null)
+          Text(_error!,
+              style: t.text.bodySmallStyle.copyWith(color: t.accent.danger)),
+      ],
+    );
+  }
+
+  /// The message the card's own validator gives, or null when it is happy.
+  String? get validationError => widget.descriptor.validate?.call(_config);
 
   // -- field dispatch --------------------------------------------------------
 

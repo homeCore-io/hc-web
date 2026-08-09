@@ -54,6 +54,7 @@ class ManageShell extends ConsumerWidget {
 
     // ── the system ───────────────────────────────────────────────────────
     ManageSection('plugins', 'Plugins', HcIcons.plugins, path: '/plugins'),
+    ManageSection('plugin-runtimes', 'Plugin runtimes', Icons.dns_outlined),
     ManageSection('system', 'System', Icons.monitor_heart_outlined),
     ManageSection('config', 'Configuration', Icons.tune_rounded),
     ManageSection('appearance', 'Appearance', Icons.palette_outlined),

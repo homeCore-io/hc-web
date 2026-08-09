@@ -334,18 +334,24 @@ class _WithSelectionSummary extends StatelessWidget {
     final line = selection.summary;
     if (line == null) return child;
     final t = HcTokens.of(context);
+    // Above the contents, not below them.
+    //
+    // Under the grid it was outside the card's cell and clipped away — the
+    // sentence existed, passed its test, and was invisible on the page, which
+    // is the exact failure mode it was written to cure. A card's height is
+    // fixed by its placement; only the top of it is guaranteed to be seen.
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (selection.shown.isNotEmpty) child,
         Padding(
-          padding: EdgeInsets.only(top: t.space.xs),
+          padding: EdgeInsets.only(bottom: t.space.xs),
           child: Text(
             line,
             style: t.text.captionStyle.copyWith(color: t.surface.onBaseMuted),
           ),
         ),
+        if (selection.shown.isNotEmpty) Flexible(child: child),
       ],
     );
   }
@@ -1477,6 +1483,26 @@ void registerBuiltinDashboardWidgets() {
       ),
     ),
     WidgetDescriptor(
+      type: 'image',
+      title: 'Image',
+      description: 'A picture, scaled to the card.',
+      icon: Icons.image_outlined,
+      sizeHint: const WidgetSizeHint(
+          minW: 2, minH: 1, recommendedW: 4, recommendedH: 3),
+      // Bleeds to the card's edges: a floor plan or a photo with a band of
+      // card padding around it reads as a mistake, and the frame is the card.
+      fill: true,
+      configFields: const [
+        WidgetConfigField('url', WidgetConfigKind.url, required: true),
+        WidgetConfigField('fit', WidgetConfigKind.choice,
+            defaultValue: 'cover', options: ['cover', 'contain', 'fill']),
+      ],
+      validate: (c) => (c['url'] as String?)?.isNotEmpty == true
+          ? null
+          : 'Give it an image address.',
+      builder: (context, a) => _ImageWidget(config: a.config),
+    ),
+    WidgetDescriptor(
       type: 'markdown',
       title: 'Markdown',
       icon: Icons.notes_outlined,
@@ -1934,6 +1960,52 @@ class _MeterBar extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// A picture that fills its card.
+///
+/// The card the web embed could not be. `web_embed` is an iframe with a
+/// sandbox profile, which is the right tool for a page and the wrong one for a
+/// floor plan: it costs a whole browsing context, cannot be told to scale, and
+/// a plain image URL in one is a page containing an image rather than an image.
+///
+/// `fit` is the only option that matters and it is the one nobody can guess
+/// from a preview: **cover** fills the card and crops, **contain** shows all of
+/// it with bars, **fill** stretches. A floor plan wants contain; a photo behind
+/// a room's controls wants cover.
+class _ImageWidget extends StatelessWidget {
+  const _ImageWidget({required this.config});
+
+  final Map<String, dynamic> config;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    final url = (config['url'] as String?) ?? '';
+    if (url.isEmpty) {
+      return const _PlaceholderWidget(message: 'No image address yet.');
+    }
+    final fit = switch (config['fit'] as String?) {
+      'contain' => BoxFit.contain,
+      'fill' => BoxFit.fill,
+      _ => BoxFit.cover,
+    };
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(t.radius.sm),
+      child: Image.network(
+        url,
+        fit: fit,
+        width: double.infinity,
+        height: double.infinity,
+        // A broken address is a thing you fix, so it says so rather than
+        // leaving the card blank and inscrutable.
+        errorBuilder: (context, _, __) =>
+            const _PlaceholderWidget(message: 'That image did not load.'),
+        loadingBuilder: (context, child, progress) =>
+            progress == null ? child : const SizedBox.shrink(),
       ),
     );
   }

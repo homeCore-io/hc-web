@@ -79,12 +79,40 @@ class GridItem {
   String toString() => '$id($x,$y ${w}x$h)';
 }
 
+/// What empty space in a layout means. Mirrors core's `DashboardFlow`.
+enum GridFlow {
+  /// Gaps close: a card floats up until something stops it. Every layout
+  /// behaved this way before the designer, and a derived layout still must —
+  /// deriving one breakpoint from another *is* repacking it.
+  packed,
+
+  /// Gaps are content: cards sit where they were put.
+  ///
+  /// What a person means when they leave room between two things on a page they
+  /// are designing. Before this existed the gap closed on the next save, which
+  /// is why a design tool could not be built on top of the old engine no matter
+  /// what was put beside it.
+  free,
+}
+
 class GridEngine {
-  const GridEngine({required this.columns});
+  const GridEngine({required this.columns, this.flow = GridFlow.packed});
 
   /// Core validates `x + w <= columns` and rejects the whole dashboard
   /// otherwise, so this is a hard bound, not a preference.
   final int columns;
+
+  /// Defaults to [GridFlow.packed] so every existing call site — and every
+  /// document that predates the field — keeps the behaviour it had.
+  final GridFlow flow;
+
+  /// Gravity, or not.
+  ///
+  /// The single place the two flows differ. Everything else — clamping,
+  /// overlap resolution, the column bound — is identical, because a gap being
+  /// content does not make an overlap acceptable.
+  List<GridItem> _settle(List<GridItem> items, {String? pinned}) =>
+      flow == GridFlow.packed ? _gravity(items, pinned: pinned) : items;
 
   /// Moves [id] to ([x], [y]), pushing whatever is in the way downward, then
   /// letting gravity pull the result back up.
@@ -103,7 +131,7 @@ class GridEngine {
         if (i.id == id) placed else i,
     ];
 
-    return _gravity(_resolve(next, placed), pinned: id);
+    return _settle(_resolve(next, placed), pinned: id);
   }
 
   /// Resizes [id], honouring its declared minimum and the column bound.
@@ -119,7 +147,7 @@ class GridEngine {
         if (i.id == id) resized else i,
     ];
 
-    return _gravity(_resolve(next, resized), pinned: id);
+    return _settle(_resolve(next, resized), pinned: id);
   }
 
   /// Appends an item at the first place it fits, scanning left-to-right and
@@ -131,12 +159,32 @@ class GridEngine {
       for (var x = 0; x <= columns - w; x++) {
         final candidate = item.copyWith(x: x, y: y, w: w);
         final clashes = items.any(candidate.overlaps);
-        if (!clashes) return _gravity([...items, candidate]);
+        if (!clashes) return _settle([...items, candidate]);
       }
     }
   }
 
-  List<GridItem> remove(List<GridItem> items, String id) => _gravity([
+  /// Puts [item] at ([x], [y]) — where the user dropped it — pushing whatever
+  /// is in the way downward.
+  ///
+  /// [add] cannot do this: it ignores the item's own position and scans from
+  /// the top-left for the first hole. That is right for a button, which is not
+  /// pointing anywhere, and wrong for a drop, which is pointing at exactly one
+  /// cell. Dropping used to draw an indicator on the cell under the cursor and
+  /// then place the card somewhere else entirely.
+  List<GridItem> addAt(List<GridItem> items, GridItem item, int x, int y) {
+    final w = item.w.clamp(1, columns);
+    final placed = item.copyWith(
+      w: w,
+      x: x.clamp(0, columns - w),
+      y: y < 0 ? 0 : y,
+    );
+    // Pinned, like a move: the card the user just placed must not be the one
+    // that gets pushed aside to make room for itself.
+    return _settle(_resolve([...items, placed], placed), pinned: placed.id);
+  }
+
+  List<GridItem> remove(List<GridItem> items, String id) => _settle([
         for (final i in items)
           if (i.id != id) i
       ]);
@@ -170,7 +218,7 @@ class GridEngine {
       }
       out.add(placed);
     }
-    return _gravity(out);
+    return _settle(out);
   }
 
   bool isLegal(List<GridItem> items) {

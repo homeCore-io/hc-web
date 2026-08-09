@@ -121,6 +121,15 @@ class DashboardLayout {
 
   bool get isDerived => derivedFrom != null;
 
+  /// Whether gaps in this layout are content or something to close.
+  ///
+  /// [GridFlow.packed] for every document that predates the field, which is the
+  /// only thing those documents can have meant: a gap could not be expressed at
+  /// all before it. A layout becomes free the moment someone arranges it by
+  /// hand — see `layout_write.dart`, and the same rule that makes a derived
+  /// layout authored.
+  final GridFlow flow;
+
   const DashboardLayout({
     required this.breakpoint,
     required this.columns,
@@ -128,6 +137,7 @@ class DashboardLayout {
     required this.gap,
     required this.placements,
     this.derivedFrom,
+    this.flow = GridFlow.packed,
   });
 
   /// `derivedFrom` needs an explicit sentinel because null is a meaningful
@@ -141,6 +151,7 @@ class DashboardLayout {
     double? gap,
     List<DashboardWidgetPlacement>? placements,
     Object? derivedFrom = _unchanged,
+    GridFlow? flow,
   }) {
     return DashboardLayout(
       breakpoint: breakpoint ?? this.breakpoint,
@@ -151,6 +162,7 @@ class DashboardLayout {
       derivedFrom: identical(derivedFrom, _unchanged)
           ? this.derivedFrom
           : derivedFrom as DashboardBreakpoint?,
+      flow: flow ?? this.flow,
     );
   }
 
@@ -166,6 +178,12 @@ class DashboardLayout {
         // noise in the payload and in every later diff of a stored document.
         if (derivedFrom != null)
           'derived_from': _toSnakeCase(_enumName(derivedFrom!)),
+        // Written even when packed, unlike derived_from. Core defaults it the
+        // same way, but a layout the user deliberately packed and one that
+        // never had an opinion are the same document either way — and omitting
+        // it would mean a free layout edited by an older client silently
+        // reverts to packed on its next save.
+        'flow': flow.name,
       };
 
   factory DashboardLayout.fromJson(Map<String, dynamic> json) =>
@@ -191,6 +209,11 @@ class DashboardLayout {
         // layout from the wrong source; reading it as authored merely leaves it
         // alone, which is the failure worth having.
         derivedFrom: _breakpointOrNull(json['derived_from']),
+        // Anything unrecognised reads as packed, which is the safe direction:
+        // packing a layout that meant to be free is a visible, fixable
+        // annoyance, while treating an unknown flow as free would leave gaps
+        // in a layout authored expecting them closed.
+        flow: json['flow'] == 'free' ? GridFlow.free : GridFlow.packed,
       );
 }
 

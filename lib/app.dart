@@ -16,6 +16,7 @@ import 'features/settings/appearance_page.dart';
 import 'features/settings/skin_editor_page.dart';
 import 'features/settings/data_page.dart';
 import 'features/settings/maintenance_page.dart';
+import 'features/settings/plugin_runtimes_page.dart';
 import 'features/settings/notifications_page.dart';
 import 'features/settings/system_config_page.dart';
 import 'features/manage/manage_shell.dart';
@@ -97,6 +98,14 @@ GoRouter _buildRouter(Ref ref) {
       GoRoute(
         path: '/wall',
         builder: (_, state) => KioskWallPage(params: state.uri.queryParameters),
+      ),
+      // The designer, OUTSIDE the shell. A design tool brings its own chrome;
+      // the nav rail is for browsing the house, and a tool that kept it would
+      // be a page with panels rather than an application.
+      GoRoute(
+        path: '/pages/:id/design',
+        builder: (_, state) => PageScreen(
+            dashboardId: state.pathParameters['id']!, designer: true),
       ),
       ShellRoute(
         // One scope for every route: it resolves which shell the location
@@ -281,6 +290,9 @@ GoRouter _buildRouter(Ref ref) {
               GoRoute(
                   path: '/admin/maintenance',
                   builder: (_, __) => const MaintenancePage()),
+              GoRoute(
+                  path: '/admin/plugin-runtimes',
+                  builder: (_, __) => const PluginRuntimesPage()),
               GoRoute(
                   path: '/admin/audit', builder: (_, __) => const AuditPage()),
               GoRoute(
