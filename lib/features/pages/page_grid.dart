@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/dashboard/card_style.dart';
 import '../../core/dashboard/grid_engine.dart';
 import '../../core/dashboard/widget_registry.dart';
 import '../../core/models/dashboard.dart';
@@ -31,6 +32,7 @@ class PageGrid extends StatefulWidget {
     this.selectedId,
     this.onDropCard,
     this.onMenu,
+    this.onSelect,
   });
 
   final List<GridItem> items;
@@ -75,6 +77,11 @@ class PageGrid extends StatefulWidget {
   /// the one this editor never had: every card action was a small round button
   /// you had to find and hit, or nothing.
   final void Function(String id, Offset globalPosition)? onMenu;
+
+  /// A plain click on a card. Null on the surfaces with nowhere to put a
+  /// selection — the phone's in-place editor has no inspector beside it, and a
+  /// card that highlights and then does nothing is a worse answer than none.
+  final void Function(String id)? onSelect;
 
   @override
   State<PageGrid> createState() => _PageGridState();
@@ -332,6 +339,9 @@ class _PageGridState extends State<PageGrid> {
                       onRemove: () => widget.onRemove?.call(item.id),
                       onConfigure: () => widget.onConfigure?.call(item.id),
                       onMenu: (pos) => widget.onMenu?.call(item.id, pos),
+                      onSelect: widget.onSelect == null
+                          ? null
+                          : () => widget.onSelect!(item.id),
                       onDragStart: () => startDrag(item),
                       onDragUpdate: updateDrag,
                       onDragEnd: endDrag,
@@ -554,6 +564,7 @@ class _Cell extends StatelessWidget {
     required this.onRemove,
     required this.onConfigure,
     required this.onMenu,
+    required this.onSelect,
     required this.onDragStart,
     required this.onDragUpdate,
     required this.onDragEnd,
@@ -574,6 +585,9 @@ class _Cell extends StatelessWidget {
   final VoidCallback onRemove;
   final VoidCallback onConfigure;
   final void Function(Offset globalPosition) onMenu;
+
+  /// Null outside the surfaces that have somewhere to show a selection.
+  final VoidCallback? onSelect;
   final VoidCallback onDragStart;
   final ValueChanged<Offset> onDragUpdate;
   final VoidCallback onDragEnd;
@@ -611,31 +625,57 @@ class _Cell extends StatelessWidget {
                       w: item.w,
                       h: item.h,
                       sizeHint: descriptor.sizeHint,
+                      editing: editing,
                     ),
                   );
 
-    final card = HcSurface(
-      // Lifted OR chosen. Both mean "this is the one you are working on".
-      selected: dragging || selected,
-      padding: EdgeInsets.all(t.space.md),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if ((model?.title ?? '').isNotEmpty)
-            Padding(
-              padding: EdgeInsets.only(bottom: t.space.sm),
-              child: Text(
-                model!.title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: t.text.bodyStyle.copyWith(
-                    fontWeight: FontWeight.w600, color: t.surface.onBase),
-              ),
-            ),
-          Expanded(child: ClipRect(child: body)),
-        ],
-      ),
-    );
+    // How much frame the element asked for. A watermarked stand-in during a
+    // drag always takes the full card, whatever it is the rest of the time —
+    // a bare element would otherwise vanish at the moment you are moving it.
+    final chrome = simplified
+        ? WidgetChrome.card
+        : (descriptor?.chrome ?? WidgetChrome.card);
+
+    // Only meaningful where there is a surface to style. A bare element has no
+    // background to remove.
+    final style = CardStyle.fromConfig(model?.config ?? const {});
+
+    final Widget card = switch (chrome) {
+      // Draws itself onto the page, and nothing is drawn around it.
+      WidgetChrome.bare => SizedBox.expand(child: ClipRect(child: body)),
+      // The surface, but the body reaches its edges.
+      WidgetChrome.bleed => HcSurface(
+          selected: dragging || selected,
+          padding: EdgeInsets.zero,
+          filled: style.filled,
+          bordered: style.bordered,
+          child: ClipRect(child: body),
+        ),
+      WidgetChrome.card => HcSurface(
+          // Lifted OR chosen. Both mean "this is the one you are working on".
+          selected: dragging || selected,
+          padding: EdgeInsets.all(t.space.md),
+          filled: style.filled,
+          bordered: style.bordered,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if ((model?.title ?? '').isNotEmpty)
+                Padding(
+                  padding: EdgeInsets.only(bottom: t.space.sm),
+                  child: Text(
+                    model!.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: t.text.bodyStyle.copyWith(
+                        fontWeight: FontWeight.w600, color: t.surface.onBase),
+                  ),
+                ),
+              Expanded(child: ClipRect(child: body)),
+            ],
+          ),
+        ),
+    };
 
     if (!editing) return card;
 
@@ -648,6 +688,12 @@ class _Cell extends StatelessWidget {
         Positioned.fill(
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
+            // Click to select. It reads as too obvious to write down, and it
+            // was missing: the only way to put a card in the inspector was to
+            // find the small round options button in its corner. Everything
+            // else about the canvas said "direct manipulation" and the first
+            // gesture anyone tries did nothing at all.
+            onTap: onSelect,
             onPanStart: (_) => onDragStart(),
             onPanUpdate: (d) => onDragUpdate(d.delta),
             onPanEnd: (_) => onDragEnd(),

@@ -24,7 +24,7 @@ class WidgetDescriptor {
     this.configFields = const [],
     this.validate,
     this.description,
-    this.fill = false,
+    this.chrome = WidgetChrome.card,
   });
 
   /// The wire value, e.g. `device_grid`. Plugin-contributed cards are namespaced
@@ -47,11 +47,39 @@ class WidgetDescriptor {
 
   final Widget Function(BuildContext context, WidgetRenderArgs args) builder;
 
-  /// When true the card gives the widget its full cell height (no top-aligned
-  /// scroll view), so content can stretch to fill — e.g. the house-status hero
-  /// spreading its tiles across a tall band instead of stranding dead space
-  /// beneath them. Leave false for text/list widgets that should scroll.
-  final bool fill;
+  /// How much of a card this element is. See [WidgetChrome].
+  final WidgetChrome chrome;
+}
+
+/// What the renderer draws *around* a widget.
+///
+/// This replaces a `bool fill` that no renderer read. `fill` was documented as
+/// "full cell height, no top-aligned scroll view" — but the only render site
+/// gives every widget an `Expanded` already, so the flag had been a no-op since
+/// that renderer landed, and the four cards setting it were getting the default
+/// treatment while their source said otherwise.
+///
+/// The distinction it should have been making is the one the layout family
+/// needs: a spacer drawn as a bordered, padded, titled box is not a space, it
+/// is a box. So the property says how much frame the element wants, and the
+/// renderer is the single place that answers it.
+enum WidgetChrome {
+  /// A surface, padding, and the card's title above the body. The default, and
+  /// right for anything that reads as a card on the page.
+  card,
+
+  /// A surface, but the body reaches its edges: no padding, no title row. For
+  /// an element that *is* its content — a picture, a map — where a band of
+  /// padding around it reads as a mistake.
+  bleed,
+
+  /// No surface at all. The widget draws directly onto the page and is
+  /// responsible for everything it shows. For the layout family: a heading, a
+  /// rule, a deliberate gap.
+  ///
+  /// In the editor these still get the selection frame the grid draws over
+  /// every cell, so a bare element is grabbable even when it renders nothing.
+  bare,
 }
 
 /// What the renderer hands a card.
@@ -64,6 +92,7 @@ class WidgetRenderArgs {
     required this.h,
     required this.subtitle,
     required this.sizeHint,
+    this.editing = false,
   });
 
   final String id;
@@ -77,6 +106,14 @@ class WidgetRenderArgs {
   final int h;
 
   final WidgetSizeHint sizeHint;
+
+  /// True while the designer (or the in-place editor) is drawing this card.
+  ///
+  /// Almost no widget should care — a card that looks different in the editor
+  /// is a card you designed and then never saw. The exception is an element
+  /// that deliberately renders *nothing* on the page: a spacer has to be
+  /// visible to be moved, and invisible to do its job.
+  final bool editing;
 
   bool get isCompact => w < sizeHint.recommendedW || h < sizeHint.recommendedH;
   bool get isVeryCompact => w <= sizeHint.minW || h <= sizeHint.minH;
@@ -126,6 +163,11 @@ enum WidgetConfigKind {
   deviceRef,
   attribute,
   areaName,
+
+  /// A kind of device — lights, locks, sensors — picked from the kinds this
+  /// house actually has. Distinct from [choice] because the options are the
+  /// live device map, not a fixed list in a descriptor.
+  facet,
   markdown,
   url,
   stringList,

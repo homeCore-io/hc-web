@@ -1,31 +1,14 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/plugin_runtimes_api.dart';
-import '../../core/providers/auth_provider.dart';
+import '../../core/providers/plugin_runtimes_provider.dart';
 import '../../design/components/hc_surface.dart';
 import '../../design/tokens.dart';
 import '../../shared/widgets/section_scaffold.dart';
-
-final pluginRuntimesApiProvider = Provider<PluginRuntimesApi>((ref) {
-  return PluginRuntimesApi(ref.watch(homecoreClientProvider));
-});
-
-/// The runtime list, refetched while the page is open.
-///
-/// Polled, not streamed, for the same reason `pluginsAutoRefreshProvider`
-/// exists: nothing pushes a *pending* runtime over the WS, and a container
-/// that has just enrolled is exactly what someone on this page is waiting for.
-///
-/// The timer is cancelled on dispose rather than being an uncancellable
-/// `Future.delayed` loop — that difference is what stops it polling after the
-/// page is gone, and a widget test catches it as a pending timer.
-final pluginRuntimesProvider =
-    FutureProvider.autoDispose<List<PluginRuntimeSummary>>((ref) async {
-  return ref.watch(pluginRuntimesApiProvider).list();
-});
 
 const _pollInterval = Duration(seconds: 10);
 
@@ -51,6 +34,9 @@ class PluginRuntimesPage extends ConsumerWidget {
     ref.watch(pluginRuntimesAutoRefreshProvider);
     final runtimes = ref.watch(pluginRuntimesProvider);
     final all = runtimes.value ?? const <PluginRuntimeSummary>[];
+    final placements =
+        ref.watch(pluginPlacementsProvider).value?.values.toList() ??
+            const <PluginPlacement>[];
     final pending = all.where((r) => r.isPending).toList();
     final approved = all.where((r) => r.isApproved).toList();
 
@@ -101,7 +87,13 @@ class PluginRuntimesPage extends ConsumerWidget {
                   tone: _Tone.muted,
                 )
               else
-                for (final r in approved) _ApprovedRow(runtime: r),
+                for (final r in approved)
+                  _ApprovedRow(
+                    runtime: r,
+                    hosts: placements
+                        .where((p) => p.runtimeId == r.runtimeId)
+                        .toList(),
+                  ),
             ],
           ],
         ),
@@ -245,8 +237,13 @@ class _PendingCardState extends ConsumerState<_PendingCard> {
 /// An approved runtime is an ordinary plugin, managed on the plugin page like
 /// any other. This row exists to say it joined and where to go next.
 class _ApprovedRow extends StatelessWidget {
-  const _ApprovedRow({required this.runtime});
+  const _ApprovedRow({required this.runtime, this.hosts = const []});
   final PluginRuntimeSummary runtime;
+
+  /// What this runtime is hosting. Rows link to each plugin's own page —
+  /// installing, removing and restarting are capability actions on the runtime
+  /// itself, so this is a list and not a control surface.
+  final List<PluginPlacement> hosts;
 
   @override
   Widget build(BuildContext context) {
@@ -257,26 +254,58 @@ class _ApprovedRow extends StatelessWidget {
       child: HcSurface(
         padding:
             EdgeInsets.symmetric(horizontal: t.space.md, vertical: t.space.sm),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(r.hostname.isEmpty ? r.runtimeId : r.hostname,
-                      style: t.text.bodyStyle.copyWith(
-                          fontWeight: FontWeight.w600,
-                          color: t.surface.onBase)),
-                  Text(r.capability,
-                      style: t.text.captionStyle
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(r.hostname.isEmpty ? r.runtimeId : r.hostname,
+                          style: t.text.bodyStyle.copyWith(
+                              fontWeight: FontWeight.w600,
+                              color: t.surface.onBase)),
+                      Text(r.capability,
+                          style: t.text.captionStyle
+                              .copyWith(color: t.surface.onBaseMuted)),
+                    ],
+                  ),
+                ),
+                if (r.pluginId != null)
+                  Text(r.pluginId!,
+                      style: t.text.bodySmallStyle
                           .copyWith(color: t.surface.onBaseMuted)),
-                ],
-              ),
+              ],
             ),
-            if (r.pluginId != null)
-              Text(r.pluginId!,
-                  style: t.text.bodySmallStyle
-                      .copyWith(color: t.surface.onBaseMuted)),
+            // An approved runtime hosting nothing is the normal state right
+            // after approval, and saying so beats an empty space that could
+            // equally mean the list failed to load.
+            SizedBox(height: t.space.sm),
+            if (hosts.isEmpty)
+              Text('Hosting nothing yet',
+                  style: t.text.captionStyle
+                      .copyWith(color: t.surface.onBaseMuted))
+            else
+              for (final h in hosts)
+                InkWell(
+                  onTap: () => context.go('/plugins/${h.pluginId}'),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    child: Row(
+                      children: [
+                        Text(h.pluginId,
+                            style: t.text.bodySmallStyle
+                                .copyWith(color: t.accent.primary)),
+                        SizedBox(width: t.space.sm),
+                        Text('v${h.version}',
+                            style: t.text.captionStyle
+                                .copyWith(color: t.surface.onBaseMuted)),
+                      ],
+                    ),
+                  ),
+                ),
           ],
         ),
       ),

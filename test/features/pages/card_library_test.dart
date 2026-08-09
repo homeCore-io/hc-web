@@ -195,15 +195,63 @@ void main() {
     });
   });
 
-  group('what it deliberately does not offer', () {
-    testWidgets('no facet filter chips', (tester) async {
-      // /devices offers "Lights 22", computed from each device's facet. No
-      // stored selection mode can express that — a query for `light` matches
-      // 17 of this house's 22 — and a chip labelled 22 that places a card
-      // showing 17 is the silent wrongness this whole arc has been removing.
+  group('kinds', () {
+    // Withheld until core learned `selection_mode: facet`, and the reason is
+    // worth keeping now that they are here. `/devices` offers "Lights 22",
+    // computed from each device's facet; the nearest stored selection was
+    // `query: "light"`, which matches on the NAME and found 17 of those 22. A
+    // chip labelled 22 that places a card showing 17 is the silent wrongness
+    // this whole arc has been removing, so the honest answer was to offer
+    // nothing until the count could be kept.
+
+    testWidgets('are the kinds this house actually has', (tester) async {
       await _pump(tester, house);
-      expect(find.textContaining('Lights'), findsNothing);
-      expect(find.textContaining('Sensors'), findsNothing);
+      // Four lights in a house of four lights and one scene.
+      expect(find.text('Lights'), findsOneWidget);
+      // And nothing for the kinds nobody owns — a chip saying "Sirens 0"
+      // offers a card that is guaranteed to be empty.
+      expect(find.text('Sirens'), findsNothing);
+      expect(find.text('Locks'), findsNothing);
+    });
+
+    testWidgets('count what the card will show, past the same exclusions',
+        (tester) async {
+      // The scene is excluded here exactly as it is from the room counts and
+      // from the card itself, so the number beside the name is the number you
+      // get. Four devices; the scene is not one of them.
+      await _pump(tester, house);
+      final row =
+          find.ancestor(of: find.text('Lights'), matching: find.byType(Row));
+      expect(find.descendant(of: row.first, matching: find.text('4')),
+          findsWidgets,
+          reason: 'four lights, not five — the scene is not a light');
+    });
+
+    testWidgets('placing one stores a facet selection, not a query',
+        (tester) async {
+      final picked = await _pump(tester, house);
+      await tester.tap(find.text('Lights'));
+      await tester.pumpAndSettle();
+
+      expect(picked, hasLength(1));
+      expect(picked.single.config['selection_mode'], 'facet');
+      expect(picked.single.config['facet'], 'lights');
+      expect(picked.single.config['query'], isNull,
+          reason: 'a query for the word is the thing this replaces');
+      expect(picked.single.title, 'Lights',
+          reason: 'named for what was picked, as a room card is');
+    });
+
+    testWidgets('and the card it places really does select them',
+        (tester) async {
+      // The claim the whole mode exists for: the chip says four and the card
+      // shows four. Resolved through the same function the card renders from.
+      final picked = await _pump(tester, house);
+      await tester.tap(find.text('Lights'));
+      await tester.pumpAndSettle();
+
+      final selection = selectDevicesWithCount(house, picked.single.config);
+      expect(selection.matched, 4);
     });
   });
 }

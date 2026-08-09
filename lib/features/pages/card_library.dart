@@ -9,6 +9,7 @@ import '../../core/devices/presentation.dart';
 import '../../core/text/humanize.dart';
 import '../../design/hc_icons.dart';
 import '../../design/tokens.dart';
+import '../devices/device_query.dart';
 
 /// What you can put on a page, drawn from the house you are putting it on.
 ///
@@ -48,7 +49,7 @@ class _CardLibraryState extends ConsumerState<CardLibrary> {
   /// answer most of the time; the rest start closed so fifteen rooms do not
   /// push everything else into the bottom third of the panel, which is what
   /// happened on a real house.
-  final _open = <String>{'Rooms', 'Devices'};
+  final _open = <String>{'Rooms', 'Kinds', 'Devices'};
 
   /// Rooms with something in them, most-populated first.
   ///
@@ -75,6 +76,44 @@ class _CardLibraryState extends ConsumerState<CardLibrary> {
     ]..sort((a, b) => b.total.compareTo(a.total));
     return rooms;
   }
+
+  /// The kinds this house has, with their live counts.
+  ///
+  /// Withheld from this panel until now, and the reason is worth keeping: a
+  /// chip saying "Lights 22" had no stored selection that could reproduce 22.
+  /// The nearest was `query: "light"`, which matches on the *name* and found 17
+  /// of them — a chip labelled 22 that places a card showing 17 is exactly the
+  /// silent wrongness this arc has been removing, so the honest answer was to
+  /// offer nothing. Core learned `selection_mode: facet`, so the chip can now
+  /// mean what it says.
+  ///
+  /// Counted through the same `facetGroupOf(facetOf(...))` the card filters on,
+  /// and past the same exclusions, so the number here is the number you get.
+  List<_Kind> _kinds(List<DeviceState> devices) {
+    final counts = <DeviceFacetGroup, int>{};
+    for (final d in devices) {
+      if (d.isSystem || d.deviceType == 'scene') continue;
+      final group = facetGroupOf(facetOf(d, d.schema));
+      counts[group] = (counts[group] ?? 0) + 1;
+    }
+    return [
+      for (final entry in counts.entries)
+        _Kind(group: entry.key, total: entry.value),
+    ]..sort((a, b) => b.total.compareTo(a.total));
+  }
+
+  DashboardWidgetModel _kindCard(_Kind kind) => _model(
+        type: 'device_grid',
+        // Named for what was picked, as rooms are. "Device grid" would be
+        // naming the renderer at them.
+        title: kind.group.label,
+        config: {
+          'selection_mode': 'facet',
+          'facet': kind.group.key,
+          'show_offline': true,
+          'limit': 12,
+        },
+      );
 
   /// Individual devices, but only once you have typed something.
   ///
@@ -150,6 +189,8 @@ class _CardLibraryState extends ConsumerState<CardLibrary> {
     final devices = ref.watch(devicesProvider).value;
     final rooms = devices == null ? const <_Room>[] : _rooms(devices);
     final shownRooms = rooms.where((r) => _matches(r.label)).toList();
+    final kinds = devices == null ? const <_Kind>[] : _kinds(devices);
+    final shownKinds = kinds.where((k) => _matches(k.group.label)).toList();
 
     return Container(
       width: 320,
@@ -206,6 +247,25 @@ class _CardLibraryState extends ConsumerState<CardLibrary> {
                             color: t.surface.onBaseMuted, height: 1.4),
                       ),
                     ),
+                  // Kinds sit under rooms because the room is the answer more
+                  // often: "the kitchen" before "every light". Both are one
+                  // drag, and neither asks anyone to meet the word "facet".
+                  if (shownKinds.isNotEmpty) ...[
+                    _Heading(
+                      label: 'Kinds',
+                      count: shownKinds.length,
+                      open: _open.contains('Kinds') || _query.isNotEmpty,
+                      onTap: () => setState(() => _toggle('Kinds')),
+                    ),
+                    if (_open.contains('Kinds') || _query.isNotEmpty)
+                      for (final kind in shownKinds)
+                        _KindRow(
+                          kind: kind,
+                          onTap: () => widget.onPick(_kindCard(kind)),
+                          payload: () => _kindCard(kind),
+                        ),
+                    SizedBox(height: t.space.sm),
+                  ],
                 ],
                 if (devices != null && _query.isNotEmpty) ...[
                   if (_matchingDevices(devices).isNotEmpty) ...[
@@ -275,20 +335,45 @@ class _CardLibraryState extends ConsumerState<CardLibrary> {
       _Entry('Now playing', 'media_player', 'speakers and TVs',
           {'selection_mode': 'query', 'query': '', 'limit': 4}),
     ]),
+    // Data is its own family, not part of "Other". Three ways to show a
+    // number, and which one you want depends on the room rather than on the
+    // number: a dial to see at a glance whether something is in range, a big
+    // figure to read across a room, a line to see where it has been.
+    _Group('Data', [
+      _Entry('Gauge', 'gauge', 'one reading against a range',
+          {'min': 0, 'max': 100}),
+      _Entry('Reading', 'device_reading', 'one number, large', {}),
+      _Entry('Chart', 'history_chart', 'a value over time',
+          {'timeframe_hours': 24}),
+      _Entry('Numbers', 'stat_summary', 'counts of things', {
+        'metrics': ['devices', 'on', 'offline']
+      }),
+    ]),
+    // Structure and space, rather than anything about the house. These are the
+    // elements that let a page stop being a wall of boxes — and the spacer is
+    // the one that makes a gap survive a save, which free flow alone does not
+    // do for the derived breakpoints.
+    _Group('Layout', [
+      _Entry('Heading', 'heading', 'a section title',
+          {'text': 'Section', 'level': 'section', 'align': 'start'}),
+      _Entry('Divider', 'divider', 'a rule between things', {}),
+      _Entry('Spacer', 'spacer', 'a gap that stays a gap', {}),
+      // "A group is one card with a heading and its own arrangement of
+      // devices, which is what a room card already is generalised" — so it is
+      // that card, pre-titled, rather than a fourth type that would be
+      // `device_grid` wearing a hat. See designer-plan.md §7.
+      _Entry('Group', 'device_grid', 'a titled box of devices',
+          {'selection_mode': 'manual', 'device_ids': <String>[]}),
+    ]),
     _Group('Other', [
       _Entry('Camera', 'camera_video', 'a live view',
           {'source_type': 'image_refresh'}),
-      _Entry('Chart', 'history_chart', 'a value over time',
-          {'timeframe_hours': 24}),
       _Entry('Web page', 'web_embed', 'anything with a URL',
           {'sandbox_profile': 'readonly_embed'}),
       _Entry(
           'Image', 'image', 'a picture, scaled to the card', {'fit': 'cover'}),
       _Entry('Note', 'markdown', 'text you write',
           {'markdown': '# Note\nWrite something here.'}),
-      _Entry('Numbers', 'stat_summary', 'counts of things', {
-        'metrics': ['devices', 'on', 'offline']
-      }),
     ]),
   ];
 }
@@ -305,6 +390,37 @@ class _Entry {
   final String type;
   final String hint;
   final Map<String, dynamic> config;
+}
+
+class _Kind {
+  const _Kind({required this.group, required this.total});
+  final DeviceFacetGroup group;
+  final int total;
+
+  /// Borrowed from a facet in the group, so the icon in the library is the one
+  /// the devices themselves wear.
+  IconData get icon => switch (group) {
+        DeviceFacetGroup.lights => DeviceFacet.light.icon,
+        DeviceFacetGroup.outlets => DeviceFacet.outlet.icon,
+        DeviceFacetGroup.switches => DeviceFacet.switch_.icon,
+        DeviceFacetGroup.covers => DeviceFacet.cover.icon,
+        DeviceFacetGroup.locks => DeviceFacet.lock.icon,
+        DeviceFacetGroup.doorsWindows => DeviceFacet.door.icon,
+        DeviceFacetGroup.garage => DeviceFacet.garage.icon,
+        DeviceFacetGroup.motion => DeviceFacet.motion.icon,
+        DeviceFacetGroup.environment => DeviceFacet.temperature.icon,
+        DeviceFacetGroup.power => DeviceFacet.power.icon,
+        DeviceFacetGroup.safety => DeviceFacet.smoke.icon,
+        DeviceFacetGroup.climate => DeviceFacet.climate.icon,
+        DeviceFacetGroup.fans => DeviceFacet.fan.icon,
+        DeviceFacetGroup.media => DeviceFacet.mediaPlayer.icon,
+        DeviceFacetGroup.scenes => DeviceFacet.scene.icon,
+        DeviceFacetGroup.buttons => DeviceFacet.button.icon,
+        DeviceFacetGroup.timers => DeviceFacet.timer.icon,
+        DeviceFacetGroup.sirens => DeviceFacet.siren.icon,
+        DeviceFacetGroup.sensors => DeviceFacet.sensor.icon,
+        DeviceFacetGroup.other => DeviceFacet.unknown.icon,
+      };
 }
 
 class _Room {
@@ -403,6 +519,52 @@ class _Heading extends StatelessWidget {
 }
 
 /// A room, with the two numbers that make it a real thing rather than a label.
+/// A kind, with the count the card will actually show.
+///
+/// No "n on" column, unlike a room: "Lights 22 · 6 on" reads as a status line
+/// for a thing you are about to place, and what you are placing is the 22.
+class _KindRow extends StatelessWidget {
+  const _KindRow(
+      {required this.kind, required this.onTap, required this.payload});
+  final _Kind kind;
+  final VoidCallback onTap;
+  final DashboardWidgetModel Function() payload;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return _DragRow(
+      payload: payload,
+      label: kind.group.label,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(t.radius.sm),
+        child: Padding(
+          padding: EdgeInsets.symmetric(
+              vertical: t.space.xs, horizontal: t.space.xs),
+          child: Row(
+            children: [
+              Icon(kind.icon, size: 15, color: t.surface.onBaseMuted),
+              SizedBox(width: t.space.sm),
+              Expanded(
+                child: Text(kind.group.label,
+                    style: t.text.bodySmallStyle
+                        .copyWith(color: t.surface.onBase)),
+              ),
+              Text(
+                '${kind.total}',
+                style: t.text.bodySmallStyle.copyWith(
+                    color: t.surface.onBaseMuted,
+                    fontFeatures: t.numericFontFeatures),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _RoomRow extends StatelessWidget {
   const _RoomRow(
       {required this.room, required this.onTap, required this.payload});

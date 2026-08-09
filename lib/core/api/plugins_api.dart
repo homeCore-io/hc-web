@@ -117,11 +117,19 @@ class PluginsApi {
 
   /// Install a plugin from the registry; core resolves + downloads + verifies +
   /// installs + activates. Returns the install summary.
+  /// Install from the registry. Core decides *where* it runs.
+  ///
+  /// [runtimeId] pins the choice to one plugin runtime, which is only needed
+  /// when several could host it — core answers `409` with the candidates, and
+  /// the caller repeats the request with one of them. Sending it when there is
+  /// no ambiguity is harmless; sending a wrong one is refused rather than
+  /// quietly redirected.
   Future<Map<String, dynamic>> installFromRegistry(String id,
-      {String? version}) async {
+      {String? version, String? runtimeId}) async {
     final response = await client.dio.post('/plugins/install', data: {
       'id': id,
       if (version != null) 'version': version,
+      if (runtimeId != null) 'runtime_id': runtimeId,
     });
     return Map<String, dynamic>.from(response.data as Map);
   }

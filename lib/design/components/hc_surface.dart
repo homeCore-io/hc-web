@@ -23,6 +23,8 @@ class HcSurface extends StatelessWidget {
     this.selected = false,
     this.onTap,
     this.borderRadius,
+    this.filled = true,
+    this.bordered = true,
   });
 
   final Widget child;
@@ -37,6 +39,20 @@ class HcSurface extends StatelessWidget {
   final bool selected;
   final VoidCallback? onTap;
   final BorderRadius? borderRadius;
+
+  /// Draw the fill and the card's elevation. False leaves the page showing
+  /// through — and takes the shadow with it, because a shadow under nothing is
+  /// a card you can see the edge of and not the face.
+  ///
+  /// Added for the dashboard designer's style pane: a page where every element
+  /// is the same filled, bordered rectangle reads as a grid of boxes no matter
+  /// what is inside them.
+  final bool filled;
+
+  /// Draw the hairline. A selected surface keeps its outline whatever this
+  /// says — losing the selection marker is a worse trade than honouring the
+  /// style exactly.
+  final bool bordered;
 
   @override
   Widget build(BuildContext context) {
@@ -66,18 +82,22 @@ class HcSurface extends StatelessWidget {
       decoration: BoxDecoration(
         // On a glass skin the fill is a sheer tint over the blurred backdrop;
         // on a flat skin it is the opaque raised surface.
-        color: t.surface.isGlass ? t.surface.glassTint : t.surface.raised,
+        color: filled
+            ? (t.surface.isGlass ? t.surface.glassTint : t.surface.raised)
+            : null,
         borderRadius: radius,
-        border: Border.all(
-          color: selected ? t.stroke.focus : t.stroke.hairline,
-          width: selected ? t.stroke.width * 2 : t.stroke.width,
-        ),
-        boxShadow: [...t.elevation.card, ...haloShadows],
+        border: bordered || selected
+            ? Border.all(
+                color: selected ? t.stroke.focus : t.stroke.hairline,
+                width: selected ? t.stroke.width * 2 : t.stroke.width,
+              )
+            : null,
+        boxShadow: [if (filled) ...t.elevation.card, ...haloShadows],
       ),
       child: child,
     );
 
-    if (t.surface.isGlass) {
+    if (t.surface.isGlass && filled) {
       body = ClipRRect(
         borderRadius: radius,
         child: BackdropFilter(

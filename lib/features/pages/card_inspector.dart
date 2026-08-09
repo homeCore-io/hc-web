@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/dashboard/card_style.dart';
 import '../../core/dashboard/widget_registry.dart';
 import '../../core/models/dashboard.dart';
 import '../../core/providers/devices_provider.dart';
@@ -33,6 +34,7 @@ class CardInspector extends ConsumerWidget {
     required this.onChanged,
     required this.onRemove,
     required this.onClose,
+    this.onRename,
   });
 
   final DashboardWidgetModel model;
@@ -42,6 +44,14 @@ class CardInspector extends ConsumerWidget {
 
   final VoidCallback onRemove;
   final VoidCallback onClose;
+
+  /// Rename the card.
+  ///
+  /// Nothing could do this before. A card took the label of whatever library
+  /// entry produced it and kept it for good, so a page could end up with two
+  /// cards both called "Several devices" and no way to tell them apart — here,
+  /// on the page, or in the layers strip that lists them by name.
+  final ValueChanged<String>? onRename;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -63,13 +73,21 @@ class CardInspector extends ConsumerWidget {
             Row(
               children: [
                 Expanded(
-                  child: Text(
-                    model.title.isEmpty
-                        ? (descriptor?.title ?? model.type)
-                        : model.title,
-                    style: t.text.subtitleStyle.copyWith(
-                        color: t.surface.onBase, fontWeight: FontWeight.w600),
-                  ),
+                  child: onRename == null
+                      ? Text(
+                          model.title.isEmpty
+                              ? (descriptor?.title ?? model.type)
+                              : model.title,
+                          style: t.text.subtitleStyle.copyWith(
+                              color: t.surface.onBase,
+                              fontWeight: FontWeight.w600),
+                        )
+                      : _TitleField(
+                          key: ValueKey('title-${model.id}'),
+                          value: model.title,
+                          hint: descriptor?.title ?? model.type,
+                          onChanged: onRename!,
+                        ),
                 ),
                 IconButton(
                   onPressed: onClose,
@@ -112,6 +130,15 @@ class CardInspector extends ConsumerWidget {
                 ),
               _Preview(config: model.config, descriptor: descriptor),
             ],
+            // Style is offered only where there is a card to un-draw. A
+            // heading, a rule and a spacer have no surface at all, so a
+            // "background" switch on one would be a control with nothing
+            // behind it.
+            if (descriptor != null && descriptor.chrome != WidgetChrome.bare)
+              _StyleSection(
+                style: CardStyle.fromConfig(model.config),
+                onChanged: (style) => onChanged(style.toConfig(model.config)),
+              ),
             SizedBox(height: t.space.md),
             Align(
               alignment: Alignment.centerLeft,
@@ -208,6 +235,141 @@ class _Preview extends ConsumerWidget {
           ],
         ],
       ),
+    );
+  }
+}
+
+/// The card's name, edited in place at the top of the inspector.
+///
+/// Deliberately not a labelled form field. It sits where the card's name was
+/// already being *shown*, so it reads as the heading it replaces until you
+/// click it — which is what makes it discoverable without adding a row of
+/// chrome to a panel that already has plenty.
+class _TitleField extends StatefulWidget {
+  const _TitleField({
+    super.key,
+    required this.value,
+    required this.hint,
+    required this.onChanged,
+  });
+
+  final String value;
+  final String hint;
+  final ValueChanged<String> onChanged;
+
+  @override
+  State<_TitleField> createState() => _TitleFieldState();
+}
+
+class _TitleFieldState extends State<_TitleField> {
+  late final TextEditingController _controller =
+      TextEditingController(text: widget.value);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    final style = t.text.subtitleStyle
+        .copyWith(color: t.surface.onBase, fontWeight: FontWeight.w600);
+    return TextField(
+      controller: _controller,
+      style: style,
+      onChanged: widget.onChanged,
+      decoration: InputDecoration(
+        isDense: true,
+        border: InputBorder.none,
+        contentPadding: EdgeInsets.zero,
+        // An untitled card shows what it is, greyed, rather than an empty box.
+        hintText: widget.hint,
+        hintStyle: style.copyWith(color: t.surface.onBaseMuted),
+      ),
+    );
+  }
+}
+
+/// Background and border, as two switches.
+///
+/// Deliberately not a preset list ("Boxed / Plain / Outline"). The two
+/// properties are independent and each maps to one thing you can see, so a
+/// preset would be a name to learn for a combination you can already read off
+/// the switches — and the interesting one, a card with a border and no fill, is
+/// the combination a three-item list would leave out.
+class _StyleSection extends StatelessWidget {
+  const _StyleSection({required this.style, required this.onChanged});
+
+  final CardStyle style;
+  final ValueChanged<CardStyle> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Padding(
+      padding: EdgeInsets.only(top: t.space.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('STYLE',
+              style:
+                  t.text.overlineStyle.copyWith(color: t.surface.onBaseMuted)),
+          SizedBox(height: t.space.xs),
+          _StyleSwitch(
+            label: 'Background',
+            value: style.filled,
+            onChanged: (v) => onChanged(style.copyWith(filled: v)),
+          ),
+          _StyleSwitch(
+            label: 'Border',
+            value: style.bordered,
+            onChanged: (v) => onChanged(style.copyWith(bordered: v)),
+          ),
+          if (style.isDefault)
+            Text(
+              'A card, like the others.',
+              style: t.text.captionStyle
+                  .copyWith(color: t.surface.onBaseMuted, height: 1.4),
+            )
+          else
+            Text(
+              style.filled
+                  ? 'No outline — it sits on the page without a frame.'
+                  : 'The page shows through. Useful for a heading strip or a '
+                      'row of controls that should not read as a card.',
+              style: t.text.captionStyle
+                  .copyWith(color: t.surface.onBaseMuted, height: 1.4),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StyleSwitch extends StatelessWidget {
+  const _StyleSwitch({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final String label;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Row(
+      children: [
+        Expanded(
+          child: Text(label,
+              style: t.text.bodyStyle.copyWith(color: t.surface.onBase)),
+        ),
+        Switch(value: value, onChanged: onChanged),
+      ],
     );
   }
 }

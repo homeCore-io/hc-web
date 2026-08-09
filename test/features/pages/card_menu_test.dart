@@ -8,6 +8,7 @@ import 'package:hc_web/core/providers/dashboards_provider.dart';
 import 'package:hc_web/core/providers/devices_provider.dart';
 import 'package:hc_web/design/skins.dart';
 import 'package:hc_web/features/dashboard/builtin_cards.dart';
+import 'package:hc_web/features/pages/page_grid.dart';
 import 'package:hc_web/features/pages/page_screen.dart';
 
 /// The card menu, and the one undo that earns its place.
@@ -107,6 +108,10 @@ Future<void> _openMenu(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+/// Cards bearing [label] on the canvas itself.
+Finder _onCanvas(WidgetTester tester, String label) =>
+    find.descendant(of: find.byType(PageGrid), matching: find.text(label));
+
 void main() {
   group('the menu', () {
     testWidgets('right-click offers the card actions', (tester) async {
@@ -141,9 +146,10 @@ void main() {
       await tester.tap(find.text('Duplicate'));
       await tester.pumpAndSettle();
 
-      // Two on the canvas plus the inspector's own heading for the copy,
-      // which is selected — placing a card selects it.
-      expect(find.text('Lights'), findsNWidgets(3));
+      // Counted on the canvas rather than across the whole screen: the name
+      // also appears in the inspector heading and in the layers strip, so a
+      // total is a number that changes whenever a panel does.
+      expect(_onCanvas(tester, 'Lights'), findsNWidgets(2));
       expect(find.text('4×2 at 0,2'), findsOneWidget,
           reason: 'directly below the original — a copy at first fit appears '
               'somewhere you are not looking');
@@ -182,14 +188,13 @@ void main() {
       await tester.tap(find.text('Remove'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Lights'), findsNothing);
+      expect(_onCanvas(tester, 'Lights'), findsNothing);
       expect(find.text('Removed Lights'), findsOneWidget);
 
       await tester.tap(find.text('Undo'));
       await tester.pumpAndSettle();
 
-      // The card, plus the inspector heading for it: restoring selects it.
-      expect(find.text('Lights'), findsNWidgets(2));
+      expect(_onCanvas(tester, 'Lights'), findsOneWidget);
       expect(find.text('4×2 at 0,0'), findsOneWidget,
           reason: 'restored to its own place; the top-left would be a '
               'different page from the one you had');
