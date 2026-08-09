@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hc_web/core/api/homecore_client.dart';
 import 'package:hc_web/core/api/plugin_runtimes_api.dart';
 import 'package:hc_web/design/skins.dart';
+import 'package:hc_web/core/providers/plugin_runtimes_provider.dart';
 import 'package:hc_web/features/settings/plugin_runtimes_page.dart';
 
 /// The approval screen is the one place in the plugin story where the operator
@@ -17,9 +18,10 @@ import 'package:hc_web/features/settings/plugin_runtimes_page.dart';
 // `implements`, not `extends`: HomecoreClient's baseUrl is the relative
 // `/api/v1`, which Dio rejects outside a browser.
 class _FakeRuntimesApi implements PluginRuntimesApi {
-  _FakeRuntimesApi(this.rows);
+  _FakeRuntimesApi(this.rows, {this.placed = const []});
 
   List<PluginRuntimeSummary> rows;
+  final List<PluginPlacement> placed;
   final approved = <String>[];
   final denied = <String>[];
 
@@ -28,6 +30,9 @@ class _FakeRuntimesApi implements PluginRuntimesApi {
 
   @override
   Future<List<PluginRuntimeSummary>> list() async => rows;
+
+  @override
+  Future<List<PluginPlacement>> placements() async => placed;
 
   @override
   Future<void> approve(String runtimeId) async => approved.add(runtimeId);
@@ -144,6 +149,39 @@ void main() {
 
     expect(find.textContaining('Compare this code'), findsNothing);
     expect(find.text('plugin.python-rtlive'), findsOneWidget);
+  });
+
+  /// The pane that says what a runtime is actually for. An approved runtime
+  /// hosting nothing is the normal state right after approval, and it has to
+  /// say so — an empty space could equally mean the list failed to load.
+  testWidgets('an approved runtime lists what it hosts', (tester) async {
+    final api = _FakeRuntimesApi(
+      [
+        _runtime(id: 'rt-live', status: 'approved', pluginId: 'plugin.py-rt'),
+        _runtime(
+          id: 'rt-empty',
+          status: 'approved',
+          hostname: 'pyhost-02',
+          pluginId: 'plugin.py-rt2',
+        ),
+      ],
+      placed: [
+        PluginPlacement(
+          runtimeId: 'rt-live',
+          pluginId: 'plugin.virtuallight',
+          version: '0.1.0',
+        ),
+      ],
+    );
+    await pumpWith(tester, api);
+
+    expect(find.text('plugin.virtuallight'), findsOneWidget);
+    expect(find.text('v0.1.0'), findsOneWidget);
+    expect(
+      find.text('Hosting nothing yet'),
+      findsOneWidget,
+      reason: 'the runtime with no placements says so, the other does not',
+    );
   });
 
   /// `[plugin_runtimes] enabled = false` makes the endpoints 404, and the API

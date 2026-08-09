@@ -93,6 +93,30 @@ class PluginRuntimeSummary {
   }
 }
 
+/// Where one plugin runs. The admin view of a placement — no config, because
+/// that holds a minted broker credential and is edited through the plugin's own
+/// config surface.
+class PluginPlacement {
+  PluginPlacement({
+    required this.runtimeId,
+    required this.pluginId,
+    required this.version,
+    this.placedAt,
+  });
+
+  final String runtimeId;
+  final String pluginId;
+  final String version;
+  final String? placedAt;
+
+  factory PluginPlacement.fromJson(Map<String, dynamic> j) => PluginPlacement(
+        runtimeId: '${j['runtime_id']}',
+        pluginId: '${j['plugin_id']}',
+        version: j['version'] as String? ?? '',
+        placedAt: j['placed_at'] as String?,
+      );
+}
+
 /// A one-time enrollment token, shown once and never again.
 class EnrollToken {
   EnrollToken({required this.token, this.expiresAt});
@@ -125,6 +149,24 @@ class PluginRuntimesApi {
     return (body['runtimes'] as List? ?? const [])
         .whereType<Map>()
         .map((m) => PluginRuntimeSummary.fromJson(Map<String, dynamic>.from(m)))
+        .toList();
+  }
+
+  /// Every plugin placed on a runtime, from the admin side.
+  ///
+  /// Answers both halves of the question in one request: what a runtime hosts,
+  /// and where a given plugin runs. Empty when the feature is off, for the same
+  /// reason [list] is.
+  Future<List<PluginPlacement>> placements() async {
+    final response = await client.dio.get(
+      '/plugin-runtimes/placements',
+      options: _tolerate404,
+    );
+    if (response.statusCode == 404) return const [];
+    final body = Map<String, dynamic>.from(response.data as Map);
+    return (body['placements'] as List? ?? const [])
+        .whereType<Map>()
+        .map((m) => PluginPlacement.fromJson(Map<String, dynamic>.from(m)))
         .toList();
   }
 

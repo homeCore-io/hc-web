@@ -18,6 +18,7 @@ import '../../core/models/plugin_config.dart';
 import '../../core/models/plugin_entry.dart';
 import '../../core/providers/devices_provider.dart';
 import '../../core/providers/plugin_config_provider.dart';
+import '../../core/providers/plugin_runtimes_provider.dart';
 import '../../core/providers/plugins_provider.dart';
 import '../../core/schema/plugin_config_schema.dart';
 import '../../design/hc_icons.dart';
@@ -314,6 +315,7 @@ class _Header extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = HcTokens.of(context);
+    final host = ref.watch(hostingRuntimeProvider(plugin.pluginId));
     final color = plugin.isActive
         ? t.accent.active
         : plugin.isOffline
@@ -361,6 +363,22 @@ class _Header extends ConsumerWidget {
                   color: t.surface.onBaseMuted,
                   fontFeatures: t.numericFontFeatures),
             ),
+            // Where it runs, but only when that is somewhere other than here.
+            // A hosted plugin is an ordinary plugin and should not look like a
+            // special case; the one thing an operator needs is somewhere to go
+            // when it will not start.
+            if (host != null)
+              InkWell(
+                onTap: () => context.go('/admin/plugin-runtimes'),
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Text(
+                    'Running in ${host.hostname.isEmpty ? host.runtimeId : host.hostname}',
+                    style:
+                        t.text.captionStyle.copyWith(color: t.accent.primary),
+                  ),
+                ),
+              ),
           ],
         ),
         const Spacer(),
