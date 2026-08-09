@@ -324,7 +324,7 @@ class _RegistrySheetState extends ConsumerState<_RegistrySheet> {
               },
               child: Padding(
                 padding: const EdgeInsets.only(top: 2),
-                child: Text('Enrol one',
+                child: Text('Enroll one',
                     style:
                         t.text.captionStyle.copyWith(color: t.accent.primary)),
               ),

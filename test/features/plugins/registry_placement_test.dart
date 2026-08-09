@@ -5,7 +5,7 @@ import 'package:hc_web/core/models/registry_plugin.dart';
 ///
 /// The rule that matters: a plugin no enrolled runtime can host is **still
 /// shown**. Hiding it leaves an operator wondering why the catalogue is missing
-/// something they read about, and the fix — enrol a runtime — is invisible from
+/// something they read about, and the fix — enroll a runtime — is invisible from
 /// a row that is not there.
 
 RegistryPlugin _fromIndex({
