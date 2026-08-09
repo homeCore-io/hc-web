@@ -12,6 +12,7 @@
 library;
 
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
@@ -22,6 +23,7 @@ import '../../core/api/history_api.dart';
 import '../../core/text/humanize.dart';
 import '../../core/dashboard/widget_registry.dart';
 import 'camera_card.dart';
+import '../../core/devices/metrics.dart';
 import '../../core/devices/presentation.dart';
 import '../../design/hc_icons.dart';
 import '../../design/components/hc_surface.dart';
@@ -1460,6 +1462,48 @@ void registerBuiltinDashboardWidgets() {
       ),
     ),
     WidgetDescriptor(
+      type: 'gauge',
+      title: 'Gauge',
+      description: 'One reading against a range.',
+      icon: Icons.speed_outlined,
+      sizeHint: const WidgetSizeHint(
+          minW: 2, minH: 2, recommendedW: 3, recommendedH: 2),
+      fill: true,
+      configFields: const [
+        WidgetConfigField('device_id', WidgetConfigKind.deviceRef,
+            required: true),
+        WidgetConfigField('attribute', WidgetConfigKind.attribute,
+            required: true),
+        WidgetConfigField('min', WidgetConfigKind.integer),
+        WidgetConfigField('max', WidgetConfigKind.integer),
+        WidgetConfigField('unit', WidgetConfigKind.text),
+      ],
+      validate: (c) => (c['device_id'] as String?)?.isNotEmpty == true &&
+              (c['attribute'] as String?)?.isNotEmpty == true
+          ? null
+          : 'Pick a device and a reading.',
+      builder: (context, a) => _GaugeWidget(config: a.config),
+    ),
+    WidgetDescriptor(
+      type: 'device_reading',
+      title: 'Reading',
+      description: 'One number, large.',
+      icon: Icons.speed_outlined,
+      sizeHint: const WidgetSizeHint(
+          minW: 2, minH: 1, recommendedW: 3, recommendedH: 1),
+      fill: true,
+      configFields: const [
+        WidgetConfigField('device_id', WidgetConfigKind.deviceRef,
+            required: true),
+        WidgetConfigField('attribute', WidgetConfigKind.attribute),
+        WidgetConfigField('unit', WidgetConfigKind.text),
+      ],
+      validate: (c) => (c['device_id'] as String?)?.isNotEmpty == true
+          ? null
+          : 'Pick a device.',
+      builder: (context, a) => _ReadingWidget(config: a.config),
+    ),
+    WidgetDescriptor(
       type: 'history_chart',
       title: 'History chart',
       icon: Icons.show_chart_outlined,
@@ -2007,6 +2051,239 @@ class _ImageWidget extends StatelessWidget {
         loadingBuilder: (context, child, progress) =>
             progress == null ? child : const SizedBox.shrink(),
       ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// The data family
+// ---------------------------------------------------------------------------
+
+/// The reading a data card is pointed at, resolved once.
+///
+/// `attribute` is optional on the reading card: left empty it falls back to
+/// [primaryMetricOf], which is the house's existing answer to "which number
+/// does this sensor lead with". A multisensor has six; picking a different one
+/// here than the device panel picks would make the same sensor read as two
+/// different things on two screens.
+({double? value, String label, HcMetricRole role})? _readingFor(
+  List<DeviceState> devices,
+  Map<String, dynamic> config,
+) {
+  final id = config['device_id'] as String?;
+  if (id == null || id.isEmpty) return null;
+  final device =
+      devices.where((d) => d.id == id).cast<DeviceState?>().firstOrNull;
+  if (device == null) return null;
+
+  final attr = (config['attribute'] as String?) ?? '';
+  if (attr.isEmpty) {
+    final primary = primaryMetricOf(device);
+    if (primary == null) return null;
+    final raw = device.state.values.whereType<num>().firstOrNull;
+    return (
+      value: raw?.toDouble(),
+      label: primary.$1,
+      role: primary.$3,
+    );
+  }
+  final raw = device.state[attr];
+  return (
+    value: raw is num ? raw.toDouble() : null,
+    label: humanize(attr),
+    role: metricRole(attr),
+  );
+}
+
+/// One reading against a range.
+///
+/// A 270° arc rather than a full circle: the gap at the bottom is what tells
+/// you where the scale starts and ends, and a closed ring has no beginning.
+///
+/// The colour is [metricRole]'s, not a choice made here — a temperature is warm
+/// and a power figure is the active colour wherever they appear, and a gauge
+/// that picked its own would be the one card in the house disagreeing about
+/// what a number means. Brief principle 2: semantic before visual.
+class _GaugeWidget extends ConsumerWidget {
+  const _GaugeWidget({required this.config});
+
+  final Map<String, dynamic> config;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = HcTokens.of(context);
+    final async = ref.watch(devicesProvider);
+    if (async.value == null) return const SizedBox.shrink();
+
+    final reading = _readingFor(async.value!, config);
+    if (reading == null) {
+      return const _PlaceholderWidget(message: 'That device is not here.');
+    }
+
+    final min = (config['min'] as num?)?.toDouble() ?? 0;
+    final max = (config['max'] as num?)?.toDouble() ?? 100;
+    final unit = (config['unit'] as String?) ?? '';
+    final value = reading.value;
+    // A range that cannot be drawn is a configuration mistake, not a reason to
+    // render a broken dial.
+    final span = max - min;
+    final fraction = value == null || span <= 0
+        ? null
+        : ((value - min) / span).clamp(0.0, 1.0);
+
+    return LayoutBuilder(
+      builder: (context, c) {
+        final side = c.biggest.shortestSide.clamp(48.0, 220.0);
+        return Center(
+          child: SizedBox(
+            width: side,
+            height: side,
+            child: CustomPaint(
+              painter: _GaugePainter(
+                fraction: fraction,
+                track: t.accent.inactive,
+                fill: reading.role.color(t),
+                width: side * 0.09,
+              ),
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      value == null ? '—' : _trim(value),
+                      style: t.text.titleStyle.copyWith(
+                        color: t.surface.onBase,
+                        fontFeatures: t.numericFontFeatures,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    if (unit.isNotEmpty)
+                      Text(unit,
+                          style: t.text.captionStyle
+                              .copyWith(color: t.surface.onBaseMuted)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// 8, not 8.0; 21.4, not 21.400000000000002.
+String _trim(double v) =>
+    v == v.roundToDouble() ? v.round().toString() : v.toStringAsFixed(1);
+
+class _GaugePainter extends CustomPainter {
+  const _GaugePainter({
+    required this.fraction,
+    required this.track,
+    required this.fill,
+    required this.width,
+  });
+
+  final double? fraction;
+  final Color track;
+  final Color fill;
+  final double width;
+
+  /// Starts at the lower left and sweeps 270°, so the gap sits at the bottom
+  /// where a scale's ends belong.
+  static const _start = 3 * math.pi / 4;
+  static const _sweep = 3 * math.pi / 2;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset(width / 2, width / 2) &
+        Size(size.width - width, size.height - width);
+    final base = Paint()
+      ..color = track
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = width
+      ..strokeCap = StrokeCap.round;
+    canvas.drawArc(rect, _start, _sweep, false, base);
+
+    if (fraction == null || fraction == 0) return;
+    canvas.drawArc(
+      rect,
+      _start,
+      _sweep * fraction!,
+      false,
+      Paint()
+        ..color = fill
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = width
+        ..strokeCap = StrokeCap.round,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_GaugePainter old) =>
+      old.fraction != fraction || old.fill != fill || old.width != width;
+}
+
+/// One number, as large as the card allows.
+///
+/// The card for a wall panel read across a room, where a dial is decoration and
+/// the number is the whole message. It scales to its cell rather than picking a
+/// size: the same card is a glance on a phone and a headline on a wall.
+class _ReadingWidget extends ConsumerWidget {
+  const _ReadingWidget({required this.config});
+
+  final Map<String, dynamic> config;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = HcTokens.of(context);
+    final async = ref.watch(devicesProvider);
+    if (async.value == null) return const SizedBox.shrink();
+
+    final reading = _readingFor(async.value!, config);
+    if (reading == null) {
+      return const _PlaceholderWidget(message: 'That device is not here.');
+    }
+    final unit = (config['unit'] as String?) ?? '';
+
+    return LayoutBuilder(
+      builder: (context, c) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.baseline,
+                textBaseline: TextBaseline.alphabetic,
+                children: [
+                  Text(
+                    reading.value == null ? '—' : _trim(reading.value!),
+                    style: t.text.displayStyle.copyWith(
+                      color: reading.role.color(t),
+                      fontFeatures: t.numericFontFeatures,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  if (unit.isNotEmpty) ...[
+                    SizedBox(width: t.space.xs),
+                    Text(unit,
+                        style: t.text.subtitleStyle
+                            .copyWith(color: t.surface.onBaseMuted)),
+                  ],
+                ],
+              ),
+            ),
+            Text(reading.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style:
+                    t.text.captionStyle.copyWith(color: t.surface.onBaseMuted)),
+          ],
+        );
+      },
     );
   }
 }

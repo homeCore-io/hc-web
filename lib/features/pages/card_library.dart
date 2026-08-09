@@ -275,20 +275,29 @@ class _CardLibraryState extends ConsumerState<CardLibrary> {
       _Entry('Now playing', 'media_player', 'speakers and TVs',
           {'selection_mode': 'query', 'query': '', 'limit': 4}),
     ]),
+    // Data is its own family, not part of "Other". Three ways to show a
+    // number, and which one you want depends on the room rather than on the
+    // number: a dial to see at a glance whether something is in range, a big
+    // figure to read across a room, a line to see where it has been.
+    _Group('Data', [
+      _Entry('Gauge', 'gauge', 'one reading against a range',
+          {'min': 0, 'max': 100}),
+      _Entry('Reading', 'device_reading', 'one number, large', {}),
+      _Entry('Chart', 'history_chart', 'a value over time',
+          {'timeframe_hours': 24}),
+      _Entry('Numbers', 'stat_summary', 'counts of things', {
+        'metrics': ['devices', 'on', 'offline']
+      }),
+    ]),
     _Group('Other', [
       _Entry('Camera', 'camera_video', 'a live view',
           {'source_type': 'image_refresh'}),
-      _Entry('Chart', 'history_chart', 'a value over time',
-          {'timeframe_hours': 24}),
       _Entry('Web page', 'web_embed', 'anything with a URL',
           {'sandbox_profile': 'readonly_embed'}),
       _Entry(
           'Image', 'image', 'a picture, scaled to the card', {'fit': 'cover'}),
       _Entry('Note', 'markdown', 'text you write',
           {'markdown': '# Note\nWrite something here.'}),
-      _Entry('Numbers', 'stat_summary', 'counts of things', {
-        'metrics': ['devices', 'on', 'offline']
-      }),
     ]),
   ];
 }
