@@ -15,6 +15,7 @@ import '../../shell/shell_scope.dart';
 import 'breakpoint_bar.dart';
 import 'card_inspector.dart';
 import 'card_library.dart';
+import 'designer_shell.dart';
 import 'page_actions.dart';
 import 'page_grid.dart';
 import 'widget_config_form.dart';
@@ -27,9 +28,19 @@ import 'widget_palette.dart';
 /// live cards, instead of navigating away to a 2,000-line form. View and edit
 /// are one surface with a mode, which is the whole difference.
 class PageScreen extends ConsumerStatefulWidget {
-  const PageScreen({super.key, required this.dashboardId});
+  const PageScreen(
+      {super.key, required this.dashboardId, this.designer = false});
 
   final String dashboardId;
+
+  /// The full-page design surface rather than the house.
+  ///
+  /// Phase 2 of `designer-plan.md`. The same screen, because the editing state
+  /// machine — drafts, per-breakpoint arrangements, pending placements, ghosts,
+  /// what a save does to the layouts you are not looking at — is intricate and
+  /// a second copy of it would drift. What differs is the presentation: the
+  /// designer fills the viewport, keeps both panes open, and is always editing.
+  final bool designer;
 
   @override
   ConsumerState<PageScreen> createState() => _PageScreenState();
@@ -590,7 +601,18 @@ class _PageScreenState extends ConsumerState<PageScreen> {
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
-    final dashboards = ref.watch(dashboardsProvider).value ?? const [];
+    final async = ref.watch(dashboardsProvider);
+    // Still arriving is not the same as not there. "Page not found." while the
+    // list loads is a claim about the house that is false — the same failure as
+    // a card announcing "No devices match" before any device has arrived — and
+    // on a slow link it is the first thing the designer says to you.
+    if (async.value == null) {
+      return Scaffold(
+        backgroundColor: t.surface.base,
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+    final dashboards = async.value!;
     final dashboard = dashboards
         .where((d) => d.id == widget.dashboardId)
         .cast<DashboardDefinition?>()
@@ -623,6 +645,13 @@ class _PageScreenState extends ConsumerState<PageScreen> {
         // While editing, geometry comes from the draft: the bar can move to a
         // breakpoint with a different column count, and reading the saved
         // document would draw the new arrangement on the old grid.
+        // The designer has no view mode to enter from: arriving IS starting.
+        if (widget.designer && !_editing) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && !_editing) _startEditing(dashboard, breakpoint);
+          });
+        }
+
         final layout = _draftLayouts
                 ?.where((l) => l.breakpoint == breakpoint)
                 .firstOrNull ??
@@ -654,6 +683,73 @@ class _PageScreenState extends ConsumerState<PageScreen> {
             (_draftLayouts ?? const []).any((l) => l.breakpoint == source) &&
             layout.derivedFrom == null;
 
+        // The canvas, shared by both presentations. In the designer it is the
+        // middle pane; in the page it is the whole body.
+        Widget canvas() => items.isEmpty && !_editing
+            ? const _EmptyPage(editing: false)
+            : _PreviewFrame(
+                width: _editing ? previewWidthFor(breakpoint) : null,
+                child: PageGrid(
+                  items: items,
+                  widgetsById: widgetsById,
+                  columns: columns,
+                  rowHeight: rowHeight,
+                  gap: gap,
+                  editing: _editing,
+                  ghostItems: _editing && _draftLayouts != null
+                      ? _ghostFor(breakpoint, source, _draftLayouts!)
+                      : const [],
+                  onMove: (id, x, y) => _apply(
+                      (e, its) => e.move(its, id, x, y), columns,
+                      byHand: true),
+                  onResize: (id, w, h) => _apply(
+                      (e, its) => e.resize(its, id, w, h), columns,
+                      byHand: true),
+                  onRemove: (id) => _removeWidget(id, columns),
+                  onConfigure: (id) => hasInspector || widget.designer
+                      ? setState(() => _selectedCard = id)
+                      : _configureWidget(id),
+                  onAddAt: (x, y) => _addWidget(columns, atX: x, atY: y),
+                  selectedId: _selectedCard,
+                  onDropCard: (payload, x, y) {
+                    if (payload is DashboardWidgetModel) {
+                      _placeCard(payload, columns, atX: x, atY: y);
+                    }
+                  },
+                ),
+              );
+
+        if (widget.designer) {
+          return DesignerShell(
+            dashboard: dashboard,
+            breakpoint: breakpoint,
+            layouts: _draftLayouts,
+            source: source,
+            columns: columns,
+            saving: _saving,
+            dirty: _touched.isNotEmpty,
+            selectedCount: _selectedCard == null ? 0 : 1,
+            selected: _draftWidgets?[_selectedCard],
+            selectedItem: items
+                .where((i) => i.id == _selectedCard)
+                .cast<GridItem?>()
+                .firstOrNull,
+            consequence: _editConsequence(breakpoint),
+            onSelectBreakpoint: _selectBreakpoint,
+            onRevert: canRevert ? () => _revertSelected(source) : null,
+            onPick: (created) => _placeCard(created, columns),
+            onChanged: (config) => _configureLive(_selectedCard!, config),
+            onRemoveSelected: () {
+              _removeWidget(_selectedCard!, columns);
+              setState(() => _selectedCard = null);
+            },
+            onDeselect: () => setState(() => _selectedCard = null),
+            onSave: () => _save(dashboard),
+            canvas: canvas(),
+            canvasWidth: previewWidthFor(breakpoint),
+          );
+        }
+
         return Scaffold(
           bottomNavigationBar: _editing
               ? _EditBar(
@@ -671,6 +767,14 @@ class _PageScreenState extends ConsumerState<PageScreen> {
                   dashboard: dashboard,
                   editing: _editing,
                   onEdit: () => _startEditing(dashboard, breakpoint),
+                  // A second door, not a replacement. The pencil still edits in
+                  // place — that is what a phone and a wall panel get, and it
+                  // is the only thing that fits there. Changing what the pencil
+                  // means on wide viewports would take the in-place editor away
+                  // from the desktop without asking.
+                  onDesign: hasInspector
+                      ? () => context.go('/pages/${dashboard.id}/design')
+                      : null,
                 ),
                 if (_editing && _draftLayouts != null)
                   Padding(
@@ -811,11 +915,15 @@ class _Header extends ConsumerWidget {
     required this.dashboard,
     required this.editing,
     required this.onEdit,
+    required this.onDesign,
   });
 
   final DashboardDefinition dashboard;
   final bool editing;
   final VoidCallback onEdit;
+
+  /// Null on anything too narrow for three panes.
+  final VoidCallback? onDesign;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -845,6 +953,10 @@ class _Header extends ConsumerWidget {
               style: t.text.bodyStyle.copyWith(color: t.accent.active),
             )
           else ...[
+            if (onDesign != null) ...[
+              TextButton(onPressed: onDesign, child: const Text('Design')),
+              SizedBox(width: t.space.xs),
+            ],
             HcIconButton(
               icon: HcIcons.pencil,
               tooltip: 'Edit this page',

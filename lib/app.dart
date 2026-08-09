@@ -98,6 +98,14 @@ GoRouter _buildRouter(Ref ref) {
         path: '/wall',
         builder: (_, state) => KioskWallPage(params: state.uri.queryParameters),
       ),
+      // The designer, OUTSIDE the shell. A design tool brings its own chrome;
+      // the nav rail is for browsing the house, and a tool that kept it would
+      // be a page with panels rather than an application.
+      GoRoute(
+        path: '/pages/:id/design',
+        builder: (_, state) => PageScreen(
+            dashboardId: state.pathParameters['id']!, designer: true),
+      ),
       ShellRoute(
         // One scope for every route: it resolves which shell the location
         // belongs to, applies that shell's skin, and wraps the page in the right

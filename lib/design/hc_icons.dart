@@ -174,6 +174,11 @@ class HcIcons {
   static const caretUp = IconData(0xe13c, fontFamily: _regular);
   static const caretDown = IconData(0xe136, fontFamily: _regular);
   static const caretRight = IconData(0xe13a, fontFamily: _regular);
+  // Confirmed the documented way: rasterised e134/e136/e138/e13a/e13c from the
+  // bundled TTF and looked. The three known values landed where they should,
+  // which is what makes the fourth trustworthy rather than a guess from the
+  // spacing.
+  static const caretLeft = IconData(0xe138, fontFamily: _regular);
   static const eye = IconData(0xe220, fontFamily: _regular);
   static const eyeSlash = IconData(0xe224, fontFamily: _regular);
   static const check = IconData(0xe182, fontFamily: _regular);

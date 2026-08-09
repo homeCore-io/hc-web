@@ -648,9 +648,13 @@ class _Cell extends StatelessWidget {
           right: 4,
           child: Row(
             children: [
-              _RoundButton(icon: HcIcons.sliders, onTap: onConfigure),
+              _RoundButton(
+                  icon: HcIcons.sliders,
+                  onTap: onConfigure,
+                  label: 'Card options'),
               const SizedBox(width: 4),
-              _RoundButton(icon: HcIcons.x, onTap: onRemove),
+              _RoundButton(
+                  icon: HcIcons.x, onTap: onRemove, label: 'Remove card'),
             ],
           ),
         ),
@@ -681,23 +685,32 @@ class _Cell extends StatelessWidget {
 }
 
 class _RoundButton extends StatelessWidget {
-  const _RoundButton({required this.icon, required this.onTap});
+  const _RoundButton(
+      {required this.icon, required this.onTap, required this.label});
 
   final IconData icon;
   final VoidCallback onTap;
 
+  /// A bare glyph on a card told a screen reader nothing and a pointer user
+  /// only what a caret-in-a-circle suggests. Both of these are destructive or
+  /// mode-changing, so both say which.
+  final String label;
+
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
-    return Material(
-      color: t.surface.base,
-      shape: const CircleBorder(),
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(5),
-          child: Icon(icon, size: 13, color: t.surface.onBase),
+    return Tooltip(
+      message: label,
+      child: Material(
+        color: t.surface.base,
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(5),
+            child: Icon(icon, size: 13, color: t.surface.onBase),
+          ),
         ),
       ),
     );
