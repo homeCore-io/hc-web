@@ -660,7 +660,7 @@ class _Cell extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if ((model?.title ?? '').isNotEmpty)
+              if (style.titled && (model?.title ?? '').isNotEmpty)
                 Padding(
                   padding: EdgeInsets.only(bottom: t.space.sm),
                   child: Text(

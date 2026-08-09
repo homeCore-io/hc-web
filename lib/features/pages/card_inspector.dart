@@ -73,21 +73,15 @@ class CardInspector extends ConsumerWidget {
             Row(
               children: [
                 Expanded(
-                  child: onRename == null
-                      ? Text(
-                          model.title.isEmpty
-                              ? (descriptor?.title ?? model.type)
-                              : model.title,
-                          style: t.text.subtitleStyle.copyWith(
-                              color: t.surface.onBase,
-                              fontWeight: FontWeight.w600),
-                        )
-                      : _TitleField(
-                          key: ValueKey('title-${model.id}'),
-                          value: model.title,
-                          hint: descriptor?.title ?? model.type,
-                          onChanged: onRename!,
-                        ),
+                  child: Text(
+                    model.title.trim().isEmpty
+                        ? (descriptor?.title ?? model.type)
+                        : model.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: t.text.subtitleStyle.copyWith(
+                        color: t.surface.onBase, fontWeight: FontWeight.w600),
+                  ),
                 ),
                 IconButton(
                   onPressed: onClose,
@@ -134,6 +128,13 @@ class CardInspector extends ConsumerWidget {
             // heading, a rule and a spacer have no surface at all, so a
             // "background" switch on one would be a control with nothing
             // behind it.
+            if (onRename != null)
+              _NameField(
+                key: ValueKey('title-${model.id}'),
+                value: model.title,
+                hint: descriptor?.title ?? model.type,
+                onChanged: onRename!,
+              ),
             if (descriptor != null && descriptor.chrome != WidgetChrome.bare)
               _StyleSection(
                 style: CardStyle.fromConfig(model.config),
@@ -239,14 +240,16 @@ class _Preview extends ConsumerWidget {
   }
 }
 
-/// The card's name, edited in place at the top of the inspector.
+/// The card's name, as a labelled field.
 ///
-/// Deliberately not a labelled form field. It sits where the card's name was
-/// already being *shown*, so it reads as the heading it replaces until you
-/// click it — which is what makes it discoverable without adding a row of
-/// chrome to a panel that already has plenty.
-class _TitleField extends StatefulWidget {
-  const _TitleField({
+/// It was an unlabelled `TextField` styled to look exactly like the heading it
+/// replaced — which meant that a card could be renamed and nobody knew. The
+/// live page grew two cards both called "One device" and one called "Device
+/// list", none of them renamed, because nothing on screen said the name was
+/// yours to change. An affordance that looks like static text is not an
+/// affordance.
+class _NameField extends StatefulWidget {
+  const _NameField({
     super.key,
     required this.value,
     required this.hint,
@@ -258,10 +261,10 @@ class _TitleField extends StatefulWidget {
   final ValueChanged<String> onChanged;
 
   @override
-  State<_TitleField> createState() => _TitleFieldState();
+  State<_NameField> createState() => _NameFieldState();
 }
 
-class _TitleFieldState extends State<_TitleField> {
+class _NameFieldState extends State<_NameField> {
   late final TextEditingController _controller =
       TextEditingController(text: widget.value);
 
@@ -274,19 +277,30 @@ class _TitleFieldState extends State<_TitleField> {
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
-    final style = t.text.subtitleStyle
-        .copyWith(color: t.surface.onBase, fontWeight: FontWeight.w600);
-    return TextField(
-      controller: _controller,
-      style: style,
-      onChanged: widget.onChanged,
-      decoration: InputDecoration(
-        isDense: true,
-        border: InputBorder.none,
-        contentPadding: EdgeInsets.zero,
-        // An untitled card shows what it is, greyed, rather than an empty box.
-        hintText: widget.hint,
-        hintStyle: style.copyWith(color: t.surface.onBaseMuted),
+    return Padding(
+      padding: EdgeInsets.only(top: t.space.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('NAME',
+              style:
+                  t.text.overlineStyle.copyWith(color: t.surface.onBaseMuted)),
+          SizedBox(height: t.space.xs),
+          TextField(
+            controller: _controller,
+            style: t.text.bodyStyle.copyWith(color: t.surface.onBase),
+            onChanged: widget.onChanged,
+            decoration: InputDecoration(
+              isDense: true,
+              border: const OutlineInputBorder(),
+              // An untitled card shows what it is, greyed, rather than an
+              // empty box.
+              hintText: widget.hint,
+              hintStyle:
+                  t.text.bodyStyle.copyWith(color: t.surface.onBaseMuted),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -327,7 +341,19 @@ class _StyleSection extends StatelessWidget {
             value: style.bordered,
             onChanged: (v) => onChanged(style.copyWith(bordered: v)),
           ),
-          if (style.isDefault)
+          _StyleSwitch(
+            label: 'Title',
+            value: style.titled,
+            onChanged: (v) => onChanged(style.copyWith(titled: v)),
+          ),
+          if (!style.titled)
+            Text(
+              'The name still labels it here and in the layers strip — it just '
+              'is not drawn on the card.',
+              style: t.text.captionStyle
+                  .copyWith(color: t.surface.onBaseMuted, height: 1.4),
+            )
+          else if (style.isDefault)
             Text(
               'A card, like the others.',
               style: t.text.captionStyle

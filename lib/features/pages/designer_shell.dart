@@ -61,6 +61,9 @@ class DesignerShell extends StatefulWidget {
     required this.widgetsById,
     required this.onSelectCard,
     required this.onRename,
+    required this.canUndo,
+    required this.undoLabel,
+    required this.onUndo,
   });
 
   final DashboardDefinition dashboard;
@@ -97,6 +100,13 @@ class DesignerShell extends StatefulWidget {
   final Map<String, DashboardWidgetModel> widgetsById;
   final ValueChanged<String> onSelectCard;
   final ValueChanged<String> onRename;
+
+  /// Undo, as a control rather than as a sentence that times out.
+  final bool canUndo;
+
+  /// What pressing it will undo, for the tooltip. Null when there is nothing.
+  final String? undoLabel;
+  final VoidCallback onUndo;
 
   /// Fixed, because the frame is fixed. Panes that resized themselves would
   /// make the canvas scale jump while you worked in it.
@@ -202,6 +212,9 @@ class _DesignerShellState extends State<DesignerShell> {
                 onZoomStep: (delta) =>
                     setState(() => _zoom = _step(scale, delta)),
                 onAlign: widget.selected == null ? null : widget.onAlign,
+                canUndo: widget.canUndo,
+                undoLabel: widget.undoLabel,
+                onUndo: widget.onUndo,
               ),
               if (widget.consequence case final line?)
                 Container(
@@ -360,6 +373,9 @@ class _TopBar extends StatelessWidget {
     required this.onZoom,
     required this.onZoomStep,
     required this.onAlign,
+    required this.canUndo,
+    required this.undoLabel,
+    required this.onUndo,
   });
 
   final String title;
@@ -385,6 +401,10 @@ class _TopBar extends StatelessWidget {
   /// Null when nothing is selected — align acts on the selection, and a live
   /// button that quietly does nothing is worse than a dim one.
   final ValueChanged<CanvasAlign>? onAlign;
+
+  final bool canUndo;
+  final String? undoLabel;
+  final VoidCallback onUndo;
 
   @override
   Widget build(BuildContext context) {
@@ -425,6 +445,21 @@ class _TopBar extends StatelessWidget {
               ),
             ),
           const Spacer(),
+          // Undo first: it is the one control here that is about the past.
+          // Dim until there is something to undo, and named — "Undo" alone
+          // makes you press it to find out what it does.
+          IconButton(
+            onPressed: canUndo ? onUndo : null,
+            // Material, like the zoom and align controls beside it. HcIcons
+            // has no undo glyph and the file's own rule is that a codepoint is
+            // verified by rasterising the font, never guessed.
+            icon: const Icon(Icons.undo, size: 16),
+            tooltip: canUndo
+                ? 'Undo ${undoLabel!.toLowerCase()}'
+                : 'Nothing to undo',
+            visualDensity: VisualDensity.compact,
+          ),
+          SizedBox(width: t.space.sm),
           // Canvas tools. Align first, because it acts on the thing you have
           // in hand; zoom last, because it acts on where you are standing.
           for (final align in CanvasAlign.values)

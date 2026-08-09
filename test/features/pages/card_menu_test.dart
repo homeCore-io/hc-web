@@ -182,6 +182,27 @@ void main() {
   });
 
   group('undo', () {
+    // It used to be a snackbar with an Undo action, on the argument that
+    // removal was the only act that destroyed work. John: *"the undo bar at
+    // the bottom is just bad, some other undo button on the top panel should
+    // exist and be active when undo is available."* He is right on both
+    // counts — there are more destructive acts now, and a timed undo is a race
+    // you lose by reading the sentence.
+
+    Finder undoButton() => find.ancestor(
+        of: find.byTooltip(RegExp('^Undo ')),
+        matching: find.byType(IconButton));
+
+    testWidgets('the button is dim until there is something to undo',
+        (tester) async {
+      await _open(tester);
+      final dim = find.ancestor(
+          of: find.byTooltip('Nothing to undo'),
+          matching: find.byType(IconButton));
+      expect(dim, findsOneWidget);
+      expect(tester.widget<IconButton>(dim).onPressed, isNull);
+    });
+
     testWidgets('a removed card can be put back where it was', (tester) async {
       await _open(tester);
       await _openMenu(tester);
@@ -189,9 +210,10 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(_onCanvas(tester, 'Lights'), findsNothing);
-      expect(find.text('Removed Lights'), findsOneWidget);
+      expect(find.text('Removed Lights'), findsNothing,
+          reason: 'no snackbar — the toolbar carries it now');
 
-      await tester.tap(find.text('Undo'));
+      await tester.tap(undoButton());
       await tester.pumpAndSettle();
 
       expect(_onCanvas(tester, 'Lights'), findsOneWidget);
@@ -200,15 +222,28 @@ void main() {
               'different page from the one you had');
     });
 
-    testWidgets('nothing else offers an undo, because nothing else needs one',
+    testWidgets('and it says what it will undo', (tester) async {
+      await _open(tester);
+      await _openMenu(tester);
+      await tester.tap(find.text('Remove'));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Undo remove lights'), findsOneWidget,
+          reason: '"Undo" alone makes you press it to find out what it does');
+    });
+
+    testWidgets('a resize is undoable too, which it was not before',
         (tester) async {
-      // A mis-drag is undone by dragging back and a wrong size by resizing.
-      // Only removal takes a configuration with it.
+      // The old argument was that a wrong size is undone by resizing. True,
+      // and it still costs you the size you had.
       await _open(tester);
       await _openMenu(tester);
       await tester.tap(find.text('Full width'));
       await tester.pumpAndSettle();
-      expect(find.text('Undo'), findsNothing);
+      expect(find.text('12×2 at 0,0'), findsOneWidget);
+
+      await tester.tap(undoButton());
+      await tester.pumpAndSettle();
+      expect(find.text('4×2 at 0,0'), findsOneWidget);
     });
   });
 }

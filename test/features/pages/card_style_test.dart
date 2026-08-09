@@ -134,7 +134,8 @@ void main() {
       const config = {'markdown': 'x'};
       expect(const CardStyle().toConfig(config), config);
       final styled = const CardStyle(filled: false).toConfig(config);
-      expect(styled['style'], {'filled': false, 'bordered': true});
+      expect(
+          styled['style'], {'filled': false, 'bordered': true, 'titled': true});
       expect(const CardStyle().toConfig(styled), config,
           reason: 'switching back removes the key rather than writing the '
               'default out longhand');

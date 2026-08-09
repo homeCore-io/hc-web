@@ -48,6 +48,33 @@ class PageScreen extends ConsumerStatefulWidget {
   ConsumerState<PageScreen> createState() => _PageScreenState();
 }
 
+/// The draft, frozen. Everything an undo has to put back.
+class _Snapshot {
+  const _Snapshot({
+    required this.label,
+    required this.coalesce,
+    required this.items,
+    required this.layouts,
+    required this.widgets,
+    required this.touched,
+    required this.contentDirty,
+    required this.selected,
+  });
+
+  /// What the *next* action was, so the button can name what it will undo.
+  final String label;
+  final String coalesce;
+  final List<GridItem> items;
+  final List<DashboardLayout> layouts;
+  final Map<String, DashboardWidgetModel> widgets;
+  final Set<DashboardBreakpoint> touched;
+  final bool contentDirty;
+
+  /// Which card was in the inspector. Undo puts you back where you were, and
+  /// where you were includes what you were looking at.
+  final String? selected;
+}
+
 class _PageScreenState extends ConsumerState<PageScreen> {
   @override
   void initState() {
@@ -114,6 +141,22 @@ class _PageScreenState extends ConsumerState<PageScreen> {
   /// indicator read [_touched], so changing a card's room in the inspector left
   /// the bar saying **Saved** while the change sat unsaved in the draft.
   bool _contentDirty = false;
+
+  /// Undo, as a stack of draft snapshots.
+  ///
+  /// `designer-plan.md` §5.1 argued a timed snackbar was enough, because
+  /// removal was the only act that destroyed work. Two things changed. There
+  /// are now more of them — a rename, a style and a selection edit all
+  /// overwrite something — and a *timed* undo makes it a race you can lose by
+  /// reading the sentence. John: *"the undo bar at the bottom is just bad, some
+  /// other undo button on the top panel should exist and be active when undo is
+  /// available."*
+  ///
+  /// A snapshot is cheap because the draft is already a value: three immutable
+  /// collections and a set. Bounded, because this is an undo affordance and not
+  /// a document history.
+  final List<_Snapshot> _undo = [];
+  static const _undoDepth = 20;
 
   /// Cards added during this edit, and not yet settled on every hand-arranged
   /// layout.
@@ -253,9 +296,53 @@ class _PageScreenState extends ConsumerState<PageScreen> {
   GridEngine _engine(int columns) =>
       GridEngine(columns: columns, flow: _editedFlow);
 
+  /// Remember the draft as it is *now*, labelled with what is about to happen.
+  ///
+  /// [coalesce] collapses a run of the same edit into one entry — typing a name
+  /// is one undo, not one per keystroke. The *first* snapshot of the run is the
+  /// one kept, because that is the state before you started typing.
+  void _pushUndo(String label, {String coalesce = ''}) {
+    if (_draftItems == null) return;
+    if (coalesce.isNotEmpty &&
+        _undo.isNotEmpty &&
+        _undo.last.coalesce == coalesce) {
+      return;
+    }
+    _undo.add(_Snapshot(
+      label: label,
+      coalesce: coalesce,
+      items: List<GridItem>.of(_draftItems!),
+      layouts: List<DashboardLayout>.of(_draftLayouts ?? const []),
+      widgets: Map<String, DashboardWidgetModel>.of(_draftWidgets ?? const {}),
+      touched: Set<DashboardBreakpoint>.of(_touched),
+      contentDirty: _contentDirty,
+      selected: _selectedCard,
+    ));
+    if (_undo.length > _undoDepth) _undo.removeAt(0);
+  }
+
+  void _undoLast() {
+    if (_undo.isEmpty) return;
+    final snap = _undo.removeLast();
+    setState(() {
+      _draftItems = snap.items;
+      _draftLayouts = snap.layouts;
+      _draftWidgets = snap.widgets;
+      _touched
+        ..clear()
+        ..addAll(snap.touched);
+      _contentDirty = snap.contentDirty;
+      // Restored too, but only if it survived — a snapshot taken before a card
+      // was added has no such card to select.
+      _selectedCard =
+          snap.widgets.containsKey(snap.selected) ? snap.selected : null;
+    });
+  }
+
   void _apply(List<GridItem> Function(GridEngine e, List<GridItem> items) op,
       int columns,
-      {bool byHand = false}) {
+      {bool byHand = false, String label = 'Move'}) {
+    _pushUndo(label);
     setState(() {
       if (byHand) _goFree();
       _commit(op(_engine(columns), _draftItems!));
@@ -478,22 +565,14 @@ class _PageScreenState extends ConsumerState<PageScreen> {
     final item =
         _draftItems?.where((i) => i.id == id).cast<GridItem?>().firstOrNull;
 
+    if (model != null && item != null) {
+      _pushUndo('Remove ${_cardLabel(model)}');
+    }
     setState(() {
       _draftWidgets = {...?_draftWidgets}..remove(id);
       if (_selectedCard == id) _selectedCard = null;
       _commit(engine.remove(_draftItems!, id));
     });
-
-    if (model == null || item == null) return;
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(
-        content: Text('Removed ${_cardLabel(model)}'),
-        action: SnackBarAction(
-          label: 'Undo',
-          onPressed: () => _restoreWidget(model, item, columns),
-        ),
-      ));
   }
 
   /// The card menu, at the pointer.
@@ -581,15 +660,10 @@ class _PageScreenState extends ConsumerState<PageScreen> {
     });
   }
 
-  /// Puts a removed card back where it was.
-  void _restoreWidget(DashboardWidgetModel model, GridItem item, int columns) {
-    if (!mounted || _draftItems == null) return;
-    setState(() {
-      _draftWidgets = {...?_draftWidgets, model.id: model};
-      _commit(_engine(columns).addAt(_draftItems!, item, item.x, item.y));
-      _selectedCard = model.id;
-    });
-  }
+  // `_restoreWidget` lived here: it put one removed card back, for the
+  // snackbar's Undo action. The undo stack restores the whole draft instead, so
+  // a removal is no longer a special case with its own inverse — which is the
+  // point of having a stack at all.
 
   /// Puts a card the library produced on the page.
   ///
@@ -632,6 +706,7 @@ class _PageScreenState extends ConsumerState<PageScreen> {
   void _configureLive(String id, Map<String, dynamic> config) {
     final model = _draftWidgets?[id];
     if (model == null) return;
+    _pushUndo('Change ${_cardLabel(model)}', coalesce: 'config:$id');
     setState(() {
       _draftWidgets = {...?_draftWidgets, id: model.copyWith(config: config)};
       _contentDirty = true;
@@ -914,6 +989,7 @@ class _PageScreenState extends ConsumerState<PageScreen> {
               final id = _selectedCard;
               final current = _draftWidgets?[id];
               if (id == null || current == null) return;
+              _pushUndo('Rename ${_cardLabel(current)}', coalesce: 'name:$id');
               _draftWidgets = {
                 ..._draftWidgets!,
                 id: current.copyWith(title: name),
@@ -932,9 +1008,14 @@ class _PageScreenState extends ConsumerState<PageScreen> {
                   (e, its) =>
                       e.move(its, id, align.xFor(item.w, columns), item.y),
                   columns,
-                  byHand: true);
+                  byHand: true,
+                  label: align.label);
             },
+            canUndo: _undo.isNotEmpty,
+            undoLabel: _undo.isEmpty ? null : _undo.last.label,
+            onUndo: _undoLast,
             onFlowChanged: (next) => setState(() {
+              _pushUndo(next == GridFlow.free ? 'Keep gaps' : 'Close gaps');
               _draftLayouts = [
                 for (final l in _draftLayouts!)
                   if (l.breakpoint == breakpoint) l.copyWith(flow: next) else l,
