@@ -30,6 +30,8 @@ const _python = {
 };
 
 void main() {
+  _updateClaims();
+
   group('reading a registry entry', () {
     /// Every entry published before plugin runtimes existed omits `runtime`
     /// entirely, and means native. Defaulting it wrong would make the whole
@@ -85,6 +87,36 @@ void main() {
       expect(p.latest, '0.2.0');
       expect(p.needsRuntime(null), isTrue, reason: 'null means the newest');
       expect(p.needsRuntime('0.1.0'), isFalse);
+    });
+  });
+}
+
+/// "An update is available" is a claim, and an unknown installed version is not
+/// evidence for it.
+///
+/// A hosted plugin registers itself over MQTT — core never unpacked a binary
+/// and reports no installed version — so comparing `latest != installedVersion`
+/// directly offered `Update to v0.1.0` on a plugin already running v0.1.0.
+void _updateClaims() {
+  group('claiming an update', () {
+    final p = RegistryPlugin.fromJson({
+      'id': 'plugin.x',
+      'versions': [
+        {'version': '0.1.0', 'artifacts': []},
+      ],
+    });
+
+    test('an unknown installed version claims nothing', () {
+      expect(p.updateFrom(null), isNull);
+      expect(p.updateFrom(''), isNull);
+    });
+
+    test('the same version claims nothing', () {
+      expect(p.updateFrom('0.1.0'), isNull);
+    });
+
+    test('an older version does claim one', () {
+      expect(p.updateFrom('0.0.9'), '0.1.0');
     });
   });
 }

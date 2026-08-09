@@ -207,9 +207,16 @@ class _RegistrySheetState extends ConsumerState<_RegistrySheet> {
   Widget _row(
       HcTokens t, RegistryPlugin p, Map<String, String?> installedVersions) {
     final installed = installedVersions.containsKey(p.id);
-    final installedVer = installedVersions[p.id];
-    final updateAvailable =
-        installed && p.latest != null && p.latest != installedVer;
+    // A hosted plugin registers itself over MQTT; core never unpacked a binary
+    // for it and has no installed version to report. The placement does — it is
+    // the record of what was put there — so ask it before giving up.
+    final installedVer = installedVersions[p.id] ??
+        ref.watch(pluginPlacementsProvider).value?[p.id]?.version;
+    // `updateFrom` rather than `latest != installedVer`, because null is not a
+    // different version, it is an unknown one. Compared directly it read as
+    // "out of date" and offered `Update to v0.1.0` on a plugin already running
+    // v0.1.0 — an update is a claim, and this does not make it on a guess.
+    final updateAvailable = installed && p.updateFrom(installedVer) != null;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 12),
       decoration: BoxDecoration(
