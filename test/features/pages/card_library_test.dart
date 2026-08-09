@@ -120,6 +120,8 @@ void main() {
 
     testWidgets('a house card comes with sensible defaults', (tester) async {
       final picked = await _pump(tester, house);
+      await tester.tap(find.text('THE HOUSE'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Activity'));
       await tester.pumpAndSettle();
       expect(picked.single.type, 'event_feed');
@@ -138,6 +140,33 @@ void main() {
       // thing people look for, and it had no way in at all before.
       expect(find.text('Office'), findsNWidgets(2));
       expect(find.text('Living Room'), findsNothing);
+    });
+  });
+
+  group('groups', () {
+    testWidgets('rooms are open and the rest are closed', (tester) async {
+      // Fifteen rooms are fifteen rows: on a real house the last group started
+      // two-thirds of the way down the panel, so everything that was not a
+      // room read as an afterthought.
+      await _pump(tester, house);
+      expect(find.text('Living Room'), findsOneWidget);
+      expect(find.text('Activity'), findsNothing);
+    });
+
+    testWidgets('a closed group still says how much is in it', (tester) async {
+      await _pump(tester, house);
+      expect(find.text('THE HOUSE'), findsOneWidget);
+      expect(find.text('5'), findsWidgets,
+          reason: 'the count is what makes a closed group honest');
+    });
+
+    testWidgets('a search opens every group', (tester) async {
+      // A hit hidden inside a closed group is a search that appears to have
+      // found nothing.
+      await _pump(tester, house);
+      await tester.enterText(find.byType(TextField), 'activ');
+      await tester.pumpAndSettle();
+      expect(find.text('Activity'), findsOneWidget);
     });
   });
 

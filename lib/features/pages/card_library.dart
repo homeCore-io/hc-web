@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/dashboard/widget_registry.dart';
 import '../../core/models/dashboard.dart';
 import '../../core/models/device_state.dart';
 import '../../core/providers/devices_provider.dart';
 import '../../core/devices/presentation.dart';
 import '../../core/text/humanize.dart';
+import '../../design/hc_icons.dart';
 import '../../design/tokens.dart';
 
 /// What you can put on a page, drawn from the house you are putting it on.
@@ -41,6 +43,12 @@ class CardLibrary extends ConsumerStatefulWidget {
 
 class _CardLibraryState extends ConsumerState<CardLibrary> {
   String _query = '';
+
+  /// Which groups are open. Rooms and devices start open because they are the
+  /// answer most of the time; the rest start closed so fifteen rooms do not
+  /// push everything else into the bottom third of the panel, which is what
+  /// happened on a real house.
+  final _open = <String>{'Rooms', 'Devices'};
 
   /// Rooms with something in them, most-populated first.
   ///
@@ -96,6 +104,11 @@ class _CardLibraryState extends ConsumerState<CardLibrary> {
           'device_ids': [d.id],
         },
       );
+
+  /// Searching opens every group: a hit hidden inside a closed one is a search
+  /// that appears to have found nothing.
+  void _toggle(String label) =>
+      _open.contains(label) ? _open.remove(label) : _open.add(label);
 
   bool _matches(String label) =>
       _query.isEmpty || label.toLowerCase().contains(_query.toLowerCase());
@@ -169,14 +182,20 @@ class _CardLibraryState extends ConsumerState<CardLibrary> {
                           .copyWith(color: t.surface.onBaseMuted))
                 else ...[
                   if (shownRooms.isNotEmpty) ...[
-                    const _Heading(label: 'Rooms'),
-                    for (final room in shownRooms)
-                      _RoomRow(
-                        room: room,
-                        onTap: () => _placeRoom(room),
-                        payload: () => _roomCard(room),
-                      ),
-                    SizedBox(height: t.space.md),
+                    _Heading(
+                      label: 'Rooms',
+                      count: shownRooms.length,
+                      open: _open.contains('Rooms'),
+                      onTap: () => setState(() => _toggle('Rooms')),
+                    ),
+                    if (_open.contains('Rooms'))
+                      for (final room in shownRooms)
+                        _RoomRow(
+                          room: room,
+                          onTap: () => _placeRoom(room),
+                          payload: () => _roomCard(room),
+                        ),
+                    SizedBox(height: t.space.sm),
                   ] else if (_query.isEmpty && rooms.isEmpty)
                     Padding(
                       padding: EdgeInsets.only(bottom: t.space.md),
@@ -190,11 +209,17 @@ class _CardLibraryState extends ConsumerState<CardLibrary> {
                 ],
                 if (devices != null && _query.isNotEmpty) ...[
                   if (_matchingDevices(devices).isNotEmpty) ...[
-                    const _Heading(label: 'Devices'),
+                    _Heading(
+                      label: 'Devices found',
+                      count: _matchingDevices(devices).length,
+                      open: true,
+                      onTap: () {},
+                    ),
                     for (final d in _matchingDevices(devices).take(12))
                       _PlainRow(
                         label: d.displayName,
                         hint: humanize(d.effectiveArea ?? ''),
+                        type: 'device_tile',
                         onTap: () => widget.onPick(_deviceCard(d)),
                         payload: () => _deviceCard(d),
                       ),
@@ -203,16 +228,24 @@ class _CardLibraryState extends ConsumerState<CardLibrary> {
                 ],
                 for (final group in _groups)
                   if (group.entries.any((e) => _matches(e.label))) ...[
-                    _Heading(label: group.label),
-                    for (final entry in group.entries)
-                      if (_matches(entry.label))
-                        _PlainRow(
-                          label: entry.label,
-                          hint: entry.hint,
-                          onTap: () => widget.onPick(_entryCard(entry)),
-                          payload: () => _entryCard(entry),
-                        ),
-                    SizedBox(height: t.space.md),
+                    _Heading(
+                      label: group.label,
+                      count:
+                          group.entries.where((e) => _matches(e.label)).length,
+                      open: _open.contains(group.label) || _query.isNotEmpty,
+                      onTap: () => setState(() => _toggle(group.label)),
+                    ),
+                    if (_open.contains(group.label) || _query.isNotEmpty)
+                      for (final entry in group.entries)
+                        if (_matches(entry.label))
+                          _PlainRow(
+                            label: entry.label,
+                            hint: entry.hint,
+                            type: entry.type,
+                            onTap: () => widget.onPick(_entryCard(entry)),
+                            payload: () => _entryCard(entry),
+                          ),
+                    SizedBox(height: t.space.sm),
                   ],
               ],
             ),
@@ -315,17 +348,56 @@ class _Search extends StatelessWidget {
   }
 }
 
+/// A group header that opens and closes, and says how much is inside.
+///
+/// Fifteen rooms are wonderful and they are also fifteen rows: on a real house
+/// the last group started two-thirds of the way down the panel, so everything
+/// that was not a room read as an afterthought. The count on the header is what
+/// makes a closed group honest — you can tell there are six things in Other
+/// without opening it.
 class _Heading extends StatelessWidget {
-  const _Heading({required this.label});
+  const _Heading({
+    required this.label,
+    required this.count,
+    required this.open,
+    required this.onTap,
+  });
+
   final String label;
+  final int count;
+  final bool open;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
-    return Padding(
-      padding: EdgeInsets.only(bottom: t.space.xs),
-      child: Text(label.toUpperCase(),
-          style: t.text.overlineStyle.copyWith(color: t.surface.onBaseMuted)),
+    return Semantics(
+      button: true,
+      expanded: open,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(t.radius.sm),
+        child: Padding(
+          padding: EdgeInsets.symmetric(
+              vertical: t.space.xs, horizontal: t.space.xs),
+          child: Row(
+            children: [
+              Icon(open ? HcIcons.caretDown : HcIcons.caretRight,
+                  size: 11, color: t.surface.onBaseMuted),
+              SizedBox(width: t.space.xs),
+              Expanded(
+                child: Text(label.toUpperCase(),
+                    style: t.text.overlineStyle
+                        .copyWith(color: t.surface.onBaseMuted)),
+              ),
+              Text('$count',
+                  style: t.text.captionStyle.copyWith(
+                      color: t.surface.onBaseMuted,
+                      fontFeatures: t.numericFontFeatures)),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -352,6 +424,9 @@ class _RoomRow extends StatelessWidget {
               vertical: t.space.xs, horizontal: t.space.xs),
           child: Row(
             children: [
+              Icon(Icons.meeting_room_outlined,
+                  size: 15, color: t.surface.onBaseMuted),
+              SizedBox(width: t.space.sm),
               Expanded(
                 child: Text(room.label,
                     style: t.text.bodySmallStyle
@@ -400,43 +475,72 @@ class _DragRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
-    return Draggable<Object>(
-      data: payload(),
-      dragAnchorStrategy: pointerDragAnchorStrategy,
-      feedback: Material(
-        color: Colors.transparent,
-        child: Container(
-          padding: EdgeInsets.symmetric(
-              horizontal: t.space.sm, vertical: t.space.xs),
-          decoration: BoxDecoration(
-            color: t.surface.overlay,
-            borderRadius: BorderRadius.circular(t.radius.sm),
-            border: Border.all(color: t.accent.active, width: t.stroke.width),
+    return MouseRegion(
+      // The only honest way to say "this is draggable" without adding a grip
+      // to every row: the cursor changes over something you can pick up.
+      cursor: SystemMouseCursors.grab,
+      child: Draggable<Object>(
+        data: payload(),
+        dragAnchorStrategy: pointerDragAnchorStrategy,
+        feedback: Material(
+          color: Colors.transparent,
+          child: Container(
+            padding: EdgeInsets.symmetric(
+                horizontal: t.space.sm, vertical: t.space.xs),
+            decoration: BoxDecoration(
+              color: t.surface.overlay,
+              borderRadius: BorderRadius.circular(t.radius.sm),
+              border: Border.all(color: t.accent.active, width: t.stroke.width),
+            ),
+            child: Text(label,
+                style: t.text.bodySmallStyle.copyWith(color: t.surface.onBase)),
           ),
-          child: Text(label,
-              style: t.text.bodySmallStyle.copyWith(color: t.surface.onBase)),
         ),
+        childWhenDragging: Opacity(opacity: 0.4, child: child),
+        child: child,
       ),
-      childWhenDragging: Opacity(opacity: 0.4, child: child),
-      child: child,
     );
   }
 }
 
+/// An element you can place: what it is, what it does, and how big it lands.
+///
+/// Three deliberate choices, each replacing something that was wrong.
+///
+/// **The icon is the registry's own.** The palette this grew out of showed one
+/// per card and the first version of this panel dropped them, which turned a
+/// library into a column of prose.
+///
+/// **The size, not a truncated hint.** At 260px the right-hand hint ellipsised
+/// on nearly every row — "a card you fill y…", "lights, climate, s…" — which is
+/// the shape of text that is present but unreadable. The cell size is short,
+/// never truncates, and is the one fact about an element you cannot guess and
+/// would otherwise learn by dropping it.
+///
+/// **The description gets its own line.** It is what tells you Numbers from
+/// Chart, so it is worth the height rather than worth abbreviating.
 class _PlainRow extends StatelessWidget {
   const _PlainRow(
       {required this.label,
       required this.hint,
+      required this.type,
       required this.onTap,
       required this.payload});
+
   final String label;
   final String hint;
+  final String type;
   final VoidCallback onTap;
   final DashboardWidgetModel Function() payload;
 
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
+    final d = WidgetRegistry.lookup(type);
+    final size = d == null
+        ? null
+        : '${d.sizeHint.recommendedW}×${d.sizeHint.recommendedH}';
+
     return _DragRow(
       payload: payload,
       label: label,
@@ -447,19 +551,35 @@ class _PlainRow extends StatelessWidget {
           padding: EdgeInsets.symmetric(
               vertical: t.space.xs, horizontal: t.space.xs),
           child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Padding(
+                padding: const EdgeInsets.only(top: 1),
+                child: Icon(d?.icon ?? Icons.widgets_outlined,
+                    size: 15, color: t.surface.onBaseMuted),
+              ),
+              SizedBox(width: t.space.sm),
               Expanded(
-                child: Text(label,
-                    style: t.text.bodySmallStyle
-                        .copyWith(color: t.surface.onBase)),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(label,
+                        style: t.text.bodySmallStyle
+                            .copyWith(color: t.surface.onBase)),
+                    Text(hint,
+                        style: t.text.captionStyle
+                            .copyWith(color: t.surface.onBaseMuted)),
+                  ],
+                ),
               ),
-              Flexible(
-                child: Text(hint,
-                    textAlign: TextAlign.right,
-                    overflow: TextOverflow.ellipsis,
-                    style: t.text.captionStyle
-                        .copyWith(color: t.surface.onBaseMuted)),
-              ),
+              if (size != null)
+                Padding(
+                  padding: const EdgeInsets.only(left: 4, top: 1),
+                  child: Text(size,
+                      style: t.text.captionStyle.copyWith(
+                          color: t.surface.onBaseMuted,
+                          fontFeatures: t.numericFontFeatures)),
+                ),
             ],
           ),
         ),
