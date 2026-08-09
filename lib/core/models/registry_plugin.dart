@@ -68,7 +68,7 @@ class RegistryPlugin {
   }
 
   /// The runtime kinds this version publishes for, for a message that names
-  /// what to go and enrol.
+  /// what to go and enroll.
   List<RegistryArtifact> runtimeArtifacts(String? version) =>
       artifactsFor(version).where((a) => !a.isNative).toList();
 
