@@ -221,10 +221,11 @@ Each phase is usable on its own; none of them leave the editor worse.
    tool lives on: a size readout while resizing, and snap lines against a
    neighbour's edges.
 4. **Canvas tools.** Zoom control, align and distribute for a multi-selection.
-5. **Layers.**
+   — done, see §5.3.
+5. **Layers.** — done, see §5.4.
 6. **Data family.** Gauge, then the chart inspector, then Number.
 7. **Layout family.** Group, Heading, Spacer, Divider. — done, see §5.2.
-8. **Devices in the library**, individually draggable.
+8. **Devices in the library**, individually draggable. — done with §3.2.
 9. **Style pane.** Transparent cards, no-border cards — the things that stop a
    page reading as a grid of boxes.
 10. **Facet filters**, once core can express them.
@@ -328,6 +329,58 @@ None of the three is known to core, and none needs to be:
 inferred — a page containing all three round-tripped through `PUT /dashboards/:id`
 and came back intact. That only holds while they stay clear of the selection
 contract, so a test pins the absence of `selection_mode` on all three.
+
+---
+
+### 5.3 Phase 4: what zoom needed first
+
+`Transform.scale` paints at a scale and lays out at the child's *unscaled*
+size. Inside a scroll view that is a silent failure: the scroll extent
+describes a canvas that is no longer that size, so at 200% the right-hand edge
+of the page exists and cannot be reached, and nothing on screen says why. Hence
+`ScaledCanvas`, which lays the child out at its own scale, takes the scaled
+size, and puts hit tests back through the same transform — a canvas you can see
+and cannot drag is not zoomed, it is a picture of being zoomed.
+
+Fit stays the default and stays a *rule* rather than a number, so it keeps
+re-deriving as the window changes. Stepping off it lands on the nearest stop:
+78% is not a number anyone asked for. Zoom never reaches the draft — how close
+you are standing to a page is not a fact about the page — and the status bar
+stopped repeating the percentage once a control showed it.
+
+**Distribute is not here.** It spreads three or more evenly, so it needs the
+multi-select §5.1 deferred. Align does not: "centre this" is a single-card
+operation, and it is the one a drag cannot do, because centring a 5-wide card
+in 12 columns lands on 3.5.
+
+**Clicking a card now selects it.** That is not in any phase because nobody
+wrote it down. The only way to put a card in the inspector was the small round
+options button in its corner, while everything else about the canvas said
+direct manipulation.
+
+### 5.4 Phase 5: two thirds of Layers do not exist
+
+§3.4 asked for z-order, reorder, rename and hide. This document has **no
+z-order** — the grid resolves overlap out of existence, so nothing is ever on
+top of anything. It has **no hidden field**, and adding one client-side would
+make a card that disappears here and is still on the wall display. And
+**reordering is nothing**: widget order is read nowhere, since layouts
+reconcile by id and placement is x/y, so a drag handle would rearrange a list
+and change no pixel on the page.
+
+What is left — say what is there, and let you get to it — is what the phase
+ships, in reading order rather than document order. It earns its place on the
+layout family alone: a spacer draws nothing at all.
+
+**Rename** is the one from that list that was both possible and missing
+entirely. A card took the label of whatever library entry produced it and kept
+it for good.
+
+It also turned up a shipped bug: the unsaved indicator read the set of
+hand-arranged breakpoints, and a config edit never joined that set, so changing
+a card's room in the inspector left the bar saying **Saved**. Content-dirty is
+now its own flag — which is also what stops a rename from detaching a derived
+layout, since that flag means "arranged by hand" and renaming arranges nothing.
 
 ---
 
