@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show BrowserContextMenu;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -47,6 +49,22 @@ class PageScreen extends ConsumerStatefulWidget {
 }
 
 class _PageScreenState extends ConsumerState<PageScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // Right-click in a design tool means the tool's menu, and the browser's
+    // would cover it. Only in the designer, and restored on the way out: on an
+    // ordinary page the browser menu is useful — copying a device name out of
+    // one is a reasonable thing to want.
+    if (kIsWeb && widget.designer) BrowserContextMenu.disableContextMenu();
+  }
+
+  @override
+  void dispose() {
+    if (kIsWeb && widget.designer) BrowserContextMenu.enableContextMenu();
+    super.dispose();
+  }
+
   /// Every layout, in whatever state the edit has left them — null means view
   /// mode. A working copy so Cancel leaves the saved page exactly as it was.
   ///
@@ -430,11 +448,132 @@ class _PageScreenState extends ConsumerState<PageScreen> {
     setState(() => _settled.add(_settledKey(selected, id)));
   }
 
+  /// Removes a card, and offers it back.
+  ///
+  /// The only action in the designer whose inverse is not a gesture. A
+  /// mis-drag is undone by dragging back and a wrong room by picking another,
+  /// but a removed card takes its configuration with it — which room, which
+  /// devices, which limit — and putting it back means rebuilding all of that
+  /// from memory. That is what earns an undo here, and what makes a general
+  /// history stack unnecessary everywhere else.
   void _removeWidget(String id, int columns) {
     final engine = _engine(columns);
+    final model = _draftWidgets?[id];
+    // Captured before the removal, including where it sat: restoring a card to
+    // the top-left would be a different page from the one you had.
+    final item =
+        _draftItems?.where((i) => i.id == id).cast<GridItem?>().firstOrNull;
+
     setState(() {
       _draftWidgets = {...?_draftWidgets}..remove(id);
+      if (_selectedCard == id) _selectedCard = null;
       _commit(engine.remove(_draftItems!, id));
+    });
+
+    if (model == null || item == null) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+        content: Text('Removed ${_cardLabel(model)}'),
+        action: SnackBarAction(
+          label: 'Undo',
+          onPressed: () => _restoreWidget(model, item, columns),
+        ),
+      ));
+  }
+
+  /// The card menu, at the pointer.
+  ///
+  /// Every entry here is reachable another way — that is deliberate. A context
+  /// menu is a shortcut for someone who already knows what they want, not the
+  /// only door to anything, because a menu you have to discover by right-
+  /// clicking is a menu most people never open.
+  ///
+  /// The size presets are the one thing here that is genuinely faster than the
+  /// alternative: dragging a card to exactly half the grid means counting
+  /// columns, and "Half width" is what you actually meant.
+  Future<void> _cardMenu(String id, Offset at, int columns) async {
+    final model = _draftWidgets?[id];
+    final item =
+        _draftItems?.where((i) => i.id == id).cast<GridItem?>().firstOrNull;
+    if (model == null || item == null) return;
+
+    setState(() => _selectedCard = id);
+
+    final overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox?;
+    if (overlay == null) return;
+
+    final choice = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromRect(
+        at & const Size(1, 1),
+        Offset.zero & overlay.size,
+      ),
+      items: const [
+        PopupMenuItem(value: 'configure', child: Text('Configure')),
+        PopupMenuItem(value: 'duplicate', child: Text('Duplicate')),
+        PopupMenuDivider(),
+        PopupMenuItem(value: 'half', child: Text('Half width')),
+        PopupMenuItem(value: 'full', child: Text('Full width')),
+        PopupMenuDivider(),
+        PopupMenuItem(value: 'remove', child: Text('Remove')),
+      ],
+    );
+    if (choice == null || !mounted) return;
+
+    switch (choice) {
+      case 'configure':
+        setState(() => _selectedCard = id);
+      case 'duplicate':
+        _duplicateCard(model, item, columns);
+      case 'half':
+        _apply((e, its) => e.resize(its, id, columns ~/ 2, item.h), columns,
+            byHand: true);
+      case 'full':
+        _apply((e, its) => e.resize(its, id, columns, item.h), columns,
+            byHand: true);
+      case 'remove':
+        _removeWidget(id, columns);
+    }
+  }
+
+  /// A copy of a card, placed directly under the original.
+  ///
+  /// Under rather than beside: a card is often as wide as the space it had, so
+  /// there is rarely room next to it, and a duplicate that lands at first fit
+  /// appears somewhere you are not looking.
+  void _duplicateCard(DashboardWidgetModel model, GridItem item, int columns) {
+    final copy = model.copyWith(
+      id: 'widget_${DateTime.now().microsecondsSinceEpoch}',
+    );
+    setState(() {
+      _draftWidgets = {...?_draftWidgets, copy.id: copy};
+      _commit(_engine(columns).addAt(
+        _draftItems!,
+        GridItem(
+          id: copy.id,
+          x: item.x,
+          y: item.bottom,
+          w: item.w,
+          h: item.h,
+          minW: item.minW,
+          minH: item.minH,
+        ),
+        item.x,
+        item.bottom,
+      ));
+      _selectedCard = copy.id;
+    });
+  }
+
+  /// Puts a removed card back where it was.
+  void _restoreWidget(DashboardWidgetModel model, GridItem item, int columns) {
+    if (!mounted || _draftItems == null) return;
+    setState(() {
+      _draftWidgets = {...?_draftWidgets, model.id: model};
+      _commit(_engine(columns).addAt(_draftItems!, item, item.x, item.y));
+      _selectedCard = model.id;
     });
   }
 
@@ -710,6 +849,7 @@ class _PageScreenState extends ConsumerState<PageScreen> {
                       ? setState(() => _selectedCard = id)
                       : _configureWidget(id),
                   onAddAt: (x, y) => _addWidget(columns, atX: x, atY: y),
+                  onMenu: (id, at) => _cardMenu(id, at, columns),
                   selectedId: _selectedCard,
                   onDropCard: (payload, x, y) {
                     if (payload is DashboardWidgetModel) {
@@ -828,49 +968,11 @@ class _PageScreenState extends ConsumerState<PageScreen> {
                         child: SingleChildScrollView(
                           padding: EdgeInsets.fromLTRB(
                               t.space.lg, 0, t.space.lg, t.space.xl),
-                          // An empty page in edit mode still gets a board: you
-                          // cannot arrange on a surface that is not drawn, and the
-                          // old empty state was a sentence pointing at a button in
-                          // the far corner.
-                          child: items.isEmpty && !_editing
-                              ? const _EmptyPage(editing: false)
-                              // While editing, draw the layout at a width that
-                              // breakpoint would really have. In view mode the actual
-                              // viewport is the truth and must not be framed.
-                              : _PreviewFrame(
-                                  width: _editing
-                                      ? previewWidthFor(breakpoint)
-                                      : null,
-                                  child: PageGrid(
-                                    items: items,
-                                    widgetsById: widgetsById,
-                                    columns: columns,
-                                    rowHeight: rowHeight,
-                                    gap: gap,
-                                    editing: _editing,
-                                    ghostItems: _editing &&
-                                            _draftLayouts != null
-                                        ? _ghostFor(
-                                            breakpoint, source, _draftLayouts!)
-                                        : const [],
-                                    onMove: (id, x, y) => _apply(
-                                        (e, its) => e.move(its, id, x, y),
-                                        columns),
-                                    onResize: (id, w, h) => _apply(
-                                        (e, its) => e.resize(its, id, w, h),
-                                        columns),
-                                    onRemove: (id) =>
-                                        _removeWidget(id, columns),
-                                    // Wide enough for a panel: select the card and
-                                    // let the inspector show it. Narrower, the sheet
-                                    // is still the only place it fits.
-                                    onConfigure: (id) => hasInspector
-                                        ? setState(() => _selectedCard = id)
-                                        : _configureWidget(id),
-                                    onAddAt: (x, y) =>
-                                        _addWidget(columns, atX: x, atY: y),
-                                  ),
-                                ),
+                          // The same canvas the designer uses. Two copies of
+                          // this had already drifted — the in-place one had
+                          // lost selection, drop-at-cell and the card menu —
+                          // which is what a shared builder is for.
+                          child: canvas(),
                         ),
                       ),
                       // One rail, and what is in it follows what you are

@@ -30,6 +30,7 @@ class PageGrid extends StatefulWidget {
     this.onAddAt,
     this.selectedId,
     this.onDropCard,
+    this.onMenu,
   });
 
   final List<GridItem> items;
@@ -67,6 +68,13 @@ class PageGrid extends StatefulWidget {
 
   /// A card dragged in from the library, dropped at a cell.
   final void Function(Object payload, int x, int y)? onDropCard;
+
+  /// A right-click on a card, at the pointer.
+  ///
+  /// The convention that carries the most weight in a pointer-driven tool, and
+  /// the one this editor never had: every card action was a small round button
+  /// you had to find and hit, or nothing.
+  final void Function(String id, Offset globalPosition)? onMenu;
 
   @override
   State<PageGrid> createState() => _PageGridState();
@@ -314,8 +322,16 @@ class _PageGridState extends State<PageGrid> {
                       simplified: gesturing,
                       dragging: _dragId == item.id || _resizeId == item.id,
                       selected: widget.selectedId == item.id,
+                      // Only while resizing. During a move the position is
+                      // already legible from where the card is; during a
+                      // resize the number of cells is exactly what you are
+                      // aiming at and the only thing you cannot read off the
+                      // screen.
+                      sizeLabel:
+                          _resizeId == item.id ? '${item.w}×${item.h}' : null,
                       onRemove: () => widget.onRemove?.call(item.id),
                       onConfigure: () => widget.onConfigure?.call(item.id),
+                      onMenu: (pos) => widget.onMenu?.call(item.id, pos),
                       onDragStart: () => startDrag(item),
                       onDragUpdate: updateDrag,
                       onDragEnd: endDrag,
@@ -534,8 +550,10 @@ class _Cell extends StatelessWidget {
     required this.simplified,
     required this.dragging,
     required this.selected,
+    required this.sizeLabel,
     required this.onRemove,
     required this.onConfigure,
+    required this.onMenu,
     required this.onDragStart,
     required this.onDragUpdate,
     required this.onDragEnd,
@@ -550,8 +568,12 @@ class _Cell extends StatelessWidget {
   final bool simplified;
   final bool dragging;
   final bool selected;
+
+  /// `4×2` while this card is being resized, else null.
+  final String? sizeLabel;
   final VoidCallback onRemove;
   final VoidCallback onConfigure;
+  final void Function(Offset globalPosition) onMenu;
   final VoidCallback onDragStart;
   final ValueChanged<Offset> onDragUpdate;
   final VoidCallback onDragEnd;
@@ -629,6 +651,10 @@ class _Cell extends StatelessWidget {
             onPanStart: (_) => onDragStart(),
             onPanUpdate: (d) => onDragUpdate(d.delta),
             onPanEnd: (_) => onDragEnd(),
+            onSecondaryTapDown: (d) => onMenu(d.globalPosition),
+            // A long press is the same gesture on a touchscreen, and the
+            // in-place editor runs there too.
+            onLongPressStart: (d) => onMenu(d.globalPosition),
             child: MouseRegion(
               cursor: SystemMouseCursors.move,
               child: DecoratedBox(
@@ -658,6 +684,29 @@ class _Cell extends StatelessWidget {
             ],
           ),
         ),
+        if (sizeLabel case final label?)
+          Positioned(
+            key: const Key('resize-readout'),
+            left: 6,
+            bottom: 6,
+            child: IgnorePointer(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: t.surface.overlay,
+                  borderRadius: BorderRadius.circular(t.radius.xs),
+                  border:
+                      Border.all(color: t.accent.active, width: t.stroke.width),
+                ),
+                child: Text(
+                  label,
+                  style: t.text.captionStyle.copyWith(
+                      color: t.surface.onBase,
+                      fontFeatures: t.numericFontFeatures),
+                ),
+              ),
+            ),
+          ),
         // Resize from the bottom-right.
         Positioned(
           right: 0,
@@ -669,12 +718,17 @@ class _Cell extends StatelessWidget {
             onPanEnd: (_) => onResizeEnd(),
             child: MouseRegion(
               cursor: SystemMouseCursors.resizeDownRight,
-              child: Container(
-                width: 22,
-                height: 22,
-                alignment: Alignment.center,
-                child: Icon(HcIcons.grip,
-                    size: 13, color: t.accent.active.withValues(alpha: 0.8)),
+              child: Semantics(
+                // A bare corner to drag was invisible to assistive tech and
+                // unnamed to everyone else.
+                label: 'Resize card',
+                child: Container(
+                  width: 22,
+                  height: 22,
+                  alignment: Alignment.center,
+                  child: Icon(HcIcons.grip,
+                      size: 13, color: t.accent.active.withValues(alpha: 0.8)),
+                ),
               ),
             ),
           ),
