@@ -172,13 +172,20 @@ class _PendingCardState extends ConsumerState<_PendingCard> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
+                // Through the type ramp with `mono: true`, so it picks up the
+                // skin's own mono family — the app bundles JetBrains Mono
+                // precisely so glyph fallback never has to leave the house.
+                // The first version hard-coded `fontFamily: 'monospace'` and
+                // the code did not appear on screen at all, while the
+                // instruction to compare it did. Whether the literal or a
+                // stale bundle caused that was not isolated; the token is the
+                // right answer either way, and a screenshot now shows the code.
                 SelectableText(
                   r.code ?? '—',
-                  style: t.text.displayStyle.copyWith(
-                    color: t.surface.onBase,
-                    fontFamily: 'monospace',
-                    letterSpacing: 4,
-                  ),
+                  style: t.text.resolve(t.text.display, mono: true).copyWith(
+                        color: t.surface.onBase,
+                        letterSpacing: 4,
+                      ),
                 ),
                 SizedBox(width: t.space.md),
                 Expanded(
