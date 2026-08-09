@@ -16,6 +16,7 @@ import 'features/settings/appearance_page.dart';
 import 'features/settings/skin_editor_page.dart';
 import 'features/settings/data_page.dart';
 import 'features/settings/maintenance_page.dart';
+import 'features/settings/plugin_runtimes_page.dart';
 import 'features/settings/notifications_page.dart';
 import 'features/settings/system_config_page.dart';
 import 'features/manage/manage_shell.dart';
@@ -289,6 +290,9 @@ GoRouter _buildRouter(Ref ref) {
               GoRoute(
                   path: '/admin/maintenance',
                   builder: (_, __) => const MaintenancePage()),
+              GoRoute(
+                  path: '/admin/plugin-runtimes',
+                  builder: (_, __) => const PluginRuntimesPage()),
               GoRoute(
                   path: '/admin/audit', builder: (_, __) => const AuditPage()),
               GoRoute(
