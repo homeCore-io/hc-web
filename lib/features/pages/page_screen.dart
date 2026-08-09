@@ -850,6 +850,9 @@ class _PageScreenState extends ConsumerState<PageScreen> {
                       : _configureWidget(id),
                   onAddAt: (x, y) => _addWidget(columns, atX: x, atY: y),
                   onMenu: (id, at) => _cardMenu(id, at, columns),
+                  onSelect: hasInspector || widget.designer
+                      ? (id) => setState(() => _selectedCard = id)
+                      : null,
                   selectedId: _selectedCard,
                   onDropCard: (payload, x, y) {
                     if (payload is DashboardWidgetModel) {
@@ -888,6 +891,20 @@ class _PageScreenState extends ConsumerState<PageScreen> {
             canvas: canvas(),
             canvasWidth: previewWidthFor(breakpoint),
             cardCount: items.length,
+            // Align moves the selection through the same engine call a drag
+            // does, so it pushes neighbours out of the way and settles exactly
+            // as dragging there would — an alignment that used a private path
+            // could land a card somewhere a drag could never put it.
+            onAlign: (align) {
+              final id = _selectedCard;
+              final item = items.where((i) => i.id == id).firstOrNull;
+              if (id == null || item == null) return;
+              _apply(
+                  (e, its) =>
+                      e.move(its, id, align.xFor(item.w, columns), item.y),
+                  columns,
+                  byHand: true);
+            },
             onFlowChanged: (next) => setState(() {
               _draftLayouts = [
                 for (final l in _draftLayouts!)
