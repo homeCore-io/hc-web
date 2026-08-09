@@ -61,9 +61,9 @@ Applies to hc-web generally; the designer is where it shows most.
 |---|---|
 | the page scrolls | panes scroll, the frame never does |
 | content centred in a column | the frame fills the viewport, edge to edge |
-| one action per screen | toolbars, context menus, keyboard, all live at once |
+| one action per screen | toolbars and context menus, all live at once |
 | state lives in the URL | state lives in the session; the URL names the document |
-| a click is a request | a click is immediate, with undo behind it |
+| a click is a request | a click is immediate, and reversible by repeating it |
 | generous rhythm | dense, tool-like; information over air |
 | hover reveals | affordances are visible because you work here |
 
@@ -71,15 +71,18 @@ Concretely, and each is testable:
 
 - **No page scroll.** `body { overflow: hidden }`, three panes, each its own
   scroller. hc-web already does this in the shell; the designer must not break it.
-- **Keyboard is not an accessibility afterthought, it is the fast path.**
-  `Del` removes, `⌘Z`/`⌘⇧Z` undo, arrows nudge by one cell, `⇧`+arrows resize,
-  `⌘D` duplicates, `Esc` deselects, `⌘S` saves, `/` focuses the library search.
-- **Right-click is a real menu** on a card: duplicate, bring forward, remove,
-  copy config.
-- **Undo history**, not a Cancel button that throws away an hour.
-- **Multi-select** — click, `⇧`click, marquee drag on empty canvas.
-- **A status bar** that says what is true: selection size in cells, page
-  dimensions, unsaved state, last save.
+- **Right-click is a real menu** on a card: configure, duplicate, size presets,
+  remove. This is the application convention that carries the most weight in a
+  pointer-driven tool, and the one that is missing.
+- **Undo where an action destroys work** — removal — rather than a history
+  stack. See §5.1: in a draft-based tool nearly every other action is its own
+  inverse.
+- **Keyboard operability**, not a shortcut table. Tab reaches a control and
+  enter activates it; that comes from using real widgets. Nudge and `⌘S` are
+  the wrong ambition on a canvas that snaps to twelve columns and shows a Save
+  button at all times — see §5.1.
+- **A status bar** that says what is true: selection size in cells, zoom,
+  columns, whether gaps are kept, unsaved state.
 
 ---
 
@@ -213,9 +216,11 @@ Each phase is usable on its own; none of them leave the editor worse.
    Without this the tool cannot do the thing that prompted it.
 2. **Full-page shell.** The `/design` route, three panes, status bar, no page
    scroll. Move the shipped library and inspector into it unchanged.
-3. **App conventions.** Keyboard map, undo/redo, multi-select, context menu,
-   Esc/Del. This is what "application" means more than any pixel does.
-4. **Canvas tools.** Snap guides, align, distribute, zoom, marquee.
+3. **Mouse conventions.** Context menu on a card — Configure, Duplicate, size
+   presets, Remove — plus undo for a removal, plus the drag feedback a pointer
+   tool lives on: a size readout while resizing, and snap lines against a
+   neighbour's edges.
+4. **Canvas tools.** Zoom control, align and distribute for a multi-selection.
 5. **Layers.**
 6. **Data family.** Gauge, then the chart inspector, then Number.
 7. **Layout family.** Group, Heading, Spacer, Divider.
@@ -226,14 +231,53 @@ Each phase is usable on its own; none of them leave the editor worse.
 
 ---
 
+### 5.1 What phase 3 dropped, and why
+
+Revised after review, 2026-08-09. The first version of this phase was "keyboard
+map, undo/redo, multi-select" and most of it was wrong for **this** tool.
+
+**Keyboard shortcuts earn little here, and the reason is the grid.** Arrow-nudge
+is indispensable in a free-pixel canvas, where a drag cannot land on an exact
+value and the keyboard is the only way to be precise. This canvas snaps to
+twelve columns: a drag already lands exactly on a cell, so nudge is a slower
+way to do the same thing. `Del` duplicates the × already on every card; `⌘S`
+duplicates a Save button that is permanently on screen. The one shortcut with
+real value is duplicate — and that is a *command*, which belongs in the context
+menu.
+
+Keyboard **operability** is a different thing and stays: tab reaches a control
+and enter activates it, which comes from using real widgets rather than from a
+shortcut table.
+
+**Undo/redo is machinery for a problem this tool mostly does not have.** The
+session is already a draft with Cancel and Save; within it nearly every action
+is its own inverse. Mis-drag a card, drag it back. Wrong size, resize it. Wrong
+room, pick another and watch the count change as you do. A history stack makes
+those marginally cheaper and costs a model of every mutation.
+
+The exception is **removal**, and it is a real one: remove a card and its
+configuration goes with it, so the inverse is not a gesture but a
+reconstruction. That gets one targeted affordance — undo the removal — not a
+stack.
+
+**Multi-select is deferred, not dismissed.** Marquee plus group-move means
+moving N items through collision resolution together, which is real engine
+work, and the payoff is smaller here than it looks: alignment is largely
+automatic when everything snaps to the same twelve columns. Worth revisiting
+once pages routinely have more cards than a screen.
+
+---
+
 ## 6. Acceptance
 
 - [ ] Two cards can sit with a deliberate gap between them, and it survives a
       save, a reload, and a breakpoint switch.
 - [ ] The designer fills the viewport and nothing but a pane ever scrolls.
-- [ ] Every destructive action is undoable, and `⌘Z` does it.
-- [ ] A card can be placed, moved, resized and removed without touching a
-      mouse.
+- [ ] Removing a card can be undone; nothing else needs to be, because
+      nothing else destroys work.
+- [ ] Every card action is reachable from a right-click as well as from the
+      card's own controls.
+- [ ] Resizing shows the size it will land at, in cells, while you drag.
 - [ ] Dragging a card shows where it will land before release.
 - [ ] A gauge and a chart can be added and pointed at a device in under four
       actions each.
