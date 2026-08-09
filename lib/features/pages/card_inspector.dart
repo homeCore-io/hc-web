@@ -33,6 +33,7 @@ class CardInspector extends ConsumerWidget {
     required this.onChanged,
     required this.onRemove,
     required this.onClose,
+    this.onRename,
   });
 
   final DashboardWidgetModel model;
@@ -42,6 +43,14 @@ class CardInspector extends ConsumerWidget {
 
   final VoidCallback onRemove;
   final VoidCallback onClose;
+
+  /// Rename the card.
+  ///
+  /// Nothing could do this before. A card took the label of whatever library
+  /// entry produced it and kept it for good, so a page could end up with two
+  /// cards both called "Several devices" and no way to tell them apart — here,
+  /// on the page, or in the layers strip that lists them by name.
+  final ValueChanged<String>? onRename;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -63,13 +72,21 @@ class CardInspector extends ConsumerWidget {
             Row(
               children: [
                 Expanded(
-                  child: Text(
-                    model.title.isEmpty
-                        ? (descriptor?.title ?? model.type)
-                        : model.title,
-                    style: t.text.subtitleStyle.copyWith(
-                        color: t.surface.onBase, fontWeight: FontWeight.w600),
-                  ),
+                  child: onRename == null
+                      ? Text(
+                          model.title.isEmpty
+                              ? (descriptor?.title ?? model.type)
+                              : model.title,
+                          style: t.text.subtitleStyle.copyWith(
+                              color: t.surface.onBase,
+                              fontWeight: FontWeight.w600),
+                        )
+                      : _TitleField(
+                          key: ValueKey('title-${model.id}'),
+                          value: model.title,
+                          hint: descriptor?.title ?? model.type,
+                          onChanged: onRename!,
+                        ),
                 ),
                 IconButton(
                   onPressed: onClose,
@@ -207,6 +224,59 @@ class _Preview extends ConsumerWidget {
             ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+/// The card's name, edited in place at the top of the inspector.
+///
+/// Deliberately not a labelled form field. It sits where the card's name was
+/// already being *shown*, so it reads as the heading it replaces until you
+/// click it — which is what makes it discoverable without adding a row of
+/// chrome to a panel that already has plenty.
+class _TitleField extends StatefulWidget {
+  const _TitleField({
+    super.key,
+    required this.value,
+    required this.hint,
+    required this.onChanged,
+  });
+
+  final String value;
+  final String hint;
+  final ValueChanged<String> onChanged;
+
+  @override
+  State<_TitleField> createState() => _TitleFieldState();
+}
+
+class _TitleFieldState extends State<_TitleField> {
+  late final TextEditingController _controller =
+      TextEditingController(text: widget.value);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    final style = t.text.subtitleStyle
+        .copyWith(color: t.surface.onBase, fontWeight: FontWeight.w600);
+    return TextField(
+      controller: _controller,
+      style: style,
+      onChanged: widget.onChanged,
+      decoration: InputDecoration(
+        isDense: true,
+        border: InputBorder.none,
+        contentPadding: EdgeInsets.zero,
+        // An untitled card shows what it is, greyed, rather than an empty box.
+        hintText: widget.hint,
+        hintStyle: style.copyWith(color: t.surface.onBaseMuted),
       ),
     );
   }

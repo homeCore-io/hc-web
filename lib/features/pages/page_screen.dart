@@ -102,6 +102,19 @@ class _PageScreenState extends ConsumerState<PageScreen> {
   /// and one that quietly detaches everything you click on.
   final Set<DashboardBreakpoint> _touched = {};
 
+  /// A card's own content changed — its config, or its name.
+  ///
+  /// Separate from [_touched] because the two mean different things and were
+  /// briefly the same flag. [_touched] means "this layout was arranged by
+  /// hand", which is what detaches a derived layout from the one it follows;
+  /// renaming a card is not arranging anything, and marking the breakpoint
+  /// touched for it would silently cut a layout loose from its source.
+  ///
+  /// It had a second cost, and that one was already shipped: the unsaved
+  /// indicator read [_touched], so changing a card's room in the inspector left
+  /// the bar saying **Saved** while the change sat unsaved in the draft.
+  bool _contentDirty = false;
+
   /// Cards added during this edit, and not yet settled on every hand-arranged
   /// layout.
   ///
@@ -200,6 +213,7 @@ class _PageScreenState extends ConsumerState<PageScreen> {
       _draftWidgets = {for (final w in d.widgets) w.id: w};
       _editingBreakpoint = breakpoint;
       _touched.clear();
+      _contentDirty = false;
       _pendingPlacement.clear();
       _settled.clear();
     });
@@ -620,6 +634,7 @@ class _PageScreenState extends ConsumerState<PageScreen> {
     if (model == null) return;
     setState(() {
       _draftWidgets = {...?_draftWidgets, id: model.copyWith(config: config)};
+      _contentDirty = true;
     });
   }
 
@@ -672,6 +687,7 @@ class _PageScreenState extends ConsumerState<PageScreen> {
       _selectedCard = null;
       _editingBreakpoint = null;
       _touched.clear();
+      _contentDirty = false;
       _pendingPlacement.clear();
       _settled.clear();
     });
@@ -870,7 +886,7 @@ class _PageScreenState extends ConsumerState<PageScreen> {
             source: source,
             columns: columns,
             saving: _saving,
-            dirty: _touched.isNotEmpty,
+            dirty: _touched.isNotEmpty || _contentDirty,
             selectedCount: _selectedCard == null ? 0 : 1,
             selected: _draftWidgets?[_selectedCard],
             selectedItem: items
@@ -891,6 +907,19 @@ class _PageScreenState extends ConsumerState<PageScreen> {
             canvas: canvas(),
             canvasWidth: previewWidthFor(breakpoint),
             cardCount: items.length,
+            items: items,
+            widgetsById: widgetsById,
+            onSelectCard: (id) => setState(() => _selectedCard = id),
+            onRename: (name) => setState(() {
+              final id = _selectedCard;
+              final current = _draftWidgets?[id];
+              if (id == null || current == null) return;
+              _draftWidgets = {
+                ..._draftWidgets!,
+                id: current.copyWith(title: name),
+              };
+              _contentDirty = true;
+            }),
             // Align moves the selection through the same engine call a drag
             // does, so it pushes neighbours out of the way and settles exactly
             // as dragging there would — an alignment that used a private path

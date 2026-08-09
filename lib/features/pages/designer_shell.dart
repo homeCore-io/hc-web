@@ -9,6 +9,7 @@ import 'breakpoint_bar.dart';
 import 'card_inspector.dart';
 import 'card_library.dart';
 import 'page_inspector.dart';
+import 'page_layers.dart';
 import 'scaled_canvas.dart';
 
 /// The design surface: a tool, not a page.
@@ -56,6 +57,10 @@ class DesignerShell extends StatefulWidget {
     required this.cardCount,
     required this.onFlowChanged,
     required this.onAlign,
+    required this.items,
+    required this.widgetsById,
+    required this.onSelectCard,
+    required this.onRename,
   });
 
   final DashboardDefinition dashboard;
@@ -87,6 +92,12 @@ class DesignerShell extends StatefulWidget {
   /// Move the selection to one edge of the canvas, or to its middle.
   final ValueChanged<CanvasAlign>? onAlign;
 
+  /// What is on the page, for the layers strip.
+  final List<GridItem> items;
+  final Map<String, DashboardWidgetModel> widgetsById;
+  final ValueChanged<String> onSelectCard;
+  final ValueChanged<String> onRename;
+
   /// Fixed, because the frame is fixed. Panes that resized themselves would
   /// make the canvas scale jump while you worked in it.
   static const _libraryWidth = 260.0;
@@ -105,6 +116,11 @@ class _DesignerShellState extends State<DesignerShell> {
   /// never saved, and does not mark the page dirty: how close you are standing
   /// to a page is not a fact about the page.
   double? _zoom;
+
+  /// The layers strip starts open. It is one row tall and it is the only thing
+  /// that names the elements which draw nothing — closing it by default would
+  /// hide the answer to a question you do not know you have yet.
+  bool _layersOpen = true;
 
   /// 50% to 200%, the range §3.1 asks for so a wall layout is designable on a
   /// laptop. Fit can go below the floor — a 1600px canvas in a 700px pane is
@@ -242,10 +258,19 @@ class _DesignerShellState extends State<DesignerShell> {
                               onChanged: widget.onChanged,
                               onRemove: widget.onRemoveSelected,
                               onClose: widget.onDeselect,
+                              onRename: widget.onRename,
                             ),
                     ),
                   ],
                 ),
+              ),
+              PageLayers(
+                items: widget.items,
+                widgetsById: widget.widgetsById,
+                selectedId: widget.selected?.id,
+                onSelect: widget.onSelectCard,
+                open: _layersOpen,
+                onToggle: () => setState(() => _layersOpen = !_layersOpen),
               ),
               _StatusBar(
                 selectedCount: widget.selectedCount,
