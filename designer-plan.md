@@ -223,7 +223,7 @@ Each phase is usable on its own; none of them leave the editor worse.
 4. **Canvas tools.** Zoom control, align and distribute for a multi-selection.
 5. **Layers.**
 6. **Data family.** Gauge, then the chart inspector, then Number.
-7. **Layout family.** Group, Heading, Spacer, Divider.
+7. **Layout family.** Group, Heading, Spacer, Divider. — done, see §5.2.
 8. **Devices in the library**, individually draggable.
 9. **Style pane.** Transparent cards, no-border cards — the things that stop a
    page reading as a grid of boxes.
@@ -265,6 +265,69 @@ moving N items through collision resolution together, which is real engine
 work, and the payoff is smaller here than it looks: alignment is largely
 automatic when everything snaps to the same twelve columns. Worth revisiting
 once pages routinely have more cards than a screen.
+
+---
+
+### 5.2 Phase 7, and the fourth element that is not one
+
+Built 2026-08-09. Heading, Divider and Spacer are three new widget types.
+Group is **not** a fourth, and that is a decision rather than an omission.
+
+**Chrome had to become real first.** Every card was drawn identically: an
+`HcSurface`, `space.md` of padding, and the card's title in a band above the
+body. A heading rendered that way is a card with large text in it, and a spacer
+rendered that way is a box — the opposite of the thing. So the descriptor now
+carries `WidgetChrome`, and `page_grid` is the single place that answers it:
+
+```
+card    surface + padding + title band          the default, everything else
+bleed   surface, body to the edges, no title    a picture, a floor plan
+bare    nothing at all                          heading, divider, spacer
+```
+
+This replaced a `bool fill` that **no renderer read**. It was documented as
+"full cell height, no top-aligned scroll view", but the only render site wraps
+every widget in an `Expanded` already, so it had been a no-op since that
+renderer landed, and four descriptors were setting it while getting the default
+treatment. The image card in particular said in a comment that it bled to the
+card's edges, and it did not. Nothing failed, which is the whole problem: a
+flag that is read by nobody looks exactly like a flag that works. `bleed` is
+what it was reaching for, and the renderer now honours it.
+
+**Group is `device_grid` with a title.** §3.2 says so itself — "one card with a
+heading and its own inner arrangement of devices, which is what a room card
+already is generalised". Shipping a `group` type would be that card wearing a
+hat: same selection contract, same renderer, one more wire string for core to
+carry. So Group is a *library entry* that drops a pre-titled `device_grid`, and
+the Layout family is three types, not four.
+
+The other reading of Group — a titled frame drawn *behind* a region of the
+canvas, the way a design tool groups shapes — is honestly blocked, and not on
+effort. It needs two cards to occupy the same cells, and the engine resolves
+overlap out of existence by design. That is the same trade that makes layouts
+derivable across breakpoints, and it is not worth undoing for a frame.
+
+**A divider has no orientation option.** The shape you dragged it into already
+says which way it runs, so it measures itself: wider than tall is a rule
+across, taller than wide is a rule down. Asking would be asking the user to
+restate with a dropdown what they just said with the mouse.
+
+**A heading keeps its text in the config, not in the card's title**, because
+`validate` is handed the config alone. A heading whose words were the title
+could be saved empty, and an empty bare card is an invisible thing holding a
+row of the grid open — it cannot be seen, only bumped into.
+
+**Spacer is the one that pairs with phase 1.** Under `free` flow a hole is
+already expressible and a spacer is a convenience. Under `packed` — which every
+*derived* breakpoint keeps — a hole closes the moment gravity runs, and a
+spacer is the only way to say the gap is content. It is an ordinary card to the
+engine, so packing carries it and the space survives the derive.
+
+None of the three is known to core, and none needs to be:
+`validate_widget_config` ends in `_ => Ok(())`. Verified against a live core, not
+inferred — a page containing all three round-tripped through `PUT /dashboards/:id`
+and came back intact. That only holds while they stay clear of the selection
+contract, so a test pins the absence of `selection_mode` on all three.
 
 ---
 

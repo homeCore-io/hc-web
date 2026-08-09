@@ -289,6 +289,22 @@ class _CardLibraryState extends ConsumerState<CardLibrary> {
         'metrics': ['devices', 'on', 'offline']
       }),
     ]),
+    // Structure and space, rather than anything about the house. These are the
+    // elements that let a page stop being a wall of boxes — and the spacer is
+    // the one that makes a gap survive a save, which free flow alone does not
+    // do for the derived breakpoints.
+    _Group('Layout', [
+      _Entry('Heading', 'heading', 'a section title',
+          {'text': 'Section', 'level': 'section', 'align': 'start'}),
+      _Entry('Divider', 'divider', 'a rule between things', {}),
+      _Entry('Spacer', 'spacer', 'a gap that stays a gap', {}),
+      // "A group is one card with a heading and its own arrangement of
+      // devices, which is what a room card already is generalised" — so it is
+      // that card, pre-titled, rather than a fourth type that would be
+      // `device_grid` wearing a hat. See designer-plan.md §7.
+      _Entry('Group', 'device_grid', 'a titled box of devices',
+          {'selection_mode': 'manual', 'device_ids': <String>[]}),
+    ]),
     _Group('Other', [
       _Entry('Camera', 'camera_video', 'a live view',
           {'source_type': 'image_refresh'}),

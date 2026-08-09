@@ -611,31 +611,49 @@ class _Cell extends StatelessWidget {
                       w: item.w,
                       h: item.h,
                       sizeHint: descriptor.sizeHint,
+                      editing: editing,
                     ),
                   );
 
-    final card = HcSurface(
-      // Lifted OR chosen. Both mean "this is the one you are working on".
-      selected: dragging || selected,
-      padding: EdgeInsets.all(t.space.md),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if ((model?.title ?? '').isNotEmpty)
-            Padding(
-              padding: EdgeInsets.only(bottom: t.space.sm),
-              child: Text(
-                model!.title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: t.text.bodyStyle.copyWith(
-                    fontWeight: FontWeight.w600, color: t.surface.onBase),
-              ),
-            ),
-          Expanded(child: ClipRect(child: body)),
-        ],
-      ),
-    );
+    // How much frame the element asked for. A watermarked stand-in during a
+    // drag always takes the full card, whatever it is the rest of the time —
+    // a bare element would otherwise vanish at the moment you are moving it.
+    final chrome = simplified
+        ? WidgetChrome.card
+        : (descriptor?.chrome ?? WidgetChrome.card);
+
+    final Widget card = switch (chrome) {
+      // Draws itself onto the page, and nothing is drawn around it.
+      WidgetChrome.bare => SizedBox.expand(child: ClipRect(child: body)),
+      // The surface, but the body reaches its edges.
+      WidgetChrome.bleed => HcSurface(
+          selected: dragging || selected,
+          padding: EdgeInsets.zero,
+          child: ClipRect(child: body),
+        ),
+      WidgetChrome.card => HcSurface(
+          // Lifted OR chosen. Both mean "this is the one you are working on".
+          selected: dragging || selected,
+          padding: EdgeInsets.all(t.space.md),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if ((model?.title ?? '').isNotEmpty)
+                Padding(
+                  padding: EdgeInsets.only(bottom: t.space.sm),
+                  child: Text(
+                    model!.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: t.text.bodyStyle.copyWith(
+                        fontWeight: FontWeight.w600, color: t.surface.onBase),
+                  ),
+                ),
+              Expanded(child: ClipRect(child: body)),
+            ],
+          ),
+        ),
+    };
 
     if (!editing) return card;
 

@@ -1356,7 +1356,6 @@ void registerBuiltinDashboardWidgets() {
       icon: Icons.home_outlined,
       sizeHint: const WidgetSizeHint(
           minW: 4, minH: 2, recommendedW: 12, recommendedH: 3),
-      fill: true,
       // Core accepts any object (or null) here.
       builder: (context, a) => _HouseStatusHeroWidget(config: a.config),
     ),
@@ -1468,7 +1467,6 @@ void registerBuiltinDashboardWidgets() {
       icon: Icons.speed_outlined,
       sizeHint: const WidgetSizeHint(
           minW: 2, minH: 2, recommendedW: 3, recommendedH: 2),
-      fill: true,
       configFields: const [
         WidgetConfigField('device_id', WidgetConfigKind.deviceRef,
             required: true),
@@ -1491,7 +1489,6 @@ void registerBuiltinDashboardWidgets() {
       icon: Icons.speed_outlined,
       sizeHint: const WidgetSizeHint(
           minW: 2, minH: 1, recommendedW: 3, recommendedH: 1),
-      fill: true,
       configFields: const [
         WidgetConfigField('device_id', WidgetConfigKind.deviceRef,
             required: true),
@@ -1535,7 +1532,7 @@ void registerBuiltinDashboardWidgets() {
           minW: 2, minH: 1, recommendedW: 4, recommendedH: 3),
       // Bleeds to the card's edges: a floor plan or a photo with a band of
       // card padding around it reads as a mistake, and the frame is the card.
-      fill: true,
+      chrome: WidgetChrome.bleed,
       configFields: const [
         WidgetConfigField('url', WidgetConfigKind.url, required: true),
         WidgetConfigField('fit', WidgetConfigKind.choice,
@@ -1622,6 +1619,66 @@ void registerBuiltinDashboardWidgets() {
         compact: a.isCompact,
         veryCompact: a.isVeryCompact,
       ),
+    ),
+    // ----- the layout family -------------------------------------------
+    // Three elements that make structure and space placeable. All three are
+    // `bare`: the whole point of a heading is that it is not in a box, and a
+    // spacer drawn as a bordered card is the opposite of a gap.
+    //
+    // None of them is known to core, and none needs to be — `validate_widget_
+    // config` ends in `_ => Ok(())`, so an unrecognised type round-trips
+    // verbatim. They are client-side vocabulary, which is why they carry no
+    // device selection and cannot fail a save.
+    WidgetDescriptor(
+      type: 'heading',
+      title: 'Heading',
+      description: 'A section title, out of any box.',
+      icon: Icons.title_outlined,
+      chrome: WidgetChrome.bare,
+      sizeHint: const WidgetSizeHint(
+          minW: 2, minH: 1, recommendedW: 12, recommendedH: 1),
+      configFields: const [
+        WidgetConfigField('text', WidgetConfigKind.text,
+            required: true, label: 'Text'),
+        WidgetConfigField('level', WidgetConfigKind.choice,
+            label: 'Size',
+            defaultValue: 'section',
+            options: ['section', 'sub']),
+        WidgetConfigField('align', WidgetConfigKind.choice,
+            label: 'Align',
+            defaultValue: 'start',
+            options: ['start', 'center', 'end']),
+      ],
+      // The text lives in the config rather than in the card's title, because
+      // `validate` is handed the config alone — a heading whose words were the
+      // title could be saved empty, and an empty heading is an invisible card
+      // holding a row of the grid open.
+      validate: (c) => (c['text'] as String?)?.trim().isNotEmpty == true
+          ? null
+          : 'Give the heading some words.',
+      builder: (context, a) => _HeadingWidget(config: a.config),
+    ),
+    WidgetDescriptor(
+      type: 'divider',
+      title: 'Divider',
+      description: 'A rule between things.',
+      icon: Icons.horizontal_rule_outlined,
+      chrome: WidgetChrome.bare,
+      sizeHint: const WidgetSizeHint(
+          minW: 1, minH: 1, recommendedW: 12, recommendedH: 1),
+      // No options at all. Which way it runs is answered by the shape you
+      // dragged it to — see _DividerWidget.
+      builder: (context, a) => const _DividerWidget(),
+    ),
+    WidgetDescriptor(
+      type: 'spacer',
+      title: 'Spacer',
+      description: 'A gap that stays a gap.',
+      icon: Icons.space_bar_outlined,
+      chrome: WidgetChrome.bare,
+      sizeHint: const WidgetSizeHint(
+          minW: 1, minH: 1, recommendedW: 4, recommendedH: 1),
+      builder: (context, a) => _SpacerWidget(editing: a.editing),
     ),
   ]);
 }
@@ -2284,6 +2341,123 @@ class _ReadingWidget extends ConsumerWidget {
           ],
         );
       },
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// The layout family
+// ---------------------------------------------------------------------------
+//
+// Phase 7 of `designer-plan.md`. Every other card answers "what does this show
+// about the house". These three answer "what shape is the page" — and they are
+// the reason the designer can produce something other than a wall of boxes.
+//
+// All three render with `WidgetChrome.bare`, which is the whole substance of
+// them. A heading inside a card is a card whose title happens to be large; a
+// divider inside a card is a card with a line in it. Removing the frame is not
+// a styling preference here, it is what makes them the thing they are named.
+
+/// A section title that sits on the page rather than in a box.
+///
+/// Two sizes, not a free font size: `section` is the page's title role and
+/// `sub` its subtitle, so a heading is always one of the ramp's steps and a
+/// page full of them stays a hierarchy instead of a set of arbitrary sizes.
+class _HeadingWidget extends StatelessWidget {
+  const _HeadingWidget({required this.config});
+
+  final Map<String, dynamic> config;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    final text = (config['text'] as String?) ?? '';
+    final sub = config['level'] == 'sub';
+    final align = switch (config['align'] as String?) {
+      'center' => TextAlign.center,
+      'end' => TextAlign.end,
+      _ => TextAlign.start,
+    };
+
+    return Align(
+      // Vertically centred in whatever height it was given: a heading dragged
+      // two rows tall should sit in the middle of them, not cling to the top.
+      alignment: switch (align) {
+        TextAlign.center => Alignment.center,
+        TextAlign.end => Alignment.centerRight,
+        _ => Alignment.centerLeft,
+      },
+      child: Text(
+        text,
+        textAlign: align,
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style: (sub ? t.text.subtitleStyle : t.text.titleStyle).copyWith(
+          color: sub ? t.surface.onBaseMuted : t.surface.onBase,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+}
+
+/// A rule.
+///
+/// It has no options, including no orientation, because the shape you dragged
+/// it into already says which way it runs: wider than it is tall is a rule
+/// across, taller than wide is a rule down. Asking would be asking the user to
+/// restate something they have already done with the mouse — and getting it
+/// wrong would be the one way a divider can look broken.
+class _DividerWidget extends StatelessWidget {
+  const _DividerWidget();
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return LayoutBuilder(
+      builder: (context, box) {
+        final horizontal = box.maxWidth >= box.maxHeight;
+        return Center(
+          child: Container(
+            width: horizontal ? double.infinity : t.stroke.width,
+            height: horizontal ? t.stroke.width : double.infinity,
+            color: t.stroke.hairline,
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Space, on purpose.
+///
+/// This is the element that pairs with `DashboardLayout.flow`. With `free`
+/// flow you can simply leave a hole, and a spacer is only a convenience. With
+/// `packed` flow — which every *derived* breakpoint keeps, because deriving
+/// means recomputing a packing — a hole closes the moment gravity runs, and a
+/// spacer is the only way to say "the gap is content". It is an ordinary card
+/// as far as the engine is concerned, so packing carries it along with
+/// everything else and the space survives the derive.
+///
+/// On the page it draws nothing at all. In the editor it has to be findable,
+/// so it says what it is — the one place a widget is allowed to know it is
+/// being edited.
+class _SpacerWidget extends StatelessWidget {
+  const _SpacerWidget({required this.editing});
+
+  final bool editing;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!editing) return const SizedBox.shrink();
+    final t = HcTokens.of(context);
+    return Center(
+      child: Text(
+        'Space',
+        style: t.text.captionStyle.copyWith(
+          color: t.surface.onBaseMuted.withValues(alpha: 0.7),
+        ),
+      ),
     );
   }
 }
