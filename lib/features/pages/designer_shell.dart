@@ -8,6 +8,7 @@ import '../../design/tokens.dart';
 import 'breakpoint_bar.dart';
 import 'card_inspector.dart';
 import 'card_library.dart';
+import 'page_inspector.dart';
 
 /// The design surface: a tool, not a page.
 ///
@@ -51,6 +52,8 @@ class DesignerShell extends StatelessWidget {
     required this.onSave,
     required this.canvas,
     required this.canvasWidth,
+    required this.cardCount,
+    required this.onFlowChanged,
   });
 
   final DashboardDefinition dashboard;
@@ -76,6 +79,8 @@ class DesignerShell extends StatelessWidget {
   /// The width this breakpoint's layout is drawn at, or null when it is the
   /// viewport's own.
   final double? canvasWidth;
+  final int cardCount;
+  final ValueChanged<GridFlow>? onFlowChanged;
 
   /// Fixed, because the frame is fixed. Panes that resized themselves would
   /// make the canvas scale jump while you worked in it.
@@ -167,7 +172,15 @@ class DesignerShell extends StatelessWidget {
                           left: BorderSide(
                               color: t.stroke.hairline, width: t.stroke.width)),
                       child: selected == null
-                          ? const _NothingSelected()
+                          ? PageInspector(
+                              dashboard: dashboard,
+                              breakpoint: breakpoint,
+                              layout: layouts
+                                  ?.where((l) => l.breakpoint == breakpoint)
+                                  .firstOrNull,
+                              cardCount: cardCount,
+                              onFlowChanged: onFlowChanged,
+                            )
                           : CardInspector(
                               model: selected!,
                               onChanged: onChanged,
@@ -356,26 +369,6 @@ class _StatusBar extends StatelessWidget {
               ),
           ],
         ],
-      ),
-    );
-  }
-}
-
-class _NothingSelected extends StatelessWidget {
-  const _NothingSelected();
-
-  @override
-  Widget build(BuildContext context) {
-    final t = HcTokens.of(context);
-    return Center(
-      child: Padding(
-        padding: EdgeInsets.all(t.space.lg),
-        child: Text(
-          'Select a card to change what it shows.',
-          textAlign: TextAlign.center,
-          style: t.text.captionStyle
-              .copyWith(color: t.surface.onBaseMuted, height: 1.4),
-        ),
       ),
     );
   }

@@ -121,8 +121,13 @@ void main() {
       // its tools out.
       await _openDesigner(tester);
       expect(find.byType(CardLibrary), findsOneWidget);
-      expect(
-          find.text('Select a card to change what it shows.'), findsOneWidget);
+      // The right pane has a subject even with nothing selected: the page.
+      // It used to be a sentence and 340px of nothing, which teaches you to
+      // stop looking at it.
+      expect(find.text('This page'), findsOneWidget);
+      expect(find.text('Close gaps'), findsOneWidget,
+          reason: 'and this is the only place the flow can be set — it was '
+              'previously a side effect of dragging');
     });
 
     testWidgets('it is already editing on arrival', (tester) async {

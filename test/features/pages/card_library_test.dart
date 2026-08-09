@@ -133,8 +133,36 @@ void main() {
       await tester.enterText(find.byType(TextField), 'off');
       await tester.pumpAndSettle();
 
-      expect(find.text('Office'), findsOneWidget);
+      // Twice: the room, and the device in it. Searching now reaches both —
+      // a room is the answer most of the time, but "the office lamp" is a
+      // thing people look for, and it had no way in at all before.
+      expect(find.text('Office'), findsNWidgets(2));
       expect(find.text('Living Room'), findsNothing);
+    });
+  });
+
+  group('individual devices', () {
+    testWidgets('are hidden until you search', (tester) async {
+      // A hundred and twenty rows above the rooms would bury them, and the
+      // room is the answer most of the time.
+      await _pump(tester, house);
+      expect(find.text('a'), findsNothing);
+    });
+
+    testWidgets('a searched device places a tile for that one device',
+        (tester) async {
+      final picked = await _pump(tester, house);
+      await tester.enterText(find.byType(TextField), 'a');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('a').last);
+      await tester.pumpAndSettle();
+
+      expect(picked.single.type, 'device_tile');
+      expect(picked.single.config['selection_mode'], 'manual');
+      expect(picked.single.config['device_ids'], ['a'],
+          reason: 'the device you searched for, already chosen — "manual mode" '
+              'is what this was always for, without making anyone meet the '
+              'word');
     });
   });
 

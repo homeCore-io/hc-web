@@ -887,6 +887,14 @@ class _PageScreenState extends ConsumerState<PageScreen> {
             onSave: () => _save(dashboard),
             canvas: canvas(),
             canvasWidth: previewWidthFor(breakpoint),
+            cardCount: items.length,
+            onFlowChanged: (next) => setState(() {
+              _draftLayouts = [
+                for (final l in _draftLayouts!)
+                  if (l.breakpoint == breakpoint) l.copyWith(flow: next) else l,
+              ];
+              _touched.add(breakpoint);
+            }),
           );
         }
 

@@ -68,6 +68,35 @@ class _CardLibraryState extends ConsumerState<CardLibrary> {
     return rooms;
   }
 
+  /// Individual devices, but only once you have typed something.
+  ///
+  /// A hundred and twenty-three rows above the rooms would bury them, and the
+  /// room is the answer most of the time. Search is what turns the list from a
+  /// wall into an index — the same reason `/devices` opens grouped and not as
+  /// one long list.
+  List<DeviceState> _matchingDevices(List<DeviceState> devices) {
+    final q = _query.toLowerCase();
+    return devices
+        .where((d) =>
+            !d.isSystem &&
+            d.deviceType != 'scene' &&
+            (d.displayName.toLowerCase().contains(q) ||
+                (d.effectiveArea ?? '').toLowerCase().contains(q)))
+        .toList()
+      ..sort((a, b) => a.displayName.compareTo(b.displayName));
+  }
+
+  /// One device, as a tile. What "manual" mode was always for, without making
+  /// anyone meet the word.
+  DashboardWidgetModel _deviceCard(DeviceState d) => _model(
+        type: 'device_tile',
+        title: d.displayName,
+        config: {
+          'selection_mode': 'manual',
+          'device_ids': [d.id],
+        },
+      );
+
   bool _matches(String label) =>
       _query.isEmpty || label.toLowerCase().contains(_query.toLowerCase());
 
@@ -125,6 +154,11 @@ class _CardLibraryState extends ConsumerState<CardLibrary> {
                   color: t.surface.onBase, fontWeight: FontWeight.w600)),
           SizedBox(height: t.space.sm),
           _Search(onChanged: (v) => setState(() => _query = v)),
+          SizedBox(height: t.space.xs),
+          Text(
+            'Type to find a device',
+            style: t.text.captionStyle.copyWith(color: t.surface.onBaseMuted),
+          ),
           SizedBox(height: t.space.md),
           Expanded(
             child: ListView(
@@ -154,6 +188,19 @@ class _CardLibraryState extends ConsumerState<CardLibrary> {
                       ),
                     ),
                 ],
+                if (devices != null && _query.isNotEmpty) ...[
+                  if (_matchingDevices(devices).isNotEmpty) ...[
+                    const _Heading(label: 'Devices'),
+                    for (final d in _matchingDevices(devices).take(12))
+                      _PlainRow(
+                        label: d.displayName,
+                        hint: humanize(d.effectiveArea ?? ''),
+                        onTap: () => widget.onPick(_deviceCard(d)),
+                        payload: () => _deviceCard(d),
+                      ),
+                    SizedBox(height: t.space.md),
+                  ],
+                ],
                 for (final group in _groups)
                   if (group.entries.any((e) => _matches(e.label))) ...[
                     _Heading(label: group.label),
@@ -179,7 +226,10 @@ class _CardLibraryState extends ConsumerState<CardLibrary> {
   /// which renderer draws it.
   static const _groups = <_Group>[
     _Group('Devices', [
-      _Entry('Pick devices by hand', 'device_tile', 'choose them yourself',
+      // Search above finds individual devices; these two are the containers.
+      _Entry('Several devices', 'device_grid', 'a card you fill yourself',
+          {'selection_mode': 'manual', 'device_ids': <String>[]}),
+      _Entry('One device', 'device_tile', 'pick it in the panel',
           {'selection_mode': 'manual', 'device_ids': <String>[]}),
     ]),
     _Group('The house', [
@@ -199,6 +249,8 @@ class _CardLibraryState extends ConsumerState<CardLibrary> {
           {'timeframe_hours': 24}),
       _Entry('Web page', 'web_embed', 'anything with a URL',
           {'sandbox_profile': 'readonly_embed'}),
+      _Entry(
+          'Image', 'image', 'a picture, scaled to the card', {'fit': 'cover'}),
       _Entry('Note', 'markdown', 'text you write',
           {'markdown': '# Note\nWrite something here.'}),
       _Entry('Numbers', 'stat_summary', 'counts of things', {
