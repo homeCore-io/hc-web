@@ -34,6 +34,7 @@ import '../home/home_entity_row.dart';
 import '../home/home_rich_cards.dart';
 import '../../core/models/dashboard.dart';
 import '../../core/models/device_state.dart';
+import '../devices/device_query.dart';
 import '../../core/models/hc_event.dart';
 import '../../core/models/history_entry.dart';
 import '../../core/models/mode_state.dart';
@@ -87,6 +88,27 @@ List<DeviceState> selectDevicesForConfig(
                 (device) => normalizeAreaName(device.effectiveArea) == areaName)
             .toList();
       }
+      break;
+    case 'facet':
+      // "Every light in the house", as a kind rather than as a search.
+      //
+      // Matched on the *group* a device's facet belongs to, which is the same
+      // thing `/devices` counts when it says "Lights 22". Matching the raw
+      // facet instead would select `light` and quietly leave out the dimmable
+      // and colour ones — the same off-by-five this mode exists to fix, in a
+      // new costume.
+      final group = DeviceFacetGroup.fromKey(config['facet'] as String?);
+      selected = group == null
+          // An unknown kind selects nothing, rather than everything. Core does
+          // not police the vocabulary (it cannot compute facets), so a card
+          // written by a newer client can arrive here naming a kind this build
+          // has never heard of — and a card that silently shows the whole
+          // house is worse than one that shows none and says so.
+          ? const []
+          : base
+              .where((device) =>
+                  facetGroupOf(facetOf(device, device.schema)) == group)
+              .toList();
       break;
     case 'query':
     default:
@@ -1689,9 +1711,10 @@ const _selectionFields = [
   WidgetConfigField('selection_mode', WidgetConfigKind.choice,
       required: true,
       defaultValue: 'manual',
-      options: ['manual', 'area', 'query']),
+      options: ['manual', 'area', 'query', 'facet']),
   WidgetConfigField('device_ids', WidgetConfigKind.deviceRefs),
   WidgetConfigField('area_name', WidgetConfigKind.areaName),
+  WidgetConfigField('facet', WidgetConfigKind.facet, label: 'Kind'),
   WidgetConfigField('query', WidgetConfigKind.text),
   WidgetConfigField('limit', WidgetConfigKind.integer),
   WidgetConfigField('show_offline', WidgetConfigKind.boolean),
@@ -1699,12 +1722,18 @@ const _selectionFields = [
 
 String? _validateSelection(Map<String, dynamic> c) {
   final mode = c['selection_mode'] as String?;
-  if (mode == null || !const ['manual', 'area', 'query'].contains(mode)) {
+  if (mode == null ||
+      !const ['manual', 'area', 'query', 'facet'].contains(mode)) {
     return 'Choose how devices are selected.';
   }
   // Core requires area_name specifically when the mode is `area`.
   if (mode == 'area' && (c['area_name'] as String?)?.isNotEmpty != true) {
     return 'Pick an area.';
+  }
+  // And `facet` the same way. Core rejects the whole dashboard on the first
+  // invalid widget, so this has to mirror it exactly.
+  if (mode == 'facet' && (c['facet'] as String?)?.trim().isNotEmpty != true) {
+    return 'Pick a kind.';
   }
   // NOTE: manual mode with an empty device_ids is intentionally allowed — core
   // accepts it, and this check must mirror core exactly (see widget_registry

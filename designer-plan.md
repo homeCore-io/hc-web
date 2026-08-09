@@ -199,7 +199,7 @@ Named so nothing here pretends to be free.
 | space between cards | `DashboardLayout.flow` in core | one field, one serde default |
 | a Group container | nothing — it is a card with a heading | client only |
 | gauge | a widget type + descriptor | client only |
-| facet filters (*Lights 22*) | a `facet` selection mode in core | one enum arm + validator |
+| ~~facet filters (*Lights 22*)~~ | ~~a `facet` selection mode in core~~ | **shipped**, §5.6 |
 | free placement across breakpoints | derive must re-pack `free` → `packed` | client, in `layout_write` |
 | undo history | nothing; the draft is already a value | client only |
 
@@ -228,7 +228,7 @@ Each phase is usable on its own; none of them leave the editor worse.
 8. **Devices in the library**, individually draggable. — done with §3.2.
 9. **Style pane.** Transparent cards, no-border cards — the things that stop a
    page reading as a grid of boxes. — done, see §5.5.
-10. **Facet filters**, once core can express them.
+10. **Facet filters**, once core can express them. — done, see §5.6.
 
 ---
 
@@ -419,6 +419,47 @@ back down: the inspector already applies each edit to the draft, and the sheet
 now passes its accumulated config rather than the one it opened with. That also
 fixes an older latent version of the same fault — the form showing stale values
 whenever the config changed underneath it.
+
+---
+
+### 5.6 Phase 10: the count that had to be kept
+
+Shipped 2026-08-09, and it needed the second — and last — core change in the
+programme.
+
+The mode was withheld for a long time on purpose. `/devices` says **Lights 22**,
+counted from each device's facet; the nearest storable selection was
+`query: "light"`, which matches on the **name** and finds **17** of those 22 on
+the real house. A chip labelled 22 that places a card showing 17 is precisely
+the silent wrongness this arc has been removing, so the honest answer was to
+offer nothing at all and pin the absence with a test.
+
+**Core validates the shape, not the vocabulary.** `facet` must be a non-empty
+string; core checks nothing else, exactly as it does for `area_name`. It cannot
+do more: a facet is inferred from the user's `ui_hint`, then the canonical
+device type, then the attributes a device reports, and core assembles none of
+that. A list there would only mean a client that learns a new kind cannot save
+until core is released too.
+
+**The client stores a *kind*, not a facet.** `DeviceFacet` has ~30 values, several
+of which are one thing to a person — a light, a dimmable light and a colour
+light are all "Lights". The wire value names the group, so the vocabulary is the
+one the user already reads. Label and key now come from a single
+`DeviceFacetGroup` rather than a `switch` that produced labels and a second list
+that could drift from it.
+
+**An unknown kind selects nothing, not everything.** Since core does not police
+the vocabulary, a card from a newer client can name a kind this build has never
+heard of; falling through to "no filter" would show the whole house under a
+heading claiming otherwise.
+
+Verified on the live house: the library says **Lights 22**, the placed card says
+**showing 12 of 22**, the inspector says **22 devices · showing first 12**, and
+the house's own hero says **12 of 22 on**. Four independent paths, one number.
+
+**Ship order:** hc-web's facet cards need a core carrying this arm. An older core
+rejects the whole `PUT` — recoverably, with a message, but the save fails — so
+core goes out first or alongside.
 
 ---
 

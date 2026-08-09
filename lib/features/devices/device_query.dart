@@ -288,37 +288,96 @@ List<DeviceGroupResult> runQuery(List<DeviceState> devices, DeviceQuery q) {
   return groups;
 }
 
+/// The kinds a house is grouped into, as opposed to the ~30 facets a device can
+/// resolve to.
+///
+/// This is the vocabulary the *user* already sees: `/devices` says "Lights 22",
+/// never "dimmable_light 9, color_light 8, light 5". A dashboard card that
+/// selects by kind has to mean the same thing, or a chip labelled 22 places a
+/// card showing 5 — which is the off-by-five wrongness the whole facet-filter
+/// question was deferred over, arriving in a new costume.
+///
+/// [key] is the wire value stored in a widget's `selection_mode: facet` config
+/// and validated by core as a non-empty string. It is deliberately not
+/// `DeviceFacet.name`: those are implementation detail and there are thirty of
+/// them, several of which are the same thing to a person.
+enum DeviceFacetGroup {
+  lights('lights', 'Lights'),
+  outlets('outlets', 'Outlets'),
+  switches('switches', 'Switches'),
+  covers('covers', 'Covers'),
+  locks('locks', 'Locks'),
+  doorsWindows('doors_windows', 'Doors & windows'),
+  garage('garage', 'Garage'),
+  motion('motion', 'Motion'),
+  environment('environment', 'Environment'),
+  power('power', 'Power'),
+  safety('safety', 'Safety'),
+  climate('climate', 'Climate'),
+  fans('fans', 'Fans'),
+  media('media', 'Media'),
+  scenes('scenes', 'Scenes'),
+  buttons('buttons', 'Buttons'),
+  timers('timers', 'Timers'),
+  sirens('sirens', 'Sirens'),
+  sensors('sensors', 'Sensors'),
+  other('other', 'Other');
+
+  const DeviceFacetGroup(this.key, this.label);
+
+  /// The stored value. Stable — changing one orphans every card that used it.
+  final String key;
+
+  /// What a person reads, on `/devices` and in the designer's library alike.
+  final String label;
+
+  static DeviceFacetGroup? fromKey(String? key) {
+    for (final g in values) {
+      if (g.key == key) return g;
+    }
+    return null;
+  }
+}
+
+/// Which kind a facet belongs to.
+DeviceFacetGroup facetGroupOf(DeviceFacet facet) => switch (facet) {
+      DeviceFacet.light ||
+      DeviceFacet.dimmableLight ||
+      DeviceFacet.colorLight =>
+        DeviceFacetGroup.lights,
+      DeviceFacet.outlet => DeviceFacetGroup.outlets,
+      DeviceFacet.switch_ => DeviceFacetGroup.switches,
+      DeviceFacet.cover => DeviceFacetGroup.covers,
+      DeviceFacet.lock => DeviceFacetGroup.locks,
+      DeviceFacet.door ||
+      DeviceFacet.contact ||
+      DeviceFacet.window =>
+        DeviceFacetGroup.doorsWindows,
+      DeviceFacet.garage => DeviceFacetGroup.garage,
+      DeviceFacet.motion || DeviceFacet.occupancy => DeviceFacetGroup.motion,
+      DeviceFacet.temperature ||
+      DeviceFacet.humidity ||
+      DeviceFacet.illuminance =>
+        DeviceFacetGroup.environment,
+      DeviceFacet.power => DeviceFacetGroup.power,
+      DeviceFacet.smoke ||
+      DeviceFacet.water ||
+      DeviceFacet.vibration =>
+        DeviceFacetGroup.safety,
+      DeviceFacet.climate => DeviceFacetGroup.climate,
+      DeviceFacet.fan => DeviceFacetGroup.fans,
+      DeviceFacet.mediaPlayer => DeviceFacetGroup.media,
+      DeviceFacet.scene => DeviceFacetGroup.scenes,
+      DeviceFacet.button => DeviceFacetGroup.buttons,
+      DeviceFacet.timer => DeviceFacetGroup.timers,
+      DeviceFacet.siren => DeviceFacetGroup.sirens,
+      DeviceFacet.sensor => DeviceFacetGroup.sensors,
+      DeviceFacet.unknown => DeviceFacetGroup.other,
+    };
+
 extension DeviceFacetLabel on DeviceFacet {
-  String get label => switch (this) {
-        DeviceFacet.light ||
-        DeviceFacet.dimmableLight ||
-        DeviceFacet.colorLight =>
-          'Lights',
-        DeviceFacet.outlet => 'Outlets',
-        DeviceFacet.switch_ => 'Switches',
-        DeviceFacet.cover => 'Covers',
-        DeviceFacet.lock => 'Locks',
-        DeviceFacet.door || DeviceFacet.contact => 'Doors & windows',
-        DeviceFacet.window => 'Doors & windows',
-        DeviceFacet.garage => 'Garage',
-        DeviceFacet.motion || DeviceFacet.occupancy => 'Motion',
-        DeviceFacet.temperature ||
-        DeviceFacet.humidity ||
-        DeviceFacet.illuminance =>
-          'Environment',
-        DeviceFacet.power => 'Power',
-        DeviceFacet.smoke ||
-        DeviceFacet.water ||
-        DeviceFacet.vibration =>
-          'Safety',
-        DeviceFacet.climate => 'Climate',
-        DeviceFacet.fan => 'Fans',
-        DeviceFacet.mediaPlayer => 'Media',
-        DeviceFacet.scene => 'Scenes',
-        DeviceFacet.button => 'Buttons',
-        DeviceFacet.timer => 'Timers',
-        DeviceFacet.siren => 'Sirens',
-        DeviceFacet.sensor => 'Sensors',
-        DeviceFacet.unknown => 'Other',
-      };
+  /// The heading this facet sits under. Delegates to [facetGroupOf] so the
+  /// label a person reads and the key a card stores cannot drift apart — they
+  /// were one `switch` and are now one enum.
+  String get label => facetGroupOf(this).label;
 }

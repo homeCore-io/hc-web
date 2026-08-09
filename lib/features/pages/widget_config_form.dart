@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/dashboard/widget_registry.dart';
+import '../../core/devices/presentation.dart';
 import '../../core/models/device_state.dart';
 import '../../core/providers/areas_provider.dart';
 import '../../core/providers/devices_provider.dart';
 import '../../core/text/humanize.dart';
 import '../../design/tokens.dart';
 import '../../shell/hc_sheet.dart';
+import '../devices/device_query.dart';
 
 /// A widget's settings, built from the card's own [WidgetDescriptor.configFields].
 ///
@@ -163,6 +165,7 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
       'device_ids' => mode == 'manual',
       'area_name' => mode == 'area',
       'query' => mode == 'query',
+      'facet' => mode == 'facet',
       _ => true,
     };
   }
@@ -205,6 +208,7 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
         WidgetConfigKind.url || WidgetConfigKind.text => _text(f),
         WidgetConfigKind.stringList => _stringList(f),
         WidgetConfigKind.areaName => _area(f),
+        WidgetConfigKind.facet => _facet(f),
         WidgetConfigKind.deviceRef => _deviceRef(f),
         WidgetConfigKind.deviceRefs => _deviceRefs(f),
         WidgetConfigKind.attribute => _attribute(f),
@@ -364,6 +368,53 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
             items: [
               for (final n in names)
                 DropdownMenuItem(value: n, child: Text(humanize(n))),
+            ],
+            onChanged: (v) => _set(f.name, v),
+          ),
+        _help(f),
+      ],
+    );
+  }
+
+  /// The kinds this house actually has, each with its live count.
+  ///
+  /// Only the kinds present, for the same reason the room list is built from
+  /// the device map rather than from an enum: offering "Sirens 0" on a house
+  /// with no siren is offering a card that will be empty, and finding that out
+  /// by placing it is the discovery loop this arc exists to remove.
+  ///
+  /// The counts come from the same `facetGroupOf(facetOf(...))` the card
+  /// filters on, so the number beside the name is the number you get.
+  Widget _facet(WidgetConfigField f) {
+    final devices = ref.watch(devicesProvider).value ?? const <DeviceState>[];
+    final counts = <DeviceFacetGroup, int>{};
+    for (final d in devices) {
+      if (d.isSystem || d.deviceType == 'scene') continue;
+      final group = facetGroupOf(facetOf(d, d.schema));
+      counts[group] = (counts[group] ?? 0) + 1;
+    }
+    final present = counts.keys.toList()
+      ..sort((a, b) => a.label.compareTo(b.label));
+    final value = _config[f.name] as String?;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _label(f),
+        if (present.isEmpty)
+          _hint('No devices yet, so there are no kinds to pick from.')
+        else
+          DropdownButtonFormField<String>(
+            initialValue: present.any((g) => g.key == value) ? value : null,
+            isExpanded: true,
+            decoration: const InputDecoration(
+                isDense: true, border: OutlineInputBorder()),
+            items: [
+              for (final g in present)
+                DropdownMenuItem(
+                  value: g.key,
+                  child: Text('${g.label} · ${counts[g]}'),
+                ),
             ],
             onChanged: (v) => _set(f.name, v),
           ),

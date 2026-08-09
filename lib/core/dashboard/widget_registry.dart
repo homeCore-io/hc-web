@@ -163,6 +163,11 @@ enum WidgetConfigKind {
   deviceRef,
   attribute,
   areaName,
+
+  /// A kind of device — lights, locks, sensors — picked from the kinds this
+  /// house actually has. Distinct from [choice] because the options are the
+  /// live device map, not a fixed list in a descriptor.
+  facet,
   markdown,
   url,
   stringList,
