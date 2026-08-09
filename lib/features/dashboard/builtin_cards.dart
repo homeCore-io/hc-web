@@ -293,8 +293,8 @@ class _DeviceGridWidget extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(devicesProvider);
     // "No devices match" is a claim about the house, and it is false while the
-    // house is still arriving. Say nothing until there is something to say.
-    if (async.value == null) return const SizedBox.shrink();
+    // house is still arriving — so it says neither that nor nothing.
+    if (async.value == null) return const _LoadingContents();
     final selection = selectDevicesWithCount(async.value!, widgetModel.config);
     final devices = selection.shown;
     return LayoutBuilder(
@@ -338,6 +338,48 @@ class _DeviceGridWidget extends ConsumerWidget {
           ),
         );
       },
+    );
+  }
+}
+
+/// What a card draws while the house is still arriving.
+///
+/// Not `SizedBox.shrink()`, which is what all four of these used to be. The
+/// silence was deliberate and correct — *"No devices match" is a claim about
+/// the house, and it is false while the house is still arriving* — but silence
+/// and **blankness** are different things, and drawing nothing is
+/// indistinguishable from a card that is broken. A screenshot of exactly this
+/// state was reported as a rendering bug, by me, with the source open.
+///
+/// Shimmer rather than a spinner: it says *content is coming and roughly this
+/// shape*, and it is the same primitive every other loading surface in the app
+/// already uses, so a skin reaches it for free.
+class _LoadingContents extends StatelessWidget {
+  const _LoadingContents({this.lines = 3});
+
+  final int lines;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    // Uneven widths — a stack of identical bars reads as a placeholder image
+    // rather than as text that has not arrived.
+    const widths = [0.55, 0.8, 0.4, 0.7, 0.5];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (var i = 0; i < lines; i++)
+          Padding(
+            padding: EdgeInsets.only(bottom: t.space.sm),
+            child: LayoutBuilder(
+              builder: (context, c) => HcShimmer(
+                width: c.maxWidth * widths[i % widths.length],
+                height: 12,
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
@@ -389,7 +431,7 @@ class _DeviceListWidget extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(devicesProvider);
-    if (async.value == null) return const SizedBox.shrink();
+    if (async.value == null) return const _LoadingContents();
     final selection = selectDevicesWithCount(async.value!, widgetModel.config);
     final devices = selection.shown;
     final t = HcTokens.of(context);
@@ -2199,7 +2241,7 @@ class _GaugeWidget extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final t = HcTokens.of(context);
     final async = ref.watch(devicesProvider);
-    if (async.value == null) return const SizedBox.shrink();
+    if (async.value == null) return const _LoadingContents(lines: 1);
 
     final reading = _readingFor(async.value!, config);
     if (reading == null) {
@@ -2324,7 +2366,7 @@ class _ReadingWidget extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final t = HcTokens.of(context);
     final async = ref.watch(devicesProvider);
-    if (async.value == null) return const SizedBox.shrink();
+    if (async.value == null) return const _LoadingContents(lines: 1);
 
     final reading = _readingFor(async.value!, config);
     if (reading == null) {

@@ -263,6 +263,39 @@ void main() {
       expect(find.text('Unsaved changes'), findsNothing);
     });
 
+    testWidgets('both scrollbars are drawn, and both are reachable',
+        (tester) async {
+      // A 1600px canvas in this pane is wider than the pane at any zoom above
+      // Fit. Before this, the nesting existed but Flutter web drew no bar and
+      // a wheel only ever reached the vertical one — so the right-hand side of
+      // the page was there and could not be got to.
+      await _openDesigner(tester);
+      await tester.tap(find.byTooltip('Zoom in'));
+      await tester.pumpAndSettle();
+
+      // Scoped to the canvas: the library pane and the breakpoint bar have
+      // scroll views of their own, and a tree-wide count would pass on theirs.
+      final bars = tester
+          .widgetList<Scrollbar>(find.ancestor(
+              of: find.byType(ScaledCanvas), matching: find.byType(Scrollbar)))
+          .toList();
+      expect(bars.length, 2, reason: 'one per axis, around the canvas');
+      expect(bars.every((b) => b.thumbVisibility == true), isTrue,
+          reason: 'a bar that only appears while scrolling cannot tell you '
+              'there is somewhere to scroll to');
+
+      final views = tester
+          .widgetList<SingleChildScrollView>(find.ancestor(
+              of: find.byType(ScaledCanvas),
+              matching: find.byType(SingleChildScrollView)))
+          .toList();
+      expect(views.map((v) => v.scrollDirection),
+          containsAll([Axis.horizontal, Axis.vertical]));
+      expect(views.every((v) => v.controller != null), isTrue,
+          reason: 'thumbVisibility needs a controller, and the bar has to be '
+              'attached to the view it scrolls');
+    });
+
     testWidgets('it stops at 200%', (tester) async {
       await _openDesigner(tester);
       for (var i = 0; i < 8; i++) {

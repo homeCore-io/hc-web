@@ -122,6 +122,18 @@ class _DesignerShellState extends State<DesignerShell> {
   /// hide the answer to a question you do not know you have yet.
   bool _layersOpen = true;
 
+  // Explicit controllers, because both scrollbars need one to stay visible and
+  // the horizontal one has to be reachable at all.
+  final _vertical = ScrollController();
+  final _horizontal = ScrollController();
+
+  @override
+  void dispose() {
+    _vertical.dispose();
+    _horizontal.dispose();
+    super.dispose();
+  }
+
   /// 50% to 200%, the range §3.1 asks for so a wall layout is designable on a
   /// laptop. Fit can go below the floor — a 1600px canvas in a 700px pane is
   /// 44% — because Fit is a promise to show the whole width, and refusing to
@@ -224,14 +236,34 @@ class _DesignerShellState extends State<DesignerShell> {
                         // above Fit it is wider still. Vertical alone would
                         // strand the right-hand edge of the page off-screen
                         // with no way to reach it.
-                        child: SingleChildScrollView(
-                          padding: EdgeInsets.all(t.space.lg),
+                        // Both bars always drawn, both reachable.
+                        //
+                        // The nesting alone was not enough: Flutter web draws
+                        // no scrollbar for an unmanaged scroll view, and a
+                        // mouse wheel only ever reaches the vertical one — so
+                        // at any zoom where the canvas is wider than the pane,
+                        // the right-hand side of the page existed and could not
+                        // be got to. `ScaledCanvas` made the extent honest,
+                        // which is precisely what turned a slightly clipped
+                        // card into unreachable content.
+                        child: Scrollbar(
+                          controller: _vertical,
+                          thumbVisibility: true,
                           child: SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            child: ScaledCanvas(
-                              scale: scale,
-                              child:
-                                  SizedBox(width: width, child: widget.canvas),
+                            controller: _vertical,
+                            padding: EdgeInsets.all(t.space.lg),
+                            child: Scrollbar(
+                              controller: _horizontal,
+                              thumbVisibility: true,
+                              child: SingleChildScrollView(
+                                controller: _horizontal,
+                                scrollDirection: Axis.horizontal,
+                                child: ScaledCanvas(
+                                  scale: scale,
+                                  child: SizedBox(
+                                      width: width, child: widget.canvas),
+                                ),
+                              ),
                             ),
                           ),
                         ),
