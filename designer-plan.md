@@ -227,7 +227,7 @@ Each phase is usable on its own; none of them leave the editor worse.
 7. **Layout family.** Group, Heading, Spacer, Divider. — done, see §5.2.
 8. **Devices in the library**, individually draggable. — done with §3.2.
 9. **Style pane.** Transparent cards, no-border cards — the things that stop a
-   page reading as a grid of boxes.
+   page reading as a grid of boxes. — done, see §5.5.
 10. **Facet filters**, once core can express them.
 
 ---
@@ -381,6 +381,44 @@ hand-arranged breakpoints, and a config edit never joined that set, so changing
 a card's room in the inspector left the bar saying **Saved**. Content-dirty is
 now its own flag — which is also what stops a rename from detaching a derived
 layout, since that flag means "arranged by hand" and renaming arranges nothing.
+
+---
+
+### 5.5 Phase 9: where a drawing preference lives
+
+Two switches — **Background** and **Border** — not a preset list. They are
+independent, each maps to one thing you can see, and the interesting
+combination (a frame with the page showing through) is the one a three-item
+list would leave out.
+
+**It lives in the widget's `config`.** There is no other field on the wire, and
+adding a seventh to `DashboardWidget` would be a core change plus a
+plugin-visible ABI change for a client-side drawing preference. Core reads only
+the keys each type declares and stores the object verbatim — the same property
+that lets `heading` exist. Verified against a running core rather than inferred
+from the code: a page carrying `style` on two cards round-tripped through
+`PUT /dashboards/:id` intact.
+
+**The default writes nothing.** Styling a card and putting it back leaves the
+document byte-identical to one that was never touched, so a page does not
+accumulate a record of every idle click.
+
+**A selected card keeps its outline** whatever the style says. Losing the
+selection marker is a worse trade than honouring the style exactly.
+
+#### The bug that had to be fixed first
+
+`WidgetConfigForm` held a `late final` copy of the config, taken when it was
+built, and re-emitted that whole map on every keystroke. So *anything else*
+writing to the same config — which, from this phase, something does — was
+silently reverted by the next character typed. Nothing about testing style on
+its own would have caught it.
+
+The form is now a pure view of the current config, and both callers feed it
+back down: the inspector already applies each edit to the draft, and the sheet
+now passes its accumulated config rather than the one it opened with. That also
+fixes an older latent version of the same fault — the form showing stale values
+whenever the config changed underneath it.
 
 ---
 

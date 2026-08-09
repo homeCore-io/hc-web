@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/dashboard/card_style.dart';
 import '../../core/dashboard/grid_engine.dart';
 import '../../core/dashboard/widget_registry.dart';
 import '../../core/models/dashboard.dart';
@@ -635,6 +636,10 @@ class _Cell extends StatelessWidget {
         ? WidgetChrome.card
         : (descriptor?.chrome ?? WidgetChrome.card);
 
+    // Only meaningful where there is a surface to style. A bare element has no
+    // background to remove.
+    final style = CardStyle.fromConfig(model?.config ?? const {});
+
     final Widget card = switch (chrome) {
       // Draws itself onto the page, and nothing is drawn around it.
       WidgetChrome.bare => SizedBox.expand(child: ClipRect(child: body)),
@@ -642,12 +647,16 @@ class _Cell extends StatelessWidget {
       WidgetChrome.bleed => HcSurface(
           selected: dragging || selected,
           padding: EdgeInsets.zero,
+          filled: style.filled,
+          bordered: style.bordered,
           child: ClipRect(child: body),
         ),
       WidgetChrome.card => HcSurface(
           // Lifted OR chosen. Both mean "this is the one you are working on".
           selected: dragging || selected,
           padding: EdgeInsets.all(t.space.md),
+          filled: style.filled,
+          bordered: style.bordered,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [

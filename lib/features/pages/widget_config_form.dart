@@ -68,8 +68,10 @@ class _ConfigSheetState extends State<_ConfigSheet> {
           child: SingleChildScrollView(
             padding: EdgeInsets.fromLTRB(t.space.lg, 0, t.space.lg, t.space.md),
             child: WidgetConfigForm(
+              // The running config, not the one the sheet opened with: the form
+              // reads this as the current state rather than keeping a copy.
               descriptor: widget.descriptor,
-              initial: widget.initial,
+              initial: _config,
               onChanged: (c) => setState(() {
                 _config = c;
                 _error = null;
@@ -128,16 +130,26 @@ class WidgetConfigForm extends ConsumerStatefulWidget {
 }
 
 class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
-  late final Map<String, dynamic> _config = {...widget.initial};
+  /// The config as it is *now*, straight from the model — not a copy taken when
+  /// the form was built.
+  ///
+  /// It used to be a `late final` copy, which made the form the authority on a
+  /// value it does not own. Anything else that wrote to the same config — and
+  /// as of the style pane, something does — would be silently reverted by the
+  /// next keystroke here, because the form would re-emit the whole map from its
+  /// stale copy. Both callers now feed the current config back down, so this is
+  /// a pure view of it.
+  Map<String, dynamic> get _config => widget.initial;
   String? _error;
 
   void _set(String name, Object? value) => setState(() {
+        final next = {...widget.initial};
         if (value == null) {
-          _config.remove(name);
+          next.remove(name);
         } else {
-          _config[name] = value;
+          next[name] = value;
         }
-        widget.onChanged({..._config});
+        widget.onChanged(next);
         _error = null;
       });
 
