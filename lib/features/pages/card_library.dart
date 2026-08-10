@@ -141,8 +141,31 @@ class _CardLibraryState extends ConsumerState<CardLibrary> {
         config: {
           'selection_mode': 'manual',
           'device_ids': [d.id],
+          ..._bareCard,
         },
       );
+
+  /// A single device is not a collection, so it does not get a collection's
+  /// container.
+  ///
+  /// John, on the live page: *"look at the single device entity, it's
+  /// un-readable, does not mesh/flow with the dashboard and placing several
+  /// single devices next to each other would consume lots of unnecessary
+  /// space."* The card was the problem, not the tile. A 3×1 cell is 100px; a
+  /// title band and two lots of padding took most of it, leaving the control
+  /// squeezed into a thin strip — and four of them side by side were four
+  /// boxes rather than four controls.
+  ///
+  /// The tile already carries the device's own name and state, so the band was
+  /// saying it twice.
+  ///
+  /// Written explicitly rather than made the type's default, because the
+  /// default has to stay "a card" for every dashboard already saved. Existing
+  /// tiles keep their box until someone turns it off, which is now three
+  /// switches in the inspector.
+  static const _bareCard = {
+    'style': {'filled': false, 'bordered': false, 'titled': false},
+  };
 
   /// Searching opens every group: a hit hidden inside a closed one is a search
   /// that appears to have found nothing.
@@ -322,8 +345,11 @@ class _CardLibraryState extends ConsumerState<CardLibrary> {
       // Search above finds individual devices; these two are the containers.
       _Entry('Several devices', 'device_grid', 'a card you fill yourself',
           {'selection_mode': 'manual', 'device_ids': <String>[]}),
-      _Entry('One device', 'device_tile', 'pick it in the panel',
-          {'selection_mode': 'manual', 'device_ids': <String>[]}),
+      _Entry('One device', 'device_tile', 'pick it in the panel', {
+        'selection_mode': 'manual',
+        'device_ids': <String>[],
+        ..._bareCard,
+      }),
     ]),
     _Group('The house', [
       _Entry(

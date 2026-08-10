@@ -15,7 +15,11 @@
 /// Absent means the default, and the default is the box. A page that has never
 /// been styled must keep looking exactly as it does.
 class CardStyle {
-  const CardStyle({this.filled = true, this.bordered = true});
+  const CardStyle({
+    this.filled = true,
+    this.bordered = true,
+    this.titled = true,
+  });
 
   /// The card's own background, and the elevation that goes with it.
   final bool filled;
@@ -23,7 +27,15 @@ class CardStyle {
   /// The hairline around it.
   final bool bordered;
 
-  bool get isDefault => filled && bordered;
+  /// The name band above the contents.
+  ///
+  /// Off is not the same as an empty name: an untitled card gives the band's
+  /// height back to its contents, where a card named `""` still reserves it.
+  /// A single device in a card called "One device" was the case that made this
+  /// necessary — the band was the larger half of the card.
+  final bool titled;
+
+  bool get isDefault => filled && bordered && titled;
 
   static const key = 'style';
 
@@ -35,6 +47,7 @@ class CardStyle {
     return CardStyle(
       filled: raw['filled'] != false,
       bordered: raw['bordered'] != false,
+      titled: raw['titled'] != false,
     );
   }
 
@@ -48,22 +61,28 @@ class CardStyle {
     if (isDefault) {
       next.remove(key);
     } else {
-      next[key] = {'filled': filled, 'bordered': bordered};
+      next[key] = {
+        'filled': filled,
+        'bordered': bordered,
+        'titled': titled,
+      };
     }
     return next;
   }
 
-  CardStyle copyWith({bool? filled, bool? bordered}) => CardStyle(
+  CardStyle copyWith({bool? filled, bool? bordered, bool? titled}) => CardStyle(
         filled: filled ?? this.filled,
         bordered: bordered ?? this.bordered,
+        titled: titled ?? this.titled,
       );
 
   @override
   bool operator ==(Object other) =>
       other is CardStyle &&
       other.filled == filled &&
-      other.bordered == bordered;
+      other.bordered == bordered &&
+      other.titled == titled;
 
   @override
-  int get hashCode => Object.hash(filled, bordered);
+  int get hashCode => Object.hash(filled, bordered, titled);
 }

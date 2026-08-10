@@ -61,6 +61,9 @@ class DesignerShell extends StatefulWidget {
     required this.widgetsById,
     required this.onSelectCard,
     required this.onRename,
+    required this.canUndo,
+    required this.undoLabel,
+    required this.onUndo,
   });
 
   final DashboardDefinition dashboard;
@@ -98,6 +101,13 @@ class DesignerShell extends StatefulWidget {
   final ValueChanged<String> onSelectCard;
   final ValueChanged<String> onRename;
 
+  /// Undo, as a control rather than as a sentence that times out.
+  final bool canUndo;
+
+  /// What pressing it will undo, for the tooltip. Null when there is nothing.
+  final String? undoLabel;
+  final VoidCallback onUndo;
+
   /// Fixed, because the frame is fixed. Panes that resized themselves would
   /// make the canvas scale jump while you worked in it.
   static const _libraryWidth = 260.0;
@@ -121,6 +131,18 @@ class _DesignerShellState extends State<DesignerShell> {
   /// that names the elements which draw nothing — closing it by default would
   /// hide the answer to a question you do not know you have yet.
   bool _layersOpen = true;
+
+  // Explicit controllers, because both scrollbars need one to stay visible and
+  // the horizontal one has to be reachable at all.
+  final _vertical = ScrollController();
+  final _horizontal = ScrollController();
+
+  @override
+  void dispose() {
+    _vertical.dispose();
+    _horizontal.dispose();
+    super.dispose();
+  }
 
   /// 50% to 200%, the range §3.1 asks for so a wall layout is designable on a
   /// laptop. Fit can go below the floor — a 1600px canvas in a 700px pane is
@@ -190,6 +212,9 @@ class _DesignerShellState extends State<DesignerShell> {
                 onZoomStep: (delta) =>
                     setState(() => _zoom = _step(scale, delta)),
                 onAlign: widget.selected == null ? null : widget.onAlign,
+                canUndo: widget.canUndo,
+                undoLabel: widget.undoLabel,
+                onUndo: widget.onUndo,
               ),
               if (widget.consequence case final line?)
                 Container(
@@ -224,14 +249,34 @@ class _DesignerShellState extends State<DesignerShell> {
                         // above Fit it is wider still. Vertical alone would
                         // strand the right-hand edge of the page off-screen
                         // with no way to reach it.
-                        child: SingleChildScrollView(
-                          padding: EdgeInsets.all(t.space.lg),
+                        // Both bars always drawn, both reachable.
+                        //
+                        // The nesting alone was not enough: Flutter web draws
+                        // no scrollbar for an unmanaged scroll view, and a
+                        // mouse wheel only ever reaches the vertical one — so
+                        // at any zoom where the canvas is wider than the pane,
+                        // the right-hand side of the page existed and could not
+                        // be got to. `ScaledCanvas` made the extent honest,
+                        // which is precisely what turned a slightly clipped
+                        // card into unreachable content.
+                        child: Scrollbar(
+                          controller: _vertical,
+                          thumbVisibility: true,
                           child: SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            child: ScaledCanvas(
-                              scale: scale,
-                              child:
-                                  SizedBox(width: width, child: widget.canvas),
+                            controller: _vertical,
+                            padding: EdgeInsets.all(t.space.lg),
+                            child: Scrollbar(
+                              controller: _horizontal,
+                              thumbVisibility: true,
+                              child: SingleChildScrollView(
+                                controller: _horizontal,
+                                scrollDirection: Axis.horizontal,
+                                child: ScaledCanvas(
+                                  scale: scale,
+                                  child: SizedBox(
+                                      width: width, child: widget.canvas),
+                                ),
+                              ),
                             ),
                           ),
                         ),
@@ -328,6 +373,9 @@ class _TopBar extends StatelessWidget {
     required this.onZoom,
     required this.onZoomStep,
     required this.onAlign,
+    required this.canUndo,
+    required this.undoLabel,
+    required this.onUndo,
   });
 
   final String title;
@@ -353,6 +401,10 @@ class _TopBar extends StatelessWidget {
   /// Null when nothing is selected — align acts on the selection, and a live
   /// button that quietly does nothing is worse than a dim one.
   final ValueChanged<CanvasAlign>? onAlign;
+
+  final bool canUndo;
+  final String? undoLabel;
+  final VoidCallback onUndo;
 
   @override
   Widget build(BuildContext context) {
@@ -393,6 +445,21 @@ class _TopBar extends StatelessWidget {
               ),
             ),
           const Spacer(),
+          // Undo first: it is the one control here that is about the past.
+          // Dim until there is something to undo, and named — "Undo" alone
+          // makes you press it to find out what it does.
+          IconButton(
+            onPressed: canUndo ? onUndo : null,
+            // Material, like the zoom and align controls beside it. HcIcons
+            // has no undo glyph and the file's own rule is that a codepoint is
+            // verified by rasterising the font, never guessed.
+            icon: const Icon(Icons.undo, size: 16),
+            tooltip: canUndo
+                ? 'Undo ${undoLabel!.toLowerCase()}'
+                : 'Nothing to undo',
+            visualDensity: VisualDensity.compact,
+          ),
+          SizedBox(width: t.space.sm),
           // Canvas tools. Align first, because it acts on the thing you have
           // in hand; zoom last, because it acts on where you are standing.
           for (final align in CanvasAlign.values)
