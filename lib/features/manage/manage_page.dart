@@ -184,6 +184,12 @@ class ManagePage extends ConsumerWidget {
         detail: _backupDetail(status),
         warn: status != null && status['last_backup_at'] == null,
       ),
+      const _Entry(
+        route: '/admin/files',
+        icon: Icons.perm_media_outlined,
+        title: 'Files',
+        detail: 'Pictures and fonts the house is holding',
+      ),
       _Entry(
         route: '/admin/system',
         icon: Icons.monitor_heart_outlined,

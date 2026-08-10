@@ -18,6 +18,7 @@ import 'features/admin/system_page.dart';
 import 'features/admin/users_page.dart';
 import 'features/settings/appearance_page.dart';
 import 'features/settings/skin_editor_page.dart';
+import 'features/settings/assets_page.dart';
 import 'features/settings/data_page.dart';
 import 'features/settings/maintenance_page.dart';
 import 'features/settings/plugin_runtimes_page.dart';
@@ -291,6 +292,8 @@ GoRouter _buildRouter(Ref ref) {
               GoRoute(path: '/areas', builder: (_, __) => const AreasPage()),
               GoRoute(
                   path: '/admin/data', builder: (_, __) => const DataPage()),
+              GoRoute(
+                  path: '/admin/files', builder: (_, __) => const AssetsPage()),
               GoRoute(
                   path: '/admin/maintenance',
                   builder: (_, __) => const MaintenancePage()),
