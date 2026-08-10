@@ -25,6 +25,8 @@ class HcSurface extends StatelessWidget {
     this.borderRadius,
     this.filled = true,
     this.bordered = true,
+    this.tint,
+    this.blur = 0,
   });
 
   final Widget child;
@@ -53,6 +55,14 @@ class HcSurface extends StatelessWidget {
   /// says — losing the selection marker is a worse trade than honouring the
   /// style exactly.
   final bool bordered;
+
+  /// Overrides the fill colour. Null takes the skin's own raised surface,
+  /// which is what every card had before there was a style pane.
+  final Color? tint;
+
+  /// Frosts the backdrop, 0–20. The glass skin does this for every card; this
+  /// is the same capability offered to one card on any skin.
+  final double blur;
 
   @override
   Widget build(BuildContext context) {
@@ -83,7 +93,8 @@ class HcSurface extends StatelessWidget {
         // On a glass skin the fill is a sheer tint over the blurred backdrop;
         // on a flat skin it is the opaque raised surface.
         color: filled
-            ? (t.surface.isGlass ? t.surface.glassTint : t.surface.raised)
+            ? (tint ??
+                (t.surface.isGlass ? t.surface.glassTint : t.surface.raised))
             : null,
         borderRadius: radius,
         border: bordered || selected
@@ -97,13 +108,16 @@ class HcSurface extends StatelessWidget {
       child: child,
     );
 
-    if (t.surface.isGlass && filled) {
+    // Frosted when the skin says so, or when this card asks for it. A card
+    // with no fill still frosts — that is the whole look — but one with
+    // neither has nothing to blur behind and skips the expensive filter.
+    if ((t.surface.isGlass || blur > 0) && (filled || blur > 0)) {
       body = ClipRRect(
         borderRadius: radius,
         child: BackdropFilter(
           filter: ui.ImageFilter.blur(
-            sigmaX: t.surface.glassBlur,
-            sigmaY: t.surface.glassBlur,
+            sigmaX: blur > 0 ? blur : t.surface.glassBlur,
+            sigmaY: blur > 0 ? blur : t.surface.glassBlur,
           ),
           child: body,
         ),

@@ -162,6 +162,85 @@ void main() {
     });
   });
 
+  group('colour, corners and blur', () {
+    test('a named surface and a palette tint both follow the skin', () {
+      // The first design principle is that a component never knows what it
+      // looks like — a skin decides. These resolve *through* the tokens, so
+      // changing skin changes the card.
+      for (final skin in [HcSkin.midnight, HcSkin.softHome]) {
+        final t = skin.tokens;
+        expect(resolveCardTint(t, 'raised'), t.surface.raised);
+        expect(resolveCardTint(t, 'sunken'), t.surface.sunken);
+        expect(resolveCardTint(t, 'accent'), isNot(t.surface.raised),
+            reason: 'an accent tint is visibly not the default surface');
+      }
+      final a = HcSkin.midnight.tokens;
+      final b = HcSkin.softHome.tokens;
+      expect(resolveCardTint(a, 'raised'), isNot(resolveCardTint(b, 'raised')),
+          reason: 'two skins, two answers — that is what following means');
+    });
+
+    test('a literal colour does not, which is the point of offering it', () {
+      final a = HcSkin.midnight.tokens;
+      final b = HcSkin.softHome.tokens;
+      expect(resolveCardTint(a, '#3366ff'), const Color(0xff3366ff));
+      expect(resolveCardTint(a, '#3366ff'), resolveCardTint(b, '#3366ff'),
+          reason: 'identical under every skin — right for a photograph, wrong '
+              'for a surface, and the pane says which it is');
+    });
+
+    test('nonsense is not a colour', () {
+      final t = HcSkin.midnight.tokens;
+      for (final bad in ['3366ff', '#xyz', '#12345', 'chartreuse', '']) {
+        expect(resolveCardTint(t, bad), isNull, reason: bad);
+      }
+    });
+
+    test('corners come from the scale, never from a pixel field', () {
+      final t = HcSkin.midnight.tokens;
+      expect(resolveCardCorner(t, 'sm'), t.radius.sm);
+      expect(resolveCardCorner(t, 'pill'), t.radius.pill);
+      expect(resolveCardCorner(t, '14'), isNull,
+          reason: '132 literal radii once accumulated; a pane offering free '
+              'pixels would be the 133rd');
+    });
+
+    test('blur is clamped, so a hand-edited document cannot frost the page',
+        () {
+      expect(
+          CardStyle.fromConfig(const {
+            'style': {'blur': 400}
+          }).blur,
+          20);
+      expect(
+          CardStyle.fromConfig(const {
+            'style': {'blur': -5}
+          }).blur,
+          0);
+      expect(
+          CardStyle.fromConfig(const {
+            'style': {'blur': 'lots'}
+          }).blur,
+          0);
+    });
+
+    test('none of it is written unless it differs from the default', () {
+      const config = {'markdown': 'x'};
+      expect(const CardStyle().toConfig(config), config);
+      final styled = const CardStyle(tint: 'accent', blur: 6, corner: 'lg')
+          .toConfig(config);
+      expect(styled['style'], {
+        'filled': true,
+        'bordered': true,
+        'titled': true,
+        'tint': 'accent',
+        'blur': 6.0,
+        'corner': 'lg',
+      });
+      expect(const CardStyle().toConfig(styled), config);
+    });
+  });
+
   group('on the canvas', () {
     testWidgets('a card is a card until it is told otherwise', (tester) async {
       await _openDesigner(tester);

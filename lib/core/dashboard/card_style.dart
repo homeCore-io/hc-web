@@ -1,3 +1,7 @@
+import 'package:flutter/widgets.dart';
+
+import '../../design/tokens.dart';
+
 /// How a card is drawn, as opposed to what it shows.
 ///
 /// Phase 9 of `designer-plan.md` — "the things that stop a page reading as a
@@ -19,6 +23,9 @@ class CardStyle {
     this.filled = true,
     this.bordered = true,
     this.titled = true,
+    this.tint,
+    this.blur = 0,
+    this.corner,
   });
 
   /// The card's own background, and the elevation that goes with it.
@@ -35,7 +42,43 @@ class CardStyle {
   /// necessary — the band was the larger half of the card.
   final bool titled;
 
-  bool get isDefault => filled && bordered && titled;
+  /// Which colour the fill is, when there is one.
+  ///
+  /// Two tiers, and the pane says which is which — because hc-web's first
+  /// design principle is that *a component never knows what it looks like; it
+  /// reads `HcTokens` and a skin decides*, and a literal colour is a deliberate
+  /// exception to it rather than an oversight.
+  ///
+  /// **Follows the skin**: a named surface level (`base`, `raised`, `sunken`,
+  /// `overlay`) or a palette tint (`accent`, `danger`). Change skin and the
+  /// card changes with it.
+  ///
+  /// **Fixed**: `#RRGGBB`. Identical under every skin, which is right for a
+  /// photograph and wrong for a surface — a skin should not re-tint a picture
+  /// of your living room, and should re-tint a panel.
+  ///
+  /// Null means the default surface, which is what every card had before.
+  final String? tint;
+
+  /// Frosts what is behind the card, 0–20.
+  ///
+  /// The machinery already existed for the Ambient Glass skin, where
+  /// `HcSurface` reads `surface.glassBlur` and frosts its backdrop. This is the
+  /// same capability offered per card on any skin.
+  final double blur;
+
+  /// A step from the radius scale — `xs`, `sm`, `md`, `lg`, `pill` — never a
+  /// pixel count. The ratchet exists because 132 literal corner radii once
+  /// accumulated, and a style pane offering free pixels would be the 133rd.
+  final String? corner;
+
+  bool get isDefault =>
+      filled &&
+      bordered &&
+      titled &&
+      tint == null &&
+      blur == 0 &&
+      corner == null;
 
   static const key = 'style';
 
@@ -48,6 +91,13 @@ class CardStyle {
       filled: raw['filled'] != false,
       bordered: raw['bordered'] != false,
       titled: raw['titled'] != false,
+      tint: raw['tint'] is String ? raw['tint'] as String : null,
+      // Clamped rather than trusted: a blur of 400 from a hand-edited document
+      // would frost the whole page through one card.
+      blur: raw['blur'] is num
+          ? (raw['blur'] as num).toDouble().clamp(0.0, 20.0)
+          : 0,
+      corner: raw['corner'] is String ? raw['corner'] as String : null,
     );
   }
 
@@ -65,15 +115,33 @@ class CardStyle {
         'filled': filled,
         'bordered': bordered,
         'titled': titled,
+        // Only what differs from the default, so a card styled and put back
+        // leaves the document as it found it.
+        if (tint != null) 'tint': tint,
+        if (blur > 0) 'blur': blur,
+        if (corner != null) 'corner': corner,
       };
     }
     return next;
   }
 
-  CardStyle copyWith({bool? filled, bool? bordered, bool? titled}) => CardStyle(
+  CardStyle copyWith({
+    bool? filled,
+    bool? bordered,
+    bool? titled,
+    Object? tint = _keep,
+    double? blur,
+    Object? corner = _keep,
+  }) =>
+      CardStyle(
         filled: filled ?? this.filled,
         bordered: bordered ?? this.bordered,
         titled: titled ?? this.titled,
+        // `_keep` rather than null-means-keep, because "back to the default" is
+        // a thing the pane has to be able to say.
+        tint: identical(tint, _keep) ? this.tint : tint as String?,
+        blur: blur ?? this.blur,
+        corner: identical(corner, _keep) ? this.corner : corner as String?,
       );
 
   @override
@@ -81,8 +149,77 @@ class CardStyle {
       other is CardStyle &&
       other.filled == filled &&
       other.bordered == bordered &&
-      other.titled == titled;
+      other.titled == titled &&
+      other.tint == tint &&
+      other.blur == blur &&
+      other.corner == corner;
 
   @override
-  int get hashCode => Object.hash(filled, bordered, titled);
+  int get hashCode => Object.hash(filled, bordered, titled, tint, blur, corner);
 }
+
+/// Distinguishes "leave it alone" from "set it back to null" in `copyWith`.
+const Object _keep = Object();
+
+/// The two tiers of fill, as the pane offers them.
+///
+/// Named surfaces and palette tints **follow the skin**; a literal colour does
+/// not. Keeping them in one list with one label each is what lets the pane say
+/// so in a sentence rather than in documentation nobody reads.
+const cardTints = <({String key, String label, bool followsSkin})>[
+  (key: 'raised', label: 'Card', followsSkin: true),
+  (key: 'base', label: 'Page', followsSkin: true),
+  (key: 'sunken', label: 'Recessed', followsSkin: true),
+  (key: 'overlay', label: 'Overlay', followsSkin: true),
+  (key: 'accent', label: 'Accent', followsSkin: true),
+  (key: 'danger', label: 'Alert', followsSkin: true),
+];
+
+/// Corner steps, from the scale rather than from a pixel field.
+const cardCorners = <({String key, String label})>[
+  (key: 'xs', label: 'Sharp'),
+  (key: 'sm', label: 'Slight'),
+  (key: 'md', label: 'Card'),
+  (key: 'lg', label: 'Round'),
+  (key: 'pill', label: 'Pill'),
+];
+
+/// [tint] as a colour, or null for the surface the card would have had.
+///
+/// A palette tint is applied at low alpha over the card rather than at full
+/// strength: an accent-coloured panel at 100% is a warning, not a surface, and
+/// the accent budget is 3–5 placements per viewport — one card claiming the
+/// whole accent would spend it all.
+Color? resolveCardTint(HcTokens t, String? tint) => switch (tint) {
+      null => null,
+      'raised' => t.surface.raised,
+      'base' => t.surface.base,
+      'sunken' => t.surface.sunken,
+      'overlay' => t.surface.overlay,
+      'accent' => Color.alphaBlend(
+          t.accent.active.withValues(alpha: 0.16), t.surface.raised),
+      'danger' => Color.alphaBlend(
+          t.accent.danger.withValues(alpha: 0.16), t.surface.raised),
+      _ => _literal(tint),
+    };
+
+/// `#RRGGBB` / `#AARRGGBB`, or null when it is not one.
+Color? _literal(String value) {
+  var hex = value.trim();
+  if (!hex.startsWith('#')) return null;
+  hex = hex.substring(1);
+  if (hex.length == 6) hex = 'ff$hex';
+  if (hex.length != 8) return null;
+  final n = int.tryParse(hex, radix: 16);
+  return n == null ? null : Color(n);
+}
+
+/// [corner] as a radius, or null for the card's own.
+double? resolveCardCorner(HcTokens t, String? corner) => switch (corner) {
+      'xs' => t.radius.xs,
+      'sm' => t.radius.sm,
+      'md' => t.radius.md,
+      'lg' => t.radius.lg,
+      'pill' => t.radius.pill,
+      _ => null,
+    };
