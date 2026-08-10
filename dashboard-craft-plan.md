@@ -356,17 +356,145 @@ Better than the reference in three specific ways: no YAML, no SVG element IDs,
 and the markers are the same live controls as the rest of the app rather than a
 parallel rendering path that has to reimplement every device type.
 
-### 7.2 Honest cost
+### 7.2 The one principle: the plan is ground, the devices are figure
 
-This is the largest item here — a new element with its own editing mode
-(place/move markers), asset upload for the image, and a stored marker list. It
-should come **last**, after the card model in §2–§3 is right, because a floor
-plan is a selection of devices with positions, and if the selection model is
-still card-shaped it will be built twice.
+A floor plan with forty labelled boxes on it is a diagram, not a dashboard.
+Everything below follows from one decision:
 
----
+> **The image is background. The live state is the subject.**
 
-### 7.3 Deferred: somewhere to put a picture
+So the plan is dimmed and desaturated by default and the markers are the only
+saturated, moving, glowing things on it. This is the same reasoning the page
+background already uses — blur and dim are what make an image survivable behind
+live content — applied one level down. Get this wrong and it is a pretty
+picture you cannot read; get it right and a lit room is visible across a dark
+one at a glance, which is the brief's actual success metric.
+
+**Floor plans in the wild are black line art on white.** A CAD or estate-agent
+export dropped onto Midnight is a white slab with the house's state invisible on
+top of it. So the image needs **invert** as well as opacity — not a nicety, the
+difference between the feature working and not, for most images anyone will
+actually have.
+
+### 7.3 A marker is not a new kind of thing
+
+The temptation is to invent a "floor plan icon" with its own styling. It should
+instead be **what the device already is**, placed at a point:
+
+| Facet group | Marker |
+|---|---|
+| lights, switches, outlets, fans, covers, locks | icon dot — glows its own colour at its own brightness, tap toggles |
+| sensors — temperature, humidity, power | a reading, tabular, reserved width. The number *is* the marker |
+| media | icon dot, tap opens the sheet — a speaker has no single primary action |
+| scenes, buttons | icon dot, tap runs it |
+
+`TilePresentation` already makes exactly this decision for tiles, and reusing it
+means a floor plan needs no second opinion about what a device is, gets the
+`status_icon` override and the chosen icon set for free, and cannot drift from
+the rest of the app.
+
+**Tap is the primary action; press-and-hold is the tail.** Straight from the
+brief: *a device's primary action is one touch from the dashboard with no
+navigation*, and everything else is one layer down.
+
+### 7.4 A marker may be a selection, not only a device
+
+The best idea in this section, and it is free. Markers bind to the **selection
+object** built in §3 — a rule plus exceptions — so a marker can be:
+
+- one device (`manual`, one id), or
+- *the living room lights* (`facet: lights` + `area`), which glows if any are
+  on and toggles all of them.
+
+That is the honest 80% of room zones without any polygon geometry: you place
+one marker in the middle of a room and it speaks for the room. Zones — tapping
+an actual region — need per-room shapes and are deferred, not smuggled in.
+
+### 7.5 Placing them
+
+**Drag a device from the library onto the plan.** That already exists: the
+library has been individually draggable since phase 8 and the canvas already
+accepts a drop with coordinates. A drop on a floor plan card puts a marker
+where the pointer was.
+
+Coordinates are stored as a **fraction of the image**, never pixels, so a
+marker survives a resize, a zoom, and a breakpoint. This is the same reason
+placements are in cells rather than pixels.
+
+**The nested-editing problem, named.** The plan lives on a card, and on the
+canvas a drag moves the card. Dragging a marker and dragging its card are the
+same gesture on the same pixels, and guessing between them by hit-testing would
+be the kind of cleverness that is wrong 5% of the time and infuriating for it.
+See §7.7 — this is a real fork, not a detail.
+
+### 7.6 What it is made of
+
+```
+floor_plan card
+  image        url, fit, opacity, invert
+  markers      [ { selection, x, y, size?, label? } ]
+```
+
+A card rather than a page kind, because a card composes: place it 12×8 and it
+*is* the page; place it 6×4 beside a room list and it is a map next to a list;
+place two and you have upstairs and downstairs. A page kind would have to
+re-answer every question the grid has already answered.
+
+Full-bleed by default — `WidgetChrome.bleed` — since a floor plan with 16px of
+card padding around it is a floor plan in a frame.
+
+### 7.7 The three decisions, settled
+
+Decided by John, 2026-08-10.
+
+**1 · Marker editing is an explicit mode.** A button on the card enters plan
+editing: the grid goes inert, drags move markers, Escape leaves — the way
+entering a group works in a vector editor. The alternative was to infer intent
+from what the drag started on, and a gesture that guesses between "move this
+marker" and "move this whole card" is the kind of cleverness that is wrong five
+percent of the time and infuriating for it.
+
+**2 · The label is per marker.** Chosen against the recommendation, and the
+better call: the option that only a per-marker choice can express is a **custom**
+label. A marker reading *Sofa lamp* where the device is called
+`hue_light_3` is worth more than any global setting, and renaming the device
+itself would change it everywhere, which is not what you want when the plan
+wants a shorter word than the device list does.
+
+Default is **none**, so a plan does not start life as a word search, and the
+mixed-labels risk is a real one the designer can now simply see and fix.
+
+**3 · A sensor marker is its reading.** `22.4°`, not a thermometer. The icon
+tells you nothing you did not already know; the value is the entire reason the
+sensor is on the plan. Tabular figures and reserved width, because the brief is
+explicit that a live number must not move the layout around it.
+
+### 7.8 Honest cost
+
+The largest item in this document, and the order matters.
+
+| Piece | Notes |
+|---|---|
+| the card, image, invert/opacity | small — a decoration and two controls |
+| markers, drawn from the selection object | reuses §3 and `TilePresentation` entirely |
+| **Edit plan** mode | the real work: a second interaction mode on the canvas, and the one thing here with no precedent in the app |
+| drop-to-place from the library | the plumbing exists; the drop target is new |
+| per-marker label, custom text | small once markers exist |
+
+**It goes last** because a marker is a selection with a position: build it
+before the selection object is right and it gets built twice. That object is now
+right, so this is unblocked.
+
+**Still needs a URL for the image** until §7.9 lands, same as everything else
+that takes a picture.
+
+**Not in scope, deliberately:** room polygons (a marker bound to a room
+selection is the honest 80%), multi-floor navigation (two cards, or two pages),
+and reaching inside the SVG (we never do — which is why the SVG needs no
+special authoring, and the whole reason this is not the reference
+implementation's design).
+
+### 7.9 Deferred: somewhere to put a picture
 
 Both image controls — the card's and the page's — take a **URL**, because there
 is nowhere to put a file. Core stores dashboards, not assets. A URL on the LAN
@@ -410,7 +538,7 @@ Each step is usable alone; none leaves the designer worse.
 9. **Fonts and icon sets in the skin** (§6.2). Largest of the identity items;
    the theme editor already has the shape for it.
 10. **Floor plan** (§7).
-11. **Asset upload** (§7.3) — deferred, not forgotten. Both image fields take a
+11. **Asset upload** (§7.9) — deferred, not forgotten. Both image fields take a
     URL until it exists and neither changes shape when it does.
 
 **Core changes needed:** selection `add`/`remove` (§3.1),
