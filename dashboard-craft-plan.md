@@ -531,10 +531,20 @@ So a lit room can spill light onto its own floor — the app's existing signatur
 tile scale. An image mode cannot do that at any budget; this one gets it almost
 for free, because the geometry is already there.
 
-**It also sidesteps §7.11.** Geometry is *data*, not a file: the `.sh3d` is
-parsed in the browser and the walls, rooms and lights are stored in the
-dashboard document. Nothing needs uploading, so mode 3 does not wait for asset
-storage the way modes 1 and 2 do.
+**Mode 3 splits in two, and only half of it sidesteps §7.11.** Geometry is
+*data*, not a file: the `.sh3d` is parsed in the browser and the walls, rooms
+and lights are stored in the dashboard document. So the **vector** mode 3 — the
+one drawn in the skin's own palette — needs no upload and can ship before asset
+storage exists.
+
+The **textured** mode 3 cannot. John, 2026-08-10: *"files in the sweet home 3d
+archive are important to provide the fully rendered visuals."* He is right, and
+an earlier draft of this section elided it by calling the whole mode free of the
+dependency. The archive's JPEGs are what make a floor look like oak instead of
+like a fill; they are files, they cannot live in a dashboard document, and
+without them mode 3 is a good drawing rather than a render. That half waits on
+§7.11 — and it is §7.11's most demanding consumer, which is why that section is
+now written around it.
 
 **Keep the furniture.** An earlier draft of this section dropped it on import —
 "we want rooms, walls and lights, not a sofa" — and that was wrong. `x`, `y`,
@@ -586,30 +596,69 @@ and reaching inside the SVG (we never do — which is why the SVG needs no
 special authoring, and the whole reason this is not the reference
 implementation's design).
 
-### 7.11 Deferred: somewhere to put a picture
+### 7.11 Asset storage — a shared dependency, not a floor-plan footnote
 
-Both image controls — the card's and the page's — take a **URL**, because there
-is nowhere to put a file. Core stores dashboards, not assets. A URL on the LAN
-works today, and the stored shape (`image: "<url>"`) does not change when an
-upload replaces the control, so nothing here has to be redesigned for it.
+This began as a note at the end of the floor plan section. It is not a footnote.
+Six features are waiting on it, and I wrote the same apology next to each of
+them one at a time without noticing I had written it six times.
 
-**What an upload needs**, so the size of it is on the record rather than
-discovered later:
+| Feature | Where the address is stored | Status |
+|---|---|---|
+| Card background picture | dashboard doc, `style.image` | shipped 0.1.36, URL only |
+| Page background picture | dashboard doc, `background.image` | shipped 0.1.36, URL only |
+| `image` widget | dashboard doc, widget config `url` | shipped, URL only |
+| Custom fonts (§6.2) | skin doc, `font.<Family>` override | shipped 0.1.36, URL only |
+| Custom icon sets (§6.2) | skin doc — needs the host **and** a codepoint map | not built |
+| Floor plan modes 1 and 2 (§7) | dashboard doc | not built |
+| Floor plan mode 3, textured (§7.9) | the `.sh3d`'s own JPEGs | not built |
+
+Every one of them stores only a string and resolves it in the browser; core
+never fetches it. So an endpoint returning `/assets/…` drops into all seven
+without changing a single stored shape. That is the good news, and it is why
+none of this was a mistake to defer — but it does mean the endpoint is now
+gating more than it is gated by, and it should move up the order accordingly.
+
+**Design it against the archive, not against the file picker.** The `.sh3d`
+case is not a bigger version of "someone chooses a PNG for a card" — it differs
+in kind, and it is the only consumer that forces the hard questions:
+
+- **It is a batch.** One import writes tens of textures at once, chosen by the
+  machine, not by a person. A picker-shaped API gets retrofitted badly for it.
+- **The bytes are already in hand.** We unzip in the browser, so this is not
+  upload-from-disk; it is *"store these bytes I am holding and give me back
+  addresses."* The picker is the easy subset of that, not the other way round.
+- **It is content-addressable.** The same oak texture repeats across rooms.
+  Hashing dedupes a lot of it, and gives the id for free.
+- **It has a lifecycle.** Delete the plan and its textures should go with it. No
+  other consumer raises that question, so no other consumer would have made us
+  answer it before shipping the endpoint.
+
+**What it needs**, so the size is on the record rather than discovered later:
 
 - `POST /assets` and `GET /assets/{id}` in core, with the bytes on disk beside
   the dashboards rather than in redb — a 4MB photograph in a key-value store
   is a 4MB read on every dashboard load.
+- A batch write, or at least an idempotent one keyed by content hash, so an
+  import of forty textures is not forty round trips with forty failure modes.
 - A size cap and an allowed-type list, enforced server-side. "It is my own
   house" is not a reason to accept an unbounded upload; a full disk stops the
   house, not just the picture.
-- Deletion, or the assets outlive every page that referenced them. Reference
-  counting across dashboards is the awkward half — the simple answer is that
-  assets are never auto-deleted and there is a list you can prune.
+- Deletion. Reference counting across dashboards is the awkward half — the
+  simple answer is that assets are never auto-deleted and there is a list you
+  can prune, with an import's textures grouped so they can be pruned together.
 - The client picker, which is the small part.
 
-Worth doing, and not on the critical path: a background you can only set by
-URL is a background, and the same field accepts `/assets/abc123` on the day
-that endpoint exists.
+**There is already a precedent to argue from.** `POST /calendars/upload` exists
+and takes a file — but it posts the *text* as JSON, so it establishes that core
+accepts uploads and not that it stores binaries. This is the binary version of
+a thing core already half does.
+
+**And one thing that was blocked twice.** Custom fonts were blocked on hosting
+*and* on a fetcher: `FontRegistry.fetch` was injected so tests could not reach
+the network, and nothing outside the tests ever injected anything, so every
+custom font silently failed to load from 0.1.36 until it was fixed. Worth
+recording because it is the failure mode this whole section invites — a feature
+that looks shipped, stores the right string, and does nothing.
 
 ---
 
@@ -629,13 +678,23 @@ Each step is usable alone; none leaves the designer worse.
 8. **Per-device icon** (§6.1). One core field.
 9. **Fonts and icon sets in the skin** (§6.2). Largest of the identity items;
    the theme editor already has the shape for it.
-10. **Floor plan** (§7).
-11. **Asset upload** (§7.11) — deferred, not forgotten. Both image fields take a
-    URL until it exists and neither changes shape when it does.
+10. **Asset storage** (§7.11). Moved up. It was last while it looked like a
+    floor-plan footnote; it is a shared dependency of six features, three of
+    which have already shipped able to store an address and unable to accept a
+    file. Design it against the `.sh3d` import — the batch case — because the
+    single-file picker is its easy subset and the reverse is not true.
+11. **Floor plan** (§7), in mode order. Mode 1 is the foundation and needs 10
+    for a picture. Mode 3's vector half is the only part that needs nothing —
+    it can be built in parallel — and its textured half needs 10 as well.
 
 **Core changes needed:** selection `add`/`remove` (§3.1),
 `DashboardDefinition.background` (§5.3), `device.ui_icon` (§6.1). Three fields
 and three validators — the same size as the two the designer arc needed.
+
+Plus one that is not a field: **asset storage** (§7.11), which is an endpoint, a
+place on disk and a deletion story rather than a line in a struct. It is the
+only item here that core cannot absorb as a validator, and it is the one six
+client features are waiting on.
 
 ---
 
