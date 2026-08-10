@@ -100,6 +100,20 @@ HcTokens resolveSkin({
   return applySkinOverrides(deriveTokens(seeds), doc.overrides);
 }
 
+/// The overrides of whichever skin is actually in force.
+///
+/// A built-in has none — its look is code, not a document — so the answer is
+/// an empty map rather than null, because every caller wants "what does this
+/// skin ask for" and none of them wants a second state.
+Map<String, String> activeSkinOverrides({
+  required SkinChoice choice,
+  required List<SkinDocument> skins,
+}) {
+  if (choice.builtIn != null || choice.isNone) return const {};
+  return skins.where((s) => s.id == choice.dataId).firstOrNull?.overrides ??
+      const {};
+}
+
 /// A built-in by its stored name, falling back to Midnight.
 ///
 /// The names are core's — `ambient_glass`, not `ambientGlass` — because that is

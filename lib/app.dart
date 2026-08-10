@@ -8,6 +8,7 @@ import 'core/providers/skin_provider.dart';
 import 'core/providers/skins_provider.dart';
 import 'core/models/skin_document.dart';
 import 'design/font_registry.dart';
+import 'design/icon_sets.dart';
 import 'design/tokens.dart';
 import 'design/skin_resolve.dart';
 import 'features/admin/areas_page.dart';
@@ -325,12 +326,15 @@ class HomecoreApp extends ConsumerWidget {
     // theme *outside* the shell — the login page and the kiosk wall — so it
     // resolves against no particular shell.
     final skins = ref.watch(skinsProvider).value ?? const <SkinDocument>[];
+    final choice = ref.watch(skinOverrideProvider);
     // Fire-and-forget: a font that arrives late bumps the registry's revision
     // and this rebuilds. A font that never arrives changes nothing, which is
     // the same outcome as not naming one.
     FontRegistry.instance.registerAll(skins.map((s) => s.overrides));
-
-    final choice = ref.watch(skinOverrideProvider);
+    // The chosen skin's icon set, applied globally because HcIcons.forFacet is
+    // reached from places with no BuildContext.
+    IconSets.select(
+        activeSkinOverrides(choice: choice, skins: skins)[iconSetOverrideKey]);
 
     // Rebuilt when a font finishes arriving. `resolveSkin` refuses a family
     // the app cannot draw yet, so without this the skin would resolve to the
@@ -338,14 +342,17 @@ class HomecoreApp extends ConsumerWidget {
     // The router config is a stable object, so navigation survives.
     return ValueListenableBuilder<int>(
       valueListenable: FontRegistry.instance.revision,
-      builder: (context, _, __) {
-        final tokens = resolveSkin(
-          choice: choice,
-          shell: HcShell.touch,
-          skins: skins,
-        );
-        return _app(tokens, router);
-      },
+      builder: (context, _, __) => ValueListenableBuilder<int>(
+        valueListenable: IconSets.revision,
+        builder: (context, __, ___) {
+          final tokens = resolveSkin(
+            choice: choice,
+            shell: HcShell.touch,
+            skins: skins,
+          );
+          return _app(tokens, router);
+        },
+      ),
     );
   }
 

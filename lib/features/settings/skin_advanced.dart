@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../../core/models/skin_document.dart';
+import '../../core/devices/presentation.dart';
 import '../../design/hc_icons.dart';
+import '../../design/icon_sets.dart';
 import '../../design/font_registry.dart';
 import '../../design/skin_catalogue.dart';
 import '../../design/tokens.dart';
@@ -119,6 +121,13 @@ class _SkinAdvancedState extends State<SkinAdvanced> {
               style: t.text.captionStyle
                   .copyWith(color: t.surface.onBaseMuted, height: 1.4),
             ),
+          ),
+          _IconSetPicker(
+            value: widget.overrides[iconSetOverrideKey] ??
+                IconSets.builtIn.first.key,
+            onChanged: (key) => key == IconSets.builtIn.first.key
+                ? _reset(iconSetOverrideKey)
+                : _set(iconSetOverrideKey, key),
           ),
           _Fonts(
             fonts: fontsFromOverrides(widget.overrides),
@@ -504,6 +513,91 @@ class _FontsState extends State<_Fonts> {
             'fetched from your own house — nothing here reaches the internet.',
             style: t.text.captionStyle
                 .copyWith(color: t.surface.onBaseMuted, height: 1.35),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Which set of glyphs the house wears.
+///
+/// A row of samples rather than a list of names: nobody knows what "Phosphor"
+/// looks like, and the difference between two icon sets is entirely visible
+/// and not at all describable.
+class _IconSetPicker extends StatelessWidget {
+  const _IconSetPicker({required this.value, required this.onChanged});
+
+  final String value;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Padding(
+      padding: EdgeInsets.only(bottom: t.space.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('ICONS',
+              style:
+                  t.text.overlineStyle.copyWith(color: t.surface.onBaseMuted)),
+          SizedBox(height: t.space.xs),
+          Row(
+            children: [
+              for (final set in IconSets.builtIn)
+                Padding(
+                  padding: EdgeInsets.only(right: t.space.xs),
+                  child: Semantics(
+                    button: true,
+                    selected: set.key == value,
+                    label: set.label,
+                    child: GestureDetector(
+                      onTap: () => onChanged(set.key),
+                      child: Container(
+                        padding: EdgeInsets.symmetric(
+                            horizontal: t.space.sm, vertical: t.space.xs),
+                        decoration: BoxDecoration(
+                          color: set.key == value ? t.surface.raised : null,
+                          borderRadius: BorderRadius.circular(t.radius.sm),
+                          border: Border.all(
+                            color: set.key == value
+                                ? t.accent.active
+                                : t.stroke.hairline,
+                            width: t.stroke.width,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // The sample is the control. Three facets that
+                            // look different in different sets.
+                            for (final facet in const [
+                              DeviceFacet.light,
+                              DeviceFacet.lock,
+                              DeviceFacet.motion,
+                            ])
+                              Padding(
+                                padding: EdgeInsets.only(right: t.space.xs / 2),
+                                child: Icon(set.forFacet(facet),
+                                    size: 15,
+                                    color: set.key == value
+                                        ? t.surface.onBase
+                                        : t.surface.onBaseMuted),
+                              ),
+                            SizedBox(width: t.space.xs / 2),
+                            Text(set.label,
+                                style: t.text.captionStyle.copyWith(
+                                    color: set.key == value
+                                        ? t.surface.onBase
+                                        : t.surface.onBaseMuted)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
           ),
         ],
       ),
