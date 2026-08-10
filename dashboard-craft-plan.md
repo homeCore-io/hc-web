@@ -469,7 +469,99 @@ tells you nothing you did not already know; the value is the entire reason the
 sensor is on the plan. Tabular figures and reserved width, because the brief is
 explicit that a live number must not move the layout around it.
 
-### 7.8 Honest cost
+### 7.8 Three modes, not one
+
+John, 2026-08-10, on the 2D mockup: *"it's a good start. This is a great 2d
+basic option mode. Other modes should have much more visual flare, backgrounds,
+imports from sweet home 3d is the most active tool used for floor plans."*
+
+Right, and the research changes the design rather than adding to it.
+
+**Mode 1 · Image.** What §7.2–7.6 describe. Any picture — an SVG or PNG export,
+a photo, a drawing — dimmed and invertible, markers on top. Costs nothing but
+the marker work, needs no import machinery, and is the floor for someone who has
+a JPEG of a plan and nothing else.
+
+**Mode 2 · Rendered.** The same machinery with a *photorealistic* background:
+Sweet Home 3D renders top-down and perspective views to PNG/JPEG, and that is
+where the flare is. Identical code to mode 1 — the difference is entirely the
+picture — so it is free, and it looks like a different product. A perspective
+render needs markers placed by eye rather than by geometry, which is fine
+because that is how mode 1 places them anyway.
+
+**Mode 3 · Native.** `.sh3d` imported and **drawn by us**. This is the flagship
+and it is not a picture at all.
+
+### 7.9 What a `.sh3d` actually contains
+
+A `.sh3d` is a **ZIP** containing `Home.xml` against a published DTD
+(`SweetHome3D.dtd`; XML has been the primary representation since 5.3). The
+elements that matter:
+
+| Element | Attributes we want |
+|---|---|
+| `wall` | `xStart` `yStart` `xEnd` `yEnd` `thickness` `height` |
+| `room` | `name`, and `point` children with `x` `y` — **polygons** |
+| `light` | `name` `x` `y` `angle` `power`, and a `lightSource` child with `color` |
+| `pieceOfFurniture` | `name` `x` `y` `angle` `width` `depth` |
+| `level` | `id` `name` `elevation` — **storeys** |
+
+Four things fall out of that, and three of them were deferred as too expensive:
+
+1. **The plan becomes vector, drawn by the app.** Walls in `stroke.hairline`,
+   room fills in surface tints, everything on the skin's own palette. Sharp at
+   any zoom, invertible by construction rather than by filter, and it responds
+   to a skin change like everything else does. No image, no upload, no dimming a
+   photograph until it is legible.
+2. **Room polygons, free.** §7.4 called zones deferred and offered a
+   room-selection marker as the honest 80%. With a `.sh3d` the geometry is in
+   the file — tapping a room becomes possible for anyone who imports one, and
+   the marker stays the answer for anyone who does not.
+3. **Markers place themselves.** Every `<light>` has a position. Import drops a
+   candidate marker at each one, already inside a known room, so binding it is a
+   pick from *that room's* lights rather than from 188 devices. The tedious part
+   of the job disappears.
+4. **Multi-floor, from `level`.** Upstairs and downstairs arrive as two plans
+   rather than as two files someone has to make.
+
+**And the flare, which only this mode can do.** We know each light's position
+from the file, its colour from `lightSource`, and its live state from the house.
+So a lit room can spill light onto its own floor — the app's existing signature
+(`glowColor × brightness`, `glowRadius 34`) applied at room scale instead of
+tile scale. An image mode cannot do that at any budget; this one gets it almost
+for free, because the geometry is already there.
+
+**It also sidesteps §7.11.** Geometry is *data*, not a file: the `.sh3d` is
+parsed in the browser and the walls, rooms and lights are stored in the
+dashboard document. Nothing needs uploading, so mode 3 does not wait for asset
+storage the way modes 1 and 2 do.
+
+**Keep the furniture.** An earlier draft of this section dropped it on import —
+"we want rooms, walls and lights, not a sofa" — and that was wrong. `x`, `y`,
+`angle`, `width` and `depth` are five numbers per piece, no more expensive than
+a wall, and the footprints are most of what makes the drawing read as a home
+rather than as a wireframe. It is the sofa that tells you which room you are
+looking at. What we do drop is everything that is not a number: the JPEG
+textures and the OBJ/MTL models, which are files, and files are §7.11's problem.
+Geometry stays a few kilobytes either way.
+
+**Honest costs of mode 3.** Unzip and XML-parse in the client (`archive` plus an
+XML parser — no core work). A coordinate transform, since Sweet Home 3D works in
+centimetres with y increasing downward. And a name-matching decision: `<light
+name="Ceiling lamp">` will not match a device called `Overhead`, so import must
+place *unbound* markers and ask, rather than guessing and being quietly wrong
+about which lamp is which.
+
+**Modes 2 and 3 are not exclusive.** Export a *top-down* render from Sweet Home
+3D and import the same `.sh3d`: the picture is the background and the parsed
+geometry sits on it, registered, because both came from one file. Photographic
+floors *and* clickable rooms *and* markers the file placed. Only a top-down
+render registers — a perspective one is mode 2 and can never gain rooms, which
+is worth saying in the UI, because it is the one thing here that will surprise
+someone. This combination is free once modes 2 and 3 both exist, and it is the
+one to aim at; it inherits mode 2's dependency on §7.11 for the picture.
+
+### 7.10 Honest cost
 
 The largest item in this document, and the order matters.
 
@@ -485,7 +577,7 @@ The largest item in this document, and the order matters.
 before the selection object is right and it gets built twice. That object is now
 right, so this is unblocked.
 
-**Still needs a URL for the image** until §7.9 lands, same as everything else
+**Still needs a URL for the image** until §7.11 lands, same as everything else
 that takes a picture.
 
 **Not in scope, deliberately:** room polygons (a marker bound to a room
@@ -494,7 +586,7 @@ and reaching inside the SVG (we never do — which is why the SVG needs no
 special authoring, and the whole reason this is not the reference
 implementation's design).
 
-### 7.9 Deferred: somewhere to put a picture
+### 7.11 Deferred: somewhere to put a picture
 
 Both image controls — the card's and the page's — take a **URL**, because there
 is nowhere to put a file. Core stores dashboards, not assets. A URL on the LAN
@@ -538,7 +630,7 @@ Each step is usable alone; none leaves the designer worse.
 9. **Fonts and icon sets in the skin** (§6.2). Largest of the identity items;
    the theme editor already has the shape for it.
 10. **Floor plan** (§7).
-11. **Asset upload** (§7.9) — deferred, not forgotten. Both image fields take a
+11. **Asset upload** (§7.11) — deferred, not forgotten. Both image fields take a
     URL until it exists and neither changes shape when it does.
 
 **Core changes needed:** selection `add`/`remove` (§3.1),
