@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/models/skin_document.dart';
+import 'font_registry.dart';
 import 'skin_seeds.dart';
 import 'skins.dart';
 import 'tokens.dart';
@@ -220,8 +221,14 @@ HcTokens applySkinOverrides(HcTokens t, Map<String, String> overrides) {
       enabled: t.motion.enabled,
     ),
     text: HcType(
-      family: t.text.family,
-      monoFamily: t.text.monoFamily,
+      // Only a family the app can actually draw with. A name it does not have
+      // falls back to the engine's own, which reaches for a glyph on
+      // fonts.gstatic.com — the exact thing the font-origin ratchet exists to
+      // stop, and the reason these two were left unexposed until a font could
+      // be registered at runtime. An unregistered name is ignored rather than
+      // honoured, so a skin cannot take the app off its own origin.
+      family: _family(overrides['text.family']) ?? t.text.family,
+      monoFamily: _family(overrides['text.monoFamily']) ?? t.text.monoFamily,
       scale: n('text.scale') ?? t.text.scale,
       display: role('text.display.size', t.text.display),
       title: role('text.title.size', t.text.title),
@@ -232,6 +239,13 @@ HcTokens applySkinOverrides(HcTokens t, Map<String, String> overrides) {
       overline: role('text.overline.size', t.text.overline),
     ),
   );
+}
+
+/// A family, but only if it will draw.
+String? _family(String? name) {
+  final family = name?.trim();
+  if (family == null || family.isEmpty) return null;
+  return FontRegistry.instance.has(family) ? family : null;
 }
 
 Duration _ms(double? value, Duration fallback) =>

@@ -394,11 +394,6 @@ const Map<String, String> unexposed = {
   'radius.pill': 'Always 999 — a sentinel meaning "fully round", not a '
       'measurement. A pill with a 12px radius is a rounded rectangle, which is '
       'what radius.md already is.',
-  'text.family': 'One text family ships. This becomes a control when a second '
-      'does, and a skin naming a font the app has not bundled would fall back '
-      'to the engine\'s own — reaching out to fonts.gstatic.com, which the '
-      'font-origin ratchet exists to prevent.',
-  'text.monoFamily': 'As text.family.',
   'text.<role>.weight': 'The ramp\'s weights are what separate a title from '
       'body at the same size. A skin that flattened them would be changing the '
       'hierarchy, not the look.',
