@@ -241,6 +241,53 @@ void main() {
     });
   });
 
+  group('a picture on the card', () {
+    test('is independent of the colour, because an image is a fill', () {
+      // A card can carry a photograph with no tint under it — asking someone
+      // to leave a colour switched on to see their own picture would be a
+      // riddle.
+      const style = CardStyle(filled: false, image: 'http://x/y.jpg');
+      expect(cardDecorationImage(style), isNotNull);
+    });
+
+    test('no address, no decoration — and whitespace is no address', () {
+      expect(cardDecorationImage(const CardStyle()), isNull);
+      expect(cardDecorationImage(const CardStyle(image: '   ')), isNull);
+    });
+
+    test('fit defaults to cover, which is the one that wants no thought', () {
+      // A floor plan wants contain and a photo behind controls wants cover;
+      // the wrong default is visible immediately either way, and cover is the
+      // one that never leaves bars down the side.
+      expect(
+          cardDecorationImage(const CardStyle(image: 'x'))!.fit, BoxFit.cover);
+      expect(
+          cardDecorationImage(const CardStyle(image: 'x', imageFit: 'contain'))!
+              .fit,
+          BoxFit.contain);
+    });
+
+    test('opacity is clamped and round-trips', () {
+      final wild = CardStyle.fromConfig(const {
+        'style': {'image': 'x', 'image_opacity': 9}
+      });
+      expect(wild.imageOpacity, 1);
+      const style =
+          CardStyle(image: 'x', imageFit: 'contain', imageOpacity: .4);
+      final stored = style.toConfig(const {})['style'] as Map;
+      expect(stored['image'], 'x');
+      expect(stored['image_fit'], 'contain');
+      expect(stored['image_opacity'], 0.4);
+      expect(CardStyle.fromConfig({'style': stored}), style);
+    });
+
+    test('a full-opacity picture writes no opacity key', () {
+      final stored =
+          const CardStyle(image: 'x').toConfig(const {})['style'] as Map;
+      expect(stored.containsKey('image_opacity'), isFalse);
+    });
+  });
+
   group('on the canvas', () {
     testWidgets('a card is a card until it is told otherwise', (tester) async {
       await _openDesigner(tester);

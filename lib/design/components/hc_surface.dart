@@ -27,6 +27,7 @@ class HcSurface extends StatelessWidget {
     this.bordered = true,
     this.tint,
     this.blur = 0,
+    this.image,
   });
 
   final Widget child;
@@ -64,6 +65,9 @@ class HcSurface extends StatelessWidget {
   /// is the same capability offered to one card on any skin.
   final double blur;
 
+  /// A picture on the card, under its contents and inside its corners.
+  final DecorationImage? image;
+
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
@@ -96,6 +100,7 @@ class HcSurface extends StatelessWidget {
             ? (tint ??
                 (t.surface.isGlass ? t.surface.glassTint : t.surface.raised))
             : null,
+        image: image,
         borderRadius: radius,
         border: bordered || selected
             ? Border.all(

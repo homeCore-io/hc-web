@@ -143,6 +143,7 @@ class CardInspector extends ConsumerWidget {
               ),
             if (descriptor != null && descriptor.chrome != WidgetChrome.bare)
               _StyleSection(
+                cardId: model.id,
                 style: CardStyle.fromConfig(model.config),
                 onChanged: (style) => onChanged(style.toConfig(model.config)),
               ),
@@ -246,6 +247,53 @@ class _Preview extends ConsumerWidget {
   }
 }
 
+/// The card's picture, as an address.
+///
+/// A field rather than a file picker because there is nowhere yet to put an
+/// uploaded file: core stores dashboards, not assets. A URL on the LAN works
+/// today and an upload can replace this without the stored shape changing.
+class _ImageField extends StatefulWidget {
+  const _ImageField({
+    super.key,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final String value;
+  final ValueChanged<String> onChanged;
+
+  @override
+  State<_ImageField> createState() => _ImageFieldState();
+}
+
+class _ImageFieldState extends State<_ImageField> {
+  late final TextEditingController _controller =
+      TextEditingController(text: widget.value);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return TextField(
+      controller: _controller,
+      style: t.text.bodySmallStyle.copyWith(color: t.surface.onBase),
+      onChanged: (s) => widget.onChanged(s.trim()),
+      decoration: InputDecoration(
+        isDense: true,
+        border: const OutlineInputBorder(),
+        labelText: 'Picture',
+        hintText: 'Image address',
+        hintStyle: t.text.bodySmallStyle.copyWith(color: t.surface.onBaseMuted),
+      ),
+    );
+  }
+}
+
 /// A row of choices, small enough to sit in a 340px pane.
 class _StyleChoice extends StatelessWidget {
   const _StyleChoice({
@@ -314,11 +362,13 @@ class _StyleSlider extends StatelessWidget {
   const _StyleSlider({
     required this.label,
     required this.value,
+    required this.max,
     required this.onChanged,
   });
 
   final String label;
   final double value;
+  final double max;
   final ValueChanged<double> onChanged;
 
   @override
@@ -333,9 +383,9 @@ class _StyleSlider extends StatelessWidget {
         ),
         Expanded(
           child: Slider(
-            value: value.clamp(0, 20),
-            max: 20,
-            divisions: 20,
+            value: value.clamp(0, max),
+            max: max,
+            divisions: max.round(),
             label: '${value.round()}',
             onChanged: onChanged,
           ),
@@ -438,10 +488,18 @@ class _NameFieldState extends State<_NameField> {
 /// the switches — and the interesting one, a card with a border and no fill, is
 /// the combination a three-item list would leave out.
 class _StyleSection extends StatelessWidget {
-  const _StyleSection({required this.style, required this.onChanged});
+  const _StyleSection({
+    required this.style,
+    required this.onChanged,
+    required this.cardId,
+  });
 
   final CardStyle style;
   final ValueChanged<CardStyle> onChanged;
+
+  /// Keys the picture field, so moving the selection to another card does not
+  /// leave the previous card's address sitting in it.
+  final String cardId;
 
   @override
   Widget build(BuildContext context) {
@@ -494,8 +552,37 @@ class _StyleSection extends StatelessWidget {
           _StyleSlider(
             label: 'Blur',
             value: style.blur,
+            max: 20,
             onChanged: (v) => onChanged(style.copyWith(blur: v)),
           ),
+          SizedBox(height: t.space.xs),
+          _ImageField(
+            key: ValueKey('card-image-$cardId'),
+            value: style.image ?? '',
+            onChanged: (v) =>
+                onChanged(style.copyWith(image: v.isEmpty ? null : v)),
+          ),
+          if ((style.image ?? '').isNotEmpty) ...[
+            SizedBox(height: t.space.xs),
+            _StyleChoice(
+              label: 'Picture',
+              value: style.imageFit ?? 'cover',
+              options: const [
+                (key: 'cover', label: 'Fill'),
+                (key: 'contain', label: 'Fit'),
+                (key: 'fill', label: 'Stretch'),
+              ],
+              onChanged: (v) =>
+                  onChanged(style.copyWith(imageFit: v == 'cover' ? null : v)),
+            ),
+            _StyleSlider(
+              label: 'Fade',
+              value: style.imageOpacity * 100,
+              max: 100,
+              onChanged: (v) =>
+                  onChanged(style.copyWith(imageOpacity: v / 100)),
+            ),
+          ],
           if (!style.titled)
             Text(
               'The name still labels it here and in the layers strip — it just '

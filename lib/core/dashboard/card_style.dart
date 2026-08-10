@@ -26,6 +26,9 @@ class CardStyle {
     this.tint,
     this.blur = 0,
     this.corner,
+    this.image,
+    this.imageFit,
+    this.imageOpacity = 1,
   });
 
   /// The card's own background, and the elevation that goes with it.
@@ -67,6 +70,23 @@ class CardStyle {
   /// same capability offered per card on any skin.
   final double blur;
 
+  /// A picture on the card, behind its contents.
+  ///
+  /// Independent of [filled]: an image *is* a fill, so a card can carry one
+  /// with the colour turned off. A URL the browser can reach, resolved by the
+  /// browser and never by core.
+  final String? image;
+
+  /// `cover` (fills and crops) or `contain` (shows all of it). The one choice
+  /// nobody can guess from a preview and the one that is always wrong by
+  /// default for half of the cases: a floor plan wants contain, a photo behind
+  /// a room's controls wants cover.
+  final String? imageFit;
+
+  /// 0–1. The dial that decides whether the picture is the subject or the
+  /// backdrop — at 1 it competes with the controls on top of it.
+  final double imageOpacity;
+
   /// A step from the radius scale — `xs`, `sm`, `md`, `lg`, `pill` — never a
   /// pixel count. The ratchet exists because 132 literal corner radii once
   /// accumulated, and a style pane offering free pixels would be the 133rd.
@@ -78,7 +98,10 @@ class CardStyle {
       titled &&
       tint == null &&
       blur == 0 &&
-      corner == null;
+      corner == null &&
+      image == null &&
+      imageFit == null &&
+      imageOpacity == 1;
 
   static const key = 'style';
 
@@ -98,6 +121,11 @@ class CardStyle {
           ? (raw['blur'] as num).toDouble().clamp(0.0, 20.0)
           : 0,
       corner: raw['corner'] is String ? raw['corner'] as String : null,
+      image: raw['image'] is String ? raw['image'] as String : null,
+      imageFit: raw['image_fit'] is String ? raw['image_fit'] as String : null,
+      imageOpacity: raw['image_opacity'] is num
+          ? (raw['image_opacity'] as num).toDouble().clamp(0.0, 1.0)
+          : 1,
     );
   }
 
@@ -120,6 +148,9 @@ class CardStyle {
         if (tint != null) 'tint': tint,
         if (blur > 0) 'blur': blur,
         if (corner != null) 'corner': corner,
+        if (image != null) 'image': image,
+        if (imageFit != null) 'image_fit': imageFit,
+        if (imageOpacity != 1) 'image_opacity': imageOpacity,
       };
     }
     return next;
@@ -132,6 +163,9 @@ class CardStyle {
     Object? tint = _keep,
     double? blur,
     Object? corner = _keep,
+    Object? image = _keep,
+    Object? imageFit = _keep,
+    double? imageOpacity,
   }) =>
       CardStyle(
         filled: filled ?? this.filled,
@@ -142,6 +176,10 @@ class CardStyle {
         tint: identical(tint, _keep) ? this.tint : tint as String?,
         blur: blur ?? this.blur,
         corner: identical(corner, _keep) ? this.corner : corner as String?,
+        image: identical(image, _keep) ? this.image : image as String?,
+        imageFit:
+            identical(imageFit, _keep) ? this.imageFit : imageFit as String?,
+        imageOpacity: imageOpacity ?? this.imageOpacity,
       );
 
   @override
@@ -152,10 +190,14 @@ class CardStyle {
       other.titled == titled &&
       other.tint == tint &&
       other.blur == blur &&
-      other.corner == corner;
+      other.corner == corner &&
+      other.image == image &&
+      other.imageFit == imageFit &&
+      other.imageOpacity == imageOpacity;
 
   @override
-  int get hashCode => Object.hash(filled, bordered, titled, tint, blur, corner);
+  int get hashCode => Object.hash(filled, bordered, titled, tint, blur, corner,
+      image, imageFit, imageOpacity);
 }
 
 /// Distinguishes "leave it alone" from "set it back to null" in `copyWith`.
@@ -223,3 +265,23 @@ double? resolveCardCorner(HcTokens t, String? corner) => switch (corner) {
       'pill' => t.radius.pill,
       _ => null,
     };
+
+/// [style]'s picture as a decoration, or null when it has none.
+///
+/// A broken address costs the card its picture and nothing else — the
+/// decoration simply fails to paint, and the contents are undisturbed. There is
+/// no error state here on purpose: a card is where you read the house, not
+/// where you debug a URL, and the address is checked where it is typed.
+DecorationImage? cardDecorationImage(CardStyle style) {
+  final url = style.image;
+  if (url == null || url.trim().isEmpty) return null;
+  return DecorationImage(
+    image: NetworkImage(url),
+    fit: switch (style.imageFit) {
+      'contain' => BoxFit.contain,
+      'fill' => BoxFit.fill,
+      _ => BoxFit.cover,
+    },
+    opacity: style.imageOpacity.clamp(0.0, 1.0),
+  );
+}
