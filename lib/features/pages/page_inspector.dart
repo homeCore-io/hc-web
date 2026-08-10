@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/dashboard/grid_engine.dart';
 import '../../core/models/dashboard.dart';
 import '../../design/tokens.dart';
+import '../assets/asset_field.dart';
 
 /// The page itself, when no card is selected.
 ///
@@ -129,15 +130,6 @@ class _BackgroundControls extends StatefulWidget {
 }
 
 class _BackgroundControlsState extends State<_BackgroundControls> {
-  late final TextEditingController _url =
-      TextEditingController(text: widget.value.image ?? '');
-
-  @override
-  void dispose() {
-    _url.dispose();
-    super.dispose();
-  }
-
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
@@ -145,18 +137,10 @@ class _BackgroundControlsState extends State<_BackgroundControls> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        TextField(
-          controller: _url,
-          style: t.text.bodySmallStyle.copyWith(color: t.surface.onBase),
+        AssetField(
+          value: v.image ?? '',
           onChanged: (s) =>
-              widget.onChanged(v.copyWith(image: s.trim().isEmpty ? null : s)),
-          decoration: InputDecoration(
-            isDense: true,
-            border: const OutlineInputBorder(),
-            hintText: 'Image address',
-            hintStyle:
-                t.text.bodySmallStyle.copyWith(color: t.surface.onBaseMuted),
-          ),
+              widget.onChanged(v.copyWith(image: s.isEmpty ? null : s)),
         ),
         SizedBox(height: t.space.xs),
         _Slider(

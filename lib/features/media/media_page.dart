@@ -11,6 +11,7 @@ import '../../design/components/hc_now_playing.dart';
 import '../../design/tokens.dart';
 import '../../shared/widgets/section_group.dart';
 import '../../shared/widgets/section_scaffold.dart';
+import '../../core/providers/art_image_provider.dart';
 
 /// Media, as now-playing cards.
 ///
@@ -217,6 +218,7 @@ class _Card extends ConsumerWidget {
 
     return HcNowPlaying(
       device: lead,
+      artImage: ref.watch(artImageProvider),
       group: group,
       onPlayPause: can('play')
           ? () => notifier.command(lead.id, {

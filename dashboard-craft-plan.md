@@ -356,40 +356,363 @@ Better than the reference in three specific ways: no YAML, no SVG element IDs,
 and the markers are the same live controls as the rest of the app rather than a
 parallel rendering path that has to reimplement every device type.
 
-### 7.2 Honest cost
+### 7.2 The one principle: the plan is ground, the devices are figure
 
-This is the largest item here — a new element with its own editing mode
-(place/move markers), asset upload for the image, and a stored marker list. It
-should come **last**, after the card model in §2–§3 is right, because a floor
-plan is a selection of devices with positions, and if the selection model is
-still card-shaped it will be built twice.
+A floor plan with forty labelled boxes on it is a diagram, not a dashboard.
+Everything below follows from one decision:
 
----
+> **The image is background. The live state is the subject.**
 
-### 7.3 Deferred: somewhere to put a picture
+So the plan is dimmed and desaturated by default and the markers are the only
+saturated, moving, glowing things on it. This is the same reasoning the page
+background already uses — blur and dim are what make an image survivable behind
+live content — applied one level down. Get this wrong and it is a pretty
+picture you cannot read; get it right and a lit room is visible across a dark
+one at a glance, which is the brief's actual success metric.
 
-Both image controls — the card's and the page's — take a **URL**, because there
-is nowhere to put a file. Core stores dashboards, not assets. A URL on the LAN
-works today, and the stored shape (`image: "<url>"`) does not change when an
-upload replaces the control, so nothing here has to be redesigned for it.
+**Floor plans in the wild are black line art on white.** A CAD or estate-agent
+export dropped onto Midnight is a white slab with the house's state invisible on
+top of it. So the image needs **invert** as well as opacity — not a nicety, the
+difference between the feature working and not, for most images anyone will
+actually have.
 
-**What an upload needs**, so the size of it is on the record rather than
-discovered later:
+### 7.3 A marker is not a new kind of thing
 
-- `POST /assets` and `GET /assets/{id}` in core, with the bytes on disk beside
-  the dashboards rather than in redb — a 4MB photograph in a key-value store
-  is a 4MB read on every dashboard load.
-- A size cap and an allowed-type list, enforced server-side. "It is my own
-  house" is not a reason to accept an unbounded upload; a full disk stops the
-  house, not just the picture.
-- Deletion, or the assets outlive every page that referenced them. Reference
-  counting across dashboards is the awkward half — the simple answer is that
-  assets are never auto-deleted and there is a list you can prune.
-- The client picker, which is the small part.
+The temptation is to invent a "floor plan icon" with its own styling. It should
+instead be **what the device already is**, placed at a point:
 
-Worth doing, and not on the critical path: a background you can only set by
-URL is a background, and the same field accepts `/assets/abc123` on the day
-that endpoint exists.
+| Facet group | Marker |
+|---|---|
+| lights, switches, outlets, fans, covers, locks | icon dot — glows its own colour at its own brightness, tap toggles |
+| sensors — temperature, humidity, power | a reading, tabular, reserved width. The number *is* the marker |
+| media | icon dot, tap opens the sheet — a speaker has no single primary action |
+| scenes, buttons | icon dot, tap runs it |
+
+`TilePresentation` already makes exactly this decision for tiles, and reusing it
+means a floor plan needs no second opinion about what a device is, gets the
+`status_icon` override and the chosen icon set for free, and cannot drift from
+the rest of the app.
+
+**Tap is the primary action; press-and-hold is the tail.** Straight from the
+brief: *a device's primary action is one touch from the dashboard with no
+navigation*, and everything else is one layer down.
+
+### 7.4 A marker may be a selection, not only a device
+
+The best idea in this section, and it is free. Markers bind to the **selection
+object** built in §3 — a rule plus exceptions — so a marker can be:
+
+- one device (`manual`, one id), or
+- *the living room lights* (`facet: lights` + `area`), which glows if any are
+  on and toggles all of them.
+
+That is the honest 80% of room zones without any polygon geometry: you place
+one marker in the middle of a room and it speaks for the room. Zones — tapping
+an actual region — need per-room shapes and are deferred, not smuggled in.
+
+### 7.5 Placing them
+
+**Drag a device from the library onto the plan.** That already exists: the
+library has been individually draggable since phase 8 and the canvas already
+accepts a drop with coordinates. A drop on a floor plan card puts a marker
+where the pointer was.
+
+Coordinates are stored as a **fraction of the image**, never pixels, so a
+marker survives a resize, a zoom, and a breakpoint. This is the same reason
+placements are in cells rather than pixels.
+
+**The nested-editing problem, named.** The plan lives on a card, and on the
+canvas a drag moves the card. Dragging a marker and dragging its card are the
+same gesture on the same pixels, and guessing between them by hit-testing would
+be the kind of cleverness that is wrong 5% of the time and infuriating for it.
+See §7.7 — this is a real fork, not a detail.
+
+### 7.6 What it is made of
+
+```
+floor_plan card
+  image        url, fit, opacity, invert
+  markers      [ { selection, x, y, size?, label? } ]
+```
+
+A card rather than a page kind, because a card composes: place it 12×8 and it
+*is* the page; place it 6×4 beside a room list and it is a map next to a list;
+place two and you have upstairs and downstairs. A page kind would have to
+re-answer every question the grid has already answered.
+
+Full-bleed by default — `WidgetChrome.bleed` — since a floor plan with 16px of
+card padding around it is a floor plan in a frame.
+
+### 7.7 The three decisions, settled
+
+Decided by John, 2026-08-10.
+
+**1 · Marker editing is an explicit mode.** A button on the card enters plan
+editing: the grid goes inert, drags move markers, Escape leaves — the way
+entering a group works in a vector editor. The alternative was to infer intent
+from what the drag started on, and a gesture that guesses between "move this
+marker" and "move this whole card" is the kind of cleverness that is wrong five
+percent of the time and infuriating for it.
+
+**2 · The label is per marker.** Chosen against the recommendation, and the
+better call: the option that only a per-marker choice can express is a **custom**
+label. A marker reading *Sofa lamp* where the device is called
+`hue_light_3` is worth more than any global setting, and renaming the device
+itself would change it everywhere, which is not what you want when the plan
+wants a shorter word than the device list does.
+
+Default is **none**, so a plan does not start life as a word search, and the
+mixed-labels risk is a real one the designer can now simply see and fix.
+
+**3 · A sensor marker is its reading.** `22.4°`, not a thermometer. The icon
+tells you nothing you did not already know; the value is the entire reason the
+sensor is on the plan. Tabular figures and reserved width, because the brief is
+explicit that a live number must not move the layout around it.
+
+### 7.8 Three modes, not one
+
+John, 2026-08-10, on the 2D mockup: *"it's a good start. This is a great 2d
+basic option mode. Other modes should have much more visual flare, backgrounds,
+imports from sweet home 3d is the most active tool used for floor plans."*
+
+Right, and the research changes the design rather than adding to it.
+
+**Mode 1 · Image.** What §7.2–7.6 describe. Any picture — an SVG or PNG export,
+a photo, a drawing — dimmed and invertible, markers on top. Costs nothing but
+the marker work, needs no import machinery, and is the floor for someone who has
+a JPEG of a plan and nothing else.
+
+**Mode 2 · Rendered.** The same machinery with a *photorealistic* background:
+Sweet Home 3D renders top-down and perspective views to PNG/JPEG, and that is
+where the flare is. Identical code to mode 1 — the difference is entirely the
+picture — so it is free, and it looks like a different product. A perspective
+render needs markers placed by eye rather than by geometry, which is fine
+because that is how mode 1 places them anyway.
+
+**Mode 3 · Native.** `.sh3d` imported and **drawn by us**. This is the flagship
+and it is not a picture at all.
+
+### 7.9 What a `.sh3d` actually contains
+
+A `.sh3d` is a **ZIP** containing `Home.xml` against a published DTD
+(`SweetHome3D.dtd`; XML has been the primary representation since 5.3). The
+elements that matter:
+
+| Element | Attributes we want |
+|---|---|
+| `wall` | `xStart` `yStart` `xEnd` `yEnd` `thickness` `height` |
+| `room` | `name`, and `point` children with `x` `y` — **polygons** |
+| `light` | `name` `x` `y` `angle` `power`, and a `lightSource` child with `color` |
+| `pieceOfFurniture` | `name` `x` `y` `angle` `width` `depth` |
+| `level` | `id` `name` `elevation` — **storeys** |
+
+Four things fall out of that, and three of them were deferred as too expensive:
+
+1. **The plan becomes vector, drawn by the app.** Walls in `stroke.hairline`,
+   room fills in surface tints, everything on the skin's own palette. Sharp at
+   any zoom, invertible by construction rather than by filter, and it responds
+   to a skin change like everything else does. No image, no upload, no dimming a
+   photograph until it is legible.
+2. **Room polygons, free.** §7.4 called zones deferred and offered a
+   room-selection marker as the honest 80%. With a `.sh3d` the geometry is in
+   the file — tapping a room becomes possible for anyone who imports one, and
+   the marker stays the answer for anyone who does not.
+3. **Markers place themselves.** Every `<light>` has a position. Import drops a
+   candidate marker at each one, already inside a known room, so binding it is a
+   pick from *that room's* lights rather than from 188 devices. The tedious part
+   of the job disappears.
+4. **Multi-floor, from `level`.** Upstairs and downstairs arrive as two plans
+   rather than as two files someone has to make.
+
+**And the flare, which only this mode can do.** We know each light's position
+from the file, its colour from `lightSource`, and its live state from the house.
+So a lit room can spill light onto its own floor — the app's existing signature
+(`glowColor × brightness`, `glowRadius 34`) applied at room scale instead of
+tile scale. An image mode cannot do that at any budget; this one gets it almost
+for free, because the geometry is already there.
+
+**Mode 3 splits in two, and only half of it sidesteps §7.11.** Geometry is
+*data*, not a file: the `.sh3d` is parsed in the browser and the walls, rooms
+and lights are stored in the dashboard document. So the **vector** mode 3 — the
+one drawn in the skin's own palette — needs no upload and can ship before asset
+storage exists.
+
+The **textured** mode 3 cannot. John, 2026-08-10: *"files in the sweet home 3d
+archive are important to provide the fully rendered visuals."* He is right, and
+an earlier draft of this section elided it by calling the whole mode free of the
+dependency. The archive's JPEGs are what make a floor look like oak instead of
+like a fill; they are files, they cannot live in a dashboard document, and
+without them mode 3 is a good drawing rather than a render. That half waited on
+§7.11 — and it was §7.11's most demanding consumer, which is why that endpoint
+was designed around it. It is built now, so nothing here is blocked.
+
+**Keep the furniture.** An earlier draft of this section dropped it on import —
+"we want rooms, walls and lights, not a sofa" — and that was wrong. `x`, `y`,
+`angle`, `width` and `depth` are five numbers per piece, no more expensive than
+a wall, and the footprints are most of what makes the drawing read as a home
+rather than as a wireframe. It is the sofa that tells you which room you are
+looking at. Everything that is not a number is a *file*, and files now have
+somewhere to go: the archive's JPEG textures are uploaded to the asset store
+(§7.11) as one group, so they can be pruned with the plan they came from. The
+OBJ/MTL models stay out — they are 3D geometry for a 3D renderer, and a
+dashboard is not one. The stored geometry stays a few kilobytes either way.
+
+**Honest costs of mode 3.** Unzip and XML-parse in the client (`archive` plus an
+XML parser — no core work). A coordinate transform, since Sweet Home 3D works in
+centimetres with y increasing downward. And a name-matching decision: `<light
+name="Ceiling lamp">` will not match a device called `Overhead`, so import must
+place *unbound* markers and ask, rather than guessing and being quietly wrong
+about which lamp is which.
+
+**Modes 2 and 3 are not exclusive.** Export a *top-down* render from Sweet Home
+3D and import the same `.sh3d`: the picture is the background and the parsed
+geometry sits on it, registered, because both came from one file. Photographic
+floors *and* clickable rooms *and* markers the file placed. Only a top-down
+render registers — a perspective one is mode 2 and can never gain rooms, which
+is worth saying in the UI, because it is the one thing here that will surprise
+someone. This combination is free once modes 2 and 3 both exist, and it is the
+one to aim at; it inherits mode 2's need for somewhere to put the picture,
+which §7.11 now satisfies.
+
+### 7.10 Honest cost
+
+The largest item in this document, and the order matters.
+
+| Piece | Notes |
+|---|---|
+| the card, image, invert/opacity | small — a decoration and two controls |
+| markers, drawn from the selection object | reuses §3 and `TilePresentation` entirely |
+| **Edit plan** mode | the real work: a second interaction mode on the canvas, and the one thing here with no precedent in the app |
+| drop-to-place from the library | the plumbing exists; the drop target is new |
+| per-marker label, custom text | small once markers exist |
+
+**It goes last** because a marker is a selection with a position: build it
+before the selection object is right and it gets built twice. That object is now
+right, so this is unblocked.
+
+**No longer needs a URL for the image.** §7.11 is built: the same field takes a
+file, and the address it stores is the same string it always was.
+
+**Not in scope, deliberately:** room polygons (a marker bound to a room
+selection is the honest 80%), multi-floor navigation (two cards, or two pages),
+and reaching inside the SVG (we never do — which is why the SVG needs no
+special authoring, and the whole reason this is not the reference
+implementation's design).
+
+### 7.11 Asset storage — **built**, on develop, unreleased
+
+This began as a note at the end of the floor plan section. It was not a
+footnote: six features were waiting on it, and I wrote the same apology beside
+each of them one at a time without noticing I had written it six times. John
+saw it in one question — *"that seems like a dependency that other pieces also
+depend on correct?"* — and it is now built.
+
+| Feature | Where the address is stored | Status |
+|---|---|---|
+| Card background picture | dashboard doc, `style.image` | **picker** |
+| Page background picture | dashboard doc, `background.image` | **picker** |
+| `image` widget | dashboard doc, widget config `url` | **picker** |
+| Custom fonts (§6.2) | skin doc, `font.<Family>` override | **picker** |
+| Custom icon sets (§6.2) | skin doc — needs a codepoint map, not just a host | still not built |
+| Floor plan modes 1 and 2 (§7) | dashboard doc | unblocked |
+| Floor plan mode 3, textured (§7.9) | the `.sh3d`'s own JPEGs | unblocked |
+
+Every one of them stores only a string and resolves it in the browser; core
+never fetches it. That is why an endpoint returning `/assets/…` dropped into
+all of them **without changing a single stored shape** — a dashboard saved
+before this and one saved with the picker are indistinguishable, and there was
+no migration.
+
+Custom icon sets are the one that did not come free, and the reason is the one
+already written in `icon_sets.dart`: a font gives you glyphs, not a
+facet→codepoint map, and no font carries that metadata. Hosting was never its
+blocker.
+
+#### What was built
+
+- **Content-addressed.** The id is the sha256 of the bytes, so writes are
+  idempotent, the caller cannot choose an address, and the address is
+  unguessable. All three matter; the third most of all, below.
+- **Bytes on disk**, under `<parent-of-state_db_path>/assets`, sharded by the
+  first two hex characters, metadata in redb. The path is derived rather than
+  configured, like `jwt_secret_file` and `audit.db`, which kept the change off
+  the 13 call sites of `StateStore::open`.
+- **`GET /assets/{id}` is public.** A browser sends no `Authorization` header
+  on an `<img>`, a CSS background or a font, and core takes a Bearer token or a
+  whitelisted source IP and nothing else. Probed against the live house:
+  `/api/v1/devices` answers **200 on :8080 and 401 at :3001**. An authenticated
+  read would have meant every wallpaper worked at home and vanished through the
+  front door. The content hash stands in for the token. Writes, the listing and
+  deletion stay authenticated — the listing especially, since it is the only
+  thing that would turn an unguessable id into a guessable one.
+- **Guards:** a 16MB cap, an allow-list of picture and font types, an id
+  validated as 64 lowercase hex *before* it can become a path, `nosniff` and a
+  restrictive CSP so accepting SVG is safe, and immutable caching, which the
+  content address makes true.
+- **Groups**, so one import prunes together. Nothing reference-counts and
+  nothing auto-deletes.
+- **One picker** (`AssetField`) in all four fields. The `image` widget needed a
+  new config kind rather than reusing `url`: a camera points at a stream and an
+  embed at a page, and neither is a file you could choose from disk.
+- **A manager** at `/admin/files` — what is stored, what it costs, and what
+  would break. Usage is a text search over the documents the client already
+  holds, which finds every reference without knowing any of them.
+
+#### Why it was designed against the archive rather than the file picker
+
+Kept because it is the reason the endpoint has the shape it has. The `.sh3d`
+case is not a bigger version of "someone chooses a PNG for a card" — it differs
+in kind, and it was the only consumer that forced the hard questions:
+
+- **It is a batch.** One import writes tens of textures at once, chosen by the
+  machine, not by a person. A picker-shaped API gets retrofitted badly for it.
+- **The bytes are already in hand.** We unzip in the browser, so this is not
+  upload-from-disk; it is *"store these bytes I am holding and give me back
+  addresses."* The picker is the easy subset of that, not the other way round.
+- **It is content-addressable.** The same oak texture repeats across rooms.
+  Hashing dedupes a lot of it, and gives the id for free.
+- **It has a lifecycle.** Delete the plan and its textures should go with it. No
+  other consumer raises that question, so no other consumer would have made us
+  answer it before shipping the endpoint.
+
+Every one of those four is answered by content-addressing plus a group, which
+is why the batch case being the design target cost nothing: an import hands
+over every texture and lets core work out which are new, and the single-file
+picker falls out as the easy subset. Designed the other way round it would have
+needed retrofitting.
+
+#### What is deliberately absent
+
+**No reference counting.** It is the half that deletes something still in use
+the moment the count is wrong, and a house that loses a wallpaper because a
+page was mid-save has traded a nuisance for a real problem. Instead nothing is
+ever removed automatically, and the manager answers *what would I break?* at
+the moment someone is looking. A deleted asset is a missing picture, exactly as
+a stale URL has always been.
+
+One consequence worth stating: **a group delete can take an asset another page
+uses**, because the same bytes uploaded twice are one asset and the first
+record's group wins. Same class of consequence as deleting one directly, and
+the manager shows it before you confirm.
+
+#### Two things this arc surfaced
+
+**Custom fonts were blocked twice.** `FontRegistry.fetch` was injected so tests
+could not reach the network, and nothing outside the tests ever injected
+anything — so every custom font silently failed to load from 0.1.36 until it
+was fixed. Worth recording because it is the failure mode this whole section
+invites: a feature that looks shipped, stores the right string, and does
+nothing.
+
+**Album art was broken through the front door** for the same underlying reason
+and is fixed the other way. It loaded `/devices/{id}/media/art` with
+`Image.network` against a protected route, so it worked on the LAN via the IP
+whitelist and 401'd at :3001 — and a 401 there draws the "no artwork" fallback,
+so it read as a speaker with no cover rather than as a failure. It now fetches
+through the authenticated client. The public-read reasoning deliberately does
+**not** transfer: a device id is short, meaningful and enumerable, so a public
+art proxy would let an unauthenticated caller walk the house and see what is
+playing. Unguessability is the whole of what makes an asset safe to serve.
 
 ---
 
@@ -409,13 +732,22 @@ Each step is usable alone; none leaves the designer worse.
 8. **Per-device icon** (§6.1). One core field.
 9. **Fonts and icon sets in the skin** (§6.2). Largest of the identity items;
    the theme editor already has the shape for it.
-10. **Floor plan** (§7).
-11. **Asset upload** (§7.3) — deferred, not forgotten. Both image fields take a
-    URL until it exists and neither changes shape when it does.
+10. ~~**Asset storage** (§7.11).~~ **Done**, on develop, unreleased: core
+    endpoints, the picker in four fields, and a manager at `/admin/files`. It
+    was last in this list while it looked like a floor-plan footnote; it turned
+    out to gate six features and was moved up, then built.
+11. **Floor plan** (§7), in mode order — **now the front of the queue**. Mode 1
+    is the foundation and has its picture. Mode 3's vector half needs nothing
+    and can be built in parallel; its textured half has what it needs too.
 
 **Core changes needed:** selection `add`/`remove` (§3.1),
 `DashboardDefinition.background` (§5.3), `device.ui_icon` (§6.1). Three fields
 and three validators — the same size as the two the designer arc needed.
+
+Plus one that was not a field: **asset storage** (§7.11) — an endpoint, a place
+on disk and a deletion story rather than a line in a struct. The only item here
+core could not absorb as a validator, and the one six client features were
+waiting on. Built.
 
 ---
 

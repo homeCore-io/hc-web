@@ -10,6 +10,7 @@ import '../../design/hc_icons.dart';
 import '../../design/tokens.dart';
 import '../devices/device_sheet.dart';
 import 'home_edit_button.dart';
+import '../../core/providers/art_image_provider.dart';
 
 /// The domain-rich cards the house shows for the two device kinds an on/off tile
 /// cannot do justice: a speaker and a thermostat. Both are wired straight to the
@@ -47,6 +48,7 @@ class HomeMediaCard extends ConsumerWidget {
         children: [
           HcNowPlaying(
             device: device,
+            artImage: ref.watch(artImageProvider),
             onPlayPause: can('play')
                 ? () => notifier.command(device.id, {
                       'action':

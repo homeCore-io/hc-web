@@ -1621,7 +1621,7 @@ void registerBuiltinDashboardWidgets() {
       // card padding around it reads as a mistake, and the frame is the card.
       chrome: WidgetChrome.bleed,
       configFields: const [
-        WidgetConfigField('url', WidgetConfigKind.url, required: true),
+        WidgetConfigField('url', WidgetConfigKind.image, required: true),
         WidgetConfigField('fit', WidgetConfigKind.choice,
             defaultValue: 'cover', options: ['cover', 'contain', 'fill']),
       ],

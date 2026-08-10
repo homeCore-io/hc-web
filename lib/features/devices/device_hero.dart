@@ -13,6 +13,7 @@ import '../../design/components/hc_history_chart.dart';
 import '../../design/components/hc_now_playing.dart';
 import '../../design/tokens.dart';
 import 'color_light_controls.dart';
+import '../../core/providers/art_image_provider.dart';
 
 /// The one thing a device is *for*, given the room to be it.
 ///
@@ -56,6 +57,7 @@ class DeviceHero extends ConsumerWidget {
         _ScreenHero(device: device),
       DeviceFacet.mediaPlayer => HcNowPlaying(
           device: device,
+          artImage: ref.watch(artImageProvider),
           onPlayPause: () => notifier.command(device.id, {
             'action': device.playbackState == 'playing' ? 'pause' : 'play',
           }),
