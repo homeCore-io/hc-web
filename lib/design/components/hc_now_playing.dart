@@ -31,9 +31,19 @@ class HcNowPlaying extends StatelessWidget {
     this.onPrevious,
     this.onVolume,
     this.onSeek,
+    this.artImage,
   });
 
   final DeviceState device;
+
+  /// How to load a device's artwork, given its id.
+  ///
+  /// Passed in rather than built here, because core's art proxy is
+  /// authenticated and a token has no business in the design layer. Left null
+  /// the card falls back to a plain browser load, which is what it always did
+  /// — correct on a whitelisted LAN address and a silent 401 through nginx.
+  /// `HomecoreImage.art` is the one to pass.
+  final ImageProvider Function(String deviceId)? artImage;
 
   /// The other speakers in this group, if any. The card only renders the group
   /// when there is one — a single speaker gets no empty section.
@@ -51,6 +61,8 @@ class HcNowPlaying extends StatelessWidget {
 
   /// Core proxies the artwork so a browser can actually load it.
   String get _artUrl => '/api/v1/devices/${device.id}/media/art';
+
+  ImageProvider get _art => artImage?.call(device.id) ?? NetworkImage(_artUrl);
 
   @override
   Widget build(BuildContext context) {
@@ -89,7 +101,7 @@ class HcNowPlaying extends StatelessWidget {
           // The bloom. It is the artwork, scaled up and blurred to nothing but
           // its colour — so the card is *of* the record, not merely next to it.
           Positioned.fill(
-            child: _ArtBloom(url: _artUrl, key: ValueKey(_artUrl)),
+            child: _ArtBloom(image: _art, key: ValueKey(_artUrl)),
           ),
           // Without this scrim the text would be illegible over a bright cover.
           Positioned.fill(
@@ -115,7 +127,7 @@ class HcNowPlaying extends StatelessWidget {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _Cover(url: _artUrl),
+                    _Cover(image: _art),
                     SizedBox(width: t.space.lg),
                     Expanded(
                       child: Column(
@@ -210,16 +222,16 @@ class HcNowPlaying extends StatelessWidget {
 
 /// The artwork, blurred until it is only colour.
 class _ArtBloom extends StatelessWidget {
-  const _ArtBloom({super.key, required this.url});
+  const _ArtBloom({super.key, required this.image});
 
-  final String url;
+  final ImageProvider image;
 
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
 
-    return Image.network(
-      url,
+    return Image(
+      image: image,
       fit: BoxFit.cover,
       // No artwork is normal — a radio stream, a paused speaker. Fall back to the
       // ordinary surface rather than showing a broken image.
@@ -301,9 +313,9 @@ class _IdleSpeaker extends StatelessWidget {
 }
 
 class _Cover extends StatelessWidget {
-  const _Cover({required this.url});
+  const _Cover({required this.image});
 
-  final String url;
+  final ImageProvider image;
 
   @override
   Widget build(BuildContext context) {
@@ -321,8 +333,8 @@ class _Cover extends StatelessWidget {
         boxShadow: t.elevation.overlay,
       ),
       clipBehavior: Clip.antiAlias,
-      child: Image.network(
-        url,
+      child: Image(
+        image: image,
         fit: BoxFit.cover,
         errorBuilder: (_, __, ___) => Center(
           child: Icon(
