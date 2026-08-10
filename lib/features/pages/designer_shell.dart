@@ -9,6 +9,7 @@ import 'breakpoint_bar.dart';
 import 'card_inspector.dart';
 import 'card_library.dart';
 import 'page_inspector.dart';
+import 'page_background.dart';
 import 'page_layers.dart';
 import 'scaled_canvas.dart';
 
@@ -64,6 +65,7 @@ class DesignerShell extends StatefulWidget {
     required this.canUndo,
     required this.undoLabel,
     required this.onUndo,
+    required this.onBackgroundChanged,
   });
 
   final DashboardDefinition dashboard;
@@ -107,6 +109,9 @@ class DesignerShell extends StatefulWidget {
   /// What pressing it will undo, for the tooltip. Null when there is nothing.
   final String? undoLabel;
   final VoidCallback onUndo;
+
+  /// What the page sits on.
+  final ValueChanged<DashboardBackground> onBackgroundChanged;
 
   /// Fixed, because the frame is fixed. Panes that resized themselves would
   /// make the canvas scale jump while you worked in it.
@@ -242,39 +247,45 @@ class _DesignerShellState extends State<DesignerShell> {
                     Expanded(
                       child: Container(
                         color: t.surface.sunken,
-                        // Two scrollers, because zoom has two directions. The
-                        // canvas draws the layout at the width that breakpoint
-                        // really has — 1600 for desktop — which the middle pane
-                        // is nowhere near once two panels take their 600; and
-                        // above Fit it is wider still. Vertical alone would
-                        // strand the right-hand edge of the page off-screen
-                        // with no way to reach it.
-                        // Both bars always drawn, both reachable.
-                        //
-                        // The nesting alone was not enough: Flutter web draws
-                        // no scrollbar for an unmanaged scroll view, and a
-                        // mouse wheel only ever reaches the vertical one — so
-                        // at any zoom where the canvas is wider than the pane,
-                        // the right-hand side of the page existed and could not
-                        // be got to. `ScaledCanvas` made the extent honest,
-                        // which is precisely what turned a slightly clipped
-                        // card into unreachable content.
-                        child: Scrollbar(
-                          controller: _vertical,
-                          thumbVisibility: true,
-                          child: SingleChildScrollView(
+                        // The page's own background, behind the canvas: you are
+                        // arranging cards *on* it, so it has to be visible
+                        // while you arrange them.
+                        child: PageBackground(
+                          background: widget.dashboard.background,
+                          // Two scrollers, because zoom has two directions. The
+                          // canvas draws the layout at the width that breakpoint
+                          // really has — 1600 for desktop — which the middle pane
+                          // is nowhere near once two panels take their 600; and
+                          // above Fit it is wider still. Vertical alone would
+                          // strand the right-hand edge of the page off-screen
+                          // with no way to reach it.
+                          // Both bars always drawn, both reachable.
+                          //
+                          // The nesting alone was not enough: Flutter web draws
+                          // no scrollbar for an unmanaged scroll view, and a
+                          // mouse wheel only ever reaches the vertical one — so
+                          // at any zoom where the canvas is wider than the pane,
+                          // the right-hand side of the page existed and could not
+                          // be got to. `ScaledCanvas` made the extent honest,
+                          // which is precisely what turned a slightly clipped
+                          // card into unreachable content.
+                          child: Scrollbar(
                             controller: _vertical,
-                            padding: EdgeInsets.all(t.space.lg),
-                            child: Scrollbar(
-                              controller: _horizontal,
-                              thumbVisibility: true,
-                              child: SingleChildScrollView(
+                            thumbVisibility: true,
+                            child: SingleChildScrollView(
+                              controller: _vertical,
+                              padding: EdgeInsets.all(t.space.lg),
+                              child: Scrollbar(
                                 controller: _horizontal,
-                                scrollDirection: Axis.horizontal,
-                                child: ScaledCanvas(
-                                  scale: scale,
-                                  child: SizedBox(
-                                      width: width, child: widget.canvas),
+                                thumbVisibility: true,
+                                child: SingleChildScrollView(
+                                  controller: _horizontal,
+                                  scrollDirection: Axis.horizontal,
+                                  child: ScaledCanvas(
+                                    scale: scale,
+                                    child: SizedBox(
+                                        width: width, child: widget.canvas),
+                                  ),
                                 ),
                               ),
                             ),
@@ -297,6 +308,7 @@ class _DesignerShellState extends State<DesignerShell> {
                                   .firstOrNull,
                               cardCount: widget.cardCount,
                               onFlowChanged: widget.onFlowChanged,
+                              onBackgroundChanged: widget.onBackgroundChanged,
                             )
                           : CardInspector(
                               model: widget.selected!,

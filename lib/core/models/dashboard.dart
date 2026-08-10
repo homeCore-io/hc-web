@@ -354,6 +354,9 @@ class DashboardDefinition {
   final List<DashboardLayout> layouts;
   final List<DashboardWidgetModel> widgets;
 
+  /// What the page sits on. Null is every dashboard saved before there was one.
+  final DashboardBackground? background;
+
   const DashboardDefinition({
     required this.id,
     required this.name,
@@ -367,6 +370,7 @@ class DashboardDefinition {
     required this.updatedAt,
     required this.layouts,
     required this.widgets,
+    this.background,
   });
 
   DashboardDefinition copyWith({
@@ -382,6 +386,7 @@ class DashboardDefinition {
     DateTime? updatedAt,
     List<DashboardLayout>? layouts,
     List<DashboardWidgetModel>? widgets,
+    DashboardBackground? background,
   }) {
     return DashboardDefinition(
       id: id ?? this.id,
@@ -396,6 +401,7 @@ class DashboardDefinition {
       updatedAt: updatedAt ?? this.updatedAt,
       layouts: layouts ?? this.layouts,
       widgets: widgets ?? this.widgets,
+      background: background ?? this.background,
     );
   }
 
@@ -426,6 +432,9 @@ class DashboardDefinition {
         'updated_at': updatedAt.toUtc().toIso8601String(),
         'layouts': layouts.map((layout) => layout.toJson()).toList(),
         'widgets': widgets.map((widget) => widget.toJson()).toList(),
+        // Omitted when there is none, so a dashboard that never had a
+        // background round-trips byte-identically.
+        if (background != null) 'background': background!.toJson(),
       };
 
   factory DashboardDefinition.fromJson(Map<String, dynamic> json) =>
@@ -457,8 +466,73 @@ class DashboardDefinition {
             .map((item) =>
                 DashboardWidgetModel.fromJson(Map<String, dynamic>.from(item)))
             .toList(),
+        background: json['background'] is Map
+            ? DashboardBackground.fromJson(
+                Map<String, dynamic>.from(json['background'] as Map))
+            : null,
       );
 }
+
+/// What a page sits on.
+///
+/// [blur] and [dim] are not decoration. An unblurred photograph destroys the
+/// legibility of everything on top of it, so a background that offered an image
+/// without them would offer a page you cannot read.
+///
+/// Clamped on the way in rather than trusted: core validates its own ranges,
+/// but a document can arrive from an import or a hand edit, and a dim of 4 is
+/// a black page.
+class DashboardBackground {
+  const DashboardBackground({this.image, this.blur = 0, this.dim = 0});
+
+  /// A URL the browser can reach. Core stores it and never fetches it.
+  final String? image;
+
+  /// 0–40. Frosts the image, not the cards on top of it.
+  final double blur;
+
+  /// 0–1. Darkens the image so text keeps its contrast.
+  final double dim;
+
+  bool get isEmpty => (image ?? '').trim().isEmpty;
+
+  DashboardBackground copyWith({
+    Object? image = _keepBackground,
+    double? blur,
+    double? dim,
+  }) =>
+      DashboardBackground(
+        image:
+            identical(image, _keepBackground) ? this.image : image as String?,
+        blur: blur ?? this.blur,
+        dim: dim ?? this.dim,
+      );
+
+  Map<String, dynamic> toJson() => {
+        if ((image ?? '').isNotEmpty) 'image': image,
+        'blur': blur,
+        'dim': dim,
+      };
+
+  factory DashboardBackground.fromJson(Map<String, dynamic> json) =>
+      DashboardBackground(
+        image: json['image'] as String?,
+        blur: ((json['blur'] as num?) ?? 0).toDouble().clamp(0.0, 40.0),
+        dim: ((json['dim'] as num?) ?? 0).toDouble().clamp(0.0, 1.0),
+      );
+
+  @override
+  bool operator ==(Object other) =>
+      other is DashboardBackground &&
+      other.image == image &&
+      other.blur == blur &&
+      other.dim == dim;
+
+  @override
+  int get hashCode => Object.hash(image, blur, dim);
+}
+
+const Object _keepBackground = Object();
 
 DashboardBreakpoint dashboardBreakpointForWidth(double width) {
   if (width < 600) return DashboardBreakpoint.mobile;

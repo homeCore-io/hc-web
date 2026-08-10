@@ -59,6 +59,7 @@ class _Snapshot {
     required this.touched,
     required this.contentDirty,
     required this.selected,
+    required this.background,
   });
 
   /// What the *next* action was, so the button can name what it will undo.
@@ -73,6 +74,7 @@ class _Snapshot {
   /// Which card was in the inspector. Undo puts you back where you were, and
   /// where you were includes what you were looking at.
   final String? selected;
+  final DashboardBackground? background;
 }
 
 class _PageScreenState extends ConsumerState<PageScreen> {
@@ -141,6 +143,9 @@ class _PageScreenState extends ConsumerState<PageScreen> {
   /// indicator read [_touched], so changing a card's room in the inspector left
   /// the bar saying **Saved** while the change sat unsaved in the draft.
   bool _contentDirty = false;
+
+  /// The page's background, while it is being edited. Null means "as saved".
+  DashboardBackground? _draftBackground;
 
   /// Undo, as a stack of draft snapshots.
   ///
@@ -257,6 +262,8 @@ class _PageScreenState extends ConsumerState<PageScreen> {
       _editingBreakpoint = breakpoint;
       _touched.clear();
       _contentDirty = false;
+      _draftBackground = null;
+      _undo.clear();
       _pendingPlacement.clear();
       _settled.clear();
     });
@@ -317,6 +324,7 @@ class _PageScreenState extends ConsumerState<PageScreen> {
       touched: Set<DashboardBreakpoint>.of(_touched),
       contentDirty: _contentDirty,
       selected: _selectedCard,
+      background: _draftBackground,
     ));
     if (_undo.length > _undoDepth) _undo.removeAt(0);
   }
@@ -332,6 +340,7 @@ class _PageScreenState extends ConsumerState<PageScreen> {
         ..clear()
         ..addAll(snap.touched);
       _contentDirty = snap.contentDirty;
+      _draftBackground = snap.background;
       // Restored too, but only if it survived — a snapshot taken before a card
       // was added has no such card to select.
       _selectedCard =
@@ -814,6 +823,7 @@ class _PageScreenState extends ConsumerState<PageScreen> {
       final next = d.copyWith(
         widgets: widgets,
         layouts: _draftLayouts,
+        background: _draftBackground,
         updatedAt: DateTime.now(),
       );
       await ref.read(dashboardsProvider.notifier).updateDashboard(next);
@@ -955,7 +965,11 @@ class _PageScreenState extends ConsumerState<PageScreen> {
 
         if (widget.designer) {
           return DesignerShell(
-            dashboard: dashboard,
+            // The draft's background, so the canvas shows what you are typing
+            // rather than what was last saved.
+            dashboard: _draftBackground == null
+                ? dashboard
+                : dashboard.copyWith(background: _draftBackground),
             breakpoint: breakpoint,
             layouts: _draftLayouts,
             source: source,
@@ -1010,6 +1024,13 @@ class _PageScreenState extends ConsumerState<PageScreen> {
                   columns,
                   byHand: true,
                   label: align.label);
+            },
+            onBackgroundChanged: (next) {
+              _pushUndo('Change the background', coalesce: 'background');
+              setState(() {
+                _draftBackground = next;
+                _contentDirty = true;
+              });
             },
             canUndo: _undo.isNotEmpty,
             undoLabel: _undo.isEmpty ? null : _undo.last.label,
