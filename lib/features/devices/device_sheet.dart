@@ -561,6 +561,9 @@ class _InfoTabState extends ConsumerState<_InfoTab> {
   final _name = TextEditingController();
   final _area = TextEditingController();
 
+  /// The chosen icon while editing, or null for "whatever the device is".
+  DeviceFacet? _icon;
+
   DeviceState get _d => widget.device;
 
   @override
@@ -578,6 +581,7 @@ class _InfoTabState extends ConsumerState<_InfoTab> {
         _error = null;
         _name.text = _d.displayName;
         _area.text = _currentArea;
+        _icon = deviceIconOverride(_d);
       });
 
   Future<void> _save() async {
@@ -591,6 +595,10 @@ class _InfoTabState extends ConsumerState<_InfoTab> {
     if (name != _d.displayName) body['name'] = name;
     if (areaText != _currentArea) {
       body['area'] = areaText.isEmpty ? null : areaText;
+    }
+    // Null clears it, which is how you get back to the device's own icon.
+    if (_icon != deviceIconOverride(_d)) {
+      body['status_icon'] = _icon?.iconKey;
     }
     if (body.isEmpty) {
       setState(() => _editing = false);
@@ -807,6 +815,24 @@ class _InfoTabState extends ConsumerState<_InfoTab> {
               ],
             ),
           ],
+          SizedBox(height: t.space.md),
+          Text('ICON',
+              style:
+                  t.text.overlineStyle.copyWith(color: t.surface.onBaseMuted)),
+          SizedBox(height: t.space.xs),
+          Text(
+            "The picture only. What the device *is* — and so what it lets you "
+            'do — is set by its type, not by this.',
+            style: t.text.captionStyle
+                .copyWith(color: t.surface.onBaseMuted, height: 1.4),
+          ),
+          SizedBox(height: t.space.xs),
+          _IconPicker(
+            value: _icon,
+            fallback: facetOf(_d, _d.schema),
+            enabled: !_busy,
+            onChanged: (f) => setState(() => _icon = f),
+          ),
           if (_error != null) ...[
             SizedBox(height: t.space.sm),
             Text(_error!,
@@ -1268,4 +1294,75 @@ String _readingValue(DeviceState d, String key, Object? value) {
     return '${_readable(value)}°${u is String && u.isNotEmpty ? u : ''}';
   }
   return '${_readable(value)}${_unit(key)}';
+}
+
+/// The icons a device can wear.
+///
+/// Drawn from the facets, so every option already has artwork the skin reaches
+/// — there is no second icon set to keep in step, and adding a facet adds an
+/// option for free.
+///
+/// The first entry is *not* an icon: it is "whatever the device is", which is
+/// the state every device starts in and the one you need a way back to.
+class _IconPicker extends StatelessWidget {
+  const _IconPicker({
+    required this.value,
+    required this.fallback,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  final DeviceFacet? value;
+
+  /// What the device would show with no override, so "Automatic" can show it
+  /// rather than a question mark.
+  final DeviceFacet fallback;
+  final bool enabled;
+  final ValueChanged<DeviceFacet?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+
+    Widget cell(DeviceFacet? facet, IconData icon, String tooltip) {
+      final chosen = facet == value;
+      return Tooltip(
+        message: tooltip,
+        child: Semantics(
+          button: true,
+          selected: chosen,
+          label: tooltip,
+          child: GestureDetector(
+            onTap: enabled ? () => onChanged(facet) : null,
+            child: Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: chosen ? t.surface.raised : null,
+                borderRadius: BorderRadius.circular(t.radius.sm),
+                border: Border.all(
+                  color: chosen ? t.accent.active : t.stroke.hairline,
+                  width: t.stroke.width,
+                ),
+              ),
+              child: Icon(icon,
+                  size: 18,
+                  color: chosen ? t.accent.active : t.surface.onBaseMuted),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Wrap(
+      spacing: t.space.xs,
+      runSpacing: t.space.xs,
+      children: [
+        cell(null, HcIcons.forFacet(fallback), 'Automatic'),
+        for (final facet in DeviceFacet.values)
+          if (facet != DeviceFacet.unknown)
+            cell(facet, HcIcons.forFacet(facet), humanize(facet.iconKey)),
+      ],
+    );
+  }
 }

@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../../core/models/skin_document.dart';
+import '../../core/devices/presentation.dart';
 import '../../design/hc_icons.dart';
+import '../../design/icon_sets.dart';
+import '../../design/font_registry.dart';
 import '../../design/skin_catalogue.dart';
 import '../../design/tokens.dart';
 
@@ -119,6 +122,18 @@ class _SkinAdvancedState extends State<SkinAdvanced> {
                   .copyWith(color: t.surface.onBaseMuted, height: 1.4),
             ),
           ),
+          _IconSetPicker(
+            value: widget.overrides[iconSetOverrideKey] ??
+                IconSets.builtIn.first.key,
+            onChanged: (key) => key == IconSets.builtIn.first.key
+                ? _reset(iconSetOverrideKey)
+                : _set(iconSetOverrideKey, key),
+          ),
+          _Fonts(
+            fonts: fontsFromOverrides(widget.overrides),
+            onAdd: (family, url) => _set('$fontOverridePrefix$family', url),
+            onRemove: (family) => _reset('$fontOverridePrefix$family'),
+          ),
           for (final group in _groups())
             _Group(
               label: group,
@@ -224,14 +239,17 @@ class _RowState extends State<_Row> {
     super.dispose();
   }
 
-  bool _valid(String raw) => widget.token.kind == TokenKind.colour
-      ? parseSkinColour(raw.trim()) != null
-      : double.tryParse(raw.trim()) != null;
+  bool _valid(String raw) => switch (widget.token.kind) {
+        TokenKind.colour => parseSkinColour(raw.trim()) != null,
+        TokenKind.family => FontRegistry.instance.has(raw.trim()),
+        TokenKind.number => double.tryParse(raw.trim()) != null,
+      };
 
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
     final isColour = widget.token.kind == TokenKind.colour;
+    final isFamily = widget.token.kind == TokenKind.family;
 
     return Padding(
       padding: EdgeInsets.only(bottom: t.space.sm),
@@ -293,31 +311,58 @@ class _RowState extends State<_Row> {
                 ),
                 SizedBox(width: t.space.xs),
               ],
-              Expanded(
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: t.surface.sunken,
-                    borderRadius: BorderRadius.circular(t.radius.xs),
-                    border: Border.all(
-                        color: _bad ? t.accent.danger : t.stroke.hairline,
-                        width: t.stroke.width),
-                  ),
-                  padding: EdgeInsets.symmetric(horizontal: t.space.xs),
-                  child: TextField(
-                    controller: _c,
+              if (isFamily)
+                // A list, not a field. A name the app does not have falls back
+                // to the engine's own face and sends glyph fallback to a CDN,
+                // so the control cannot be one that lets you type it.
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    initialValue: FontRegistry.instance.has('${widget.current}')
+                        ? '${widget.current}'
+                        : null,
+                    isExpanded: true,
+                    isDense: true,
                     style: t.text
                         .resolve(t.text.caption, mono: true)
                         .copyWith(color: t.surface.onBase),
                     decoration: const InputDecoration(
                         isDense: true, border: InputBorder.none),
-                    onChanged: (raw) {
-                      final ok = _valid(raw);
-                      setState(() => _bad = !ok);
-                      if (ok) widget.onSet(raw.trim());
-                    },
+                    items: [
+                      for (final family in FontRegistry.instance.available)
+                        DropdownMenuItem(
+                            value: family,
+                            child: Text(family,
+                                style: TextStyle(fontFamily: family))),
+                    ],
+                    onChanged: (v) => v == null ? null : widget.onSet(v),
+                  ),
+                )
+              else
+                Expanded(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: t.surface.sunken,
+                      borderRadius: BorderRadius.circular(t.radius.xs),
+                      border: Border.all(
+                          color: _bad ? t.accent.danger : t.stroke.hairline,
+                          width: t.stroke.width),
+                    ),
+                    padding: EdgeInsets.symmetric(horizontal: t.space.xs),
+                    child: TextField(
+                      controller: _c,
+                      style: t.text
+                          .resolve(t.text.caption, mono: true)
+                          .copyWith(color: t.surface.onBase),
+                      decoration: const InputDecoration(
+                          isDense: true, border: InputBorder.none),
+                      onChanged: (raw) {
+                        final ok = _valid(raw);
+                        setState(() => _bad = !ok);
+                        if (ok) widget.onSet(raw.trim());
+                      },
+                    ),
                   ),
                 ),
-              ),
             ],
           ),
           SizedBox(height: t.space.xs / 2),
@@ -333,6 +378,226 @@ class _RowState extends State<_Row> {
             'from ${widget.token.derivedFrom}',
             style: t.text.captionStyle
                 .copyWith(color: t.surface.onBaseMuted, height: 1.35),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The fonts this skin brings with it.
+///
+/// At the top of the panel because the family picker below is a dead control
+/// until something is in here: the app ships two faces, and the whole point of
+/// the ask was the third.
+///
+/// A family plus an address. There is nowhere to upload a file yet — core
+/// stores skins, not assets — so this is the same trade the pictures make, and
+/// the same field accepts an `/assets/…` path on the day that exists.
+class _Fonts extends StatefulWidget {
+  const _Fonts({
+    required this.fonts,
+    required this.onAdd,
+    required this.onRemove,
+  });
+
+  final Map<String, String> fonts;
+  final void Function(String family, String url) onAdd;
+  final ValueChanged<String> onRemove;
+
+  @override
+  State<_Fonts> createState() => _FontsState();
+}
+
+class _FontsState extends State<_Fonts> {
+  final _family = TextEditingController();
+  final _url = TextEditingController();
+  String? _note;
+
+  @override
+  void dispose() {
+    _family.dispose();
+    _url.dispose();
+    super.dispose();
+  }
+
+  Future<void> _add() async {
+    final family = _family.text.trim();
+    final url = _url.text.trim();
+    if (family.isEmpty || url.isEmpty) return;
+    // Loaded before it is stored. A skin carrying a font nobody can fetch is a
+    // skin whose type controls quietly do nothing, and finding that out later
+    // is worse than being told now.
+    final ok = await FontRegistry.instance.register(family, url);
+    if (!mounted) return;
+    setState(() => _note = ok ? null : 'That did not load as a font.');
+    if (ok) {
+      widget.onAdd(family, url);
+      _family.clear();
+      _url.clear();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Padding(
+      padding: EdgeInsets.only(bottom: t.space.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('FONTS',
+              style:
+                  t.text.overlineStyle.copyWith(color: t.surface.onBaseMuted)),
+          SizedBox(height: t.space.xs),
+          for (final font in widget.fonts.entries)
+            Padding(
+              padding: EdgeInsets.only(bottom: t.space.xs / 2),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(font.key,
+                        style: t.text.bodySmallStyle.copyWith(
+                            color: t.surface.onBase, fontFamily: font.key)),
+                  ),
+                  if (!FontRegistry.instance.has(font.key))
+                    Padding(
+                      padding: EdgeInsets.only(right: t.space.xs),
+                      child: Text('not loaded',
+                          style: t.text.captionStyle
+                              .copyWith(color: t.accent.danger)),
+                    ),
+                  Semantics(
+                    button: true,
+                    label: 'Remove ${font.key}',
+                    child: GestureDetector(
+                      onTap: () => widget.onRemove(font.key),
+                      child: Icon(HcIcons.x,
+                          size: 12, color: t.surface.onBaseMuted),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _family,
+                  style:
+                      t.text.bodySmallStyle.copyWith(color: t.surface.onBase),
+                  decoration: const InputDecoration(
+                      isDense: true, hintText: 'Family name'),
+                ),
+              ),
+              SizedBox(width: t.space.xs),
+              Expanded(
+                flex: 2,
+                child: TextField(
+                  controller: _url,
+                  style:
+                      t.text.bodySmallStyle.copyWith(color: t.surface.onBase),
+                  decoration: const InputDecoration(
+                      isDense: true, hintText: 'Address of the font file'),
+                ),
+              ),
+              SizedBox(width: t.space.xs),
+              TextButton(onPressed: _add, child: const Text('Add')),
+            ],
+          ),
+          if (_note != null)
+            Text(_note!,
+                style: t.text.captionStyle.copyWith(color: t.accent.danger)),
+          Text(
+            'The family name must be the one inside the file. Fonts are '
+            'fetched from your own house — nothing here reaches the internet.',
+            style: t.text.captionStyle
+                .copyWith(color: t.surface.onBaseMuted, height: 1.35),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Which set of glyphs the house wears.
+///
+/// A row of samples rather than a list of names: nobody knows what "Phosphor"
+/// looks like, and the difference between two icon sets is entirely visible
+/// and not at all describable.
+class _IconSetPicker extends StatelessWidget {
+  const _IconSetPicker({required this.value, required this.onChanged});
+
+  final String value;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Padding(
+      padding: EdgeInsets.only(bottom: t.space.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('ICONS',
+              style:
+                  t.text.overlineStyle.copyWith(color: t.surface.onBaseMuted)),
+          SizedBox(height: t.space.xs),
+          Row(
+            children: [
+              for (final set in IconSets.builtIn)
+                Padding(
+                  padding: EdgeInsets.only(right: t.space.xs),
+                  child: Semantics(
+                    button: true,
+                    selected: set.key == value,
+                    label: set.label,
+                    child: GestureDetector(
+                      onTap: () => onChanged(set.key),
+                      child: Container(
+                        padding: EdgeInsets.symmetric(
+                            horizontal: t.space.sm, vertical: t.space.xs),
+                        decoration: BoxDecoration(
+                          color: set.key == value ? t.surface.raised : null,
+                          borderRadius: BorderRadius.circular(t.radius.sm),
+                          border: Border.all(
+                            color: set.key == value
+                                ? t.accent.active
+                                : t.stroke.hairline,
+                            width: t.stroke.width,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // The sample is the control. Three facets that
+                            // look different in different sets.
+                            for (final facet in const [
+                              DeviceFacet.light,
+                              DeviceFacet.lock,
+                              DeviceFacet.motion,
+                            ])
+                              Padding(
+                                padding: EdgeInsets.only(right: t.space.xs / 2),
+                                child: Icon(set.forFacet(facet),
+                                    size: 15,
+                                    color: set.key == value
+                                        ? t.surface.onBase
+                                        : t.surface.onBaseMuted),
+                              ),
+                            SizedBox(width: t.space.xs / 2),
+                            Text(set.label,
+                                style: t.text.captionStyle.copyWith(
+                                    color: set.key == value
+                                        ? t.surface.onBase
+                                        : t.surface.onBaseMuted)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
           ),
         ],
       ),

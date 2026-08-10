@@ -85,7 +85,7 @@ class HcTile extends StatelessWidget {
             Row(
               children: [
                 _Bulb(
-                    facet: facet,
+                    iconFacet: deviceIconOverride(device) ?? facet,
                     on: on,
                     offline: offline,
                     colour: fg,
@@ -146,14 +146,18 @@ class HcTile extends StatelessWidget {
 /// The disc behind the icon, which fills with light as the device brightens.
 class _Bulb extends StatelessWidget {
   const _Bulb({
-    required this.facet,
+    required this.iconFacet,
     required this.on,
     required this.offline,
     required this.colour,
     required this.accent,
   });
 
-  final DeviceFacet facet;
+  /// Which glyph to draw — the device's `status_icon` override when it has
+  /// one, else its real facet. Deliberately separate from the facet that
+  /// decides the *controls*: an icon override changes the picture and must not
+  /// change what the tile lets you do.
+  final DeviceFacet iconFacet;
   final bool on;
   final bool offline;
   final Color colour;
@@ -180,7 +184,7 @@ class _Bulb extends StatelessWidget {
       ),
       // The glyph itself changes weight with state — see HcIcons.
       child: Icon(
-        HcIcons.forFacet(facet, on: on),
+        HcIcons.forFacet(iconFacet, on: on),
         size: size * 0.5,
         color: colour,
       ),

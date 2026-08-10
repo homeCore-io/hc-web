@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 
 import '../core/devices/presentation.dart';
+import 'icon_sets.dart';
 
 /// The icon vocabulary — Phosphor, driven straight off its fonts.
 ///
@@ -30,7 +31,15 @@ class HcIcons {
   ///
   /// [on] is what flips outline → fill. That is the entire point: a lit lamp is
   /// the same glyph as a dark one, solid.
+  ///
+  /// Routed through the chosen icon set, so a skin can answer *facet → glyph*
+  /// with a different set of glyphs. Phosphor's own answer is
+  /// [phosphorFacet] below, unchanged and still the default.
   static IconData forFacet(DeviceFacet facet, {bool on = false}) =>
+      IconSets.active.forFacet(facet, on: on);
+
+  /// Phosphor's answer, which was this function until there was a choice.
+  static IconData phosphorFacet(DeviceFacet facet, {bool on = false}) =>
       switch (facet) {
         DeviceFacet.light ||
         DeviceFacet.dimmableLight ||

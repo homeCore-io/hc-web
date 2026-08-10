@@ -25,6 +25,7 @@ class PageInspector extends StatelessWidget {
     required this.layout,
     required this.cardCount,
     required this.onFlowChanged,
+    this.onBackgroundChanged,
   });
 
   final DashboardDefinition dashboard;
@@ -32,6 +33,10 @@ class PageInspector extends StatelessWidget {
   final DashboardLayout? layout;
   final int cardCount;
   final ValueChanged<GridFlow>? onFlowChanged;
+
+  /// Null outside the designer — the page inspector also renders where there is
+  /// nothing to save into.
+  final ValueChanged<DashboardBackground>? onBackgroundChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -90,8 +95,136 @@ class PageInspector extends StatelessWidget {
                   .copyWith(color: t.surface.onBaseMuted, height: 1.4),
             ),
           ],
+          if (onBackgroundChanged != null) ...[
+            SizedBox(height: t.space.lg),
+            Text('BACKGROUND',
+                style: t.text.overlineStyle
+                    .copyWith(color: t.surface.onBaseMuted)),
+            SizedBox(height: t.space.xs),
+            _BackgroundControls(
+              value: dashboard.background ?? const DashboardBackground(),
+              onChanged: onBackgroundChanged!,
+            ),
+          ],
         ],
       ),
+    );
+  }
+}
+
+/// Image, blur and dim — with the two sliders present from the start.
+///
+/// They are not "advanced". A photograph behind live content is unreadable
+/// without them, so hiding them behind a disclosure would mean the first thing
+/// anyone sees after pasting a URL is a page they cannot read, and the fix one
+/// click away and invisible.
+class _BackgroundControls extends StatefulWidget {
+  const _BackgroundControls({required this.value, required this.onChanged});
+
+  final DashboardBackground value;
+  final ValueChanged<DashboardBackground> onChanged;
+
+  @override
+  State<_BackgroundControls> createState() => _BackgroundControlsState();
+}
+
+class _BackgroundControlsState extends State<_BackgroundControls> {
+  late final TextEditingController _url =
+      TextEditingController(text: widget.value.image ?? '');
+
+  @override
+  void dispose() {
+    _url.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    final v = widget.value;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextField(
+          controller: _url,
+          style: t.text.bodySmallStyle.copyWith(color: t.surface.onBase),
+          onChanged: (s) =>
+              widget.onChanged(v.copyWith(image: s.trim().isEmpty ? null : s)),
+          decoration: InputDecoration(
+            isDense: true,
+            border: const OutlineInputBorder(),
+            hintText: 'Image address',
+            hintStyle:
+                t.text.bodySmallStyle.copyWith(color: t.surface.onBaseMuted),
+          ),
+        ),
+        SizedBox(height: t.space.xs),
+        _Slider(
+          label: 'Blur',
+          value: v.blur,
+          max: 40,
+          onChanged: (n) => widget.onChanged(v.copyWith(blur: n)),
+        ),
+        _Slider(
+          label: 'Dim',
+          value: v.dim * 100,
+          max: 100,
+          onChanged: (n) => widget.onChanged(v.copyWith(dim: n / 100)),
+        ),
+        Text(
+          v.isEmpty
+              ? 'A picture behind the whole page. Blur and dim are what keep '
+                  'the cards readable on top of it.'
+              : 'Blurred and dimmed behind the cards; the cards stay sharp.',
+          style: t.text.captionStyle
+              .copyWith(color: t.surface.onBaseMuted, height: 1.4),
+        ),
+      ],
+    );
+  }
+}
+
+class _Slider extends StatelessWidget {
+  const _Slider({
+    required this.label,
+    required this.value,
+    required this.max,
+    required this.onChanged,
+  });
+
+  final String label;
+  final double value;
+  final double max;
+  final ValueChanged<double> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Row(
+      children: [
+        SizedBox(
+          width: 44,
+          child: Text(label,
+              style: t.text.bodySmallStyle.copyWith(color: t.surface.onBase)),
+        ),
+        Expanded(
+          child: Slider(
+            value: value.clamp(0, max),
+            max: max,
+            divisions: max.round(),
+            label: '${value.round()}',
+            onChanged: onChanged,
+          ),
+        ),
+        SizedBox(
+          width: 28,
+          child: Text('${value.round()}',
+              textAlign: TextAlign.right,
+              style: t.text.captionStyle.copyWith(
+                  color: t.surface.onBaseMuted,
+                  fontFeatures: t.numericFontFeatures)),
+        ),
+      ],
     );
   }
 }

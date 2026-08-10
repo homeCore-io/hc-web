@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../design/hc_icons.dart';
 import '../models/device_state.dart';
 import '../schema/device_schema.dart';
 
@@ -437,4 +438,55 @@ String normalizeAreaName(String? value) {
       .split('_')
       .where((part) => part.isNotEmpty)
       .join('_');
+}
+
+// ---------------------------------------------------------------------------
+// The icon a device wears
+// ---------------------------------------------------------------------------
+
+/// A device's icon, honouring the user's override.
+///
+/// `status_icon` has existed in core since long before this — stored,
+/// PATCHable, round-tripped by the client — and **read by nothing**. It was
+/// documented as "optional UI-facing status icon override selected by the
+/// user" and there was no way to select one and nothing that would have shown
+/// it. This is the half that was missing; no core change was needed.
+///
+/// It is deliberately *not* [ui_hint]. A hint changes what the device **is**,
+/// so it changes the controls as well as the icon: hint a switch as a light
+/// and you get a dimmer. An icon override changes only the picture — "this is
+/// a switch, and it runs the bathroom fan, so show me a fan" — and the
+/// controls stay honest about what the device can actually do.
+///
+/// The vocabulary is the facet names, so every value already has artwork and a
+/// skin already reaches it. An unknown name falls back rather than drawing a
+/// blank, because a device from a newer client must not lose its icon.
+IconData deviceIcon(DeviceState d, {bool on = false, DeviceSchema? schema}) {
+  final override = deviceIconOverride(d);
+  if (override != null) return HcIcons.forFacet(override, on: on);
+  return HcIcons.forFacet(facetOf(d, schema ?? d.schema), on: on);
+}
+
+/// The facet a device's `status_icon` names, or null when it names none.
+DeviceFacet? deviceIconOverride(DeviceState d) {
+  final raw = d.statusIcon?.trim().toLowerCase();
+  if (raw == null || raw.isEmpty) return null;
+  for (final facet in DeviceFacet.values) {
+    if (facet.iconKey == raw) return facet;
+  }
+  return null;
+}
+
+extension DeviceFacetIconKey on DeviceFacet {
+  /// The stored value for this facet's icon.
+  ///
+  /// snake_case, like every other key on this API — `dimmable_light`, not
+  /// `dimmableLight`. The enum's own `name` is camelCase because the language
+  /// is, and the wire should not carry the language's spelling. `switch_` is
+  /// the same problem in sharper form: a trailing underscore only exists
+  /// because `switch` is a keyword.
+  String get iconKey => this == DeviceFacet.switch_
+      ? 'switch'
+      : name.replaceAllMapped(
+          RegExp('[A-Z]'), (m) => '_${m[0]!.toLowerCase()}');
 }

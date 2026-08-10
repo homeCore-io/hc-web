@@ -24,7 +24,17 @@ import 'tokens.dart';
 /// honest scalar form. See [unexposed] for what is left out and why — the gap
 /// is documented rather than quietly rounded away.
 
-enum TokenKind { colour, number }
+enum TokenKind {
+  colour,
+  number,
+
+  /// A font family name, chosen from the ones the app can actually draw with.
+  ///
+  /// Not free text, and that is the whole safety property: a name the app does
+  /// not have falls back to the engine's own face and sends glyph fallback to
+  /// a CDN. A list of registered families cannot express that.
+  family,
+}
 
 @immutable
 class DerivedToken {
@@ -323,6 +333,18 @@ final List<DerivedToken> derivedTokens = [
   // every row is better than storing a number that means something different
   // depending on another control.
   DerivedToken(
+      path: 'text.family',
+      group: 'Type',
+      kind: TokenKind.family,
+      derivedFrom: 'the base skin — every size in the app routes through it',
+      read: (t) => t.text.family ?? ''),
+  DerivedToken(
+      path: 'text.monoFamily',
+      group: 'Type',
+      kind: TokenKind.family,
+      derivedFrom: 'the base skin — config, ids, log lines',
+      read: (t) => t.text.monoFamily),
+  DerivedToken(
       path: 'text.scale',
       group: 'Type',
       kind: TokenKind.number,
@@ -394,11 +416,6 @@ const Map<String, String> unexposed = {
   'radius.pill': 'Always 999 — a sentinel meaning "fully round", not a '
       'measurement. A pill with a 12px radius is a rounded rectangle, which is '
       'what radius.md already is.',
-  'text.family': 'One text family ships. This becomes a control when a second '
-      'does, and a skin naming a font the app has not bundled would fall back '
-      'to the engine\'s own — reaching out to fonts.gstatic.com, which the '
-      'font-origin ratchet exists to prevent.',
-  'text.monoFamily': 'As text.family.',
   'text.<role>.weight': 'The ramp\'s weights are what separate a title from '
       'body at the same size. A skin that flattened them would be changing the '
       'hierarchy, not the look.',
@@ -423,6 +440,7 @@ String formatTokenValue(Object value) {
         ? '#$rgb'
         : '#${a.toRadixString(16).padLeft(2, '0').toUpperCase()}$rgb';
   }
+  if (value is String) return value;
   final n = value as double;
   // 8, not 8.0; 1.15, not 1.1500000000000001.
   return n == n.roundToDouble() ? n.round().toString() : n.toString();

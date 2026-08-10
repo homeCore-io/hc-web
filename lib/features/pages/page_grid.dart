@@ -639,6 +639,10 @@ class _Cell extends StatelessWidget {
     // Only meaningful where there is a surface to style. A bare element has no
     // background to remove.
     final style = CardStyle.fromConfig(model?.config ?? const {});
+    final tint = resolveCardTint(t, style.tint);
+    final corner = resolveCardCorner(t, style.corner);
+    final radius = corner == null ? null : BorderRadius.circular(corner);
+    final image = cardDecorationImage(style);
 
     final Widget card = switch (chrome) {
       // Draws itself onto the page, and nothing is drawn around it.
@@ -649,6 +653,10 @@ class _Cell extends StatelessWidget {
           padding: EdgeInsets.zero,
           filled: style.filled,
           bordered: style.bordered,
+          tint: tint,
+          blur: style.blur,
+          borderRadius: radius,
+          image: image,
           child: ClipRect(child: body),
         ),
       WidgetChrome.card => HcSurface(
@@ -657,6 +665,10 @@ class _Cell extends StatelessWidget {
           padding: EdgeInsets.all(t.space.md),
           filled: style.filled,
           bordered: style.bordered,
+          tint: tint,
+          blur: style.blur,
+          borderRadius: radius,
+          image: image,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
