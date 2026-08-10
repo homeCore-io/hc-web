@@ -6,6 +6,7 @@ import '../../core/dashboard/widget_registry.dart';
 import '../../core/models/dashboard.dart';
 import '../../core/providers/devices_provider.dart';
 import '../../design/tokens.dart';
+import '../assets/asset_field.dart';
 import '../dashboard/builtin_cards.dart';
 import 'card_members.dart';
 import 'widget_config_form.dart';
@@ -247,12 +248,13 @@ class _Preview extends ConsumerWidget {
   }
 }
 
-/// The card's picture, as an address.
+/// The card's picture.
 ///
-/// A field rather than a file picker because there is nowhere yet to put an
-/// uploaded file: core stores dashboards, not assets. A URL on the LAN works
-/// today and an upload can replace this without the stored shape changing.
-class _ImageField extends StatefulWidget {
+/// It was a bare address field, with a note saying an upload could replace it
+/// "without the stored shape changing". That day arrived and the note held:
+/// the field still stores a string, [AssetField] just gives you a way to make
+/// one.
+class _ImageField extends StatelessWidget {
   const _ImageField({
     super.key,
     required this.value,
@@ -263,35 +265,11 @@ class _ImageField extends StatefulWidget {
   final ValueChanged<String> onChanged;
 
   @override
-  State<_ImageField> createState() => _ImageFieldState();
-}
-
-class _ImageFieldState extends State<_ImageField> {
-  late final TextEditingController _controller =
-      TextEditingController(text: widget.value);
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final t = HcTokens.of(context);
-    return TextField(
-      controller: _controller,
-      style: t.text.bodySmallStyle.copyWith(color: t.surface.onBase),
-      onChanged: (s) => widget.onChanged(s.trim()),
-      decoration: InputDecoration(
-        isDense: true,
-        border: const OutlineInputBorder(),
-        labelText: 'Picture',
-        hintText: 'Image address',
-        hintStyle: t.text.bodySmallStyle.copyWith(color: t.surface.onBaseMuted),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => AssetField(
+        value: value,
+        onChanged: onChanged,
+        label: 'Picture',
+      );
 }
 
 /// A row of choices, small enough to sit in a 340px pane.

@@ -10,6 +10,7 @@ import '../../core/text/humanize.dart';
 import '../../design/tokens.dart';
 import '../../shell/hc_sheet.dart';
 import '../devices/device_query.dart';
+import '../assets/asset_field.dart';
 
 /// A widget's settings, built from the card's own [WidgetDescriptor.configFields].
 ///
@@ -206,6 +207,7 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
         WidgetConfigKind.integer => _text(f, number: true),
         WidgetConfigKind.markdown => _text(f, lines: 5),
         WidgetConfigKind.url || WidgetConfigKind.text => _text(f),
+        WidgetConfigKind.image => _image(f),
         WidgetConfigKind.stringList => _stringList(f),
         WidgetConfigKind.areaName => _area(f),
         WidgetConfigKind.facet => _facet(f),
@@ -262,6 +264,25 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
               _set(f.name, v.isEmpty ? null : v);
             }
           },
+        ),
+        _help(f),
+      ],
+    );
+  }
+
+  /// A picture, which may be uploaded rather than hosted first.
+  ///
+  /// The stored value is still a string, so a card configured before this
+  /// existed keeps working and one configured with it is indistinguishable
+  /// from a pasted address.
+  Widget _image(WidgetConfigField f) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _label(f),
+        AssetField(
+          value: '${_config[f.name] ?? ''}',
+          onChanged: (v) => _set(f.name, v.isEmpty ? null : v),
         ),
         _help(f),
       ],

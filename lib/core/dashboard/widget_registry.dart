@@ -170,6 +170,13 @@ enum WidgetConfigKind {
   facet,
   markdown,
   url,
+
+  /// An address that may also be uploaded — a picture stored by core.
+  ///
+  /// Distinct from [url] because not every address is a file of ours: a camera
+  /// points at a stream and a web embed at a page, and neither is something you
+  /// could choose from disk. Only the ones that are get the picker.
+  image,
   stringList,
 }
 

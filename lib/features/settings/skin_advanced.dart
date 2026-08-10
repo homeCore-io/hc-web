@@ -7,6 +7,8 @@ import '../../design/icon_sets.dart';
 import '../../design/font_registry.dart';
 import '../../design/skin_catalogue.dart';
 import '../../design/tokens.dart';
+import '../../core/api/assets_api.dart';
+import '../assets/asset_field.dart';
 
 /// The advanced disclosure: every derived value, overridable, with its rule.
 ///
@@ -391,9 +393,9 @@ class _RowState extends State<_Row> {
 /// until something is in here: the app ships two faces, and the whole point of
 /// the ask was the third.
 ///
-/// A family plus an address. There is nowhere to upload a file yet — core
-/// stores skins, not assets — so this is the same trade the pictures make, and
-/// the same field accepts an `/assets/…` path on the day that exists.
+/// A family plus an address — or a file, now that core has somewhere to put
+/// one. The stored shape never changed: a skin has always carried an address,
+/// and an upload just fills it in for you.
 class _Fonts extends StatefulWidget {
   const _Fonts({
     required this.fonts,
@@ -411,19 +413,18 @@ class _Fonts extends StatefulWidget {
 
 class _FontsState extends State<_Fonts> {
   final _family = TextEditingController();
-  final _url = TextEditingController();
+  String _url = '';
   String? _note;
 
   @override
   void dispose() {
     _family.dispose();
-    _url.dispose();
     super.dispose();
   }
 
   Future<void> _add() async {
     final family = _family.text.trim();
-    final url = _url.text.trim();
+    final url = _url.trim();
     if (family.isEmpty || url.isEmpty) return;
     // Loaded before it is stored. A skin carrying a font nobody can fetch is a
     // skin whose type controls quietly do nothing, and finding that out later
@@ -434,7 +435,7 @@ class _FontsState extends State<_Fonts> {
     if (ok) {
       widget.onAdd(family, url);
       _family.clear();
-      _url.clear();
+      setState(() => _url = '');
     }
   }
 
@@ -491,19 +492,20 @@ class _FontsState extends State<_Fonts> {
                 ),
               ),
               SizedBox(width: t.space.xs),
-              Expanded(
-                flex: 2,
-                child: TextField(
-                  controller: _url,
-                  style:
-                      t.text.bodySmallStyle.copyWith(color: t.surface.onBase),
-                  decoration: const InputDecoration(
-                      isDense: true, hintText: 'Address of the font file'),
-                ),
-              ),
-              SizedBox(width: t.space.xs),
               TextButton(onPressed: _add, child: const Text('Add')),
             ],
+          ),
+          SizedBox(height: t.space.xs),
+          // Two rows rather than three fields across a 340px pane. No preview:
+          // a font has nothing to show at thumbnail size, and the panel above
+          // already renders each family in its own face, which is the only
+          // preview that means anything here.
+          AssetField(
+            value: _url,
+            onChanged: (v) => setState(() => _url = v),
+            kinds: fontExtensions,
+            preview: false,
+            hint: 'Address of the font file, or choose one',
           ),
           if (_note != null)
             Text(_note!,
