@@ -68,8 +68,7 @@ class _HomeEntityRowState extends ConsumerState<HomeEntityRow> {
               horizontal: t.space.md, vertical: t.space.sm + 1),
           child: Row(
             children: [
-              Icon(HcIcons.forFacet(facet, on: on),
-                  size: 19, color: iconColour),
+              Icon(deviceIcon(device, on: on), size: 19, color: iconColour),
               SizedBox(width: t.space.md),
               Expanded(
                 child: Text(

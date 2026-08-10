@@ -366,6 +366,33 @@ still card-shaped it will be built twice.
 
 ---
 
+### 7.3 Deferred: somewhere to put a picture
+
+Both image controls — the card's and the page's — take a **URL**, because there
+is nowhere to put a file. Core stores dashboards, not assets. A URL on the LAN
+works today, and the stored shape (`image: "<url>"`) does not change when an
+upload replaces the control, so nothing here has to be redesigned for it.
+
+**What an upload needs**, so the size of it is on the record rather than
+discovered later:
+
+- `POST /assets` and `GET /assets/{id}` in core, with the bytes on disk beside
+  the dashboards rather than in redb — a 4MB photograph in a key-value store
+  is a 4MB read on every dashboard load.
+- A size cap and an allowed-type list, enforced server-side. "It is my own
+  house" is not a reason to accept an unbounded upload; a full disk stops the
+  house, not just the picture.
+- Deletion, or the assets outlive every page that referenced them. Reference
+  counting across dashboards is the awkward half — the simple answer is that
+  assets are never auto-deleted and there is a list you can prune.
+- The client picker, which is the small part.
+
+Worth doing, and not on the critical path: a background you can only set by
+URL is a background, and the same field accepts `/assets/abc123` on the day
+that endpoint exists.
+
+---
+
 ## 8. Order
 
 Each step is usable alone; none leaves the designer worse.
@@ -383,6 +410,8 @@ Each step is usable alone; none leaves the designer worse.
 9. **Fonts and icon sets in the skin** (§6.2). Largest of the identity items;
    the theme editor already has the shape for it.
 10. **Floor plan** (§7).
+11. **Asset upload** (§7.3) — deferred, not forgotten. Both image fields take a
+    URL until it exists and neither changes shape when it does.
 
 **Core changes needed:** selection `add`/`remove` (§3.1),
 `DashboardDefinition.background` (§5.3), `device.ui_icon` (§6.1). Three fields
