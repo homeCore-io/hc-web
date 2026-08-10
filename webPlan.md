@@ -1445,4 +1445,45 @@ flutter test
 
 ---
 
-*Last updated: 2026-03-23 — open questions resolved; Phases 7–8 added*
+## Open: Manage has two navigations, and they say the same thing
+
+*Noted 2026-08-10, John, on seeing `/admin/files` land: "the main pane is
+duplication of the left sidebar list."*
+
+He is right, and it is not a small thing to fix later. Manage currently renders
+its sections **twice**:
+
+- `manage_shell.dart` — the left sidebar, a flat list of `ManageSection`s,
+  present on every admin page.
+- `manage_page.dart` — the landing pane, the same sections again as cards and
+  rows, with a little live detail on each ("42 rules · 3 off", "Last backed up
+  7 days ago").
+
+So the landing page is mostly a second copy of the thing sitting immediately to
+its left. Two consequences, one of which already bit:
+
+1. **A new page has to be added in two places**, and nothing catches it if you
+   miss one. `/admin/files` shipped in the landing pane only and was invisible
+   in the sidebar until it was spotted on the live box. A test would not have
+   found it — both lists were internally consistent.
+2. **The detail is the only thing the landing pane adds**, and it is the part
+   the sidebar cannot show. That is the signal for what this should become.
+
+**Directions worth weighing when it is picked up** — not decided here:
+
+- *One list, one source.* Derive both surfaces from a single section table so
+  adding a page is one edit. Cheapest fix; leaves the duplication visible but
+  makes it harmless.
+- *Give the landing pane a different job.* Attention first — what needs looking
+  at, what failed, what has not been backed up — and let the sidebar do
+  navigation. `manage_attention.dart` already exists and is halfway to this.
+- *Drop the landing pane.* Land on the first section instead. Fewest moving
+  parts, and loses the live detail, which is the bit with actual value.
+
+The second reads strongest: the sidebar is already a good navigation and a
+second one is not worth its maintenance, whereas *"what in this house wants
+attention"* is a page nothing currently is.
+
+---
+
+*Last updated: 2026-08-10 — Manage navigation duplication noted*
