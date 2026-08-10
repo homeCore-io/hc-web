@@ -6,6 +6,9 @@ import 'core/providers/auth_provider.dart';
 import 'core/providers/nav_prefs_provider.dart';
 import 'core/providers/skin_provider.dart';
 import 'core/providers/skins_provider.dart';
+import 'core/models/skin_document.dart';
+import 'design/font_registry.dart';
+import 'design/tokens.dart';
 import 'design/skin_resolve.dart';
 import 'features/admin/areas_page.dart';
 import 'features/admin/audit_page.dart';
@@ -321,27 +324,45 @@ class HomecoreApp extends ConsumerWidget {
     // Midnight when nothing is chosen: the design was drawn dark. This is the
     // theme *outside* the shell — the login page and the kiosk wall — so it
     // resolves against no particular shell.
-    final tokens = resolveSkin(
-      choice: ref.watch(skinOverrideProvider),
-      shell: HcShell.touch,
-      skins: ref.watch(skinsProvider).value ?? const [],
-    );
+    final skins = ref.watch(skinsProvider).value ?? const <SkinDocument>[];
+    // Fire-and-forget: a font that arrives late bumps the registry's revision
+    // and this rebuilds. A font that never arrives changes nothing, which is
+    // the same outcome as not naming one.
+    FontRegistry.instance.registerAll(skins.map((s) => s.overrides));
 
-    return MaterialApp.router(
-      title: 'HomeCore',
-      theme: hcThemeFromTokens(tokens),
-      darkTheme: hcThemeFromTokens(tokens),
-      // MediaQuery does not exist above MaterialApp, so reduced motion cannot be
-      // read where `theme:` is built. Re-applying it here gives the shell-less
-      // routes the same treatment ShellScope gives everything else.
-      builder: (context, child) => Theme(
-        data: hcThemeFromTokens(
-          tokens,
-          reduceMotion: MediaQuery.maybeDisableAnimationsOf(context) ?? false,
-        ),
-        child: child ?? const SizedBox.shrink(),
-      ),
-      routerConfig: router,
+    final choice = ref.watch(skinOverrideProvider);
+
+    // Rebuilt when a font finishes arriving. `resolveSkin` refuses a family
+    // the app cannot draw yet, so without this the skin would resolve to the
+    // fallback and stay there until something unrelated happened to repaint.
+    // The router config is a stable object, so navigation survives.
+    return ValueListenableBuilder<int>(
+      valueListenable: FontRegistry.instance.revision,
+      builder: (context, _, __) {
+        final tokens = resolveSkin(
+          choice: choice,
+          shell: HcShell.touch,
+          skins: skins,
+        );
+        return _app(tokens, router);
+      },
     );
   }
+
+  Widget _app(HcTokens tokens, GoRouter router) => MaterialApp.router(
+        title: 'HomeCore',
+        theme: hcThemeFromTokens(tokens),
+        darkTheme: hcThemeFromTokens(tokens),
+        // MediaQuery does not exist above MaterialApp, so reduced motion cannot be
+        // read where `theme:` is built. Re-applying it here gives the shell-less
+        // routes the same treatment ShellScope gives everything else.
+        builder: (context, child) => Theme(
+          data: hcThemeFromTokens(
+            tokens,
+            reduceMotion: MediaQuery.maybeDisableAnimationsOf(context) ?? false,
+          ),
+          child: child ?? const SizedBox.shrink(),
+        ),
+        routerConfig: router,
+      );
 }

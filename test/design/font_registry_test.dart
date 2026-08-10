@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hc_web/core/models/skin_document.dart';
 import 'package:hc_web/design/font_registry.dart';
+import 'package:hc_web/design/skin_catalogue.dart';
 import 'package:hc_web/design/skin_resolve.dart';
 import 'package:hc_web/design/skins.dart';
 
@@ -114,6 +115,28 @@ void main() {
       final honoured = applySkinOverrides(
           HcSkin.midnight.tokens, {'text.monoFamily': 'Inter'});
       expect(honoured.text.monoFamily, 'Inter');
+    });
+  });
+
+  group('the editor', () {
+    test('offers only families that will draw', () {
+      // The picker is a list rather than a field precisely so an unregistered
+      // name cannot be typed into it. If this ever became free text, the
+      // font-origin ratchet would be one keystroke from being bypassed.
+      expect(FontRegistry.instance.available, FontRegistry.bundled);
+    });
+
+    test('a family token reads as a string, not a number', () {
+      // `formatTokenValue` handled colours and doubles; a family is the third
+      // kind and would have thrown a cast error in the editor's own field.
+      final family = derivedTokens.firstWhere((d) => d.path == 'text.family');
+      expect(family.kind, TokenKind.family);
+      expect(formatTokenValue(family.read(HcSkin.midnight.tokens)), 'Inter');
+    });
+
+    test('both faces are catalogued, so neither is silently unreachable', () {
+      final paths = derivedTokens.map((d) => d.path);
+      expect(paths, containsAll(['text.family', 'text.monoFamily']));
     });
   });
 

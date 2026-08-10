@@ -25,6 +25,13 @@ String _differentValue(DerivedToken d, Object current) {
     // Flip every channel: guaranteed different, and still a real colour.
     return formatTokenValue(Color(c.toARGB32() ^ 0x00FFFFFF));
   }
+  if (d.kind == TokenKind.family) {
+    // Another family the app can actually draw with. Not an arbitrary name:
+    // an unregistered one is deliberately *ignored*, so using one here would
+    // assert that the editor accepts an edit which does nothing — which is
+    // the opposite of what this test is for.
+    return current == 'Inter' ? 'JetBrains Mono' : 'Inter';
+  }
   // Formatted the same way the editor would show it, so the comparison below
   // is about the value reaching the token and not about "7" versus "7.0".
   return formatTokenValue((current as double) + 7);
