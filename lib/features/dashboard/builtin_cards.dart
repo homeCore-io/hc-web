@@ -139,6 +139,26 @@ List<DeviceState> selectDevicesForConfig(
       break;
   }
 
+  // Exceptions, applied after the rule and before everything else.
+  //
+  // The rule stays a live query — a new lamp in the living room still appears
+  // without editing the page — and these are the two ways to disagree with it
+  // for one device. Order matters: `remove` wins, so a device in both is out,
+  // which is the reading that lets "remove" mean remove.
+  final added = _ids(config['add']);
+  if (added.isNotEmpty) {
+    final have = {for (final d in selected) d.id};
+    selected = [
+      ...selected,
+      for (final device in base)
+        if (added.contains(device.id) && !have.contains(device.id)) device,
+    ];
+  }
+  final removed = _ids(config['remove']);
+  if (removed.isNotEmpty) {
+    selected = selected.where((d) => !removed.contains(d.id)).toList();
+  }
+
   final showOffline = config['show_offline'] as bool? ?? true;
   if (!showOffline) {
     selected = selected.where((device) => device.available).toList();
@@ -150,6 +170,9 @@ List<DeviceState> selectDevicesForConfig(
   }
   return selected;
 }
+
+Set<String> _ids(Object? raw) =>
+    raw is List ? raw.whereType<String>().toSet() : const {};
 
 /// What a card shows, and how many it left out.
 ///

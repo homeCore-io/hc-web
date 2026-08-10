@@ -7,6 +7,7 @@ import '../../core/models/dashboard.dart';
 import '../../core/providers/devices_provider.dart';
 import '../../design/tokens.dart';
 import '../dashboard/builtin_cards.dart';
+import 'card_members.dart';
 import 'widget_config_form.dart';
 
 /// The selected card's settings, beside the canvas.
@@ -123,6 +124,11 @@ class CardInspector extends ConsumerWidget {
                   ),
                 ),
               _Preview(config: model.config, descriptor: descriptor),
+              // Which devices, listed and tickable — for the card types whose
+              // contents are a device selection. A room card was a live query
+              // with nothing showing what it held.
+              if (_selects(descriptor.type))
+                CardMembers(config: model.config, onChanged: onChanged),
             ],
             // Style is offered only where there is a card to un-draw. A
             // heading, a rule and a spacer have no surface at all, so a
@@ -239,6 +245,17 @@ class _Preview extends ConsumerWidget {
     );
   }
 }
+
+/// Card types whose contents are a device selection.
+///
+/// The same set `_Preview` counts, and for the same reason: these are the cards
+/// where "what is in it" is a question with an answer.
+bool _selects(String type) => const {
+      'device_grid',
+      'device_list',
+      'device_tile',
+      'media_player',
+    }.contains(type);
 
 /// The card's name, as a labelled field.
 ///
