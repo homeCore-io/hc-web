@@ -178,6 +178,22 @@ void main() {
       expect(find.text('a'), findsNothing);
     });
 
+    testWidgets('gets no container, because it is not a collection',
+        (tester) async {
+      // "Placing several single devices next to each other would consume lots
+      // of unnecessary space" — a 3×1 cell is 100px, and a title band plus two
+      // lots of padding took most of it. The tile already carries the device's
+      // own name and state, so the band said it twice.
+      final picked = await _pump(tester, house);
+      await tester.enterText(find.byType(TextField), 'a');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('a').last);
+      await tester.pumpAndSettle();
+
+      expect(picked.single.config['style'],
+          {'filled': false, 'bordered': false, 'titled': false});
+    });
+
     testWidgets('a searched device places a tile for that one device',
         (tester) async {
       final picked = await _pump(tester, house);
