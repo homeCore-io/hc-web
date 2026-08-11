@@ -52,8 +52,16 @@ class _DeviceReadingsBlockState extends State<DeviceReadingsBlock> {
       return true;
     }).toList();
 
-    final advanced = keys.where(isAdvancedReading).toList();
-    final normal = keys.where((k) => !isAdvancedReading(k)).toList();
+    // A plugin that *declares* an attribute diagnostic has said something the
+    // name cannot: `rssi` is guessable, `sensor_health_index` is not. The
+    // declaration wins, and where there is none the heuristic still applies —
+    // most devices have no schema at all.
+    final schema = widget.device.schema;
+    bool advancedBy(String k) =>
+        (schema?.attributes[k]?.isDiagnostic ?? false) || isAdvancedReading(k);
+
+    final advanced = keys.where(advancedBy).toList();
+    final normal = keys.where((k) => !advancedBy(k)).toList();
     if (normal.isEmpty && advanced.isEmpty) return const SizedBox.shrink();
 
     // Group, then order the groups so the ones a person came for lead.
