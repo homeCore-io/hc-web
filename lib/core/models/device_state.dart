@@ -28,6 +28,21 @@ class DeviceState {
   /// A user-chosen icon name, overriding the one the facet would pick.
   final String? statusIcon;
 
+  /// What the device *is*, as its own system reports it — absent until a
+  /// plugin has been taught to send it, which is most of them.
+  ///
+  /// Nothing branches on these. They are for the person looking at a device
+  /// that has stopped working and needing to know which one it is and what it
+  /// is running.
+  final String? manufacturer;
+  final String? model;
+  final String? swVersion;
+
+  /// What this device sits behind — a bulb's bridge, a node's controller.
+  /// Advisory: nothing routes through it, and a device with no parent is the
+  /// common case.
+  final String? parentDeviceId;
+
   final bool available;
   final Map<String, dynamic> state;
 
@@ -49,6 +64,10 @@ class DeviceState {
     this.area,
     this.areaOverride,
     this.deviceType,
+    this.manufacturer,
+    this.model,
+    this.swVersion,
+    this.parentDeviceId,
     this.uiHint,
     this.statusIcon,
     required this.available,
@@ -66,6 +85,10 @@ class DeviceState {
         area: json['area'] as String?,
         areaOverride: json['area_override'] as String?,
         deviceType: json['device_type'] as String?,
+        manufacturer: json['manufacturer'] as String?,
+        model: json['model'] as String?,
+        swVersion: json['sw_version'] as String?,
+        parentDeviceId: json['parent_device_id'] as String?,
         uiHint: json['ui_hint'] as String?,
         statusIcon: json['status_icon'] as String?,
         available: json['available'] as bool? ?? false,
@@ -88,6 +111,10 @@ class DeviceState {
     String? area,
     String? areaOverride,
     String? deviceType,
+    String? manufacturer,
+    String? model,
+    String? swVersion,
+    String? parentDeviceId,
     String? uiHint,
     String? statusIcon,
     bool? available,
@@ -104,6 +131,10 @@ class DeviceState {
         area: area ?? this.area,
         areaOverride: areaOverride ?? this.areaOverride,
         deviceType: deviceType ?? this.deviceType,
+        manufacturer: manufacturer ?? this.manufacturer,
+        model: model ?? this.model,
+        swVersion: swVersion ?? this.swVersion,
+        parentDeviceId: parentDeviceId ?? this.parentDeviceId,
         uiHint: uiHint ?? this.uiHint,
         statusIcon: statusIcon ?? this.statusIcon,
         available: available ?? this.available,

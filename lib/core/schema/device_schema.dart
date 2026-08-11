@@ -95,6 +95,32 @@ class BoolStates {
   }
 }
 
+/// Why an attribute exists, mirroring core's `AttributeCategory` and Home
+/// Assistant's `entity_category` before it.
+///
+/// A **presentation** distinction, not a permission one: a diagnostic reading
+/// is as readable as any other, it simply is not what the device is for. So
+/// these are folded, never hidden — battery level matters exactly when it is
+/// low, and a fold an operator can open is the difference between "out of the
+/// way" and "gone".
+enum AttributeCategory {
+  /// Battery, signal strength, firmware, uptime.
+  diagnostic,
+
+  /// Settings that shape behaviour rather than report it — a sensitivity
+  /// threshold, a reporting interval.
+  config;
+
+  static AttributeCategory? fromWire(String? raw) => switch (raw) {
+        'diagnostic' => AttributeCategory.diagnostic,
+        'config' => AttributeCategory.config,
+        // Unknown means a core newer than this build. Treating it as primary
+        // shows the attribute rather than swallowing it, which is the safe
+        // direction to be wrong in.
+        _ => null,
+      };
+}
+
 class AttributeSchema {
   const AttributeSchema({
     required this.kind,
@@ -105,6 +131,7 @@ class AttributeSchema {
     this.max,
     this.step,
     this.options,
+    this.category,
     this.states,
   });
 
@@ -130,6 +157,16 @@ class AttributeSchema {
   /// Only meaningful for [AttributeKind.bool_].
   final BoolStates? states;
 
+  /// Why this attribute exists, when it is not what the device is *for*.
+  ///
+  /// Null means primary — the ordinary case, and what every attribute
+  /// declared before core carried this reports. See [AttributeCategory].
+  final AttributeCategory? category;
+
+  /// True when this is a reading about the device's health rather than about
+  /// what it is doing.
+  bool get isDiagnostic => category == AttributeCategory.diagnostic;
+
   bool get hasRange => min != null && max != null;
 
   static AttributeSchema? fromJson(Map json) {
@@ -144,6 +181,7 @@ class AttributeSchema {
       max: (json['max'] as num?)?.toDouble(),
       step: (json['step'] as num?)?.toDouble(),
       options: (json['options'] as List?)?.cast<String>(),
+      category: AttributeCategory.fromWire(json['category'] as String?),
       states: BoolStates.fromJson(json['states']),
     );
   }
