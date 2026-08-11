@@ -30,7 +30,7 @@ class AssetField extends ConsumerStatefulWidget {
     required this.value,
     required this.onChanged,
     this.label,
-    this.hint = 'Address, or choose a file',
+    this.hint = 'Address, or a file',
     this.kinds = imageExtensions,
     this.group,
     this.preview = true,

@@ -22,6 +22,22 @@ void main() {
     final t = theme.extension<HcTokens>()!;
 
     group(skin.label, () {
+      test('a slider fills with the action colour, not the scheme primary', () {
+        // Found on the live house: a page's Blur and Dim sliders rendering
+        // Material blue on an orange skin, beside orange buttons. Nothing
+        // failed, because an unthemed Slider is a valid render — the same way
+        // the button below once was.
+        final slider = theme.sliderTheme;
+        expect(slider.activeTrackColor, isNotNull,
+            reason: 'an unthemed Slider fills from colorScheme.primary, which '
+                'on Midnight is the blue used for links and selection');
+        expect(slider.activeTrackColor, t.accent.active,
+            reason: 'the same colour a FilledButton and HcButton use; a '
+                'slider setting a value is an action like any other');
+        expect(slider.thumbColor, t.accent.active);
+        expect(slider.inactiveTrackColor, t.stroke.hairline);
+      });
+
       test('a filled button is the primary accent, not the scheme primary', () {
         final bg = theme.filledButtonTheme.style?.backgroundColor;
         expect(bg, isNotNull,
