@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/dashboard/floor_plan.dart';
 import '../../core/devices/presentation.dart';
+import '../../core/models/dashboard.dart';
 import '../../core/models/device_state.dart';
 import '../../core/providers/devices_provider.dart';
 import '../../design/hc_icons.dart';
@@ -86,6 +87,30 @@ class _FloorPlanCardState extends ConsumerState<FloorPlanCard> {
     });
   }
 
+  /// A device dropped from the library becomes a marker where the pointer was.
+  ///
+  /// Accepted only while the mode is on, deliberately. Outside it the canvas
+  /// beneath is itself a drop target — that is how a card gets placed — and two
+  /// things claiming the same drop would make which one you got depend on
+  /// pixels. Inside the mode the plan wins, unambiguously.
+  void _drop(Object? payload, Offset global, Size box) {
+    if (!_planEditing || box.width <= 0 || box.height <= 0) return;
+    if (payload is! DashboardWidgetModel) return;
+    final rb = context.findRenderObject();
+    if (rb is! RenderBox) return;
+    final local = rb.globalToLocal(global);
+
+    final markers = markersFromConfig(widget.config)
+      ..add(FloorPlanMarker(
+        selection: selectionFromPayload(payload.config),
+        x: local.dx / box.width,
+        y: local.dy / box.height,
+        // No label: a plan that starts life labelled is a word search, and the
+        // inspector is where you give one a name it did not have.
+      ));
+    _write(markers);
+  }
+
   void _moveTo(int index, Offset local, Size box) {
     final markers = markersFromConfig(widget.config);
     if (index < 0 || index >= markers.length) return;
@@ -117,44 +142,50 @@ class _FloorPlanCardState extends ConsumerState<FloorPlanCard> {
             }
             return KeyEventResult.ignored;
           },
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              _Ground(url: url, config: widget.config),
-              if (_planEditing) const _EditingWash(),
-              for (final (index, marker) in markers.indexed)
-                Positioned(
-                  // Fractions, so the marker holds its place on the plan
-                  // through a resize, a zoom and a breakpoint change.
-                  left: marker.x * size.width,
-                  top: marker.y * size.height,
-                  child: FractionalTranslation(
-                    translation: const Offset(-0.5, -0.5),
-                    child: _planEditing
-                        ? _Draggable(
-                            dragging: _dragging == index,
-                            onStart: () => setState(() => _dragging = index),
-                            onUpdate: (global) {
-                              final rb = context.findRenderObject();
-                              if (rb is! RenderBox) return;
-                              _moveTo(index, rb.globalToLocal(global), size);
-                            },
-                            onEnd: () => setState(() => _dragging = null),
-                            child: _Marker(marker: marker, devices: devices),
-                          )
-                        : _Marker(marker: marker, devices: devices),
+          child: DragTarget<Object>(
+            onWillAcceptWithDetails: (d) =>
+                _planEditing && d.data is DashboardWidgetModel,
+            onAcceptWithDetails: (d) => _drop(d.data, d.offset, size),
+            builder: (context, candidate, __) => Stack(
+              fit: StackFit.expand,
+              children: [
+                _Ground(url: url, config: widget.config),
+                if (_planEditing) _EditingWash(inviting: candidate.isNotEmpty),
+                if (_planEditing && markers.isEmpty) const _DropHint(),
+                for (final (index, marker) in markers.indexed)
+                  Positioned(
+                    // Fractions, so the marker holds its place on the plan
+                    // through a resize, a zoom and a breakpoint change.
+                    left: marker.x * size.width,
+                    top: marker.y * size.height,
+                    child: FractionalTranslation(
+                      translation: const Offset(-0.5, -0.5),
+                      child: _planEditing
+                          ? _Draggable(
+                              dragging: _dragging == index,
+                              onStart: () => setState(() => _dragging = index),
+                              onUpdate: (global) {
+                                final rb = context.findRenderObject();
+                                if (rb is! RenderBox) return;
+                                _moveTo(index, rb.globalToLocal(global), size);
+                              },
+                              onEnd: () => setState(() => _dragging = null),
+                              child: _Marker(marker: marker, devices: devices),
+                            )
+                          : _Marker(marker: marker, devices: devices),
+                    ),
                   ),
-                ),
-              if (_canEdit)
-                Positioned(
-                  right: 8,
-                  top: 8,
-                  child: _EditToggle(
-                    editing: _planEditing,
-                    onPressed: _planEditing ? _leave : _enter,
+                if (_canEdit)
+                  Positioned(
+                    right: 8,
+                    top: 8,
+                    child: _EditToggle(
+                      editing: _planEditing,
+                      onPressed: _planEditing ? _leave : _enter,
+                    ),
                   ),
-                ),
-            ],
+              ],
+            ),
           ),
         );
       },
@@ -168,7 +199,10 @@ class _FloorPlanCardState extends ConsumerState<FloorPlanCard> {
 /// markers when you meant to move the card, which is the confusion the mode
 /// exists to remove.
 class _EditingWash extends StatelessWidget {
-  const _EditingWash();
+  const _EditingWash({this.inviting = false});
+
+  /// Something draggable is over the plan right now.
+  final bool inviting;
 
   @override
   Widget build(BuildContext context) {
@@ -176,8 +210,39 @@ class _EditingWash extends StatelessWidget {
     return IgnorePointer(
       child: DecoratedBox(
         decoration: BoxDecoration(
-          border: Border.all(color: t.accent.active, width: 2),
-          color: t.accent.active.withValues(alpha: 0.04),
+          border: Border.all(color: t.accent.active, width: inviting ? 3 : 2),
+          color: t.accent.active.withValues(alpha: inviting ? 0.10 : 0.04),
+        ),
+      ),
+    );
+  }
+}
+
+/// What to do with an empty plan, said on the empty plan.
+///
+/// The mode is enterable before there is anything in it to move, so without
+/// this the first thing you see after pressing Place is a picture that does
+/// nothing.
+class _DropHint extends StatelessWidget {
+  const _DropHint();
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return IgnorePointer(
+      child: Center(
+        child: Container(
+          padding: EdgeInsets.symmetric(
+              horizontal: t.space.md, vertical: t.space.sm),
+          decoration: BoxDecoration(
+            color: t.surface.raised.withValues(alpha: 0.9),
+            borderRadius: t.radius.mdR,
+            border: Border.all(color: t.stroke.hairline),
+          ),
+          child: Text(
+            'Drag a device or a room onto the plan.',
+            style: t.text.bodySmallStyle.copyWith(color: t.surface.onBase),
+          ),
         ),
       ),
     );
@@ -464,6 +529,32 @@ class _Reading extends StatelessWidget {
       ),
     );
   }
+}
+
+/// The selection half of a card the library was about to place.
+///
+/// A row in the library drags a whole `DashboardWidgetModel` — a card, with a
+/// type and a title and presentation settings. Dropped on a plan it should
+/// become a *marker*, and the part that carries over is the selection: which
+/// devices it meant. Everything else described a card that is not being made.
+///
+/// So a "Living Room" row becomes a marker that speaks for the living room,
+/// and a single device becomes a marker for that device, with no new vocabulary
+/// on either side.
+Map<String, dynamic> selectionFromPayload(Map<String, dynamic> config) {
+  const keys = [
+    'selection_mode',
+    'device_ids',
+    'area_name',
+    'facet',
+    'query',
+    'limit',
+    'show_offline',
+  ];
+  return {
+    for (final k in keys)
+      if (config.containsKey(k)) k: config[k],
+  };
 }
 
 /// The one number a sensor is on the plan for.

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hc_web/core/models/dashboard.dart';
 import 'package:hc_web/core/models/device_state.dart';
 import 'package:hc_web/core/providers/devices_provider.dart';
 import 'package:hc_web/design/skins.dart';
@@ -228,6 +229,7 @@ void main() {
   });
 
   _editModeTests();
+  _dropTests();
 
   testWidgets('markers are placed by fraction, so they survive a resize',
       (tester) async {
@@ -372,5 +374,104 @@ void _editModeTests() {
     expect(written!['url'], 'https://house.lan/plan.png');
     expect(written!['dim'], 0.7);
     expect(written!['invert'], true);
+  });
+}
+
+void _dropTests() {
+  DashboardWidgetModel payload(Map<String, dynamic> config) =>
+      DashboardWidgetModel(
+        id: 'w',
+        type: 'device_tile',
+        title: 'Living Room',
+        refreshPolicy: DashboardRefreshPolicy.passive,
+        config: config,
+      );
+
+  test('a dropped card contributes its selection and nothing else', () {
+    // The library drags a whole card. What carries over to a marker is which
+    // devices it meant; the rest described a card that is not being made.
+    final selection = selectionFromPayload(const {
+      'selection_mode': 'area',
+      'area_name': 'Living Room',
+      'show_offline': true,
+      'title_visible': false,
+      'style': {'image': 'x'},
+    });
+    expect(selection, {
+      'selection_mode': 'area',
+      'area_name': 'Living Room',
+      'show_offline': true,
+    });
+    expect(selection.containsKey('style'), isFalse);
+  });
+
+  testWidgets('an empty plan in place mode says what to do', (tester) async {
+    await _pump(tester, const {'url': 'https://house.lan/plan.png'}, const [],
+        editing: true, onConfigChanged: (_) {});
+    await tester.tap(find.text('Place'));
+    await tester.pump();
+    expect(find.textContaining('Drag a device'), findsOneWidget);
+  });
+
+  testWidgets('dropping a device makes a marker where it landed',
+      (tester) async {
+    // Driven through the DragTarget's own contract rather than by simulating a
+    // pointer: what is being checked is that a drop at a global point becomes
+    // the right fraction of the card, and a synthetic drag adds Flutter's
+    // machinery to the thing under test without adding coverage.
+    Map<String, dynamic>? written;
+    await _pump(tester, const {'url': 'https://house.lan/plan.png'},
+        [_light('light.a', on: true)],
+        editing: true, onConfigChanged: (c) => written = c);
+    await tester.tap(find.text('Place'));
+    await tester.pump();
+
+    final target =
+        tester.widget<DragTarget<Object>>(find.byType(DragTarget<Object>));
+    final topLeft = tester.getTopLeft(find.byType(FloorPlanCard));
+    final dropped = payload(const {
+      'selection_mode': 'manual',
+      'device_ids': ['light.a'],
+    });
+
+    expect(
+      target.onWillAcceptWithDetails!(
+          DragTargetDetails<Object>(data: dropped, offset: topLeft)),
+      isTrue,
+      reason: 'in place mode the plan claims the drop',
+    );
+    // A quarter across and half down a 400x300 card.
+    target.onAcceptWithDetails!(DragTargetDetails<Object>(
+        data: dropped, offset: Offset(topLeft.dx + 100, topLeft.dy + 150)));
+    await tester.pump();
+
+    expect(written, isNotNull, reason: 'the drop never reached the document');
+    final markers = written!['markers'] as List;
+    expect(markers, hasLength(1));
+    final m = markers.first as Map;
+    expect(m['x'], closeTo(0.25, 0.06));
+    expect(m['y'], closeTo(0.5, 0.06));
+    expect((m['selection'] as Map)['device_ids'], ['light.a']);
+    expect(m.containsKey('label'), isFalse,
+        reason: 'a plan that starts life labelled is a word search');
+  });
+
+  testWidgets('a drop is ignored outside the mode', (tester) async {
+    // The canvas beneath is itself a drop target — that is how a card gets
+    // placed — and two things claiming the same drop would make which one you
+    // got depend on pixels.
+    Map<String, dynamic>? written;
+    await _pump(tester, const {'url': 'https://house.lan/plan.png'}, const [],
+        editing: true, onConfigChanged: (c) => written = c);
+    final target =
+        tester.widget<DragTarget<Object>>(find.byType(DragTarget<Object>));
+    expect(
+      target.onWillAcceptWithDetails!(DragTargetDetails<Object>(
+          data: payload(const {'selection_mode': 'manual'}),
+          offset: Offset.zero)),
+      isFalse,
+      reason: 'not in place mode, so the plan does not claim the drop',
+    );
+    expect(written, isNull);
   });
 }

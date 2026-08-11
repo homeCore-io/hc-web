@@ -84,9 +84,14 @@ double _fraction(Object? raw) {
 }
 
 /// The markers on a card, in the order they were placed.
+///
+/// Always a growable list, never `const []`. Callers add to it — placing the
+/// first marker on a plan is exactly the case where the list is empty — and an
+/// unmodifiable empty list turns that into a crash on the one path nobody
+/// tries twice.
 List<FloorPlanMarker> markersFromConfig(Map<String, dynamic> config) {
   final raw = config['markers'];
-  if (raw is! List) return const [];
+  if (raw is! List) return <FloorPlanMarker>[];
   return [
     for (final item in raw)
       if (item is Map) FloorPlanMarker.fromJson(item.cast<String, dynamic>()),

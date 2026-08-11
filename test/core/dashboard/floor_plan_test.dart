@@ -103,6 +103,24 @@ void main() {
       expect(list[1].label, 'Hall');
     });
 
+    test(
+        'is always growable, because the first marker is added to an empty '
+        'list', () {
+      // Returning `const []` made placing the first marker on a plan throw
+      // "Cannot add to an unmodifiable list" — on the one path every new plan
+      // takes exactly once.
+      expect(
+          () => markersFromConfig(const {}).add(
+                const FloorPlanMarker(selection: {}, x: 0, y: 0),
+              ),
+          returnsNormally);
+      expect(
+          () => markersFromConfig(const {'markers': 'junk'}).add(
+                const FloorPlanMarker(selection: {}, x: 0, y: 0),
+              ),
+          returnsNormally);
+    });
+
     test('survives junk where the markers should be', () {
       // Config is a free-form map that older and newer clients both write.
       expect(markersFromConfig(const {}), isEmpty);
