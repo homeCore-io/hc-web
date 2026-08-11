@@ -105,7 +105,7 @@ Future<void> _pump(
   WidgetTester tester,
   Map<String, dynamic> config,
   List<DeviceState> devices, {
-  bool editing = false,
+  bool entered = false,
   ValueChanged<Map<String, dynamic>>? onConfigChanged,
 }) async {
   await tester.pumpWidget(ProviderScope(
@@ -118,7 +118,7 @@ Future<void> _pump(
           height: 300,
           child: FloorPlanCard(
             config: config,
-            editing: editing,
+            entered: entered,
             onConfigChanged: onConfigChanged,
           ),
         ),
@@ -127,6 +127,62 @@ Future<void> _pump(
   ));
   await tester.pump();
 }
+
+/// The card wired to a document that actually takes the writes.
+///
+/// [_pump] hands the card a config it can never change, which is right for
+/// asking *what did it write*. It is useless for the inspector, where the point
+/// is the round trip: a label typed into the card has to come back as the
+/// card's own config or the field is editing a ghost.
+class _Live extends StatefulWidget {
+  const _Live({required this.initial, required this.seen});
+  final Map<String, dynamic> initial;
+  final List<Map<String, dynamic>> seen;
+
+  @override
+  State<_Live> createState() => _LiveState();
+}
+
+class _LiveState extends State<_Live> {
+  late Map<String, dynamic> _config = widget.initial;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+        width: 400,
+        height: 300,
+        child: FloorPlanCard(
+          config: _config,
+          entered: true,
+          onConfigChanged: (next) {
+            widget.seen.add(next);
+            setState(() => _config = next);
+          },
+        ),
+      );
+}
+
+/// Returns every config the card wrote, in order; the last is the document.
+Future<List<Map<String, dynamic>>> _pumpLive(
+  WidgetTester tester,
+  Map<String, dynamic> config,
+  List<DeviceState> devices,
+) async {
+  final seen = <Map<String, dynamic>>[];
+  await tester.pumpWidget(ProviderScope(
+    overrides: [devicesProvider.overrideWith(() => _Devices(devices))],
+    child: MaterialApp(
+      theme: hcThemeFromTokens(HcSkin.midnight.tokens),
+      home: Scaffold(body: _Live(initial: config, seen: seen)),
+    ),
+  ));
+  await tester.pump();
+  return seen;
+}
+
+List<Map<String, dynamic>> _markersOf(Map<String, dynamic> config) => [
+      for (final m in (config['markers'] as List? ?? const []))
+        (m as Map).cast<String, dynamic>(),
+    ];
 
 void main() {
   setUpAll(() => HttpOverrides.global = _FakeImages());
@@ -230,6 +286,7 @@ void main() {
 
   _editModeTests();
   _dropTests();
+  _inspectorTests();
 
   testWidgets('markers are placed by fraction, so they survive a resize',
       (tester) async {
@@ -278,49 +335,27 @@ class _Devices extends DevicesNotifier {
 }
 
 void _editModeTests() {
-  testWidgets('the plan offers no editing outside the designer',
-      (tester) async {
-    await _pump(tester, _oneMarker(), [_light('light.a', on: true)]);
-    expect(find.text('Place'), findsNothing,
-        reason: 'a viewer must not be one tap from rearranging the house');
+  testWidgets('a marker is inert until the card is entered', (tester) async {
+    // A viewer must not be one drag from rearranging the house — and in the
+    // designer, a card you have not entered is an object you arrange, so the
+    // markers on it are part of the picture.
+    Map<String, dynamic>? written;
+    await _pump(tester, _oneMarker(), [_light('light.a', on: true)],
+        onConfigChanged: (c) => written = c);
+    await tester.drag(find.byType(Icon).first, const Offset(-100, 0));
+    await tester.pump();
+    expect(written, isNull);
   });
 
   testWidgets('nor when nobody is listening for the result', (tester) async {
-    // editing:true with no writer is the designer drawing a preview. Offering
-    // a button whose changes go nowhere is worse than not offering it.
+    // Entered with no writer is the designer drawing a preview. A gesture whose
+    // result goes nowhere is worse than one that is refused.
     await _pump(tester, _oneMarker(), [_light('light.a', on: true)],
-        editing: true);
-    expect(find.text('Place'), findsNothing);
-  });
-
-  testWidgets('in the designer it is a mode you enter and leave',
-      (tester) async {
-    await _pump(tester, _oneMarker(), [_light('light.a', on: true)],
-        editing: true, onConfigChanged: (_) {});
-
-    expect(find.text('Place'), findsOneWidget);
-    await tester.tap(find.text('Place'));
+        entered: true);
+    await tester.drag(find.byType(Icon).first, const Offset(-100, 0));
     await tester.pump();
-    // Entering says so: a mode you cannot see is how you drag a marker when
-    // you meant to move the card.
-    expect(find.text('Done'), findsOneWidget);
-
-    await tester.tap(find.text('Done'));
-    await tester.pump();
-    expect(find.text('Place'), findsOneWidget);
-  });
-
-  testWidgets('Escape leaves the mode', (tester) async {
-    await _pump(tester, _oneMarker(), [_light('light.a', on: true)],
-        editing: true, onConfigChanged: (_) {});
-    await tester.tap(find.text('Place'));
-    await tester.pump();
-    expect(find.text('Done'), findsOneWidget);
-
-    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-    await tester.pump();
-    expect(find.text('Place'), findsOneWidget,
-        reason: 'the way leaving a group works in a vector editor');
+    expect(find.textContaining('Drag a device'), findsNothing,
+        reason: 'nothing here can be placed, so nothing invites it');
   });
 
   testWidgets('dragging a marker writes a fraction, not a pixel',
@@ -328,9 +363,7 @@ void _editModeTests() {
     Map<String, dynamic>? written;
     await _pump(
         tester, _oneMarker(x: 0.5, y: 0.5), [_light('light.a', on: true)],
-        editing: true, onConfigChanged: (c) => written = c);
-    await tester.tap(find.text('Place'));
-    await tester.pump();
+        entered: true, onConfigChanged: (c) => written = c);
 
     // The card is 400x300 and the marker sits at its centre. Drag it a
     // quarter of the width left.
@@ -349,9 +382,7 @@ void _editModeTests() {
     Map<String, dynamic>? written;
     await _pump(
         tester, _oneMarker(x: 0.1, y: 0.5), [_light('light.a', on: true)],
-        editing: true, onConfigChanged: (c) => written = c);
-    await tester.tap(find.text('Place'));
-    await tester.pump();
+        entered: true, onConfigChanged: (c) => written = c);
     await tester.drag(find.byType(Icon).first, const Offset(-400, 0));
     await tester.pump();
 
@@ -365,9 +396,7 @@ void _editModeTests() {
     Map<String, dynamic>? written;
     final config = {..._oneMarker(), 'dim': 0.7, 'invert': true};
     await _pump(tester, config, [_light('light.a', on: true)],
-        editing: true, onConfigChanged: (c) => written = c);
-    await tester.tap(find.text('Place'));
-    await tester.pump();
+        entered: true, onConfigChanged: (c) => written = c);
     await tester.drag(find.byType(Icon).first, const Offset(-40, 0));
     await tester.pump();
 
@@ -405,11 +434,9 @@ void _dropTests() {
     expect(selection.containsKey('style'), isFalse);
   });
 
-  testWidgets('an empty plan in place mode says what to do', (tester) async {
+  testWidgets('an empty plan, once entered, says what to do', (tester) async {
     await _pump(tester, const {'url': 'https://house.lan/plan.png'}, const [],
-        editing: true, onConfigChanged: (_) {});
-    await tester.tap(find.text('Place'));
-    await tester.pump();
+        entered: true, onConfigChanged: (_) {});
     expect(find.textContaining('Drag a device'), findsOneWidget);
   });
 
@@ -422,9 +449,7 @@ void _dropTests() {
     Map<String, dynamic>? written;
     await _pump(tester, const {'url': 'https://house.lan/plan.png'},
         [_light('light.a', on: true)],
-        editing: true, onConfigChanged: (c) => written = c);
-    await tester.tap(find.text('Place'));
-    await tester.pump();
+        entered: true, onConfigChanged: (c) => written = c);
 
     final target =
         tester.widget<DragTarget<Object>>(find.byType(DragTarget<Object>));
@@ -456,13 +481,13 @@ void _dropTests() {
         reason: 'a plan that starts life labelled is a word search');
   });
 
-  testWidgets('a drop is ignored outside the mode', (tester) async {
+  testWidgets('a drop is ignored until the card is entered', (tester) async {
     // The canvas beneath is itself a drop target — that is how a card gets
     // placed — and two things claiming the same drop would make which one you
     // got depend on pixels.
     Map<String, dynamic>? written;
     await _pump(tester, const {'url': 'https://house.lan/plan.png'}, const [],
-        editing: true, onConfigChanged: (c) => written = c);
+        onConfigChanged: (c) => written = c);
     final target =
         tester.widget<DragTarget<Object>>(find.byType(DragTarget<Object>));
     expect(
@@ -473,5 +498,187 @@ void _dropTests() {
       reason: 'not in place mode, so the plan does not claim the drop',
     );
     expect(written, isNull);
+  });
+}
+
+// ── the marker inspector ───────────────────────────────────────────────────
+
+/// A marker you can place and never name or delete is what shipped first, and
+/// it made a misplaced marker permanent. This is the smallest panel that fixes
+/// that: what it speaks for, what to call it, and the way to get rid of it.
+
+Map<String, dynamic> _room(String area, {double x = 0.5, double y = 0.5}) => {
+      'x': x,
+      'y': y,
+      'selection': {'selection_mode': 'area', 'area_name': area},
+    };
+
+void _inspectorTests() {
+  testWidgets('there is no panel until you touch a marker', (tester) async {
+    await _pumpLive(tester, {
+      'markers': [_room('living_room')]
+    }, [
+      _light('light.a', on: true, area: 'living_room')
+    ]);
+    expect(find.text('Label'), findsNothing,
+        reason: 'an inspector nobody asked for is a plan you cannot see');
+  });
+
+  testWidgets('touching one says which marker it is about', (tester) async {
+    // On a plan with eight markers, a panel that does not name its subject is
+    // one you have to verify before daring to press Remove.
+    await _pumpLive(tester, {
+      'markers': [_room('living_room')]
+    }, [
+      _light('light.a', on: true, area: 'living_room')
+    ]);
+    await tester.tap(find.byType(Icon).first);
+    await tester.pump();
+
+    expect(find.text('Living Room'), findsOneWidget);
+    expect(find.text('Label'), findsOneWidget);
+  });
+
+  testWidgets('a marker with a name of your own keeps it in the document',
+      (tester) async {
+    final seen = await _pumpLive(tester, {
+      'markers': [_room('living_room')]
+    }, [
+      _light('light.a', on: true, area: 'living_room')
+    ]);
+    await tester.tap(find.byType(Icon).first);
+    await tester.pump();
+
+    await tester.enterText(find.byType(TextField), 'Sofa lamp');
+    await tester.pump();
+
+    expect(_markersOf(seen.last).single['label'], 'Sofa lamp',
+        reason: 'the custom label is the whole reason labels are per marker');
+    // And it is on the plan, not only in the document.
+    expect(find.text('Sofa lamp'), findsWidgets);
+  });
+
+  testWidgets('clearing the name removes it rather than storing an empty one',
+      (tester) async {
+    final seen = await _pumpLive(tester, {
+      'markers': [
+        {..._room('living_room'), 'label': 'Sofa lamp'}
+      ]
+    }, [
+      _light('light.a', on: true, area: 'living_room')
+    ]);
+    await tester.tap(find.byType(Icon).first);
+    await tester.pump();
+    await tester.enterText(find.byType(TextField), '   ');
+    await tester.pump();
+
+    expect(_markersOf(seen.last).single.containsKey('label'), isFalse,
+        reason: '"no label" is a choice, not an empty string');
+  });
+
+  testWidgets('Remove takes the marker off the plan', (tester) async {
+    final seen = await _pumpLive(tester, {
+      'markers': [_room('living_room'), _room('kitchen', x: 0.8)]
+    }, [
+      _light('light.a', on: true, area: 'living_room'),
+      _light('light.b', on: true, area: 'kitchen'),
+    ]);
+    await tester.tap(find.byType(Icon).first);
+    await tester.pump();
+    await tester.tap(find.text('Remove'));
+    await tester.pump();
+
+    final markers = _markersOf(seen.last);
+    expect(markers, hasLength(1));
+    expect((markers.single['selection'] as Map)['area_name'], 'kitchen',
+        reason: 'the wrong one was removed');
+    expect(find.text('Label'), findsNothing,
+        reason: 'the panel outlived the marker it was about');
+  });
+
+  testWidgets('and so does Delete, on the marker you just touched',
+      (tester) async {
+    // The keyboard route matters because removing is the commoner of the two
+    // things you come to this panel for: a marker dropped in the wrong room.
+    final seen = await _pumpLive(tester, {
+      'markers': [_room('living_room')]
+    }, [
+      _light('light.a', on: true, area: 'living_room')
+    ]);
+    await tester.tap(find.byType(Icon).first);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.delete);
+    await tester.pump();
+
+    expect(_markersOf(seen.last), isEmpty);
+  });
+
+  testWidgets('Escape puts the panel away before it leaves the card',
+      (tester) async {
+    // Two-stage on purpose: one key that always undoes the last thing you got
+    // into. The second stage — leaving the card — is the frame's, and is
+    // proved in the grid's own tests.
+    await _pumpLive(tester, {
+      'markers': [_room('living_room')]
+    }, [
+      _light('light.a', on: true, area: 'living_room')
+    ]);
+    await tester.tap(find.byType(Icon).first);
+    await tester.pump();
+    expect(find.text('Label'), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    expect(find.text('Label'), findsNothing);
+  });
+
+  testWidgets('clicking the plan puts it away too', (tester) async {
+    await _pumpLive(tester, {
+      'markers': [_room('living_room')]
+    }, [
+      _light('light.a', on: true, area: 'living_room')
+    ]);
+    await tester.tap(find.byType(Icon).first);
+    await tester.pump();
+
+    // The top-left corner of the 400x300 card: plan, no marker on it.
+    await tester.tapAt(const Offset(20, 20));
+    await tester.pump();
+    expect(find.text('Label'), findsNothing);
+  });
+
+  testWidgets('dragging a marker selects it, so the panel is about it',
+      (tester) async {
+    await _pumpLive(tester, {
+      'markers': [_room('living_room')]
+    }, [
+      _light('light.a', on: true, area: 'living_room')
+    ]);
+    await tester.drag(find.byType(Icon).first, const Offset(-60, 0));
+    await tester.pump();
+
+    expect(find.text('Living Room'), findsOneWidget,
+        reason: 'the panel is about the marker already under your finger');
+  });
+
+  testWidgets('a marker pointing at nothing still says so in the panel',
+      (tester) async {
+    await _pumpLive(tester, {
+      'markers': [
+        {
+          'x': 0.5,
+          'y': 0.5,
+          'selection': {
+            'selection_mode': 'manual',
+            'device_ids': ['light.deleted'],
+          },
+        }
+      ]
+    }, const []);
+    await tester.tap(find.byType(Icon).first);
+    await tester.pump();
+
+    expect(find.text('Nothing here now'), findsOneWidget,
+        reason: 'the panel is how you find and remove a marker gone stale');
   });
 }

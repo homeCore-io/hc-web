@@ -7,6 +7,7 @@ import '../../core/devices/presentation.dart';
 import '../../core/models/dashboard.dart';
 import '../../core/models/device_state.dart';
 import '../../core/providers/devices_provider.dart';
+import '../../core/text/humanize.dart';
 import '../../design/hc_icons.dart';
 import '../../design/tokens.dart';
 import '../devices/device_readings.dart';
@@ -30,14 +31,26 @@ class FloorPlanCard extends ConsumerStatefulWidget {
   const FloorPlanCard({
     super.key,
     required this.config,
-    this.editing = false,
+    this.entered = false,
     this.onConfigChanged,
   });
 
   final Map<String, dynamic> config;
 
-  /// The designer is drawing this card, so plan editing can be *offered*.
-  final bool editing;
+  /// The editor has been entered into this card, so markers can be placed.
+  ///
+  /// Placing is an explicit mode, decided rather than inferred. The
+  /// alternative was to guess from what a drag started on — a marker, or the
+  /// card beneath it — and a gesture that guesses between "move this marker"
+  /// and "move this whole card" is the kind of cleverness that is wrong five
+  /// percent of the time and infuriating for it.
+  ///
+  /// The mode is not this card's to own, though, and trying was the bug: the
+  /// grid veils a card's body in the editor, so the Place button this card used
+  /// to draw was underneath it — rendered, and impossible to press. Now the
+  /// frame offers the way in and this flag is the answer. See
+  /// [WidgetDescriptor.inPlaceLabel].
+  final bool entered;
 
   /// Null when nothing is listening, which is also how this card knows it may
   /// not edit itself.
@@ -48,21 +61,27 @@ class FloorPlanCard extends ConsumerStatefulWidget {
 }
 
 class _FloorPlanCardState extends ConsumerState<FloorPlanCard> {
-  /// Plan editing is an explicit mode, decided rather than inferred.
-  ///
-  /// The alternative was to guess from what a drag started on — a marker, or
-  /// the card beneath it — and a gesture that guesses between "move this
-  /// marker" and "move this whole card" is the kind of cleverness that is
-  /// wrong five percent of the time and infuriating for it. So: a button in,
-  /// Escape out, the way entering a group works in a vector editor.
-  bool _planEditing = false;
-
   /// Which marker is being dragged, by index. Null between gestures.
   int? _dragging;
 
-  final _focus = FocusNode(debugLabel: 'floor plan');
+  /// Which marker the inspector is about, by index. Null for none.
+  ///
+  /// By index, and so cleared whenever the list under it could have shifted:
+  /// a marker has no id, because a marker is a *position and a selection* and
+  /// giving it an identity would be inventing a thing the document does not
+  /// have. Index is honest as long as nothing outlives the list.
+  int? _selected;
 
-  bool get _canEdit => widget.editing && widget.onConfigChanged != null;
+  /// Where the keys land while a marker is selected.
+  ///
+  /// A child of the frame's own node, which is what makes Escape two-stage:
+  /// this handles it while something is selected and *ignores* it otherwise,
+  /// so the same key deselects and then leaves the card.
+  final _focus = FocusNode(debugLabel: 'floor plan markers');
+
+  /// May this card place markers right now? Being entered is not enough — the
+  /// result has to have somewhere to go.
+  bool get _placing => widget.entered && widget.onConfigChanged != null;
 
   @override
   void dispose() {
@@ -70,15 +89,67 @@ class _FloorPlanCardState extends ConsumerState<FloorPlanCard> {
     super.dispose();
   }
 
-  void _enter() {
-    setState(() => _planEditing = true);
-    _focus.requestFocus();
+  @override
+  void didUpdateWidget(FloorPlanCard old) {
+    super.didUpdateWidget(old);
+    // Left the card, e.g. by Escape. The gesture and the selection end with the
+    // mode — an inspector for a marker you can no longer touch is a lie.
+    if (!_placing) {
+      _dragging = null;
+      _selected = null;
+      return;
+    }
+    // The list shrank under us — an undo, or another surface editing the same
+    // draft. Selecting by index means never trusting a stale one.
+    if (_selected != null &&
+        _selected! >= markersFromConfig(widget.config).length) {
+      _selected = null;
+    }
   }
 
-  void _leave() => setState(() {
-        _planEditing = false;
-        _dragging = null;
-      });
+  void _select(int? index) {
+    setState(() => _selected = index);
+    if (index != null) _focus.requestFocus();
+  }
+
+  void _remove(int index) {
+    final markers = markersFromConfig(widget.config);
+    if (index < 0 || index >= markers.length) return;
+    markers.removeAt(index);
+    setState(() => _selected = null);
+    _write(markers);
+  }
+
+  /// A name of your own, or none.
+  ///
+  /// Empty clears it rather than storing `''`: "no label" is a real choice —
+  /// the default one — and a plan full of empty strings would be a plan whose
+  /// document says something it does not mean.
+  void _relabel(int index, String raw) {
+    final markers = markersFromConfig(widget.config);
+    if (index < 0 || index >= markers.length) return;
+    final trimmed = raw.trim();
+    markers[index] =
+        markers[index].copyWith(label: trimmed.isEmpty ? null : trimmed);
+    _write(markers);
+  }
+
+  KeyEventResult _onKey(KeyEvent event) {
+    final index = _selected;
+    if (index == null || event is! KeyDownEvent) return KeyEventResult.ignored;
+    switch (event.logicalKey) {
+      // Deselect first, leave the card second. One key, and never a surprise:
+      // pressing it always undoes the last thing you got into.
+      case LogicalKeyboardKey.escape:
+        _select(null);
+        return KeyEventResult.handled;
+      case LogicalKeyboardKey.delete:
+      case LogicalKeyboardKey.backspace:
+        _remove(index);
+        return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
 
   void _write(List<FloorPlanMarker> markers) {
     widget.onConfigChanged?.call({
@@ -94,7 +165,7 @@ class _FloorPlanCardState extends ConsumerState<FloorPlanCard> {
   /// things claiming the same drop would make which one you got depend on
   /// pixels. Inside the mode the plan wins, unambiguously.
   void _drop(Object? payload, Offset global, Size box) {
-    if (!_planEditing || box.width <= 0 || box.height <= 0) return;
+    if (!_placing || box.width <= 0 || box.height <= 0) return;
     if (payload is! DashboardWidgetModel) return;
     final rb = context.findRenderObject();
     if (rb is! RenderBox) return;
@@ -131,27 +202,32 @@ class _FloorPlanCardState extends ConsumerState<FloorPlanCard> {
     return LayoutBuilder(
       builder: (context, box) {
         final size = Size(box.maxWidth, box.maxHeight);
+        final selected =
+            _selected != null && _selected! < markers.length ? _selected : null;
         return Focus(
           focusNode: _focus,
-          onKeyEvent: (_, event) {
-            if (_planEditing &&
-                event is KeyDownEvent &&
-                event.logicalKey == LogicalKeyboardKey.escape) {
-              _leave();
-              return KeyEventResult.handled;
-            }
-            return KeyEventResult.ignored;
-          },
+          onKeyEvent: (_, event) => _onKey(event),
           child: DragTarget<Object>(
             onWillAcceptWithDetails: (d) =>
-                _planEditing && d.data is DashboardWidgetModel,
+                _placing && d.data is DashboardWidgetModel,
             onAcceptWithDetails: (d) => _drop(d.data, d.offset, size),
             builder: (context, candidate, __) => Stack(
               fit: StackFit.expand,
               children: [
                 _Ground(url: url, config: widget.config),
-                if (_planEditing) _EditingWash(inviting: candidate.isNotEmpty),
-                if (_planEditing && markers.isEmpty) const _DropHint(),
+                if (_placing) _EditingWash(inviting: candidate.isNotEmpty),
+                if (_placing && markers.isEmpty) const _DropHint(),
+                // Clicking the plan itself puts the inspector away, the way
+                // clicking the canvas clears the card selection. Only while
+                // placing: outside the mode this would swallow the taps that
+                // will one day work a light from the plan.
+                if (_placing)
+                  Positioned.fill(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => _select(null),
+                    ),
+                  ),
                 for (final (index, marker) in markers.indexed)
                   Positioned(
                     // Fractions, so the marker holds its place on the plan
@@ -160,28 +236,49 @@ class _FloorPlanCardState extends ConsumerState<FloorPlanCard> {
                     top: marker.y * size.height,
                     child: FractionalTranslation(
                       translation: const Offset(-0.5, -0.5),
-                      child: _planEditing
+                      child: _placing
                           ? _Draggable(
                               dragging: _dragging == index,
-                              onStart: () => setState(() => _dragging = index),
+                              // Touching a marker is how you get its inspector,
+                              // and dragging one is touching it. Anything else
+                              // would mean moving a marker and then hunting for
+                              // the panel about the thing already under your
+                              // finger.
+                              onTap: () => _select(index),
+                              onStart: () {
+                                _select(index);
+                                setState(() => _dragging = index);
+                              },
                               onUpdate: (global) {
                                 final rb = context.findRenderObject();
                                 if (rb is! RenderBox) return;
                                 _moveTo(index, rb.globalToLocal(global), size);
                               },
                               onEnd: () => setState(() => _dragging = null),
-                              child: _Marker(marker: marker, devices: devices),
+                              child: _Marker(
+                                marker: marker,
+                                devices: devices,
+                                selected: selected == index,
+                              ),
                             )
                           : _Marker(marker: marker, devices: devices),
                     ),
                   ),
-                if (_canEdit)
+                if (_placing && selected != null)
                   Positioned(
-                    right: 8,
-                    top: 8,
-                    child: _EditToggle(
-                      editing: _planEditing,
-                      onPressed: _planEditing ? _leave : _enter,
+                    // Bottom-left, opposite the frame's Done chip, and pinned
+                    // rather than following the marker: a panel that moves with
+                    // what it is about is a panel you chase, and one anchored to
+                    // a marker near an edge has nowhere to be.
+                    left: 8,
+                    bottom: 8,
+                    child: _MarkerInspector(
+                      key: ValueKey(selected),
+                      marker: markers[selected],
+                      devices: devices,
+                      maxWidth: size.width - 16,
+                      onLabel: (text) => _relabel(selected, text),
+                      onRemove: () => _remove(selected),
                     ),
                   ),
               ],
@@ -249,49 +346,6 @@ class _DropHint extends StatelessWidget {
   }
 }
 
-/// In, and out.
-class _EditToggle extends StatelessWidget {
-  const _EditToggle({required this.editing, required this.onPressed});
-
-  final bool editing;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = HcTokens.of(context);
-    return Tooltip(
-      message: editing ? 'Done placing — or press Escape' : 'Place markers',
-      child: Material(
-        color:
-            editing ? t.accent.active : t.surface.raised.withValues(alpha: .9),
-        shape: RoundedRectangleBorder(borderRadius: t.radius.pillR),
-        child: InkWell(
-          borderRadius: t.radius.pillR,
-          onTap: onPressed,
-          child: Padding(
-            padding: EdgeInsets.symmetric(
-                horizontal: t.space.sm, vertical: t.space.xs),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(editing ? Icons.check : Icons.edit_location_alt_outlined,
-                    size: 14,
-                    color: editing ? t.accent.onPrimary : t.surface.onBase),
-                SizedBox(width: t.space.xs),
-                Text(
-                  editing ? 'Done' : 'Place',
-                  style: t.text.captionStyle.copyWith(
-                      color: editing ? t.accent.onPrimary : t.surface.onBase),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 /// A marker you can move.
 ///
 /// The gesture is claimed here, on the marker, so the card's own drag never
@@ -299,6 +353,7 @@ class _EditToggle extends StatelessWidget {
 class _Draggable extends StatelessWidget {
   const _Draggable({
     required this.dragging,
+    required this.onTap,
     required this.onStart,
     required this.onUpdate,
     required this.onEnd,
@@ -306,6 +361,7 @@ class _Draggable extends StatelessWidget {
   });
 
   final bool dragging;
+  final VoidCallback onTap;
   final VoidCallback onStart;
   final ValueChanged<Offset> onUpdate;
   final VoidCallback onEnd;
@@ -317,6 +373,7 @@ class _Draggable extends StatelessWidget {
       cursor: SystemMouseCursors.move,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
+        onTap: onTap,
         onPanStart: (_) => onStart(),
         onPanUpdate: (d) => onUpdate(d.globalPosition),
         onPanEnd: (_) => onEnd(),
@@ -406,44 +463,62 @@ const _invert = ColorFilter.matrix(<double>[
 
 /// What the device already is, at a point.
 class _Marker extends StatelessWidget {
-  const _Marker({required this.marker, required this.devices});
+  const _Marker({
+    required this.marker,
+    required this.devices,
+    this.selected = false,
+  });
 
   final FloorPlanMarker marker;
   final List<DeviceState> devices;
 
+  /// The inspector is about this one. Drawn as a ring rather than by changing
+  /// the marker itself: a marker's own colour already means *this device is
+  /// on*, and borrowing it to mean "chosen" would put a second meaning on the
+  /// one thing the plan exists to say.
+  final bool selected;
+
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
-    final selected = selectDevicesForConfig(devices, marker.selection);
+    final matched = selectDevicesForConfig(devices, marker.selection);
 
-    // A marker pointing at nothing is a placement mistake, and saying so where
-    // it sits beats a blank spot on the plan.
-    if (selected.isEmpty) {
-      return _Dot(
+    final Widget body;
+    if (matched.isEmpty) {
+      // A marker pointing at nothing is a placement mistake, and saying so
+      // where it sits beats a blank spot on the plan.
+      body = _Dot(
         icon: HcIcons.forFacet(DeviceFacet.unknown),
         on: false,
         label: marker.label,
         tint: t.surface.onBaseMuted,
       );
+    } else if (facetOf(matched.first).presentation ==
+        TilePresentation.readout) {
+      // A sensor marker is its reading. The icon tells you nothing you did not
+      // already know; the value is the entire reason the sensor is on the plan.
+      body = _Reading(text: _readingOf(matched.first), label: marker.label);
+    } else {
+      // Any of them being on lights the marker, which is what makes one marker
+      // able to speak for a room.
+      final on = matched.any(isOn);
+      body = _Dot(
+        icon: HcIcons.forFacet(facetOf(matched.first), on: on),
+        on: on,
+        label: marker.label,
+        tint: t.accent.active,
+      );
     }
 
-    final lead = selected.first;
-    final facet = facetOf(lead);
-
-    // A sensor marker is its reading. The icon tells you nothing you did not
-    // already know; the value is the entire reason the sensor is on the plan.
-    if (facet.presentation == TilePresentation.readout) {
-      return _Reading(text: _readingOf(lead), label: marker.label);
-    }
-
-    // Any of them being on lights the marker, which is what makes one marker
-    // able to speak for a room.
-    final on = selected.any(isOn);
-    return _Dot(
-      icon: HcIcons.forFacet(facet, on: on),
-      on: on,
-      label: marker.label,
-      tint: t.accent.active,
+    if (!selected) return body;
+    return Container(
+      padding: EdgeInsets.all(t.space.xs / 2),
+      decoration: BoxDecoration(
+        borderRadius: t.radius.pillR,
+        border: Border.all(color: t.surface.onBase, width: 1.5),
+        color: t.surface.onBase.withValues(alpha: 0.08),
+      ),
+      child: body,
     );
   }
 }
@@ -578,6 +653,154 @@ String _readingOf(DeviceState d) {
   }
   final fallback = d.state['state'];
   return fallback is String && fallback.isNotEmpty ? fallback : '—';
+}
+
+/// The one marker you touched: what it speaks for, what to call it, and the way
+/// to get rid of it.
+///
+/// **On the card, not in the rail.** A marker is not a card, and the rail is
+/// about the card — the plan, its picture, its dimming. More to the point, the
+/// in-place editor on a phone has no rail at all, and a marker you can place
+/// but never label or delete is the state this whole feature shipped in.
+/// Anchored on the plan, it is in the same place on every surface.
+///
+/// Deliberately three things. Position is already editable — by dragging, which
+/// is the entire point of the mode — and *which devices* is the card library's
+/// job, done by dropping another one. Repeating either here would be a second
+/// way to say something the plan already says better.
+class _MarkerInspector extends StatelessWidget {
+  const _MarkerInspector({
+    super.key,
+    required this.marker,
+    required this.devices,
+    required this.maxWidth,
+    required this.onLabel,
+    required this.onRemove,
+  });
+
+  final FloorPlanMarker marker;
+  final List<DeviceState> devices;
+  final double maxWidth;
+  final ValueChanged<String> onLabel;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxWidth: maxWidth.clamp(120.0, 260.0)),
+      child: Container(
+        padding: EdgeInsets.all(t.space.sm),
+        decoration: BoxDecoration(
+          color: t.surface.overlay,
+          borderRadius: t.radius.mdR,
+          border: Border.all(color: t.stroke.hairline),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Which marker this is about. Without it the panel could be about
+            // any of them, and on a plan with eight markers that is a panel you
+            // have to verify before you dare press Remove.
+            Text(
+              describeMarker(marker, devices),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: t.text.captionStyle.copyWith(color: t.surface.onBaseMuted),
+            ),
+            SizedBox(height: t.space.xs),
+            _LabelField(value: marker.label ?? '', onChanged: onLabel),
+            SizedBox(height: t.space.xs),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: onRemove,
+                icon: Icon(HcIcons.trash, size: 14, color: t.accent.danger),
+                label: Text('Remove',
+                    style:
+                        t.text.captionStyle.copyWith(color: t.accent.danger)),
+                style: TextButton.styleFrom(
+                  padding: EdgeInsets.symmetric(
+                      horizontal: t.space.sm, vertical: t.space.xs),
+                  minimumSize: const Size(0, 32),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The custom name, or none.
+///
+/// Its own widget for its own controller: the card rewrites its config on every
+/// keystroke — that is how an in-place edit reaches the draft — and a field
+/// rebuilt from that config without one would put the caret back at the start
+/// of the word on every letter.
+class _LabelField extends StatefulWidget {
+  const _LabelField({required this.value, required this.onChanged});
+
+  final String value;
+  final ValueChanged<String> onChanged;
+
+  @override
+  State<_LabelField> createState() => _LabelFieldState();
+}
+
+class _LabelFieldState extends State<_LabelField> {
+  late final _controller = TextEditingController(text: widget.value);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return TextField(
+      controller: _controller,
+      // Not autofocused, deliberately. The field would swallow Delete, and
+      // Delete on the marker you just touched is how you get rid of a marker
+      // dropped in the wrong room — the commoner of the two things you come
+      // here to do, and the one with no other keyboard route.
+      style: t.text.bodySmallStyle.copyWith(color: t.surface.onBase),
+      onChanged: widget.onChanged,
+      decoration: InputDecoration(
+        isDense: true,
+        border: const OutlineInputBorder(),
+        labelText: 'Label',
+        labelStyle: t.text.captionStyle.copyWith(color: t.surface.onBaseMuted),
+        // Not the device's name: an unlabelled marker shows *nothing*, and a
+        // hint naming the room would promise a word the plan will not draw.
+        hintText: 'None',
+        hintStyle: t.text.bodySmallStyle.copyWith(color: t.surface.onBaseMuted),
+      ),
+    );
+  }
+}
+
+/// What a marker speaks for, in the fewest words that identify it.
+///
+/// Public because the inspector is not the only thing that has to name a
+/// marker — anything that lists or previews one must say the same words, or the
+/// two disagree about which marker you are looking at.
+String describeMarker(FloorPlanMarker marker, List<DeviceState> devices) {
+  final area = marker.selection['area_name'];
+  if (marker.selection['selection_mode'] == 'area' &&
+      area is String &&
+      area.isNotEmpty) {
+    return humanize(area);
+  }
+  final matched = selectDevicesForConfig(devices, marker.selection);
+  if (matched.isEmpty) return 'Nothing here now';
+  if (matched.length == 1) return matched.first.displayName;
+  return '${matched.length} devices';
 }
 
 /// A small backing so text stays readable over any part of the picture.

@@ -1642,6 +1642,10 @@ void registerBuiltinDashboardWidgets() {
           minW: 4, minH: 3, recommendedW: 8, recommendedH: 6),
       // A plan with a band of card padding around it is a plan in a frame.
       chrome: WidgetChrome.bleed,
+      // The card the whole in-place editing mechanism exists for: a marker is
+      // placed by pointing at the plan, because placing it in a form would mean
+      // typing coordinates.
+      inPlaceLabel: 'Place markers',
       configFields: const [
         WidgetConfigField('url', WidgetConfigKind.image, required: true),
         WidgetConfigField('fit', WidgetConfigKind.choice,
@@ -1657,7 +1661,7 @@ void registerBuiltinDashboardWidgets() {
           : 'Give it a picture of your floor plan.',
       builder: (context, a) => FloorPlanCard(
         config: a.config,
-        editing: a.editing,
+        entered: a.entered,
         onConfigChanged: a.onConfigChanged,
       ),
     ),
