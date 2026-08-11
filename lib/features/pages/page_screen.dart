@@ -949,6 +949,11 @@ class _PageScreenState extends ConsumerState<PageScreen> {
                   onConfigure: (id) => hasInspector || widget.designer
                       ? setState(() => _selectedCard = id)
                       : _configureWidget(id),
+                  // A card that edits itself in place — the floor plan placing
+                  // a marker. Straight into the same writer the inspector
+                  // uses, so it lands in the draft and coalesces into one undo
+                  // entry per gesture rather than one per pixel.
+                  onWidgetConfig: _configureLive,
                   onAddAt: (x, y) => _addWidget(columns, atX: x, atY: y),
                   onMenu: (id, at) => _cardMenu(id, at, columns),
                   onSelect: hasInspector || widget.designer

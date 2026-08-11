@@ -28,6 +28,7 @@ class PageGrid extends StatefulWidget {
     this.onResize,
     this.onRemove,
     this.onConfigure,
+    this.onWidgetConfig,
     this.onAddAt,
     this.selectedId,
     this.onDropCard,
@@ -55,6 +56,9 @@ class PageGrid extends StatefulWidget {
   final void Function(String id, int w, int h)? onResize;
   final void Function(String id)? onRemove;
   final void Function(String id)? onConfigure;
+
+  /// A card rewriting its own config — see [WidgetRenderArgs.onConfigChanged].
+  final void Function(String id, Map<String, dynamic> config)? onWidgetConfig;
 
   /// A tap on empty canvas, in grid cells.
   ///
@@ -323,6 +327,9 @@ class _PageGridState extends State<PageGrid> {
                   height: heightOf(item),
                   child: RepaintBoundary(
                     child: _Cell(
+                      onConfigChanged: widget.onWidgetConfig == null
+                          ? null
+                          : (next) => widget.onWidgetConfig!(item.id, next),
                       item: item,
                       model: widget.widgetsById[item.id],
                       editing: widget.editing,
@@ -563,6 +570,7 @@ class _Cell extends StatelessWidget {
     required this.sizeLabel,
     required this.onRemove,
     required this.onConfigure,
+    required this.onConfigChanged,
     required this.onMenu,
     required this.onSelect,
     required this.onDragStart,
@@ -584,6 +592,10 @@ class _Cell extends StatelessWidget {
   final String? sizeLabel;
   final VoidCallback onRemove;
   final VoidCallback onConfigure;
+
+  /// How this card writes its own config back. Null when nothing is listening,
+  /// which is also how a card knows it may not edit itself.
+  final ValueChanged<Map<String, dynamic>>? onConfigChanged;
   final void Function(Offset globalPosition) onMenu;
 
   /// Null outside the surfaces that have somewhere to show a selection.
@@ -626,6 +638,7 @@ class _Cell extends StatelessWidget {
                       h: item.h,
                       sizeHint: descriptor.sizeHint,
                       editing: editing,
+                      onConfigChanged: onConfigChanged,
                     ),
                   );
 

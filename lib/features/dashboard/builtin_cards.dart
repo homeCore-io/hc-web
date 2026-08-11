@@ -1655,7 +1655,11 @@ void registerBuiltinDashboardWidgets() {
       validate: (c) => (c['url'] as String?)?.isNotEmpty == true
           ? null
           : 'Give it a picture of your floor plan.',
-      builder: (context, a) => FloorPlanCard(config: a.config),
+      builder: (context, a) => FloorPlanCard(
+        config: a.config,
+        editing: a.editing,
+        onConfigChanged: a.onConfigChanged,
+      ),
     ),
     WidgetDescriptor(
       type: 'markdown',

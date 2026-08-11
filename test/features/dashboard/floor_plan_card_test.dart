@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hc_web/core/models/device_state.dart';
@@ -103,8 +103,10 @@ DeviceState _sensor(String id, double temp) => DeviceState(
 Future<void> _pump(
   WidgetTester tester,
   Map<String, dynamic> config,
-  List<DeviceState> devices,
-) async {
+  List<DeviceState> devices, {
+  bool editing = false,
+  ValueChanged<Map<String, dynamic>>? onConfigChanged,
+}) async {
   await tester.pumpWidget(ProviderScope(
     overrides: [devicesProvider.overrideWith(() => _Devices(devices))],
     child: MaterialApp(
@@ -113,7 +115,11 @@ Future<void> _pump(
         body: SizedBox(
           width: 400,
           height: 300,
-          child: FloorPlanCard(config: config),
+          child: FloorPlanCard(
+            config: config,
+            editing: editing,
+            onConfigChanged: onConfigChanged,
+          ),
         ),
       ),
     ),
@@ -221,6 +227,8 @@ void main() {
     expect(icon.color, HcSkin.midnight.tokens.surface.onBaseMuted);
   });
 
+  _editModeTests();
+
   testWidgets('markers are placed by fraction, so they survive a resize',
       (tester) async {
     await _pump(tester, {
@@ -244,9 +252,125 @@ void main() {
   });
 }
 
+Map<String, dynamic> _oneMarker({double x = 0.5, double y = 0.5}) => {
+      'url': 'https://house.lan/plan.png',
+      'markers': [
+        {
+          'x': x,
+          'y': y,
+          'selection': {
+            'selection_mode': 'manual',
+            'device_ids': ['light.a']
+          }
+        }
+      ],
+    };
+
+// ── placing markers ────────────────────────────────────────────────────────
+
 class _Devices extends DevicesNotifier {
   _Devices(this.items);
   final List<DeviceState> items;
   @override
   Future<List<DeviceState>> build() async => items;
+}
+
+void _editModeTests() {
+  testWidgets('the plan offers no editing outside the designer',
+      (tester) async {
+    await _pump(tester, _oneMarker(), [_light('light.a', on: true)]);
+    expect(find.text('Place'), findsNothing,
+        reason: 'a viewer must not be one tap from rearranging the house');
+  });
+
+  testWidgets('nor when nobody is listening for the result', (tester) async {
+    // editing:true with no writer is the designer drawing a preview. Offering
+    // a button whose changes go nowhere is worse than not offering it.
+    await _pump(tester, _oneMarker(), [_light('light.a', on: true)],
+        editing: true);
+    expect(find.text('Place'), findsNothing);
+  });
+
+  testWidgets('in the designer it is a mode you enter and leave',
+      (tester) async {
+    await _pump(tester, _oneMarker(), [_light('light.a', on: true)],
+        editing: true, onConfigChanged: (_) {});
+
+    expect(find.text('Place'), findsOneWidget);
+    await tester.tap(find.text('Place'));
+    await tester.pump();
+    // Entering says so: a mode you cannot see is how you drag a marker when
+    // you meant to move the card.
+    expect(find.text('Done'), findsOneWidget);
+
+    await tester.tap(find.text('Done'));
+    await tester.pump();
+    expect(find.text('Place'), findsOneWidget);
+  });
+
+  testWidgets('Escape leaves the mode', (tester) async {
+    await _pump(tester, _oneMarker(), [_light('light.a', on: true)],
+        editing: true, onConfigChanged: (_) {});
+    await tester.tap(find.text('Place'));
+    await tester.pump();
+    expect(find.text('Done'), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    expect(find.text('Place'), findsOneWidget,
+        reason: 'the way leaving a group works in a vector editor');
+  });
+
+  testWidgets('dragging a marker writes a fraction, not a pixel',
+      (tester) async {
+    Map<String, dynamic>? written;
+    await _pump(
+        tester, _oneMarker(x: 0.5, y: 0.5), [_light('light.a', on: true)],
+        editing: true, onConfigChanged: (c) => written = c);
+    await tester.tap(find.text('Place'));
+    await tester.pump();
+
+    // The card is 400x300 and the marker sits at its centre. Drag it a
+    // quarter of the width left.
+    await tester.drag(find.byType(Icon).first, const Offset(-100, 0));
+    await tester.pump();
+
+    expect(written, isNotNull, reason: 'the move never reached the document');
+    final marker = (written!['markers'] as List).first as Map;
+    expect(marker['x'], closeTo(0.25, 0.05));
+    expect(marker['y'], closeTo(0.5, 0.05));
+    expect(marker['x'], isNot(isA<int>()),
+        reason: 'a pixel would be right exactly once, at one card size');
+  });
+
+  testWidgets('a drag past the edge parks at it', (tester) async {
+    Map<String, dynamic>? written;
+    await _pump(
+        tester, _oneMarker(x: 0.1, y: 0.5), [_light('light.a', on: true)],
+        editing: true, onConfigChanged: (c) => written = c);
+    await tester.tap(find.text('Place'));
+    await tester.pump();
+    await tester.drag(find.byType(Icon).first, const Offset(-400, 0));
+    await tester.pump();
+
+    final marker = (written!['markers'] as List).first as Map;
+    expect(marker['x'], 0.0, reason: 'clamped, so it stays findable');
+  });
+
+  testWidgets('the rest of the config survives a move', (tester) async {
+    // The card rewrites its own document here, and dropping `url` or `dim`
+    // on the way would blank the plan the marker sits on.
+    Map<String, dynamic>? written;
+    final config = {..._oneMarker(), 'dim': 0.7, 'invert': true};
+    await _pump(tester, config, [_light('light.a', on: true)],
+        editing: true, onConfigChanged: (c) => written = c);
+    await tester.tap(find.text('Place'));
+    await tester.pump();
+    await tester.drag(find.byType(Icon).first, const Offset(-40, 0));
+    await tester.pump();
+
+    expect(written!['url'], 'https://house.lan/plan.png');
+    expect(written!['dim'], 0.7);
+    expect(written!['invert'], true);
+  });
 }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/dashboard/floor_plan.dart';
@@ -24,34 +25,238 @@ import 'builtin_cards.dart';
 /// use decide whether it draws as a glowing dot or as a reading. That means a
 /// plan needs no second opinion about what a device is, and cannot drift from
 /// the rest of the app.
-class FloorPlanCard extends ConsumerWidget {
-  const FloorPlanCard({super.key, required this.config});
+class FloorPlanCard extends ConsumerStatefulWidget {
+  const FloorPlanCard({
+    super.key,
+    required this.config,
+    this.editing = false,
+    this.onConfigChanged,
+  });
 
   final Map<String, dynamic> config;
 
+  /// The designer is drawing this card, so plan editing can be *offered*.
+  final bool editing;
+
+  /// Null when nothing is listening, which is also how this card knows it may
+  /// not edit itself.
+  final ValueChanged<Map<String, dynamic>>? onConfigChanged;
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final url = (config['url'] as String?)?.trim() ?? '';
-    final markers = markersFromConfig(config);
+  ConsumerState<FloorPlanCard> createState() => _FloorPlanCardState();
+}
+
+class _FloorPlanCardState extends ConsumerState<FloorPlanCard> {
+  /// Plan editing is an explicit mode, decided rather than inferred.
+  ///
+  /// The alternative was to guess from what a drag started on — a marker, or
+  /// the card beneath it — and a gesture that guesses between "move this
+  /// marker" and "move this whole card" is the kind of cleverness that is
+  /// wrong five percent of the time and infuriating for it. So: a button in,
+  /// Escape out, the way entering a group works in a vector editor.
+  bool _planEditing = false;
+
+  /// Which marker is being dragged, by index. Null between gestures.
+  int? _dragging;
+
+  final _focus = FocusNode(debugLabel: 'floor plan');
+
+  bool get _canEdit => widget.editing && widget.onConfigChanged != null;
+
+  @override
+  void dispose() {
+    _focus.dispose();
+    super.dispose();
+  }
+
+  void _enter() {
+    setState(() => _planEditing = true);
+    _focus.requestFocus();
+  }
+
+  void _leave() => setState(() {
+        _planEditing = false;
+        _dragging = null;
+      });
+
+  void _write(List<FloorPlanMarker> markers) {
+    widget.onConfigChanged?.call({
+      ...widget.config,
+      'markers': [for (final m in markers) m.toJson()],
+    });
+  }
+
+  void _moveTo(int index, Offset local, Size box) {
+    final markers = markersFromConfig(widget.config);
+    if (index < 0 || index >= markers.length) return;
+    if (box.width <= 0 || box.height <= 0) return;
+    markers[index] = markers[index].copyWith(
+      x: local.dx / box.width,
+      y: local.dy / box.height,
+    );
+    _write(markers);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final url = (widget.config['url'] as String?)?.trim() ?? '';
+    final markers = markersFromConfig(widget.config);
     final devices = ref.watch(devicesProvider).value ?? const <DeviceState>[];
 
     return LayoutBuilder(
-      builder: (context, box) => Stack(
-        fit: StackFit.expand,
-        children: [
-          _Ground(url: url, config: config),
-          for (final marker in markers)
-            Positioned(
-              // Fractions, so the marker holds its place on the plan through a
-              // resize, a zoom and a breakpoint change.
-              left: marker.x * box.maxWidth,
-              top: marker.y * box.maxHeight,
-              child: FractionalTranslation(
-                translation: const Offset(-0.5, -0.5),
-                child: _Marker(marker: marker, devices: devices),
-              ),
+      builder: (context, box) {
+        final size = Size(box.maxWidth, box.maxHeight);
+        return Focus(
+          focusNode: _focus,
+          onKeyEvent: (_, event) {
+            if (_planEditing &&
+                event is KeyDownEvent &&
+                event.logicalKey == LogicalKeyboardKey.escape) {
+              _leave();
+              return KeyEventResult.handled;
+            }
+            return KeyEventResult.ignored;
+          },
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              _Ground(url: url, config: widget.config),
+              if (_planEditing) const _EditingWash(),
+              for (final (index, marker) in markers.indexed)
+                Positioned(
+                  // Fractions, so the marker holds its place on the plan
+                  // through a resize, a zoom and a breakpoint change.
+                  left: marker.x * size.width,
+                  top: marker.y * size.height,
+                  child: FractionalTranslation(
+                    translation: const Offset(-0.5, -0.5),
+                    child: _planEditing
+                        ? _Draggable(
+                            dragging: _dragging == index,
+                            onStart: () => setState(() => _dragging = index),
+                            onUpdate: (global) {
+                              final rb = context.findRenderObject();
+                              if (rb is! RenderBox) return;
+                              _moveTo(index, rb.globalToLocal(global), size);
+                            },
+                            onEnd: () => setState(() => _dragging = null),
+                            child: _Marker(marker: marker, devices: devices),
+                          )
+                        : _Marker(marker: marker, devices: devices),
+                  ),
+                ),
+              if (_canEdit)
+                Positioned(
+                  right: 8,
+                  top: 8,
+                  child: _EditToggle(
+                    editing: _planEditing,
+                    onPressed: _planEditing ? _leave : _enter,
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// While the mode is on, the plan says so.
+///
+/// Not decoration: entering a mode you cannot see is how you end up dragging
+/// markers when you meant to move the card, which is the confusion the mode
+/// exists to remove.
+class _EditingWash extends StatelessWidget {
+  const _EditingWash();
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return IgnorePointer(
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border.all(color: t.accent.active, width: 2),
+          color: t.accent.active.withValues(alpha: 0.04),
+        ),
+      ),
+    );
+  }
+}
+
+/// In, and out.
+class _EditToggle extends StatelessWidget {
+  const _EditToggle({required this.editing, required this.onPressed});
+
+  final bool editing;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Tooltip(
+      message: editing ? 'Done placing — or press Escape' : 'Place markers',
+      child: Material(
+        color:
+            editing ? t.accent.active : t.surface.raised.withValues(alpha: .9),
+        shape: RoundedRectangleBorder(borderRadius: t.radius.pillR),
+        child: InkWell(
+          borderRadius: t.radius.pillR,
+          onTap: onPressed,
+          child: Padding(
+            padding: EdgeInsets.symmetric(
+                horizontal: t.space.sm, vertical: t.space.xs),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(editing ? Icons.check : Icons.edit_location_alt_outlined,
+                    size: 14,
+                    color: editing ? t.accent.onPrimary : t.surface.onBase),
+                SizedBox(width: t.space.xs),
+                Text(
+                  editing ? 'Done' : 'Place',
+                  style: t.text.captionStyle.copyWith(
+                      color: editing ? t.accent.onPrimary : t.surface.onBase),
+                ),
+              ],
             ),
-        ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A marker you can move.
+///
+/// The gesture is claimed here, on the marker, so the card's own drag never
+/// sees it — which is what "the grid goes inert" means in practice.
+class _Draggable extends StatelessWidget {
+  const _Draggable({
+    required this.dragging,
+    required this.onStart,
+    required this.onUpdate,
+    required this.onEnd,
+    required this.child,
+  });
+
+  final bool dragging;
+  final VoidCallback onStart;
+  final ValueChanged<Offset> onUpdate;
+  final VoidCallback onEnd;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.move,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onPanStart: (_) => onStart(),
+        onPanUpdate: (d) => onUpdate(d.globalPosition),
+        onPanEnd: (_) => onEnd(),
+        onPanCancel: onEnd,
+        child: Opacity(opacity: dragging ? 0.75 : 1, child: child),
       ),
     );
   }

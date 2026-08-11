@@ -93,6 +93,7 @@ class WidgetRenderArgs {
     required this.subtitle,
     required this.sizeHint,
     this.editing = false,
+    this.onConfigChanged,
   });
 
   final String id;
@@ -106,6 +107,18 @@ class WidgetRenderArgs {
   final int h;
 
   final WidgetSizeHint sizeHint;
+
+  /// How a card writes its own config back, when it edits itself in place.
+  ///
+  /// Almost no card needs this: config is edited in the inspector, and a card
+  /// that quietly rewrites itself while you look at it is a card you cannot
+  /// trust. The floor plan is the exception the design named — you place a
+  /// marker *on the plan*, because placing it in a form would mean typing
+  /// coordinates — so the gesture happens on the card and the result has to
+  /// get back to the document.
+  ///
+  /// Null outside the designer, which is also the check for "may I edit?".
+  final ValueChanged<Map<String, dynamic>>? onConfigChanged;
 
   /// True while the designer (or the in-place editor) is drawing this card.
   ///
