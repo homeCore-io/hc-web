@@ -29,6 +29,7 @@ import '../../design/hc_icons.dart';
 import '../../design/components/hc_surface.dart';
 import '../../design/components/hc_tile.dart';
 import '../../design/tokens.dart';
+import 'floor_plan_card.dart';
 import '../devices/device_sheet.dart';
 import '../home/home_entity_row.dart';
 import '../home/home_rich_cards.dart';
@@ -1629,6 +1630,32 @@ void registerBuiltinDashboardWidgets() {
           ? null
           : 'Give it an image address.',
       builder: (context, a) => _ImageWidget(config: a.config),
+    ),
+    WidgetDescriptor(
+      type: 'floor_plan',
+      title: 'Floor plan',
+      description: 'A picture of the house, with the house on it.',
+      icon: Icons.map_outlined,
+      // Big by default. A plan at 4x3 is a thumbnail of a house, and the
+      // markers on it are unhittable.
+      sizeHint: const WidgetSizeHint(
+          minW: 4, minH: 3, recommendedW: 8, recommendedH: 6),
+      // A plan with a band of card padding around it is a plan in a frame.
+      chrome: WidgetChrome.bleed,
+      configFields: const [
+        WidgetConfigField('url', WidgetConfigKind.image, required: true),
+        WidgetConfigField('fit', WidgetConfigKind.choice,
+            defaultValue: 'contain', options: ['contain', 'cover', 'fill']),
+        // Dim and invert are the two controls that make an image survivable
+        // behind live state — see the card's own doc for why invert is not a
+        // nicety.
+        WidgetConfigField('dim', WidgetConfigKind.integer, label: 'Dim'),
+        WidgetConfigField('invert', WidgetConfigKind.boolean, label: 'Invert'),
+      ],
+      validate: (c) => (c['url'] as String?)?.isNotEmpty == true
+          ? null
+          : 'Give it a picture of your floor plan.',
+      builder: (context, a) => FloorPlanCard(config: a.config),
     ),
     WidgetDescriptor(
       type: 'markdown',
