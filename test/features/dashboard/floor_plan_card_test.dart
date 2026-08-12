@@ -298,6 +298,7 @@ void main() {
   _pressTests();
   _drawnHomeTests();
   _importedMarkerTests();
+  _roomPressTests();
 
   testWidgets('naming a marker does not move it', (tester) async {
     // It did. The label was a sibling of the dot in a Row and the whole row was
@@ -1117,5 +1118,122 @@ void _importedMarkerTests() {
     await tester.pump();
 
     expect((written!['markers'] as List), hasLength(2));
+  });
+}
+
+// ── pressing a room ────────────────────────────────────────────────────────
+
+/// §7.4 called zones deferred and offered a marker bound to a room as the
+/// honest 80%. For an imported home the polygon is *in the file*, so the 80%
+/// becomes the whole thing: press the kitchen, not a dot in the kitchen.
+
+const _twoRooms = HomePlan(rooms: [
+  PlanRoom(name: 'Living Room', points: [
+    PlanPoint(0, 0),
+    PlanPoint(400, 0),
+    PlanPoint(400, 400),
+    PlanPoint(0, 400),
+  ]),
+  PlanRoom(name: 'Cellar', points: [
+    PlanPoint(400, 0),
+    PlanPoint(800, 0),
+    PlanPoint(800, 400),
+    PlanPoint(400, 400),
+  ]),
+]);
+
+void _roomPressTests() {
+  testWidgets('pressing a room turns that room off', (tester) async {
+    final house = await _pump(tester, {
+      'plan': _twoRooms.toJson()
+    }, [
+      _light('light.a', on: true, area: 'living_room'),
+      _light('light.b', on: true, area: 'living_room'),
+    ]);
+
+    // The middle of the living room half of the card.
+    final card = tester.getRect(find.byType(FloorPlanCard));
+    await tester.tapAt(Offset(card.left + card.width * 0.25, card.center.dy));
+    await tester.pump();
+
+    expect(_asked(house), ['light.a false', 'light.b false']);
+  });
+
+  testWidgets('a room the house has no area for is not pressable',
+      (tester) async {
+    // An exact match after humanising, never anything fuzzy: a room that
+    // quietly worked a different room's lights is the worst bug this card
+    // could have.
+    final house = await _pump(tester, {
+      'plan': _twoRooms.toJson()
+    }, [
+      _light('light.a', on: true, area: 'living_room'),
+    ]);
+
+    final card = tester.getRect(find.byType(FloorPlanCard));
+    // Over the Cellar, which no device claims.
+    await tester.tapAt(Offset(card.left + card.width * 0.75, card.center.dy));
+    await tester.pump();
+
+    expect(house.sent, isEmpty);
+  });
+
+  testWidgets('a marker standing in a room is still what you press',
+      (tester) async {
+    // The dot is the specific thing and the room is the general one, so the
+    // dot has to win where they overlap.
+    final house = await _pump(
+      tester,
+      {
+        'plan': _twoRooms.toJson(),
+        'markers': [
+          const FloorPlanMarker(
+            selection: {
+              'selection_mode': 'manual',
+              'device_ids': ['light.only'],
+            },
+            x: 0.5,
+            y: 0.5,
+            home: PlanPoint(200, 200),
+          ).toJson(),
+        ],
+      },
+      [
+        _light('light.a', on: true, area: 'living_room'),
+        _light('light.only', on: true, area: 'living_room'),
+      ],
+    );
+
+    await tester.tap(find.byType(Icon).first);
+    await tester.pump();
+
+    expect(_asked(house), ['light.only false'],
+        reason: 'the room took a press meant for the marker on it');
+  });
+
+  testWidgets('rooms are inert inside the card, where the plan is being drawn',
+      (tester) async {
+    final house = await _pump(
+      tester,
+      {'plan': _twoRooms.toJson()},
+      [_light('light.a', on: true, area: 'living_room')],
+      entered: true,
+      onConfigChanged: (_) {},
+    );
+
+    final card = tester.getRect(find.byType(FloorPlanCard));
+    await tester.tapAt(Offset(card.left + card.width * 0.25, card.center.dy));
+    await tester.pump();
+
+    expect(house.sent, isEmpty, reason: 'the designer switched a real light');
+  });
+
+  testWidgets('a room says its name and its state', (tester) async {
+    final handle = tester.ensureSemantics();
+    await _pump(tester, {'plan': _twoRooms.toJson()},
+        [_light('light.a', on: true, area: 'living_room')]);
+
+    expect(find.bySemanticsLabel('Living Room, on'), findsOneWidget);
+    handle.dispose();
   });
 }

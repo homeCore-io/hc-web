@@ -16,7 +16,12 @@ import '../../design/tokens.dart';
 /// is deliberately quiet: structure in muted ink, rooms as a barely-there fill,
 /// furniture as outlines. If this ever competes with a lit marker, it is wrong.
 class PlanView extends StatelessWidget {
-  const PlanView({super.key, required this.plan, this.showNames = true});
+  const PlanView({
+    super.key,
+    required this.plan,
+    this.showNames = true,
+    this.lit,
+  });
 
   /// Already narrowed to the storey being drawn — see [HomePlan.level].
   final HomePlan plan;
@@ -24,12 +29,20 @@ class PlanView extends StatelessWidget {
   /// Room names, where a room is big enough to hold one.
   final bool showNames;
 
+  /// The room under the pointer, drawn a shade stronger.
+  ///
+  /// Hover only, and so invisible until someone points at the plan — which is
+  /// the only way to say "this room is a thing you can press" without the plan
+  /// spending its whole life shouting it.
+  final PlanRoom? lit;
+
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
     return CustomPaint(
       painter: _PlanPainter(
         plan: plan,
+        lit: lit,
         ink: t.surface.onBase,
         muted: t.surface.onBaseMuted,
         fill: t.surface.raised,
@@ -40,6 +53,80 @@ class PlanView extends StatelessWidget {
       size: Size.infinite,
     );
   }
+}
+
+/// A room you can press, shaped like the room.
+///
+/// §7.4 called zones deferred and offered a marker bound to a room selection as
+/// the honest 80%. That stays the answer for a picture — but for a home
+/// imported from a file the polygon *is in the file*, so the 80% becomes the
+/// whole thing at no cost: press the kitchen, not a dot in the kitchen.
+///
+/// The shape is honoured rather than approximated. A [ClipPath] clips hit
+/// testing as well as painting, so an L-shaped room's notch belongs to whatever
+/// is actually drawn there — a bounding box would hand the hall's floor to the
+/// living room, in exactly the homes where it matters.
+class PlanRoomTarget extends StatelessWidget {
+  const PlanRoomTarget({
+    super.key,
+    required this.room,
+    required this.fit,
+    required this.label,
+    required this.onTap,
+    required this.onHover,
+  });
+
+  final PlanRoom room;
+  final PlanFit fit;
+
+  /// What this room is and what state it is in, for anyone not looking.
+  final String label;
+  final VoidCallback onTap;
+  final ValueChanged<bool> onHover;
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned.fill(
+      child: ClipPath(
+        clipper: _RoomClipper(room, fit),
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          onEnter: (_) => onHover(true),
+          onExit: (_) => onHover(false),
+          child: Semantics(
+            container: true,
+            button: true,
+            label: label,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: onTap,
+              // Nothing drawn: the room is already on the plan, and this is
+              // only the part of it that answers a pointer.
+              child: const SizedBox.expand(),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RoomClipper extends CustomClipper<Path> {
+  const _RoomClipper(this.room, this.fit);
+
+  final PlanRoom room;
+  final PlanFit fit;
+
+  @override
+  Path getClip(Size size) => Path()
+    ..addPolygon(
+      [for (final p in room.points) fit.toCard(p.x, p.y)],
+      true,
+    );
+
+  @override
+  bool shouldReclip(_RoomClipper old) =>
+      !identical(old.room, room) || old.fit != fit;
 }
 
 /// Where a home sits inside a card, and how to get between the two.
@@ -85,11 +172,22 @@ class PlanFit {
   /// Centimetres to card pixels, for anything that has a size as well as a
   /// place — a wall's thickness, a sofa's footprint.
   double lengths(double centimetres) => centimetres * _scale;
+
+  @override
+  bool operator ==(Object other) =>
+      other is PlanFit &&
+      other._scale == _scale &&
+      other._dx == _dx &&
+      other._dy == _dy;
+
+  @override
+  int get hashCode => Object.hash(_scale, _dx, _dy);
 }
 
 class _PlanPainter extends CustomPainter {
   _PlanPainter({
     required this.plan,
+    required this.lit,
     required this.ink,
     required this.muted,
     required this.fill,
@@ -99,6 +197,7 @@ class _PlanPainter extends CustomPainter {
   });
 
   final HomePlan plan;
+  final PlanRoom? lit;
   final Color ink;
   final Color muted;
   final Color fill;
@@ -118,12 +217,16 @@ class _PlanPainter extends CustomPainter {
 
     // Rooms first: they are the floor, and everything else stands on it.
     final roomPaint = Paint()..color = fill.withValues(alpha: 0.55);
+    // The one under the pointer, a shade stronger. Still a surface tint and
+    // never the accent: `accent.active` means *this device is on*, and a room
+    // you are merely pointing at is not on.
+    final litPaint = Paint()..color = ink.withValues(alpha: 0.10);
     for (final room in plan.rooms) {
       if (room.points.length < 3) continue;
-      canvas.drawPath(
-        Path()..addPolygon([for (final p in room.points) at(p.x, p.y)], true),
-        roomPaint,
-      );
+      final path = Path()
+        ..addPolygon([for (final p in room.points) at(p.x, p.y)], true);
+      canvas.drawPath(path, roomPaint);
+      if (identical(room, lit)) canvas.drawPath(path, litPaint);
     }
 
     // Furniture as footprints, outlined rather than filled: it is there to say
@@ -213,6 +316,7 @@ class _PlanPainter extends CustomPainter {
   @override
   bool shouldRepaint(_PlanPainter old) =>
       !identical(old.plan, plan) ||
+      !identical(old.lit, lit) ||
       old.ink != ink ||
       old.muted != muted ||
       old.fill != fill ||

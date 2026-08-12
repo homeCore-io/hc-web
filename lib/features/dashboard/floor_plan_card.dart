@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/dashboard/floor_plan.dart';
+import '../../core/dashboard/sweet_home.dart';
 import '../../core/devices/presentation.dart';
 import '../../core/models/dashboard.dart';
 import '../../core/models/device_state.dart';
@@ -73,6 +74,9 @@ class _FloorPlanCardState extends ConsumerState<FloorPlanCard> {
   /// giving it an identity would be inventing a thing the document does not
   /// have. Index is honest as long as nothing outlives the list.
   int? _selected;
+
+  /// The room the pointer is over, so the drawing can say so. Hover only.
+  PlanRoom? _hovered;
 
   /// Where the keys land while a marker is selected.
   ///
@@ -150,14 +154,21 @@ class _FloorPlanCardState extends ConsumerState<FloorPlanCard> {
   /// speaker must not promise to switch it, and must not sit there dead
   /// because of it either.
   ({String label, VoidCallback act})? _pressFor(
-      FloorPlanMarker marker, List<DeviceState> devices) {
+          FloorPlanMarker marker, List<DeviceState> devices) =>
+      _pressOn(marker.selection,
+          marker.label ?? describeMarker(marker, devices), devices);
+
+  /// The same decision for anything on the plan that can be pressed — a marker,
+  /// or a room of an imported home. One rule, so a room and a dot standing in
+  /// it can never disagree about what pressing does.
+  ({String label, VoidCallback act})? _pressOn(
+      Map<String, dynamic> selection, String name, List<DeviceState> devices) {
     // Inside the card a press means "show me this marker", and the plan is a
     // thing being arranged rather than a thing being worked.
     if (widget.entered) return null;
 
-    final matched = selectDevicesForConfig(devices, marker.selection);
+    final matched = selectDevicesForConfig(devices, selection);
     if (matched.isEmpty) return null;
-    final name = marker.label ?? describeMarker(marker, devices);
 
     final switches = [
       for (final d in matched)
@@ -279,6 +290,44 @@ class _FloorPlanCardState extends ConsumerState<FloorPlanCard> {
     _write(markers);
   }
 
+  /// The rooms of a drawn home, as things you can press.
+  ///
+  /// A room is offered only when the house has an **area of the same name** —
+  /// `Living Room` in the file against `living_room` here, compared after the
+  /// same humanising the rest of the app does. An exact match after
+  /// normalisation rather than anything fuzzy: a room that quietly worked a
+  /// different room's lights would be the worst bug this card could have, and a
+  /// room with no match simply is not pressable.
+  List<Widget> _roomTargets(HomePlan? plan, PlanFit? fit,
+      List<DeviceState> devices, PlanRoom? hovered) {
+    if (plan == null || fit == null || widget.entered) return const [];
+
+    // The house's own areas, by the name a person would read.
+    final areas = <String, String>{};
+    for (final d in devices) {
+      final area = d.effectiveArea;
+      if (area != null && area.isNotEmpty) areas[humanize(area)] = area;
+    }
+
+    return [
+      for (final room in plan.rooms)
+        if (room.points.length >= 3 && room.name != null)
+          if (areas[humanize(room.name)] case final area?)
+            if (_pressOn({'selection_mode': 'area', 'area_name': area},
+                    room.name!, devices)
+                case final press?)
+              PlanRoomTarget(
+                key: ValueKey(room.name),
+                room: room,
+                fit: fit,
+                label: press.label,
+                onTap: press.act,
+                onHover: (over) => setState(() => _hovered =
+                    over ? room : (_hovered == room ? null : _hovered)),
+              ),
+    ];
+  }
+
   /// The unbound marker under a point, if the drop is close enough to have
   /// meant it.
   ///
@@ -382,7 +431,11 @@ class _FloorPlanCardState extends ConsumerState<FloorPlanCard> {
             builder: (context, candidate, __) => Stack(
               fit: StackFit.expand,
               children: [
-                _Ground(url: url, config: widget.config),
+                _Ground(url: url, config: widget.config, lit: _hovered),
+                // Under the markers, so a dot standing in a room is still the
+                // thing you press when you press the dot.
+                ..._roomTargets(
+                    planFromConfig(widget.config), fit, devices, _hovered),
                 if (_placing) _EditingWash(inviting: candidate.isNotEmpty),
                 if (_placing && markers.isEmpty) const _DropHint(),
                 // Clicking the plan itself puts the inspector away, the way
@@ -580,10 +633,13 @@ class _Draggable extends StatelessWidget {
 
 /// The picture, held back.
 class _Ground extends StatelessWidget {
-  const _Ground({required this.url, required this.config});
+  const _Ground({required this.url, required this.config, this.lit});
 
   final String url;
   final Map<String, dynamic> config;
+
+  /// The room under the pointer, passed through to the drawing.
+  final PlanRoom? lit;
 
   @override
   Widget build(BuildContext context) {
@@ -598,7 +654,7 @@ class _Ground extends StatelessWidget {
       if (drawn != null) {
         return ColoredBox(
           color: t.surface.sunken,
-          child: PlanView(plan: drawn),
+          child: PlanView(plan: drawn, lit: lit),
         );
       }
       return ColoredBox(
@@ -653,7 +709,7 @@ class _Ground extends StatelessWidget {
         // Above the scrim, and so undimmed. Dimming exists to make a photograph
         // survivable underneath live state; a drawing already in the skin's own
         // muted ink has nothing to be held back from.
-        if (drawn != null) PlanView(plan: drawn),
+        if (drawn != null) PlanView(plan: drawn, lit: lit),
       ],
     );
   }
