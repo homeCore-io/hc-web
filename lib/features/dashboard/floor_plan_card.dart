@@ -11,6 +11,7 @@ import '../../core/text/humanize.dart';
 import '../../design/hc_icons.dart';
 import '../../design/tokens.dart';
 import '../devices/device_readings.dart';
+import '../devices/device_sheet.dart';
 import 'builtin_cards.dart';
 
 /// A picture of the house, with the house on it.
@@ -134,6 +135,69 @@ class _FloorPlanCardState extends ConsumerState<FloorPlanCard> {
     _write(markers);
   }
 
+  /// What pressing a marker means, or null when it means nothing.
+  ///
+  /// **One decision, used three ways** — it names the marker for a screen
+  /// reader, decides whether the cursor says "pressable", and is what runs on
+  /// the tap. Derived separately, those drift, and a plan that says *on* while
+  /// turning something on is worse than one that does nothing.
+  ///
+  /// The rule is §7.4's: a marker glows if any of its devices are on, and
+  /// pressing it turns *all* of them off — the honest 80% of a room zone with
+  /// no polygon geometry. Which is also why the decision is taken over the
+  /// devices the press can actually command: a marker whose group holds a
+  /// speaker must not promise to switch it, and must not sit there dead
+  /// because of it either.
+  ({String label, VoidCallback act})? _pressFor(
+      FloorPlanMarker marker, List<DeviceState> devices) {
+    // Inside the card a press means "show me this marker", and the plan is a
+    // thing being arranged rather than a thing being worked.
+    if (widget.entered) return null;
+
+    final matched = selectDevicesForConfig(devices, marker.selection);
+    if (matched.isEmpty) return null;
+    final name = marker.label ?? describeMarker(marker, devices);
+
+    final switches = [
+      for (final d in matched)
+        if (!d.isMediaPlayer &&
+            facetOf(d).presentation == TilePresentation.control)
+          d,
+    ];
+
+    // Nothing here takes a bare on/off: a sensor, or a speaker where "on"
+    // would be the wrong verb. The tiles answer the same tap with the detail
+    // sheet, and a temperature you can press through to its history is worth
+    // more than a marker that ignores you.
+    if (switches.isEmpty) {
+      final lead = matched.first;
+      // The reading is what the marker draws and the whole reason it is on the
+      // plan, so it belongs in the spoken name too — the label has to carry
+      // everything the picture says.
+      final reading = facetOf(lead).presentation == TilePresentation.readout
+          ? ', ${_readingOf(lead)}'
+          : '';
+      return (
+        label: '$name$reading',
+        act: () => showDeviceSheet(context, lead.id),
+      );
+    }
+
+    final on = switches.any(isOn);
+    return (
+      label: '$name, ${on ? 'on' : 'off'}',
+      act: () {
+        final notifier = ref.read(devicesProvider.notifier);
+        for (final d in switches) {
+          // Optimistic, with its own rollback and failure reporting — so the
+          // marker lights the instant you press it, and un-lights itself if
+          // the house disagrees. See DevicesNotifier.command.
+          notifier.command(d.id, {'on': !on});
+        }
+      },
+    );
+  }
+
   KeyEventResult _onKey(KeyEvent event) {
     final index = _selected;
     if (index == null || event is! KeyDownEvent) return KeyEventResult.ignored;
@@ -193,6 +257,47 @@ class _FloorPlanCardState extends ConsumerState<FloorPlanCard> {
     _write(markers);
   }
 
+  /// One marker, in whichever of its two lives this card is having.
+  ///
+  /// Placing, it is a thing you move and inspect. Otherwise it is a control:
+  /// the plan stops being a picture of the house and becomes a way to work it,
+  /// which is the whole point of putting the house on a plan.
+  Widget _markerAt({
+    required int index,
+    required FloorPlanMarker marker,
+    required List<DeviceState> devices,
+    required Size size,
+    required bool selected,
+  }) {
+    if (_placing) {
+      return _Draggable(
+        dragging: _dragging == index,
+        // Touching a marker is how you get its inspector, and dragging one is
+        // touching it. Anything else would mean moving a marker and then
+        // hunting for the panel about the thing already under your finger.
+        onTap: () => _select(index),
+        onStart: () {
+          _select(index);
+          setState(() => _dragging = index);
+        },
+        onUpdate: (global) {
+          final rb = context.findRenderObject();
+          if (rb is! RenderBox) return;
+          _moveTo(index, rb.globalToLocal(global), size);
+        },
+        onEnd: () => setState(() => _dragging = null),
+        child: _Marker(marker: marker, devices: devices, selected: selected),
+      );
+    }
+
+    final body = _Marker(marker: marker, devices: devices);
+    final press = _pressFor(marker, devices);
+    // A marker pointing at nothing, or at something with nothing to press, is
+    // drawn and left alone rather than given a dead affordance.
+    if (press == null) return body;
+    return _Tappable(label: press.label, onTap: press.act, child: body);
+  }
+
   @override
   Widget build(BuildContext context) {
     final url = (widget.config['url'] as String?)?.trim() ?? '';
@@ -236,32 +341,13 @@ class _FloorPlanCardState extends ConsumerState<FloorPlanCard> {
                     top: marker.y * size.height,
                     child: FractionalTranslation(
                       translation: const Offset(-0.5, -0.5),
-                      child: _placing
-                          ? _Draggable(
-                              dragging: _dragging == index,
-                              // Touching a marker is how you get its inspector,
-                              // and dragging one is touching it. Anything else
-                              // would mean moving a marker and then hunting for
-                              // the panel about the thing already under your
-                              // finger.
-                              onTap: () => _select(index),
-                              onStart: () {
-                                _select(index);
-                                setState(() => _dragging = index);
-                              },
-                              onUpdate: (global) {
-                                final rb = context.findRenderObject();
-                                if (rb is! RenderBox) return;
-                                _moveTo(index, rb.globalToLocal(global), size);
-                              },
-                              onEnd: () => setState(() => _dragging = null),
-                              child: _Marker(
-                                marker: marker,
-                                devices: devices,
-                                selected: selected == index,
-                              ),
-                            )
-                          : _Marker(marker: marker, devices: devices),
+                      child: _markerAt(
+                        index: index,
+                        marker: marker,
+                        devices: devices,
+                        size: size,
+                        selected: selected == index,
+                      ),
                     ),
                   ),
                 if (_placing && selected != null)
@@ -340,6 +426,49 @@ class _DropHint extends StatelessWidget {
             'Drag a device or a room onto the plan.',
             style: t.text.bodySmallStyle.copyWith(color: t.surface.onBase),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A marker you can press.
+///
+/// The gesture is a plain tap and nothing else: a plan lives inside a scrolling
+/// page, and a marker that claimed drags would fight the page for every
+/// gesture that started on it.
+class _Tappable extends StatelessWidget {
+  const _Tappable({
+    required this.label,
+    required this.onTap,
+    required this.child,
+  });
+
+  /// What this marker is and what state it is in, for anyone not looking at
+  /// the glow — which is the only thing the sighted version says.
+  final String label;
+  final VoidCallback onTap;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: Semantics(
+        // Its own node, not an annotation folded into the card's. Without this
+        // every marker's name lands on one big node covering the whole plan,
+        // which is a plan a screen reader reads as a single sentence.
+        container: true,
+        button: true,
+        label: label,
+        // The label already carries everything the marker draws — its name and
+        // its state or reading — so letting the plate underneath announce
+        // itself as well would say the name twice.
+        excludeSemantics: true,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: child,
         ),
       ),
     );

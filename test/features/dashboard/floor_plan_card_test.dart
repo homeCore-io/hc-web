@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,6 +11,7 @@ import 'package:hc_web/core/models/device_state.dart';
 import 'package:hc_web/core/providers/devices_provider.dart';
 import 'package:hc_web/design/skins.dart';
 import 'package:hc_web/features/dashboard/floor_plan_card.dart';
+import 'package:hc_web/features/devices/device_sheet.dart';
 
 /// A picture of the house, with the house on it.
 ///
@@ -101,15 +103,17 @@ DeviceState _sensor(String id, double temp) => DeviceState(
       available: true,
     );
 
-Future<void> _pump(
+/// Returns the house the card was talking to, so a test can ask what it heard.
+Future<_Devices> _pump(
   WidgetTester tester,
   Map<String, dynamic> config,
   List<DeviceState> devices, {
   bool entered = false,
   ValueChanged<Map<String, dynamic>>? onConfigChanged,
 }) async {
+  final house = _Devices(devices);
   await tester.pumpWidget(ProviderScope(
-    overrides: [devicesProvider.overrideWith(() => _Devices(devices))],
+    overrides: [devicesProvider.overrideWith(() => house)],
     child: MaterialApp(
       theme: hcThemeFromTokens(HcSkin.midnight.tokens),
       home: Scaffold(
@@ -126,6 +130,7 @@ Future<void> _pump(
     ),
   ));
   await tester.pump();
+  return house;
 }
 
 /// The card wired to a document that actually takes the writes.
@@ -287,6 +292,7 @@ void main() {
   _editModeTests();
   _dropTests();
   _inspectorTests();
+  _pressTests();
 
   testWidgets('naming a marker does not move it', (tester) async {
     // It did. The label was a sibling of the dot in a Row and the whole row was
@@ -351,8 +357,17 @@ Map<String, dynamic> _oneMarker({double x = 0.5, double y = 0.5}) => {
 class _Devices extends DevicesNotifier {
   _Devices(this.items);
   final List<DeviceState> items;
+
+  /// Every command the card sent, in order — the only honest record of what a
+  /// press actually asked the house to do.
+  final sent = <(String, Map<String, dynamic>)>[];
+
   @override
   Future<List<DeviceState>> build() async => items;
+
+  @override
+  Future<void> command(String id, Map<String, dynamic> patch) async =>
+      sent.add((id, patch));
 }
 
 void _editModeTests() {
@@ -701,5 +716,154 @@ void _inspectorTests() {
 
     expect(find.text('Nothing here now'), findsOneWidget,
         reason: 'the panel is how you find and remove a marker gone stale');
+  });
+}
+
+// ── pressing a marker ──────────────────────────────────────────────────────
+
+/// §7.4, the half that makes a plan a way to work the house rather than a
+/// picture of it: a marker glows if any of its devices are on, and pressing it
+/// turns *all* of them off. That is room zones without polygon geometry.
+
+/// What the card asked the house to do, flattened — records holding maps do not
+/// compare by value, and `{'on': false}` is the whole payload anyway.
+List<String> _asked(_Devices house) =>
+    [for (final (id, patch) in house.sent) '$id ${patch['on']}'];
+
+/// What a marker is to anyone not looking at the glow.
+SemanticsNode _nodeOf(WidgetTester tester, Finder marker) =>
+    tester.getSemantics(marker);
+
+void _pressTests() {
+  testWidgets('pressing a lit room turns the whole room off', (tester) async {
+    final house = await _pump(tester, {
+      'markers': [_room('living_room')]
+    }, [
+      _light('light.a', on: true, area: 'living_room'),
+      _light('light.b', on: false, area: 'living_room'),
+      _light('light.elsewhere', on: true, area: 'kitchen'),
+    ]);
+
+    await tester.tap(find.byType(Icon));
+    await tester.pump();
+
+    expect(_asked(house), ['light.a false', 'light.b false'],
+        reason: 'all of them, and only the ones the marker speaks for');
+  });
+
+  testWidgets('and pressing a dark one turns it on', (tester) async {
+    final house = await _pump(tester, {
+      'markers': [_room('living_room')]
+    }, [
+      _light('light.a', on: false, area: 'living_room'),
+      _light('light.b', on: false, area: 'living_room'),
+    ]);
+
+    await tester.tap(find.byType(Icon));
+    await tester.pump();
+
+    expect(_asked(house), ['light.a true', 'light.b true']);
+  });
+
+  testWidgets('the marker says what pressing it will do', (tester) async {
+    // The glow says "on" to anyone looking at it and nothing at all to anyone
+    // who is not, so the same decision that drives the press names the marker.
+    final handle = tester.ensureSemantics();
+    await _pump(tester, {
+      'markers': [_room('living_room')]
+    }, [
+      _light('light.a', on: true, area: 'living_room')
+    ]);
+
+    expect(_nodeOf(tester, find.byType(Icon)).label, 'Living Room, on');
+    handle.dispose();
+  });
+
+  testWidgets('a custom name is the one the marker answers to', (tester) async {
+    final handle = tester.ensureSemantics();
+    final marker = _room('living_room');
+    marker['label'] = 'Sofa lamp';
+    await _pump(tester, {
+      'markers': [marker]
+    }, [
+      _light('light.a', on: false, area: 'living_room')
+    ]);
+
+    expect(_nodeOf(tester, find.byType(Icon)).label, 'Sofa lamp, off');
+    handle.dispose();
+  });
+
+  testWidgets('a sensor is not a switch — it opens its details',
+      (tester) async {
+    // "On" is the wrong verb for a thermometer, and a marker that ignores the
+    // tap is worse than one that shows you the thing you pressed.
+    final house = await _pump(tester, {
+      'markers': [
+        {
+          'x': 0.5,
+          'y': 0.5,
+          'selection': {
+            'selection_mode': 'manual',
+            'device_ids': ['sensor.hall'],
+          },
+        }
+      ]
+    }, [
+      _sensor('sensor.hall', 21.5)
+    ]);
+
+    await tester.tap(find.textContaining('21.5'));
+    await tester.pumpAndSettle();
+
+    expect(house.sent, isEmpty, reason: 'a sensor was told to switch on');
+    expect(find.byType(DevicePanel), findsOneWidget);
+  });
+
+  testWidgets('a marker pointing at nothing is not pressable', (tester) async {
+    final handle = tester.ensureSemantics();
+    final house = await _pump(tester, {
+      'markers': [
+        {
+          'x': 0.5,
+          'y': 0.5,
+          'selection': {
+            'selection_mode': 'manual',
+            'device_ids': ['light.deleted'],
+          },
+        }
+      ]
+    }, const []);
+
+    await tester.tap(find.byType(Icon));
+    await tester.pump();
+
+    expect(house.sent, isEmpty);
+    expect(
+        _nodeOf(tester, find.byType(Icon))
+            .getSemanticsData()
+            .hasAction(SemanticsAction.tap),
+        isFalse,
+        reason: 'a dead affordance is worse than none');
+    handle.dispose();
+  });
+
+  testWidgets('inside the card a press selects, and works nothing',
+      (tester) async {
+    // The designer is arranging the plan, not operating the house. Pressing a
+    // marker there must never reach a light.
+    final house = await _pump(
+        tester,
+        {
+          'markers': [_room('living_room')]
+        },
+        [_light('light.a', on: true, area: 'living_room')],
+        entered: true,
+        onConfigChanged: (_) {});
+
+    await tester.tap(find.byType(Icon).first);
+    await tester.pump();
+
+    expect(house.sent, isEmpty, reason: 'the designer switched a real light');
+    expect(find.text('Label'), findsOneWidget, reason: 'it selected instead');
   });
 }
