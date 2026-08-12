@@ -10,7 +10,8 @@ import 'package:xml/xml.dart';
 ///
 /// **Geometry is data, not a file** — that is the claim mode 3 rests on, and
 /// every test here is about the numbers surviving the trip into a dashboard
-/// document. The archive's textures are files and deliberately out of scope.
+/// document — and, for the floors, about the *address* of a texture surviving
+/// with the size that makes it tile at a plank's width rather than a room's.
 ///
 /// The homes below are synthesised rather than exported, because a checked-in
 /// binary would tell us only that one file parses. What they encode is the DTD:
@@ -32,14 +33,29 @@ String _homeXml({
   $furniture
 </home>''';
 
-Uint8List _sh3d(String xml, {String entry = 'Home.xml', String? extra}) {
+Uint8List _sh3d(
+  String xml, {
+  String entry = 'Home.xml',
+  String? extra,
+  Map<String, List<int>> files = const {},
+}) {
   final archive = Archive()
     ..addFile(ArchiveFile.bytes(entry, utf8.encode(xml)));
   if (extra != null) {
     archive.addFile(ArchiveFile.bytes(extra, utf8.encode('not xml')));
   }
+  for (final e in files.entries) {
+    archive.addFile(ArchiveFile.bytes(e.key, e.value));
+  }
   return Uint8List.fromList(ZipEncoder().encode(archive));
 }
+
+/// Enough of a PNG to be recognised as one, and no more — every test here is
+/// about the bytes being carried, never about what they depict.
+List<int> _png([int seed = 1]) =>
+    [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, seed];
+
+List<int> _jpeg() => [0xFF, 0xD8, 0xFF, 0xE0, 0x00];
 
 HomePlan _parse(String xml) => parseHomeXml(XmlDocument.parse(xml));
 
@@ -50,7 +66,7 @@ void main() {
         walls: "<wall id='w1' xStart='0' yStart='0' xEnd='500' yEnd='0' "
             "thickness='10'/>",
       ));
-      final plan = readSweetHome(bytes);
+      final plan = readSweetHome(bytes).plan;
       expect(plan.walls, hasLength(1));
       expect(plan.walls.single.x2, 500);
     });
@@ -61,7 +77,7 @@ void main() {
         _homeXml(walls: "<wall xStart='0' yStart='0' xEnd='1' yEnd='1'/>"),
         entry: 'home/Home.xml',
       );
-      expect(readSweetHome(bytes).walls, hasLength(1));
+      expect(readSweetHome(bytes).plan.walls, hasLength(1));
     });
 
     test('something that is not a zip says so, in words', () {
@@ -339,6 +355,164 @@ void _roomAtTests() {
 
     test('a point in no room at all is no room, not the first one', () {
       expect(lShaped.roomAt(const PlanPoint(-50, -50)), isNull);
+    });
+  });
+  group('a floor', () {
+    String room(String inner, {String attrs = ''}) => _homeXml(
+          rooms: "<room name='Living' $attrs>"
+              "<point x='0' y='0'/><point x='400' y='0'/>"
+              "<point x='400' y='400'/>$inner</room>",
+        );
+
+    test('takes its texture from the child that names the floor', () {
+      // A room writes its floor and its ceiling as siblings, told apart by an
+      // attribute. Taking the first <texture> found floors the room in its
+      // own ceiling.
+      final plan = _parse(room(
+        "<texture attribute='ceilingTexture' name='Plaster' image='9' "
+        "width='50' height='50'/>"
+        "<texture attribute='floorTexture' name='Oak' image='3' "
+        "width='100' height='75'/>",
+      ));
+      final floor = plan.rooms.single.floor!;
+      expect(floor.source, '3');
+      expect(floor.width, 100);
+      expect(floor.height, 75);
+    });
+
+    test('is measured in centimetres, multiplied by the author\'s scale', () {
+      // Someone who doubled the tile in this room meant flagstones twice the
+      // size, and the catalogue size alone would draw them small.
+      final plan = _parse(room(
+        "<texture attribute='floorTexture' name='Slate' image='1' "
+        "width='60' height='60' scale='2'/>",
+      ));
+      expect(plan.rooms.single.floor!.width, 120);
+    });
+
+    test('with no size at all still tiles, at a metre', () {
+      final plan = _parse(room(
+        "<texture attribute='floorTexture' name='Odd' image='1' "
+        "width='0' height='0'/>",
+      ));
+      // Zero would divide by zero on the way to a shader; the floor is drawn.
+      expect(plan.rooms.single.floor!.width, 100);
+    });
+
+    test('can be a colour instead, and comes back opaque', () {
+      final plan = _parse(room('', attrs: "floorColor='ADADAD'"));
+      expect(plan.rooms.single.floorColor, 0xFFADADAD);
+      expect(plan.rooms.single.floor, isNull);
+    });
+
+    test('is nothing at all where the author hid it', () {
+      // A stairwell has a hole in it on purpose, and filling that in is a
+      // different house.
+      final plan = _parse(room(
+        "<texture attribute='floorTexture' name='Oak' image='3' "
+        "width='100' height='100'/>",
+        attrs: "floorVisible='false' floorColor='ADADAD'",
+      ));
+      expect(plan.rooms.single.floor, isNull);
+      expect(plan.rooms.single.floorColor, isNull);
+    });
+
+    test('survives a round trip once it is stored, and not before', () {
+      final plan = _parse(room(
+        "<texture attribute='floorTexture' name='Oak' image='3' "
+        "width='100' height='90' angle='0.5'/>",
+      ));
+      // An unstored texture names an entry in an archive nobody kept, so the
+      // document is better off not remembering it at all.
+      expect(HomePlan.fromJson(plan.toJson()).rooms.single.floor, isNull);
+
+      final done = plan.withStoredTextures({'3': '/api/v1/assets/abc'});
+      final back = HomePlan.fromJson(done.toJson()).rooms.single.floor!;
+      expect(back.url, '/api/v1/assets/abc');
+      expect(back.width, 100);
+      expect(back.height, 90);
+      expect(back.angle, 0.5);
+      expect(back.source, isNull);
+    });
+
+    test('that was not stored loses its texture and keeps its colour', () {
+      final plan = _parse(room(
+        "<texture attribute='floorTexture' name='Oak' image='3' "
+        "width='100' height='100'/>",
+        attrs: "floorColor='ADADAD'",
+      ));
+      final done = plan.withStoredTextures(const {});
+      expect(done.rooms.single.floor, isNull);
+      expect(done.rooms.single.floorColor, 0xFFADADAD);
+    });
+  });
+
+  group('the textures in an archive', () {
+    String twoRooms({String second = '4'}) => _homeXml(
+          rooms: "<room name='Living'><point x='0' y='0'/>"
+              "<point x='400' y='0'/><point x='400' y='400'/>"
+              "<texture attribute='floorTexture' name='Oak' image='3' "
+              "width='100' height='100'/></room>"
+              "<room name='Kitchen'><point x='0' y='0'/>"
+              "<point x='400' y='0'/><point x='400' y='400'/>"
+              "<texture attribute='floorTexture' name='Tile' image='$second' "
+              "width='30' height='30'/></room>",
+        );
+
+    test('are read for the floors that name them, and nothing else', () {
+      // A .sh3d carries its whole catalogue — walls seen edge-on, the sky.
+      // Uploading all of it would be megabytes to draw a few square metres.
+      final home = readSweetHome(_sh3d(twoRooms(), files: {
+        '3': _png(1),
+        '4': _jpeg(),
+        '7': _png(2),
+      }));
+      expect(home.textures.keys, unorderedEquals(['3', '4']));
+      expect(home.textures['4'], _jpeg());
+    });
+
+    test('are found by basename when the archive nests them', () {
+      final home = readSweetHome(_sh3d(twoRooms(), files: {
+        'furniture/3': _png(),
+        'furniture/4': _jpeg(),
+      }));
+      expect(home.textures.keys, unorderedEquals(['3', '4']));
+    });
+
+    test('are one entry however many rooms share it', () {
+      final home =
+          readSweetHome(_sh3d(twoRooms(second: '3'), files: {'3': _png()}));
+      expect(home.textures, hasLength(1));
+    });
+
+    test('name a group that is the same for the same bytes', () {
+      // Uploads are content-addressed and the first write's group is the one
+      // that sticks, so an id minted per import would drift from the group the
+      // assets are really under and prune nothing.
+      final first = readSweetHome(_sh3d(twoRooms(), files: {'3': _png(1)}));
+      final again = readSweetHome(_sh3d(twoRooms(), files: {'3': _png(1)}));
+      final other = readSweetHome(_sh3d(twoRooms(), files: {'3': _png(2)}));
+      expect(first.group, again.group);
+      expect(first.group, isNot(other.group));
+      expect(first.group, startsWith('plan-'));
+    });
+  });
+
+  group('an image is declared', () {
+    test('from its own first bytes, because an entry has no name', () {
+      expect(sniffImageType(Uint8List.fromList(_png())), 'image/png');
+      expect(sniffImageType(Uint8List.fromList(_jpeg())), 'image/jpeg');
+      expect(
+        sniffImageType(Uint8List.fromList(
+            [0x52, 0x49, 0x46, 0x46, 1, 2, 3, 4, 0x57, 0x45, 0x42, 0x50])),
+        'image/webp',
+      );
+    });
+
+    test('or not at all, which is how it is skipped rather than lied about',
+        () {
+      expect(sniffImageType(Uint8List.fromList(utf8.encode('<svg/>'))), isNull);
+      expect(sniffImageType(Uint8List.fromList(const [])), isNull);
     });
   });
 }

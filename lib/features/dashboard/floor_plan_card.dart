@@ -711,7 +711,7 @@ class _Ground extends StatelessWidget {
       if (drawn != null) {
         return ColoredBox(
           color: t.surface.sunken,
-          child: PlanView(plan: drawn, lit: lit),
+          child: PlanView(plan: drawn, lit: lit, dim: planDim(config)),
         );
       }
       return ColoredBox(
@@ -763,10 +763,13 @@ class _Ground extends StatelessWidget {
             color: t.surface.base.withValues(alpha: planDim(config)),
           ),
         ),
-        // Above the scrim, and so undimmed. Dimming exists to make a photograph
-        // survivable underneath live state; a drawing already in the skin's own
-        // muted ink has nothing to be held back from.
-        if (drawn != null) PlanView(plan: drawn, lit: lit),
+        // Above the scrim, because the drawing's structure is in the skin's own
+        // muted ink and has nothing to be held back from. Its *floors* can be
+        // photographs of oak, though, so Dim is handed to the drawing to apply
+        // to those alone — one control, held back in the one place a plan can
+        // shout over live state.
+        if (drawn != null)
+          PlanView(plan: drawn, lit: lit, dim: planDim(config)),
       ],
     );
   }

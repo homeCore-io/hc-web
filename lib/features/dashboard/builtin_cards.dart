@@ -1652,8 +1652,9 @@ void registerBuiltinDashboardWidgets() {
             defaultValue: 'contain', options: ['contain', 'cover', 'fill']),
         // Dim and invert are the two controls that make an image survivable
         // behind live state — see the card's own doc for why invert is not a
-        // nicety. Neither touches an imported home: a drawing already in the
-        // skin's own ink has nothing to be held back from.
+        // nicety. Invert never touches an imported home, which is drawn in the
+        // skin's own ink and so is right on any skin already; Dim reaches its
+        // textured floors, which are photographs like any other.
         WidgetConfigField('dim', WidgetConfigKind.integer, label: 'Dim'),
         WidgetConfigField('invert', WidgetConfigKind.boolean, label: 'Invert'),
         WidgetConfigField('plan', WidgetConfigKind.homePlan,

@@ -15,10 +15,11 @@ import 'package:xml/xml.dart';
 /// responsive to a skin change like everything else. That is the whole
 /// difference between mode 3 and a picture of a house.
 ///
-/// The archive's JPEG textures are *files* and cannot live in a document; they
-/// belong in the asset store, and this parser deliberately stops short of them.
-/// A drawing without them is a good drawing rather than a render — which is the
-/// half that ships first.
+/// The archive's JPEG textures are *files* and cannot live in a document, so
+/// what a room keeps is an **address** into the asset store plus how big one
+/// tile is in centimetres — see [PlanTexture]. Reading them out of the zip is
+/// this file's job; storing them is [SweetHome.textures] handed to whoever has
+/// an uploader. A floor colour, being a number, needs none of that.
 class HomePlan {
   const HomePlan({
     this.levels = const [],
@@ -112,6 +113,38 @@ class HomePlan {
     if (minX == null) return null;
     return PlanBounds(left: minX!, top: minY!, right: maxX!, bottom: maxY!);
   }
+
+  /// The archive entries this home's floors name, with nothing repeated.
+  ///
+  /// Two rooms floored in the same oak name the same entry, and uploading it
+  /// twice would be two round trips for one asset — content addressing would
+  /// merge them at the far end, which is a reason not to bother rather than a
+  /// reason not to care.
+  Set<String> get textureSources => {
+        for (final r in rooms)
+          if (r.floor?.source case final s?) s,
+      };
+
+  /// The same home with its floors pointing at stored assets.
+  ///
+  /// A texture whose upload did not happen — refused, too big, offline — comes
+  /// out with no floor at all rather than with a dangling zip entry name. The
+  /// document is the wrong place to remember that a file once existed inside an
+  /// archive nobody kept.
+  HomePlan withStoredTextures(Map<String, String> urls) => HomePlan(
+        levels: levels,
+        walls: walls,
+        furniture: furniture,
+        rooms: [
+          for (final r in rooms)
+            r.withFloor(switch (r.floor?.source) {
+              final s? when urls[s] != null => r.floor!.stored(urls[s]!),
+              // Already stored, or never a texture: leave it exactly as it is.
+              null => r.floor,
+              _ => null,
+            }),
+        ],
+      );
 
   factory HomePlan.fromJson(Map<String, dynamic> json) => HomePlan(
         levels: [
@@ -237,6 +270,66 @@ class PlanWall {
       };
 }
 
+/// What a surface is made of: a picture, and how much of the home one tile of
+/// it covers.
+///
+/// **The size is the whole point.** A floor texture is a photograph of about a
+/// square metre of oak, and drawing it stretched to the room would make one
+/// plank the width of a kitchen. Sweet Home 3D records what the picture is
+/// worth in centimetres, so the same image tiles at the same real size in every
+/// room and at every card size — which is also why this survives a resize
+/// without a second thought.
+///
+/// [source] is where the picture is in the archive and lives only as long as
+/// the import does; [url] is where it ended up, and is what the document keeps.
+class PlanTexture {
+  const PlanTexture({
+    this.source,
+    this.url,
+    required this.width,
+    required this.height,
+    this.angle = 0,
+  });
+
+  /// An entry name inside the `.sh3d` — never serialised, because outside the
+  /// import the archive is gone.
+  final String? source;
+
+  /// An asset address, once it has one.
+  final String? url;
+
+  /// Centimetres one tile covers.
+  final double width;
+  final double height;
+
+  /// Radians, the file's own convention — planks laid diagonally stay diagonal.
+  final double angle;
+
+  bool get isStored => url?.isNotEmpty == true;
+
+  PlanTexture stored(String url) =>
+      PlanTexture(url: url, width: width, height: height, angle: angle);
+
+  factory PlanTexture.fromJson(Map<String, dynamic> j) => PlanTexture(
+        url: j['url'] as String?,
+        // A tile of no size would divide by zero on the way to a shader; a
+        // metre is what most catalogue textures are, and is a better guess than
+        // refusing to draw the floor.
+        width: _positive(_num(j['w'])),
+        height: _positive(_num(j['h'])),
+        angle: _num(j['a']) ?? 0,
+      );
+
+  Map<String, dynamic> toJson() => {
+        if (url != null) 'url': url,
+        'w': _round(width),
+        'h': _round(height),
+        if (angle != 0) 'a': _round(angle),
+      };
+}
+
+double _positive(double? v) => v == null || v <= 0 || v.isNaN ? 100 : v;
+
 /// A room, as the polygon the file gives — the geometry §7.4 called deferred.
 class PlanRoom {
   const PlanRoom({
@@ -245,11 +338,34 @@ class PlanRoom {
     this.level,
     this.nameDx = 0,
     this.nameDy = 0,
+    this.floor,
+    this.floorColor,
   });
 
   final String? name;
   final List<PlanPoint> points;
   final String? level;
+
+  /// What the floor is made of, or null for a room the file left plain — and
+  /// for every room until its texture has been stored.
+  final PlanTexture? floor;
+
+  /// An opaque ARGB floor colour, or null.
+  ///
+  /// Kept even though a texture usually wins, because most homes are painted
+  /// rather than tiled and a colour is four bytes with nothing to upload — the
+  /// cheapest half of making a plan read as a home rather than as a diagram.
+  final int? floorColor;
+
+  PlanRoom withFloor(PlanTexture? floor) => PlanRoom(
+        name: name,
+        points: points,
+        level: level,
+        nameDx: nameDx,
+        nameDy: nameDy,
+        floor: floor,
+        floorColor: floorColor,
+      );
 
   /// Where the author dragged the room's name, relative to the middle, in
   /// centimetres. Honoured rather than ignored: someone who moved a label in
@@ -302,6 +418,10 @@ class PlanRoom {
         level: j['level'] as String?,
         nameDx: _num(j['ndx']) ?? 0,
         nameDy: _num(j['ndy']) ?? 0,
+        floor: j['floor'] is Map
+            ? PlanTexture.fromJson((j['floor'] as Map).cast<String, dynamic>())
+            : null,
+        floorColor: (j['fc'] as num?)?.toInt(),
       );
 
   Map<String, dynamic> toJson() => {
@@ -312,6 +432,10 @@ class PlanRoom {
         if (level != null) 'level': level,
         if (nameDx != 0) 'ndx': _round(nameDx),
         if (nameDy != 0) 'ndy': _round(nameDy),
+        // Only a stored texture. One still holding an archive entry name is a
+        // reference to a file that no longer exists anywhere the app can reach.
+        if (floor?.isStored == true) 'floor': floor!.toJson(),
+        if (floorColor != null) 'fc': floorColor,
       };
 }
 
@@ -380,6 +504,84 @@ class PlanImportException implements Exception {
   String toString() => message;
 }
 
+/// Everything an import got out of one archive: the geometry, and the pictures
+/// the geometry points at.
+///
+/// Two halves because they end up in two places. The plan goes into the
+/// dashboard document; the textures are files and go to the asset store, which
+/// means a network round trip each and a caller that has an uploader — so the
+/// parse cannot do it and should not pretend to.
+class SweetHome {
+  const SweetHome({required this.plan, this.textures = const {}});
+
+  final HomePlan plan;
+
+  /// Archive entry name to bytes, for the entries a floor actually names.
+  ///
+  /// A `.sh3d` carries every texture in its catalogue, most of them for
+  /// surfaces a plan view never shows — walls seen edge-on, ceilings seen from
+  /// underneath, the sky. Uploading all of them would be tens of megabytes to
+  /// draw the few square metres of floor anybody can see.
+  final Map<String, Uint8List> textures;
+
+  /// What to file this import's textures under, derived from the bytes.
+  ///
+  /// **Deterministic, so re-importing the same home lands in the same group.**
+  /// An id minted per import would drift from the group the assets are actually
+  /// recorded under — uploads are content-addressed and the first write's group
+  /// is the one that sticks — leaving a prune that deletes nothing and a
+  /// manager that shows the textures loose. A hash is enough here: this is a
+  /// label for pruning, not an address, so it need not resist anything.
+  /// **Two 32-bit lanes rather than one 64-bit pass.** This app is compiled to
+  /// JavaScript, where an integer is a double: a 64-bit FNV constant is not
+  /// representable and `dart2js` refuses it outright — which the VM the tests
+  /// run on never notices. Two lanes with different bases give the same
+  /// practical spread while every intermediate stays under 2^53.
+  String get group {
+    var a = 0x811c9dc5, b = 0x01000193;
+    for (final name in textures.keys.toList()..sort()) {
+      for (final byte in textures[name]!) {
+        a = ((a ^ byte) * 0x01000193) & 0xFFFFFFFF;
+        b = ((b ^ byte) * 0x00000101) & 0xFFFFFFFF;
+      }
+    }
+    return 'plan-${_hex(a)}${_hex(b)}';
+  }
+
+  static String _hex(int v) => v.toRadixString(16).padLeft(8, '0');
+}
+
+/// What core should be told a texture is, read from the bytes themselves.
+///
+/// Sniffed here and nowhere else in the app, and only because these have no
+/// name to go on: an archive entry is called `2`, so the extension trick every
+/// other uploader uses has nothing to work with. Null for anything core would
+/// refuse, which is how an exotic texture is skipped rather than stored under a
+/// lie and served as a broken image later.
+String? sniffImageType(Uint8List bytes) {
+  bool starts(List<int> magic) {
+    if (bytes.length < magic.length) return false;
+    for (var i = 0; i < magic.length; i++) {
+      if (bytes[i] != magic[i]) return false;
+    }
+    return true;
+  }
+
+  if (starts(const [0x89, 0x50, 0x4E, 0x47])) return 'image/png';
+  if (starts(const [0xFF, 0xD8, 0xFF])) return 'image/jpeg';
+  if (starts(const [0x47, 0x49, 0x46, 0x38])) return 'image/gif';
+  // RIFF....WEBP — the format is four bytes in, past the length.
+  if (starts(const [0x52, 0x49, 0x46, 0x46]) &&
+      bytes.length > 11 &&
+      bytes[8] == 0x57 &&
+      bytes[9] == 0x45 &&
+      bytes[10] == 0x42 &&
+      bytes[11] == 0x50) {
+    return 'image/webp';
+  }
+  return null;
+}
+
 /// Reads a `.sh3d` archive.
 ///
 /// Tolerant on purpose. The DTD has grown over a decade of releases and a home
@@ -391,7 +593,7 @@ class PlanImportException implements Exception {
 /// Throws [PlanImportException] only for a file that is not a home at all,
 /// because that is the one case where carrying on would draw an empty plan and
 /// blame the user's house.
-HomePlan readSweetHome(Uint8List bytes) {
+SweetHome readSweetHome(Uint8List bytes) {
   final Archive archive;
   try {
     archive = ZipDecoder().decodeBytes(bytes);
@@ -425,7 +627,33 @@ HomePlan readSweetHome(Uint8List bytes) {
     throw PlanImportException(
         'The home inside that file could not be read: $e');
   }
-  return parseHomeXml(doc);
+
+  final plan = parseHomeXml(doc);
+
+  // Only the entries the floors name, and only once each — see
+  // [SweetHome.textures].
+  final wanted = plan.textureSources;
+  final textures = <String, Uint8List>{};
+  if (wanted.isNotEmpty) {
+    for (final file in archive.files) {
+      if (!file.isFile) continue;
+      // By full name or by basename: the attribute is usually a bare `2` at the
+      // root of the archive, but a home saved with its furniture in a folder
+      // writes the path, and both should find the same bytes.
+      final name = wanted.contains(file.name)
+          ? file.name
+          : wanted.contains(file.name.split('/').last)
+              ? file.name.split('/').last
+              : null;
+      if (name == null || textures.containsKey(name)) continue;
+      final content = file.readBytes();
+      if (content != null && content.isNotEmpty) {
+        textures[name] = Uint8List.fromList(content);
+      }
+    }
+  }
+
+  return SweetHome(plan: plan, textures: textures);
 }
 
 /// The half that is pure data, split out so it can be tested without a zip.
@@ -465,6 +693,15 @@ HomePlan parseHomeXml(XmlDocument doc) {
         level: levelOf(e),
         nameDx: _num(e.getAttribute('nameXOffset')) ?? 0,
         nameDy: _num(e.getAttribute('nameYOffset')) ?? 0,
+        // A room can be told not to have a floor at all — a mezzanine, a
+        // stairwell — and drawing one there would fill in the hole the author
+        // put in the house on purpose.
+        floor: e.getAttribute('floorVisible') == 'false'
+            ? null
+            : _texture(e, 'floorTexture'),
+        floorColor: e.getAttribute('floorVisible') == 'false'
+            ? null
+            : _colour(e.getAttribute('floorColor')),
       ),
   ];
 
@@ -488,6 +725,43 @@ HomePlan parseHomeXml(XmlDocument doc) {
 
   return HomePlan(
       levels: levels, walls: walls, rooms: rooms, furniture: furniture);
+}
+
+/// The `<texture>` child describing one surface of an element, or null.
+///
+/// Sweet Home 3D writes every surface's texture as a sibling of every other —
+/// a wall carries its two sides, a room its floor and its ceiling — and tells
+/// them apart by an `attribute` rather than by the tag. Taking the first
+/// `<texture>` found would floor a room in its own ceiling.
+PlanTexture? _texture(XmlElement element, String attribute) {
+  for (final e in element.findElements('texture')) {
+    if (e.getAttribute('attribute') != attribute) continue;
+    final image = e.getAttribute('image');
+    if (image == null || image.isEmpty) continue;
+    // `scale` is the author enlarging the tile in this room specifically; the
+    // catalogue size alone would draw their double-size flagstones small.
+    final scale = _num(e.getAttribute('scale')) ?? 1;
+    return PlanTexture(
+      source: image,
+      width: _positive(_num(e.getAttribute('width'))) * (scale > 0 ? scale : 1),
+      height:
+          _positive(_num(e.getAttribute('height'))) * (scale > 0 ? scale : 1),
+      angle: _num(e.getAttribute('angle')) ?? 0,
+    );
+  }
+  return null;
+}
+
+/// A colour attribute, which the file writes as bare hexadecimal.
+///
+/// Opaque whatever it says. Sweet Home 3D's own alpha lives in a separate
+/// `*Shininess`/transparency notion and a room floor that came through as
+/// invisible would read as a bug in the import rather than as a choice.
+int? _colour(String? raw) {
+  if (raw == null || raw.isEmpty) return null;
+  final value = int.tryParse(raw.trim(), radix: 16);
+  if (value == null) return null;
+  return 0xFF000000 | (value & 0x00FFFFFF);
 }
 
 List<Map<String, dynamic>> _list(Object? raw) => [

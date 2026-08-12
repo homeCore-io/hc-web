@@ -1,3 +1,6 @@
+import 'dart:ui' as ui;
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/dashboard/sweet_home.dart';
@@ -15,12 +18,13 @@ import '../../design/tokens.dart';
 /// stay figure — the one principle the whole card follows — so everything here
 /// is deliberately quiet: structure in muted ink, rooms as a barely-there fill,
 /// furniture as outlines. If this ever competes with a lit marker, it is wrong.
-class PlanView extends StatelessWidget {
+class PlanView extends StatefulWidget {
   const PlanView({
     super.key,
     required this.plan,
     this.showNames = true,
     this.lit,
+    this.dim = 0,
   });
 
   /// Already narrowed to the storey being drawn — see [HomePlan.level].
@@ -36,16 +40,107 @@ class PlanView extends StatelessWidget {
   /// spending its whole life shouting it.
   final PlanRoom? lit;
 
+  /// How much to hold a floor's own colouring back, 0–1.
+  ///
+  /// Only the floors, and only where one is a texture or a colour. Structure
+  /// and names are drawn in the skin's ink and have never needed holding back;
+  /// a photograph of oak has, for the same reason a photographed plan does —
+  /// live state has to win over the ground it stands on, and a full-strength
+  /// floor is the one thing in this drawing capable of out-shouting a lit lamp.
+  final double dim;
+
+  @override
+  State<PlanView> createState() => _PlanViewState();
+}
+
+class _PlanViewState extends State<PlanView> {
+  /// Address to decoded picture, for the floors of the plan being drawn.
+  final _textures = <String, ImageInfo>{};
+  final _streams = <String, (ImageStream, ImageStreamListener)>{};
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _resolve();
+  }
+
+  @override
+  void didUpdateWidget(PlanView old) {
+    super.didUpdateWidget(old);
+    if (!identical(old.plan, widget.plan)) _resolve();
+  }
+
+  @override
+  void dispose() {
+    for (final url in _streams.keys.toList()) {
+      _forget(url);
+    }
+    super.dispose();
+  }
+
+  Set<String> get _wanted => {
+        for (final r in widget.plan.rooms)
+          if (r.floor?.url case final url?)
+            if (url.isNotEmpty) url,
+      };
+
+  /// Keep exactly the pictures this plan asks for.
+  ///
+  /// Called on every plan change rather than once, because a plan *does*
+  /// change under a card — a re-import, a storey picked in the inspector — and
+  /// a texture stream left listening after its room is gone holds a decoded
+  /// bitmap alive for as long as the card is on screen.
+  void _resolve() {
+    final wanted = _wanted;
+    for (final url in _streams.keys.toList()) {
+      if (!wanted.contains(url)) _forget(url);
+    }
+    for (final url in wanted) {
+      if (_streams.containsKey(url)) continue;
+      final stream = NetworkImage(url).resolve(
+        createLocalImageConfiguration(context),
+      );
+      // A repeat fires for an animated image and for a re-decode; taking every
+      // frame is both correct and no dearer than taking the first.
+      final listener = ImageStreamListener((info, _) {
+        if (!mounted) {
+          info.dispose();
+          return;
+        }
+        setState(() {
+          _textures.remove(url)?.dispose();
+          _textures[url] = info;
+        });
+        // A floor that never arrives — the asset was pruned, the box is
+        // offline — simply stays the quiet fill it was before the import. There
+        // is nothing useful to say about it on a floor plan.
+      }, onError: (_, __) {});
+      stream.addListener(listener);
+      _streams[url] = (stream, listener);
+    }
+  }
+
+  void _forget(String url) {
+    final held = _streams.remove(url);
+    held?.$1.removeListener(held.$2);
+    _textures.remove(url)?.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
     return CustomPaint(
       painter: _PlanPainter(
-        plan: plan,
-        lit: lit,
+        plan: widget.plan,
+        lit: widget.lit,
+        textures: {
+          for (final e in _textures.entries) e.key: e.value.image,
+        },
+        dim: widget.dim,
         ink: t.surface.onBase,
         muted: t.surface.onBaseMuted,
         fill: t.surface.raised,
+        base: t.surface.base,
         nameStyle: t.text.captionStyle.copyWith(color: t.surface.onBaseMuted),
         nameRadius: t.radius.xs,
         textScaler: MediaQuery.textScalerOf(context),
@@ -188,9 +283,12 @@ class _PlanPainter extends CustomPainter {
   _PlanPainter({
     required this.plan,
     required this.lit,
+    required this.textures,
+    required this.dim,
     required this.ink,
     required this.muted,
     required this.fill,
+    required this.base,
     required this.nameStyle,
     required this.nameRadius,
     required this.textScaler,
@@ -198,9 +296,18 @@ class _PlanPainter extends CustomPainter {
 
   final HomePlan plan;
   final PlanRoom? lit;
+
+  /// Decoded floor pictures by address; a floor whose picture has not arrived
+  /// is simply drawn as it was before textures existed.
+  final Map<String, ui.Image> textures;
+  final double dim;
   final Color ink;
   final Color muted;
   final Color fill;
+
+  /// The card's own ground, which is what a floor is held back *towards* — a
+  /// black scrim would grey a light skin out instead of settling it down.
+  final Color base;
   final TextStyle nameStyle;
 
   /// From the tokens, like every other corner in the app — a skin with sharp
@@ -221,11 +328,22 @@ class _PlanPainter extends CustomPainter {
     // never the accent: `accent.active` means *this device is on*, and a room
     // you are merely pointing at is not on.
     final litPaint = Paint()..color = ink.withValues(alpha: 0.10);
+    final scrim = Paint()..color = base.withValues(alpha: dim.clamp(0.0, 1.0));
     for (final room in plan.rooms) {
       if (room.points.length < 3) continue;
       final path = Path()
         ..addPolygon([for (final p in room.points) at(p.x, p.y)], true);
-      canvas.drawPath(path, roomPaint);
+
+      // What the room is actually made of, if the file said and the picture
+      // arrived; the token fill otherwise, which is what every room looked like
+      // before any of this and is still right for a home with no materials in
+      // it at all.
+      final material = _floorPaint(room, fit);
+      canvas.drawPath(path, material ?? roomPaint);
+      // Held back only where it is the house's own colouring. The token fill is
+      // already a whisper and dimming it further would erase the rooms.
+      if (material != null && dim > 0) canvas.drawPath(path, scrim);
+
       if (identical(room, lit)) canvas.drawPath(path, litPaint);
     }
 
@@ -267,6 +385,45 @@ class _PlanPainter extends CustomPainter {
     }
 
     if (showNamesOn(size)) _names(canvas, fit);
+  }
+
+  /// How to fill one room's floor, or null for a room the file said nothing
+  /// about — and for one whose texture has not loaded yet.
+  Paint? _floorPaint(PlanRoom room, PlanFit fit) {
+    final floor = room.floor;
+    final image = floor?.url == null ? null : textures[floor!.url];
+    if (floor != null && image != null) {
+      // **Tiled at its real size, anchored to the house.** The picture is worth
+      // so many centimetres, so it is scaled by the same fit as the walls — one
+      // plank stays one plank at every card size. Anchoring the pattern at the
+      // home's origin rather than the canvas's keeps it still when the card
+      // changes shape: tiles pinned to a corner of the card would swim across
+      // the floor on a resize.
+      final origin = fit.toCard(0, 0);
+      final matrix = Matrix4.identity()
+        ..translateByDouble(origin.dx, origin.dy, 0, 1)
+        ..rotateZ(floor.angle)
+        ..scaleByDouble(
+          fit.lengths(floor.width) / image.width,
+          fit.lengths(floor.height) / image.height,
+          1,
+          1,
+        );
+      return Paint()
+        ..shader = ui.ImageShader(
+          image,
+          TileMode.repeated,
+          TileMode.repeated,
+          matrix.storage,
+          // The tiles are usually drawn smaller than the picture, which without
+          // this is a floor that shimmers as the card resizes.
+          filterQuality: FilterQuality.low,
+        );
+    }
+    if (room.floorColor case final colour?) {
+      return Paint()..color = Color(colour);
+    }
+    return null;
   }
 
   /// Below this the labels are noise on a thumbnail rather than help.
@@ -317,6 +474,9 @@ class _PlanPainter extends CustomPainter {
   bool shouldRepaint(_PlanPainter old) =>
       !identical(old.plan, plan) ||
       !identical(old.lit, lit) ||
+      !mapEquals(old.textures, textures) ||
+      old.dim != dim ||
+      old.base != base ||
       old.ink != ink ||
       old.muted != muted ||
       old.fill != fill ||
