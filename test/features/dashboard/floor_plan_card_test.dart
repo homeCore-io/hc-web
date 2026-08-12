@@ -300,6 +300,7 @@ void main() {
   _importedMarkerTests();
   _roomPressTests();
   _bindFromRoomTests();
+  _bindOrderTests();
 
   testWidgets('naming a marker does not move it', (tester) async {
     // It did. The label was a sibling of the dot in a Row and the whole row was
@@ -1334,3 +1335,67 @@ void _bindFromRoomTests() {
     expect(find.textContaining('3 more'), findsOneWidget);
   });
 }
+
+// ── which six get offered ──────────────────────────────────────────────────
+
+/// Only six of a room's devices fit the panel, so which six matters. A real
+/// living room with thirty-one things in it led with "Holiday Lights 1" while
+/// the ceiling light the marker plainly *is* sat off the end of the list.
+
+void _bindOrderTests() {
+  test('a shared word ranks a device up, and nothing else does', () {
+    expect(nameAffinity('Living ceiling', 'Ceiling light'), 1);
+    expect(nameAffinity('Living ceiling', 'Holiday Lights 1'), 0);
+    // Short words are noise, not evidence: "the" in common means nothing.
+    expect(nameAffinity('The lamp', 'The kettle'), 0);
+    expect(nameAffinity(null, 'Anything'), 0);
+  });
+
+  testWidgets('the offer leads with the light the file was talking about',
+      (tester) async {
+    await _pumpLive(
+      tester,
+      {
+        'plan': const HomePlan(rooms: [
+          PlanRoom(name: 'Living Room', points: [
+            PlanPoint(0, 0),
+            PlanPoint(400, 0),
+            PlanPoint(400, 400),
+            PlanPoint(0, 400),
+          ]),
+        ]).toJson(),
+        'markers': [
+          const FloorPlanMarker(
+            selection: unboundSelection,
+            x: 0.5,
+            y: 0.5,
+            home: PlanPoint(200, 200),
+            label: 'Living ceiling',
+          ).toJson(),
+        ],
+      },
+      [
+        for (var i = 1; i <= 6; i++)
+          _light('Holiday Lights $i', on: false, area: 'living_room'),
+        _sensorIn('Ceiling light', 'living_room'),
+      ],
+    );
+    await tester.tap(find.byType(Icon).first);
+    await tester.pump();
+
+    // Seven devices and only six slots: without the ranking the one the file
+    // named is exactly the one that falls off.
+    expect(find.text('Ceiling light'), findsOneWidget);
+  });
+}
+
+/// A device in an area, named — enough to rank, which is all these tests ask.
+DeviceState _sensorIn(String id, String area) => DeviceState(
+      id: id,
+      name: id,
+      pluginId: 'plugin.test',
+      deviceType: 'light',
+      state: const {'state': 'off', 'on': false},
+      available: true,
+      areaOverride: area,
+    );

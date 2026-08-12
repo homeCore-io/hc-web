@@ -310,10 +310,33 @@ class _FloorPlanCardState extends ConsumerState<FloorPlanCard> {
         if (d.effectiveArea != null && humanize(d.effectiveArea) == wanted) d,
     ];
     if (inRoom.isEmpty) return null;
+
+    // Only six of these get shown, so which six matters. A room with
+    // thirty-one things in it led with "Holiday Lights 1" while the ceiling
+    // light the marker plainly *is* sat off the end of the list.
+    //
+    // Ranked, never matched: the file's name for the lamp pulls a device with a
+    // word in common to the front, then things that take an on/off before
+    // things that only report, then alphabetically so the order is stable
+    // between two devices with nothing to separate them.
+    inRoom.sort((a, b) {
+      final byName = nameAffinity(marker.label, b.displayName)
+          .compareTo(nameAffinity(marker.label, a.displayName));
+      if (byName != 0) return byName;
+      final control = _actuable(b) ? 1 : 0;
+      final theirs = _actuable(a) ? 1 : 0;
+      if (control != theirs) return control - theirs;
+      return a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase());
+    });
+
     // The area key as the house spells it, taken from a device rather than
     // guessed back from the room's name.
     return (room: name, area: inRoom.first.effectiveArea!, devices: inRoom);
   }
+
+  /// Something a press could switch, as opposed to something that only reports.
+  static bool _actuable(DeviceState d) =>
+      !d.isMediaPlayer && facetOf(d).presentation == TilePresentation.control;
 
   void _bind(int index, Map<String, dynamic> selection) {
     final markers = markersFromConfig(widget.config);

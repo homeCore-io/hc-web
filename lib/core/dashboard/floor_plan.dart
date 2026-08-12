@@ -210,6 +210,32 @@ List<FloorPlanMarker>? seedMarkersFor(
   return placed.isEmpty ? null : placed;
 }
 
+/// How much two names look like the same thing, 0 upward.
+///
+/// **Ordering only, never a choice.** The file calls a lamp `Living ceiling`
+/// and the house calls it `Ceiling light`; the shared word is worth showing
+/// first, and is worth nothing as evidence — §7.10's rule stands, a marker is
+/// bound by a person. So this decides what to *offer* and a press decides what
+/// it means, which is the difference between helpful and quietly wrong.
+///
+/// Words rather than characters: `Living ceiling` against `Ceiling light`
+/// shares a whole word, while an edit distance over the strings would call
+/// them barely related and rank `Living Room Lamp 4` above.
+int nameAffinity(String? a, String? b) {
+  if (a == null || b == null) return 0;
+  // Three letters and up, minus the few short words that are in every second
+  // device name and evidence of nothing. Dropping *all* three-letter words
+  // instead would throw away `bed`, `fan` and `tap`, which are exactly the
+  // words that do identify a thing.
+  const noise = {'the', 'and', 'for'};
+  Set<String> words(String s) => s
+      .toLowerCase()
+      .split(RegExp(r'[^a-z0-9]+'))
+      .where((w) => w.length > 2 && !noise.contains(w))
+      .toSet();
+  return words(a).intersection(words(b)).length;
+}
+
 /// Whether to invert the picture's luminance.
 ///
 /// Not a nicety. Floor plans in the wild are black line art on white, and a
