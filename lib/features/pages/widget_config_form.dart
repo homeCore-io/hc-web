@@ -11,6 +11,7 @@ import '../../design/tokens.dart';
 import '../../shell/hc_sheet.dart';
 import '../devices/device_query.dart';
 import '../assets/asset_field.dart';
+import '../dashboard/home_plan_field.dart';
 
 /// A widget's settings, built from the card's own [WidgetDescriptor.configFields].
 ///
@@ -145,12 +146,19 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
   Map<String, dynamic> get _config => widget.initial;
   String? _error;
 
-  void _set(String name, Object? value) => setState(() {
+  void _set(String name, Object? value) => _patch({name: value});
+
+  /// Several keys at once, because one field can be one decision spread over
+  /// more than one key — and applying them one at a time would rebuild from
+  /// `initial` in between and lose all but the last.
+  void _patch(Map<String, Object?> values) => setState(() {
         final next = {...widget.initial};
-        if (value == null) {
-          next.remove(name);
-        } else {
-          next[name] = value;
+        for (final entry in values.entries) {
+          if (entry.value == null) {
+            next.remove(entry.key);
+          } else {
+            next[entry.key] = entry.value;
+          }
         }
         widget.onChanged(next);
         _error = null;
@@ -208,6 +216,7 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
         WidgetConfigKind.markdown => _text(f, lines: 5),
         WidgetConfigKind.url || WidgetConfigKind.text => _text(f),
         WidgetConfigKind.image => _image(f),
+        WidgetConfigKind.homePlan => _homePlan(f),
         WidgetConfigKind.stringList => _stringList(f),
         WidgetConfigKind.areaName => _area(f),
         WidgetConfigKind.facet => _facet(f),
@@ -275,6 +284,20 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
   /// The stored value is still a string, so a card configured before this
   /// existed keeps working and one configured with it is indistinguishable
   /// from a pasted address.
+  /// The one field that owns more than its own key: the geometry and the
+  /// storey being drawn are one decision, and splitting them across two fields
+  /// would let a card point at a storey its home does not have.
+  Widget _homePlan(WidgetConfigField f) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _label(f),
+        HomePlanField(config: _config, onChanged: _patch),
+        _help(f),
+      ],
+    );
+  }
+
   Widget _image(WidgetConfigField f) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
