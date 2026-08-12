@@ -536,36 +536,56 @@ class _Dot extends StatelessWidget {
   final Color tint;
   final String? label;
 
+  /// The dot is the marker, and the marker is a point on a plan.
+  static const _size = 30.0;
+
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 30,
-          height: 30,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: on
-                ? tint.withValues(alpha: 0.22)
-                : t.surface.raised.withValues(alpha: 0.85),
-            border: Border.all(
-              color: on ? tint : t.stroke.hairline,
-              width: on ? 1.5 : 1,
-            ),
-            // The app's own signature: a lit thing spills light. Through
-            // `glow.halo` and not a hand-rolled BoxShadow, so a flat skin —
-            // where strength is 0 — simply has no halo rather than growing one
-            // this card invented. The token ratchet catches the other way.
-            boxShadow: on ? t.glow.halo(tint, blur: 16, alpha: 0.45) : null,
-          ),
-          child: Icon(icon, size: 16, color: on ? tint : t.surface.onBaseMuted),
+    final dot = Container(
+      width: _size,
+      height: _size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: on
+            ? tint.withValues(alpha: 0.22)
+            : t.surface.raised.withValues(alpha: 0.85),
+        border: Border.all(
+          color: on ? tint : t.stroke.hairline,
+          width: on ? 1.5 : 1,
         ),
-        if (label != null) ...[
-          SizedBox(width: t.space.xs),
-          _Plate(child: Text(label!, style: t.text.captionStyle)),
-        ],
+        // The app's own signature: a lit thing spills light. Through
+        // `glow.halo` and not a hand-rolled BoxShadow, so a flat skin —
+        // where strength is 0 — simply has no halo rather than growing one
+        // this card invented. The token ratchet catches the other way.
+        boxShadow: on ? t.glow.halo(tint, blur: 16, alpha: 0.45) : null,
+      ),
+      child: Icon(icon, size: 16, color: on ? tint : t.surface.onBaseMuted),
+    );
+    if (label == null) return dot;
+
+    // **The label hangs off the dot; it must not move it.**
+    //
+    // As a Row it did: the caller centres this whole widget on the marker's
+    // point, so a dot with a name beside it sat half the name's width to the
+    // left of the spot it was placed on — and grew further off as the name got
+    // longer. Nothing in the document moved, which is what made it easy to
+    // miss: the fraction was right and the drawing was wrong, on the plan and
+    // in view mode alike.
+    //
+    // A Stack sized by the dot alone fixes it without measuring anything: only
+    // the unpositioned child decides the size, the label is placed past the
+    // dot's edge, and `Clip.none` lets it paint outside. The dot stays the
+    // hit target, which is also the honest answer to "what am I grabbing".
+    return Stack(
+      clipBehavior: Clip.none,
+      alignment: Alignment.center,
+      children: [
+        dot,
+        Positioned(
+          left: _size + t.space.xs,
+          child: _Plate(child: Text(label!, style: t.text.captionStyle)),
+        ),
       ],
     );
   }

@@ -288,6 +288,27 @@ void main() {
   _dropTests();
   _inspectorTests();
 
+  testWidgets('naming a marker does not move it', (tester) async {
+    // It did. The label was a sibling of the dot in a Row and the whole row was
+    // centred on the point, so naming a marker slid its dot half the name's
+    // width to the left — further the longer the name — while the document went
+    // on saying the fraction it was placed at. Right value, wrong drawing, on
+    // the plan and in view mode alike.
+    Offset dot() => tester.getCenter(find.byType(Icon));
+
+    await _pump(tester, _oneMarker(), [_light('light.a', on: true)]);
+    final bare = dot();
+
+    final named = _oneMarker();
+    (named['markers'] as List).first['label'] = 'Sofa lamp in the far corner';
+    await _pump(tester, named, [_light('light.a', on: true)]);
+
+    expect(dot(), bare,
+        reason: 'the name is drawn beside the dot, not around it');
+    // And the dot is where the fraction says: the middle of a 400x300 card.
+    expect(bare.dx, closeTo(200, 1));
+  });
+
   testWidgets('markers are placed by fraction, so they survive a resize',
       (tester) async {
     await _pump(tester, {
