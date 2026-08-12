@@ -290,6 +290,38 @@ class _FloorPlanCardState extends ConsumerState<FloorPlanCard> {
     _write(markers);
   }
 
+  /// The room a marker stands in, and what the house has in it.
+  ///
+  /// Null unless all three hold: the marker has a place in an imported home,
+  /// that place falls in a room the file named, and this house has an area of
+  /// the same name. Any of them missing and there is nothing honest to offer,
+  /// so the panel says to drag instead.
+  ({String room, String area, List<DeviceState> devices})? _nearby(
+      FloorPlanMarker marker, List<DeviceState> devices) {
+    final at = marker.home;
+    if (at == null) return null;
+    final plan = planFromConfig(widget.config);
+    final name = plan?.roomAt(at)?.name;
+    if (name == null || name.isEmpty) return null;
+
+    final wanted = humanize(name);
+    final inRoom = [
+      for (final d in devices)
+        if (d.effectiveArea != null && humanize(d.effectiveArea) == wanted) d,
+    ];
+    if (inRoom.isEmpty) return null;
+    // The area key as the house spells it, taken from a device rather than
+    // guessed back from the room's name.
+    return (room: name, area: inRoom.first.effectiveArea!, devices: inRoom);
+  }
+
+  void _bind(int index, Map<String, dynamic> selection) {
+    final markers = markersFromConfig(widget.config);
+    if (index < 0 || index >= markers.length) return;
+    markers[index] = markers[index].copyWith(selection: selection);
+    _write(markers);
+  }
+
   /// The rooms of a drawn home, as things you can press.
   ///
   /// A room is offered only when the house has an **area of the same name** —
@@ -483,6 +515,8 @@ class _FloorPlanCardState extends ConsumerState<FloorPlanCard> {
                       maxWidth: size.width - 16,
                       onLabel: (text) => _relabel(selected, text),
                       onRemove: () => _remove(selected),
+                      nearby: _nearby(markers[selected], devices),
+                      onBind: (selection) => _bind(selected, selection),
                     ),
                   ),
               ],
@@ -963,6 +997,8 @@ class _MarkerInspector extends StatelessWidget {
     required this.maxWidth,
     required this.onLabel,
     required this.onRemove,
+    required this.nearby,
+    required this.onBind,
   });
 
   final FloorPlanMarker marker;
@@ -970,6 +1006,13 @@ class _MarkerInspector extends StatelessWidget {
   final double maxWidth;
   final ValueChanged<String> onLabel;
   final VoidCallback onRemove;
+
+  /// The room this marker stands in and what is in it, when the plan knows —
+  /// see [_FloorPlanCardState._nearby].
+  final ({String room, String area, List<DeviceState> devices})? nearby;
+
+  /// Bind the marker to a selection.
+  final ValueChanged<Map<String, dynamic>> onBind;
 
   @override
   Widget build(BuildContext context) {
@@ -996,16 +1039,11 @@ class _MarkerInspector extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: t.text.captionStyle.copyWith(color: t.surface.onBaseMuted),
             ),
-            // A marker the import placed is half a job, and the half that is
-            // left has no button — it is a drag, and a panel that named the
-            // state without naming the gesture would leave someone stuck
-            // looking at five dots that do nothing.
-            if (isUnbound(marker))
-              Text(
-                'Drop a device on it to say which one.',
-                style:
-                    t.text.captionStyle.copyWith(color: t.surface.onBaseMuted),
-              ),
+            // A marker the import placed is half a job. The other half is a
+            // choice among what is *in that room* — the file knows which room
+            // the lamp hangs in, so the list is three or four things rather
+            // than the whole house.
+            if (isUnbound(marker)) _Bind(nearby: nearby, onBind: onBind),
             SizedBox(height: t.space.xs),
             _LabelField(value: marker.label ?? '', onChanged: onLabel),
             SizedBox(height: t.space.xs),
@@ -1026,6 +1064,109 @@ class _MarkerInspector extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// What a marker placed by an import could be.
+///
+/// **The room does the narrowing.** The file says the lamp hangs in the
+/// bedroom, so the question stops being "which of 188 devices is this" and
+/// becomes "which of the four things in the bedroom" — which is a list you can
+/// read, and the difference between an import that saves work and one that
+/// hands you a puzzle.
+///
+/// Nothing is guessed even so. Every device here is one press, and the press is
+/// yours: a name that nearly matches still gets picked by a person.
+class _Bind extends StatelessWidget {
+  const _Bind({required this.nearby, required this.onBind});
+
+  final ({String room, String area, List<DeviceState> devices})? nearby;
+  final ValueChanged<Map<String, dynamic>> onBind;
+
+  /// Enough to choose from, few enough to read at a glance on a panel this
+  /// size. Past it the library is the better tool and says so.
+  static const _most = 6;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    final at = nearby;
+    // No room, or a room this house has no area for: the drag is the only way,
+    // and saying so beats an empty list.
+    if (at == null || at.devices.isEmpty) {
+      return Text('Drop a device on it to say which one.',
+          style: t.text.captionStyle.copyWith(color: t.surface.onBaseMuted));
+    }
+
+    final shown = at.devices.take(_most).toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('In ${at.room}:',
+            style: t.text.captionStyle.copyWith(color: t.surface.onBaseMuted)),
+        SizedBox(height: t.space.xs),
+        Wrap(
+          spacing: t.space.xs,
+          runSpacing: t.space.xs,
+          children: [
+            // The room itself first: one marker speaking for a room is the
+            // shape §7.4 is built around, and on a plan it is often what you
+            // wanted rather than a single lamp.
+            _BindChip(
+              label: 'The whole room',
+              onTap: () => onBind({
+                'selection_mode': 'area',
+                'area_name': at.area,
+              }),
+            ),
+            for (final device in shown)
+              _BindChip(
+                label: device.displayName,
+                onTap: () => onBind({
+                  'selection_mode': 'manual',
+                  'device_ids': [device.id],
+                }),
+              ),
+          ],
+        ),
+        if (at.devices.length > _most) ...[
+          SizedBox(height: t.space.xs),
+          Text(
+            '${at.devices.length - _most} more — drop one on it instead.',
+            style: t.text.captionStyle.copyWith(color: t.surface.onBaseMuted),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _BindChip extends StatelessWidget {
+  const _BindChip({required this.label, required this.onTap});
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Material(
+      color: t.surface.raised,
+      shape: RoundedRectangleBorder(
+        borderRadius: t.radius.smR,
+        side: BorderSide(color: t.stroke.hairline),
+      ),
+      child: InkWell(
+        borderRadius: t.radius.smR,
+        onTap: onTap,
+        child: Padding(
+          padding: EdgeInsets.symmetric(
+              horizontal: t.space.xs, vertical: t.space.xs / 2),
+          child: Text(label,
+              style: t.text.captionStyle.copyWith(color: t.surface.onBase)),
         ),
       ),
     );

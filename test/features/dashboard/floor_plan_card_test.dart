@@ -299,6 +299,7 @@ void main() {
   _drawnHomeTests();
   _importedMarkerTests();
   _roomPressTests();
+  _bindFromRoomTests();
 
   testWidgets('naming a marker does not move it', (tester) async {
     // It did. The label was a sibling of the dot in a Row and the whole row was
@@ -1235,5 +1236,101 @@ void _roomPressTests() {
 
     expect(find.bySemanticsLabel('Living Room, on'), findsOneWidget);
     handle.dispose();
+  });
+}
+
+// ── binding from the room ──────────────────────────────────────────────────
+
+/// §7.9's payoff: the file says which room the lamp hangs in, so binding it is
+/// a choice among that room's four things rather than a hunt through 188.
+
+void _bindFromRoomTests() {
+  Map<String, dynamic> importedLiving() => {
+        'plan': const HomePlan(rooms: [
+          PlanRoom(name: 'Living Room', points: [
+            PlanPoint(0, 0),
+            PlanPoint(400, 0),
+            PlanPoint(400, 400),
+            PlanPoint(0, 400),
+          ]),
+        ], furniture: [
+          PlanPiece(name: 'Ceiling lamp', x: 200, y: 200, light: true),
+        ]).toJson(),
+        'markers': [
+          for (final m in candidateMarkers(const HomePlan(furniture: [
+            PlanPiece(name: 'Ceiling lamp', x: 200, y: 200, light: true),
+          ])))
+            m.toJson(),
+        ],
+      };
+
+  testWidgets('the panel offers what is in that room', (tester) async {
+    await _pumpLive(tester, importedLiving(), [
+      _light('light.sofa', on: false, area: 'living_room'),
+      _light('light.reading', on: false, area: 'living_room'),
+      _light('light.kitchen', on: false, area: 'kitchen'),
+    ]);
+    await tester.tap(find.byType(Icon).first);
+    await tester.pump();
+
+    expect(find.text('In Living Room:'), findsOneWidget);
+    expect(find.text('light.sofa'), findsOneWidget);
+    expect(find.text('light.reading'), findsOneWidget);
+    expect(find.text('light.kitchen'), findsNothing,
+        reason: 'the kitchen is not this lamp\'s room');
+    expect(find.text('The whole room'), findsOneWidget);
+  });
+
+  testWidgets('picking one binds the marker to it', (tester) async {
+    final seen = await _pumpLive(tester, importedLiving(), [
+      _light('light.sofa', on: false, area: 'living_room'),
+    ]);
+    await tester.tap(find.byType(Icon).first);
+    await tester.pump();
+    await tester.tap(find.text('light.sofa'));
+    await tester.pump();
+
+    final marker = _markersOf(seen.last).single;
+    expect((marker['selection'] as Map)['device_ids'], ['light.sofa']);
+    expect(marker['label'], 'Ceiling lamp', reason: 'the name it came with');
+    expect(marker['hx'], 200, reason: 'and the place it came with');
+  });
+
+  testWidgets('or to the room itself, which is what §7.4 is built around',
+      (tester) async {
+    final seen = await _pumpLive(tester, importedLiving(), [
+      _light('light.sofa', on: false, area: 'living_room'),
+    ]);
+    await tester.tap(find.byType(Icon).first);
+    await tester.pump();
+    await tester.tap(find.text('The whole room'));
+    await tester.pump();
+
+    final selection = _markersOf(seen.last).single['selection'] as Map;
+    expect(selection['selection_mode'], 'area');
+    expect(selection['area_name'], 'living_room');
+  });
+
+  testWidgets('a room this house has nothing in falls back to the drag',
+      (tester) async {
+    await _pumpLive(tester, importedLiving(), [
+      _light('light.kitchen', on: false, area: 'kitchen'),
+    ]);
+    await tester.tap(find.byType(Icon).first);
+    await tester.pump();
+
+    expect(find.textContaining('Drop a device on it'), findsOneWidget);
+    expect(find.text('The whole room'), findsNothing);
+  });
+
+  testWidgets('and a long list says where the better tool is', (tester) async {
+    await _pumpLive(tester, importedLiving(), [
+      for (var i = 0; i < 9; i++)
+        _light('light.$i', on: false, area: 'living_room'),
+    ]);
+    await tester.tap(find.byType(Icon).first);
+    await tester.pump();
+
+    expect(find.textContaining('3 more'), findsOneWidget);
   });
 }
