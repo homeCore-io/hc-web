@@ -6,7 +6,7 @@ publish_to: 'none'
 # release workflow publishes ghcr.io/homecore-io/hc-web:<version> from `v<version>`.
 # It read 1.0.0+1 from `flutter create` and had never been touched, which would
 # have made the first release's image tag disagree with the app it contains.
-version: 0.1.38+1
+version: 0.1.39+1
 
 environment:
   sdk: '>=3.3.0 <4.0.0'
