@@ -578,6 +578,34 @@ ThemeData hcThemeFromTokens(HcTokens tokens, {bool reduceMotion = false}) {
       thickness: 1,
     ),
 
+    // Sliders, in the skin.
+    //
+    // The same escape the buttons below document, one control over: an
+    // unthemed `Slider` fills from `colorScheme.primary`, and on Midnight that
+    // is the blue #7CC4FF used for links and selection rather than the amber
+    // every action wears. It showed on the live house — a page's Blur and Dim
+    // sliders rendering Material blue on an orange skin, next to orange
+    // buttons — and nothing failed, because a Material default is a valid
+    // render.
+    //
+    // Themed here rather than in `_Slider` on the page that showed it: a skin
+    // has to reach the whole app, and there are sliders in the device panel and
+    // the media card too. Pinning one widget would have fixed the screenshot
+    // and left the rest.
+    sliderTheme: SliderThemeData(
+      // `accent.active`, matching the buttons above and HcButton — the app's
+      // one "this is the action" colour. `accent.primary` is a different token
+      // and picking it here would have been a third answer to a settled
+      // question.
+      activeTrackColor: t.accent.active,
+      inactiveTrackColor: t.stroke.hairline,
+      thumbColor: t.accent.active,
+      overlayColor: t.accent.active.withValues(alpha: 0.12),
+      valueIndicatorColor: t.surface.overlay,
+      valueIndicatorTextStyle:
+          t.text.captionStyle.copyWith(color: t.surface.onBase),
+    ),
+
     // Buttons and dialogs, in the skin.
     //
     // These were never themed, so every FilledButton in the app rendered at

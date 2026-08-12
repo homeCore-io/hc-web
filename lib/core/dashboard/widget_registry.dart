@@ -25,6 +25,7 @@ class WidgetDescriptor {
     this.validate,
     this.description,
     this.chrome = WidgetChrome.card,
+    this.inPlaceLabel,
   });
 
   /// The wire value, e.g. `device_grid`. Plugin-contributed cards are namespaced
@@ -49,6 +50,20 @@ class WidgetDescriptor {
 
   /// How much of a card this element is. See [WidgetChrome].
   final WidgetChrome chrome;
+
+  /// What entering this card lets you do — `Place markers` — or null for the
+  /// cards you cannot enter, which is nearly all of them.
+  ///
+  /// **Entering has to be offered by the frame, not by the card.** In the
+  /// editor a card is an object you arrange, so the grid lays an opaque veil
+  /// over its body and takes every pointer; a button the card draws inside
+  /// itself is visible and unclickable, which is worse than absent. So a card
+  /// that can be edited in place says so here, the frame offers the way in, and
+  /// [WidgetRenderArgs.entered] is how the card hears that it happened.
+  ///
+  /// The label is the promise: it appears on the button and in its tooltip, so
+  /// "enter this card" is never the vague verb it is in a vector editor.
+  final String? inPlaceLabel;
 }
 
 /// What the renderer draws *around* a widget.
@@ -93,6 +108,8 @@ class WidgetRenderArgs {
     required this.subtitle,
     required this.sizeHint,
     this.editing = false,
+    this.entered = false,
+    this.onConfigChanged,
   });
 
   final String id;
@@ -107,6 +124,18 @@ class WidgetRenderArgs {
 
   final WidgetSizeHint sizeHint;
 
+  /// How a card writes its own config back, when it edits itself in place.
+  ///
+  /// Almost no card needs this: config is edited in the inspector, and a card
+  /// that quietly rewrites itself while you look at it is a card you cannot
+  /// trust. The floor plan is the exception the design named — you place a
+  /// marker *on the plan*, because placing it in a form would mean typing
+  /// coordinates — so the gesture happens on the card and the result has to
+  /// get back to the document.
+  ///
+  /// Null outside the designer, which is also the check for "may I edit?".
+  final ValueChanged<Map<String, dynamic>>? onConfigChanged;
+
   /// True while the designer (or the in-place editor) is drawing this card.
   ///
   /// Almost no widget should care — a card that looks different in the editor
@@ -114,6 +143,15 @@ class WidgetRenderArgs {
   /// that deliberately renders *nothing* on the page: a spacer has to be
   /// visible to be moved, and invisible to do its job.
   final bool editing;
+
+  /// The editor has been *entered* into this card: its veil is lifted, the
+  /// pointer belongs to the card, and the grid will not move it.
+  ///
+  /// Only ever true for a card whose descriptor carries a
+  /// [WidgetDescriptor.inPlaceLabel]. A card reads this the way a group in a
+  /// vector editor reads being open: it is the difference between drawing a
+  /// marker and dragging one.
+  final bool entered;
 
   bool get isCompact => w < sizeHint.recommendedW || h < sizeHint.recommendedH;
   bool get isVeryCompact => w <= sizeHint.minW || h <= sizeHint.minH;

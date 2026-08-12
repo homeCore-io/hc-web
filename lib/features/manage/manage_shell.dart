@@ -62,6 +62,7 @@ class ManageShell extends ConsumerWidget {
         'notifications', 'Notifications', Icons.notifications_none_rounded),
     ManageSection('users', 'Users & access', Icons.people_outline),
     ManageSection('data', 'Data & backups', Icons.inventory_2_outlined),
+    ManageSection('files', 'Files', Icons.perm_media_outlined),
     ManageSection(
         'maintenance', 'Maintenance', Icons.cleaning_services_outlined),
     ManageSection('audit', 'Audit', Icons.fact_check_outlined),

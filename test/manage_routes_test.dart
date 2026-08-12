@@ -90,6 +90,24 @@ void main() {
       reason: 'ManagePage links these paths and app.dart defines no route for '
           'them; the menu row will dead-end on the router error page',
     );
+
+    // Manage says the same thing twice — a sidebar and a landing pane — and a
+    // new page has to be added to both. `/admin/files` shipped in the landing
+    // pane alone and was invisible in the rail until it was spotted on the
+    // live box: routed, tested, reachable by URL, and absent from the
+    // navigation everyone actually uses. Nothing above catches that, because
+    // both lists were internally consistent.
+    //
+    // Asserted one way only. The rail carries Appearance and Plugin runtimes,
+    // which the landing pane has never listed; that asymmetry predates this
+    // and is a decision to make during the cleanup noted in webPlan.md, not a
+    // bug to fail on now.
+    expect(
+      linked.difference(adminSections),
+      isEmpty,
+      reason: 'ManagePage offers these and the rail does not, so the page is '
+          'invisible from every screen except the Manage landing page',
+    );
   });
 
   test('paths that moved still resolve', () {

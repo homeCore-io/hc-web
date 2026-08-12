@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/dashboard/card_style.dart';
 import '../../core/dashboard/grid_engine.dart';
@@ -28,6 +29,7 @@ class PageGrid extends StatefulWidget {
     this.onResize,
     this.onRemove,
     this.onConfigure,
+    this.onWidgetConfig,
     this.onAddAt,
     this.selectedId,
     this.onDropCard,
@@ -55,6 +57,9 @@ class PageGrid extends StatefulWidget {
   final void Function(String id, int w, int h)? onResize;
   final void Function(String id)? onRemove;
   final void Function(String id)? onConfigure;
+
+  /// A card rewriting its own config — see [WidgetRenderArgs.onConfigChanged].
+  final void Function(String id, Map<String, dynamic> config)? onWidgetConfig;
 
   /// A tap on empty canvas, in grid cells.
   ///
@@ -90,6 +95,46 @@ class PageGrid extends StatefulWidget {
 class _PageGridState extends State<PageGrid> {
   /// The cell a dragged-in card is hovering over, in grid units.
   (int, int)? _dropCell;
+
+  /// The card the editor has been *entered* into, or null.
+  ///
+  /// At most one, like a text cursor: two live cards would mean two things
+  /// claiming the same drop and the same Escape.
+  String? _entered;
+
+  /// Held by the entered card's frame, so Escape has somewhere to land.
+  final _enteredFocus = FocusNode(debugLabel: 'entered card');
+
+  @override
+  void dispose() {
+    _enteredFocus.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(PageGrid old) {
+    super.didUpdateWidget(old);
+    // Leaving edit mode, or the card being deleted underneath us, leaves
+    // nothing to be inside of.
+    if (_entered != null &&
+        (!widget.editing || !widget.items.any((i) => i.id == _entered))) {
+      _entered = null;
+    }
+  }
+
+  void _enter(String id) {
+    setState(() => _entered = id);
+    // Entering is also choosing: the inspector should be showing the card you
+    // are now working inside.
+    widget.onSelect?.call(id);
+    _enteredFocus.requestFocus();
+  }
+
+  void _leave() {
+    if (_entered == null) return;
+    setState(() => _entered = null);
+    _enteredFocus.unfocus();
+  }
 
   // A gesture (move or resize) works from an immutable snapshot of the layout
   // taken at its start, so the arrangement depends only on where the pointer is
@@ -232,7 +277,7 @@ class _PageGridState extends State<PageGrid> {
         // animates smoothly. Cards snap back to their live selves on release.
         final gesturing = _dragId != null || _resizeId != null;
 
-        return SizedBox(
+        final board = SizedBox(
           width: double.infinity,
           // Room to drop a card below the last row while editing.
           height: height + (widget.editing ? stepY * 2 : 0),
@@ -245,47 +290,23 @@ class _PageGridState extends State<PageGrid> {
               // above them.
               if (widget.editing)
                 Positioned.fill(
-                  // The whole board is a drop target while editing. Tracking
-                  // the cell under the pointer is what makes dropping feel like
-                  // placing rather than like submitting: you see where it will
-                  // land before you let go.
-                  child: DragTarget<Object>(
-                    onMove: (details) {
-                      final box = context.findRenderObject() as RenderBox?;
-                      if (box == null) return;
-                      final local = box.globalToLocal(details.offset);
-                      final x =
-                          (local.dx / stepX).floor().clamp(0, columns - 1);
-                      final y = (local.dy / stepY).floor();
-                      final cell = (x, y < 0 ? 0 : y);
-                      if (_dropCell != cell) setState(() => _dropCell = cell);
-                    },
-                    onLeave: (_) => setState(() => _dropCell = null),
-                    onAcceptWithDetails: (details) {
-                      final cell = _dropCell;
-                      setState(() => _dropCell = null);
-                      if (cell != null) {
-                        widget.onDropCard?.call(details.data, cell.$1, cell.$2);
-                      }
-                    },
-                    builder: (context, _, __) => GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTapUp: widget.onAddAt == null
-                          ? null
-                          : (details) {
-                              final p = details.localPosition;
-                              final x =
-                                  (p.dx / stepX).floor().clamp(0, columns - 1);
-                              final y = (p.dy / stepY).floor();
-                              widget.onAddAt!(x, y < 0 ? 0 : y);
-                            },
-                      child: CustomPaint(
-                        painter: _ColumnGuides(
-                          columns: columns,
-                          cellW: cellW,
-                          gap: widget.gap,
-                          color: t.stroke.hairline,
-                        ),
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTapUp: widget.onAddAt == null
+                        ? null
+                        : (details) {
+                            final p = details.localPosition;
+                            final x =
+                                (p.dx / stepX).floor().clamp(0, columns - 1);
+                            final y = (p.dy / stepY).floor();
+                            widget.onAddAt!(x, y < 0 ? 0 : y);
+                          },
+                    child: CustomPaint(
+                      painter: _ColumnGuides(
+                        columns: columns,
+                        cellW: cellW,
+                        gap: widget.gap,
+                        color: t.stroke.hairline,
                       ),
                     ),
                   ),
@@ -323,12 +344,19 @@ class _PageGridState extends State<PageGrid> {
                   height: heightOf(item),
                   child: RepaintBoundary(
                     child: _Cell(
+                      onConfigChanged: widget.onWidgetConfig == null
+                          ? null
+                          : (next) => widget.onWidgetConfig!(item.id, next),
                       item: item,
                       model: widget.widgetsById[item.id],
                       editing: widget.editing,
                       simplified: gesturing,
                       dragging: _dragId == item.id || _resizeId == item.id,
                       selected: widget.selectedId == item.id,
+                      entered: _entered == item.id,
+                      enteredFocus: _enteredFocus,
+                      onEnter: () => _enter(item.id),
+                      onLeave: _leave,
                       // Only while resizing. During a move the position is
                       // already legible from where the card is; during a
                       // resize the number of cells is exactly what you are
@@ -414,6 +442,42 @@ class _PageGridState extends State<PageGrid> {
               ],
             ],
           ),
+        );
+
+        if (!widget.editing) return board;
+
+        // The whole board is a drop target — *around* the cards, not behind
+        // them.
+        //
+        // Behind was the obvious place and it was wrong: a card in the editor
+        // is covered by an opaque veil, so a library drag held over one was
+        // seen by nothing at all, and letting go there did nothing. Dropping
+        // onto the half of a full page that already has cards on it is not an
+        // edge case.
+        //
+        // As an ancestor it is *last* in the hit path, which is exactly the
+        // priority we want: a card that claims the drop itself — an entered
+        // floor plan turning it into a marker — is deeper, so it wins, and this
+        // catches everything it does not.
+        return DragTarget<Object>(
+          onMove: (details) {
+            final box = context.findRenderObject() as RenderBox?;
+            if (box == null) return;
+            final local = box.globalToLocal(details.offset);
+            final x = (local.dx / stepX).floor().clamp(0, columns - 1);
+            final y = (local.dy / stepY).floor();
+            final cell = (x, y < 0 ? 0 : y);
+            if (_dropCell != cell) setState(() => _dropCell = cell);
+          },
+          onLeave: (_) => setState(() => _dropCell = null),
+          onAcceptWithDetails: (details) {
+            final cell = _dropCell;
+            setState(() => _dropCell = null);
+            if (cell != null) {
+              widget.onDropCard?.call(details.data, cell.$1, cell.$2);
+            }
+          },
+          builder: (context, _, __) => board,
         );
       },
     );
@@ -560,9 +624,14 @@ class _Cell extends StatelessWidget {
     required this.simplified,
     required this.dragging,
     required this.selected,
+    required this.entered,
+    required this.enteredFocus,
+    required this.onEnter,
+    required this.onLeave,
     required this.sizeLabel,
     required this.onRemove,
     required this.onConfigure,
+    required this.onConfigChanged,
     required this.onMenu,
     required this.onSelect,
     required this.onDragStart,
@@ -580,10 +649,23 @@ class _Cell extends StatelessWidget {
   final bool dragging;
   final bool selected;
 
+  /// The editor is inside this card: no veil, no drag, the pointer is the
+  /// card's own. See [WidgetDescriptor.inPlaceLabel].
+  final bool entered;
+
+  /// Where Escape lands while inside.
+  final FocusNode enteredFocus;
+  final VoidCallback onEnter;
+  final VoidCallback onLeave;
+
   /// `4×2` while this card is being resized, else null.
   final String? sizeLabel;
   final VoidCallback onRemove;
   final VoidCallback onConfigure;
+
+  /// How this card writes its own config back. Null when nothing is listening,
+  /// which is also how a card knows it may not edit itself.
+  final ValueChanged<Map<String, dynamic>>? onConfigChanged;
   final void Function(Offset globalPosition) onMenu;
 
   /// Null outside the surfaces that have somewhere to show a selection.
@@ -626,6 +708,8 @@ class _Cell extends StatelessWidget {
                       h: item.h,
                       sizeHint: descriptor.sizeHint,
                       editing: editing,
+                      entered: entered,
+                      onConfigChanged: onConfigChanged,
                     ),
                   );
 
@@ -691,6 +775,51 @@ class _Cell extends StatelessWidget {
 
     if (!editing) return card;
 
+    // Inside the card: the veil comes off.
+    //
+    // This is the whole point of entering. Everything below — the IgnorePointer
+    // and the opaque pan detector over it — exists so a card in the editor is
+    // an object you arrange rather than one you operate, and it is total: a
+    // floor plan's own Place button rendered *underneath* it, visible and
+    // unclickable, and a marker drag never reached the marker. So while we are
+    // inside, the card gets the pointer, the grid will not move it, and the
+    // only chrome left is the way out.
+    if (entered) {
+      return Focus(
+        focusNode: enteredFocus,
+        onKeyEvent: (_, event) {
+          if (event is KeyDownEvent &&
+              event.logicalKey == LogicalKeyboardKey.escape) {
+            onLeave();
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.ignored;
+        },
+        child: Stack(
+          children: [
+            Positioned.fill(child: card),
+            // Which card you are inside, said on the card. Non-interactive, so
+            // it never takes a pointer the card wanted.
+            Positioned.fill(
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: t.radius.mdR,
+                    border: Border.all(color: t.accent.active, width: 2),
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              top: 4,
+              right: 4,
+              child: _DoneChip(onTap: onLeave),
+            ),
+          ],
+        ),
+      );
+    }
+
     // Edit mode: a veil swallows the live widget's own taps, and the frame adds
     // the three things you do to a card — move it, size it, remove it.
     return Stack(
@@ -732,6 +861,14 @@ class _Cell extends StatelessWidget {
           right: 4,
           child: Row(
             children: [
+              // Only for a card that has something to do in place, and only
+              // where its edits have somewhere to go.
+              if (descriptor?.inPlaceLabel case final label?)
+                if (onConfigChanged != null) ...[
+                  _RoundButton(
+                      icon: HcIcons.pencil, onTap: onEnter, label: label),
+                  const SizedBox(width: 4),
+                ],
               _RoundButton(
                   icon: HcIcons.sliders,
                   onTap: onConfigure,
@@ -792,6 +929,47 @@ class _Cell extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// The way out of a card you are inside.
+///
+/// A word rather than another round glyph: every other button on a card's frame
+/// is an action *on* the card, and this one is the only thing that changes what
+/// your pointer means. It says so, and it says the shortcut.
+class _DoneChip extends StatelessWidget {
+  const _DoneChip({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Tooltip(
+      message: 'Done — or press Escape',
+      child: Material(
+        color: t.accent.active,
+        shape: RoundedRectangleBorder(borderRadius: t.radius.pillR),
+        child: InkWell(
+          borderRadius: t.radius.pillR,
+          onTap: onTap,
+          child: Padding(
+            padding: EdgeInsets.symmetric(
+                horizontal: t.space.sm, vertical: t.space.xs),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(HcIcons.check, size: 13, color: t.accent.onPrimary),
+                SizedBox(width: t.space.xs),
+                Text('Done',
+                    style: t.text.captionStyle
+                        .copyWith(color: t.accent.onPrimary)),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

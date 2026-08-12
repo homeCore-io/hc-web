@@ -573,6 +573,15 @@ class _InfoTabState extends ConsumerState<_InfoTab> {
     super.dispose();
   }
 
+  /// Manufacturer and model as one line, because they are read together and
+  /// either can be absent: "Signify LCT015", or just "Signify", or nothing.
+  String? get _hardware {
+    final parts = [_d.manufacturer, _d.model]
+        .where((s) => s != null && s.trim().isNotEmpty)
+        .map((s) => s!.trim());
+    return parts.isEmpty ? null : parts.join(' ');
+  }
+
   String get _currentArea =>
       _d.effectiveArea != null ? humanize(_d.effectiveArea!) : '';
 
@@ -668,6 +677,17 @@ class _InfoTabState extends ConsumerState<_InfoTab> {
               onEdit: _start, actionLabel: 'change'),
           if (_d.deviceType != null) _kv(t, 'Type', humanize(_d.deviceType!)),
           _kv(t, 'Source', source),
+
+          // What the thing actually is, when its plugin says. Above the
+          // technical fold rather than inside it: "which of my three of these
+          // is this" and "what firmware is it on" are questions an owner asks,
+          // not an integrator debugging a rule.
+          //
+          // Absent for most devices — a plugin has to have been taught to
+          // report it — so each row appears only when there is something to
+          // say, rather than a column of "Unknown".
+          if (_hardware != null) _kv(t, 'Hardware', _hardware!),
+          if (_d.swVersion != null) _kv(t, 'Firmware', _d.swVersion!),
           SizedBox(height: t.space.sm),
           Divider(height: 1, color: t.stroke.hairline),
           SizedBox(height: t.space.sm),
@@ -699,6 +719,12 @@ class _InfoTabState extends ConsumerState<_InfoTab> {
           ),
           if (_tech) ...[
             _mono(t, 'Device ID', _d.id),
+            // Where the device sits. Technical because acting on it means
+            // knowing the other device's id — the reason it is worth showing
+            // is that twenty things going offline together usually have one
+            // cause, and this names it.
+            if (_d.parentDeviceId != null)
+              _mono(t, 'Behind', _d.parentDeviceId!),
             if (_d.canonicalName != null)
               _mono(t, 'Canonical', _d.canonicalName!),
             _mono(t, 'Plugin', _d.pluginId),
