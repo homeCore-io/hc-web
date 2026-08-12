@@ -56,6 +56,12 @@ Finder get _painted => find.descendant(
       matching: find.byType(CustomPaint),
     );
 
+/// The flare layer, which is a separate painter from the drawing it falls on.
+Finder get _flare => find.descendant(
+      of: find.byType(PlanFlare),
+      matching: find.byType(CustomPaint),
+    );
+
 void main() {
   testWidgets('a home draws, and an empty one draws nothing rather than fails',
       (tester) async {
@@ -324,6 +330,79 @@ void _anchorTests() {
               color:
                   HcSkin.midnight.tokens.surface.base.withValues(alpha: 0.5))),
       );
+    });
+  });
+  group('light on the floor', () {
+    const room = PlanRoom(name: 'Living', points: [
+      PlanPoint(0, 0),
+      PlanPoint(400, 0),
+      PlanPoint(400, 300),
+      PlanPoint(0, 300),
+    ]);
+    const plan = HomePlan(rooms: [room]);
+
+    const pool = PlanPool(
+      at: PlanPoint(200, 150),
+      tint: Color(0xFFFFE0B0),
+      reach: 300,
+      strength: 1,
+    );
+
+    testWidgets('a lit lamp spills onto its own room', (tester) async {
+      await _pump(tester, const PlanFlare(plan: plan, pools: [pool]));
+      // Clipped, because light does not cross walls — that is what makes it
+      // read as light rather than as a highlight smeared over the drawing.
+      expect(
+          _flare,
+          paints
+            ..clipPath()
+            ..circle());
+    });
+
+    testWidgets('a lamp in no room the file drew spills nothing',
+        (tester) async {
+      // There is no floor there to catch it, and unclipped it would bleed
+      // across the whole plan.
+      await _pump(
+        tester,
+        const PlanFlare(plan: plan, pools: [
+          PlanPool(
+              at: PlanPoint(900, 900),
+              tint: Color(0xFFFFE0B0),
+              reach: 300,
+              strength: 1),
+        ]),
+      );
+      expect(_flare, isNot(paints..circle()));
+    });
+
+    testWidgets('a flat skin has none of it, like every other halo',
+        (tester) async {
+      // Control Room's own description is near-black, hairlines, no bloom, and
+      // its glow strength is 0. A card that glowed anyway would be inventing a
+      // light language of its own — see HcGlow.
+      await _pump(tester, const PlanFlare(plan: plan, pools: [pool]),
+          skin: HcSkin.controlRoom);
+      expect(_flare, isNot(paints..circle()));
+
+      await _pump(tester, const PlanFlare(plan: plan, pools: [pool]));
+      expect(_flare, paints..circle());
+    });
+
+    testWidgets('a lamp turned down spills less than one turned up',
+        (tester) async {
+      // Strength is the house's business: the same lamp at 10% glows faintly
+      // and at 100% blooms, which is the rule the tiles already follow.
+      await _pump(
+          tester,
+          const PlanFlare(plan: plan, pools: [
+            PlanPool(
+                at: PlanPoint(200, 150),
+                tint: Color(0xFFFFE0B0),
+                reach: 300,
+                strength: 0)
+          ]));
+      expect(_flare, isNot(paints..circle()));
     });
   });
 }

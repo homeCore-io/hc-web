@@ -87,12 +87,18 @@ class _Headers implements HttpHeaders {
   noSuchMethod(Invocation i) => super.noSuchMethod(i);
 }
 
-DeviceState _light(String id, {required bool on, String? area}) => DeviceState(
+DeviceState _light(String id,
+        {required bool on, String? area, int? brightnessPct}) =>
+    DeviceState(
       id: id,
       name: id,
       pluginId: 'plugin.test',
       deviceType: 'light',
-      state: {'state': on ? 'on' : 'off', 'on': on},
+      state: {
+        'state': on ? 'on' : 'off',
+        'on': on,
+        if (brightnessPct != null) 'brightness_pct': brightnessPct,
+      },
       available: true,
       areaOverride: area,
     );
@@ -112,13 +118,14 @@ Future<_Devices> _pump(
   Map<String, dynamic> config,
   List<DeviceState> devices, {
   bool entered = false,
+  HcSkin skin = HcSkin.midnight,
   ValueChanged<Map<String, dynamic>>? onConfigChanged,
 }) async {
   final house = _Devices(devices);
   await tester.pumpWidget(ProviderScope(
     overrides: [devicesProvider.overrideWith(() => house)],
     child: MaterialApp(
-      theme: hcThemeFromTokens(HcSkin.midnight.tokens),
+      theme: hcThemeFromTokens(skin.tokens),
       home: Scaffold(
         body: SizedBox(
           width: 400,
@@ -1386,6 +1393,167 @@ void _bindOrderTests() {
     // Seven devices and only six slots: without the ranking the one the file
     // named is exactly the one that falls off.
     expect(find.text('Ceiling light'), findsOneWidget);
+  });
+
+  group('the flare', () {
+    /// A one-room home with a lamp in the middle of it, as import leaves one.
+    Map<String, dynamic> config({
+      required Map<String, dynamic> selection,
+      String? lightColour = 'FFE0B0',
+      double? hx = 200,
+    }) =>
+        {
+          'plan': {
+            'rooms': [
+              {
+                'name': 'Living',
+                'points': [
+                  {'x': 0, 'y': 0},
+                  {'x': 400, 'y': 0},
+                  {'x': 400, 'y': 300},
+                  {'x': 0, 'y': 300},
+                ],
+              },
+            ],
+            'furniture': [
+              {
+                'name': 'Ceiling',
+                'x': 200,
+                'y': 150,
+                'w': 40,
+                'd': 40,
+                'light': true,
+                if (lightColour != null)
+                  'lc': int.parse('FF$lightColour', radix: 16),
+              },
+            ],
+          },
+          'markers': [
+            {
+              'selection': selection,
+              'x': 0.5,
+              'y': 0.5,
+              if (hx != null) ...{'hx': hx, 'hy': 150.0},
+            },
+          ],
+        };
+
+    Map<String, dynamic> bound(String id) => {
+          'selection_mode': 'manual',
+          'device_ids': [id],
+        };
+
+    Finder flare() => find.descendant(
+        of: find.byType(PlanFlare), matching: find.byType(CustomPaint));
+
+    List<PlanPool> pools(WidgetTester tester) =>
+        tester.widget<PlanFlare>(find.byType(PlanFlare)).pools;
+
+    testWidgets('a lit lamp puts light on the floor of its own room',
+        (tester) async {
+      await _pump(
+          tester, config(selection: bound('lamp')), [_light('lamp', on: true)]);
+      // Clipped, because light does not cross walls.
+      expect(
+          flare(),
+          paints
+            ..clipPath()
+            ..circle());
+    });
+
+    testWidgets('and the same lamp off puts none there', (tester) async {
+      // The whole point: the plan looks like the house looks right now.
+      await _pump(tester, config(selection: bound('lamp')),
+          [_light('lamp', on: false)]);
+      expect(flare(), isNot(paints..circle()));
+    });
+
+    testWidgets('a marker bound to nothing stays dark, however lit the room',
+        (tester) async {
+      // Honest rather than helpful: nobody has said what that lamp is yet, so
+      // the plan does not pretend to know it is the one that came on.
+      await _pump(
+        tester,
+        config(selection: const {'selection_mode': 'manual', 'device_ids': []}),
+        [_light('lamp', on: true)],
+      );
+      expect(flare(), isNot(paints..circle()));
+    });
+
+    testWidgets('a sensor lights nothing, whatever it is reading',
+        (tester) async {
+      // A room lit by its own thermometer would be nonsense.
+      await _pump(
+          tester, config(selection: bound('temp')), [_sensor('temp', 21.5)]);
+      expect(flare(), isNot(paints..circle()));
+    });
+
+    testWidgets('it burns the colour the file gave it', (tester) async {
+      // The one place in this card where a colour does not come from the skin,
+      // and it is right: a warm bulb in a paper shade is a fact about the
+      // house, the same kind of fact as the colour of its floor.
+      await _pump(
+          tester, config(selection: bound('lamp')), [_light('lamp', on: true)]);
+      expect(pools(tester).single.tint, const Color(0xFFFFE0B0));
+    });
+
+    testWidgets('and the skin\'s where the file said nothing', (tester) async {
+      await _pump(tester, config(selection: bound('lamp'), lightColour: null),
+          [_light('lamp', on: true)]);
+      expect(pools(tester).single.tint, HcSkin.midnight.tokens.accent.active);
+    });
+
+    testWidgets('a lamp turned down spills less than one turned up',
+        (tester) async {
+      await _pump(tester, config(selection: bound('lamp')),
+          [_light('lamp', on: true, brightnessPct: 10)]);
+      expect(pools(tester).single.strength, closeTo(0.1, 0.001));
+    });
+
+    testWidgets('a room speaks for its brightest lamp, never its average',
+        (tester) async {
+      // One lamp at full and one off is a lit room, not a half-lit one.
+      await _pump(
+        tester,
+        config(selection: const {
+          'selection_mode': 'manual',
+          'device_ids': ['a', 'b'],
+        }),
+        [
+          _light('a', on: true, brightnessPct: 100),
+          _light('b', on: false, brightnessPct: 0),
+        ],
+      );
+      expect(pools(tester).single.strength, 1.0);
+    });
+
+    testWidgets('placing markers turns it off', (tester) async {
+      // The wash already says the card is in a mode, and a designer moving
+      // markers is looking at where they are, not at what the house is doing.
+      await _pump(
+          tester, config(selection: bound('lamp')), [_light('lamp', on: true)],
+          entered: true, onConfigChanged: (_) {});
+      expect(find.byType(PlanFlare), findsNothing);
+    });
+
+    testWidgets('a marker with no place in the home spills nothing',
+        (tester) async {
+      // A marker on a picture has no room to be in — the flare is the one
+      // thing only an imported home can do.
+      await _pump(tester, config(selection: bound('lamp'), hx: null),
+          [_light('lamp', on: true)]);
+      expect(flare(), isNot(paints..circle()));
+    });
+
+    testWidgets('a marker dragged off its lamp lights in the skin instead',
+        (tester) async {
+      // Past the tolerance the marker is about something else, and borrowing
+      // the nearest lamp's colour would light a room from a lamp nobody
+      // pointed at.
+      await _pump(tester, config(selection: bound('lamp'), hx: 380),
+          [_light('lamp', on: true)]);
+      expect(pools(tester).single.tint, HcSkin.midnight.tokens.accent.active);
+    });
   });
 }
 

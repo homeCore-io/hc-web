@@ -150,6 +150,157 @@ class _PlanViewState extends State<PlanView> {
   }
 }
 
+/// One lamp's worth of light, as the house currently has it.
+class PlanPool {
+  const PlanPool({
+    required this.at,
+    required this.tint,
+    required this.reach,
+    required this.strength,
+  });
+
+  /// Where the lamp is, in the home's own centimetres.
+  final PlanPoint at;
+
+  /// What colour it burns — the file's `<lightSource>` where it said, and the
+  /// skin's accent where it did not.
+  final Color tint;
+
+  /// How far the light carries, in centimetres.
+  final double reach;
+
+  /// How much of it there is, 0–1: the lamp's own power times how far up the
+  /// house has it turned.
+  final double strength;
+
+  /// By value, because the card builds this list afresh on every frame and a
+  /// painter comparing identity would repaint the whole plan on each tick of
+  /// anything else on the page.
+  @override
+  bool operator ==(Object other) =>
+      other is PlanPool &&
+      other.at == at &&
+      other.tint == tint &&
+      other.reach == reach &&
+      other.strength == strength;
+
+  @override
+  int get hashCode => Object.hash(at, tint, reach, strength);
+}
+
+/// Light on the floor, from the lamps that are on.
+///
+/// **The one thing only an imported home can do.** The file says where each
+/// lamp hangs and what colour it burns; the house says whether it is lit and
+/// how far up. Put together, a lit room spills light onto its own floor — the
+/// app's `glow.halo` signature at room scale instead of at dot scale, and the
+/// difference between a plan that shows you the house and a plan that looks
+/// like the house looks right now.
+///
+/// **Clipped to the room the lamp stands in, because light does not cross
+/// walls.** That is what makes it read as light rather than as a highlight
+/// smeared over the drawing, and it is free: the polygons are already in the
+/// file, and already clip a press.
+///
+/// A lamp in no room the file drew spills nothing. There is no floor there to
+/// catch it, and an unclipped pool would bleed across the whole plan.
+class PlanFlare extends StatelessWidget {
+  const PlanFlare({
+    super.key,
+    required this.plan,
+    required this.pools,
+  });
+
+  final HomePlan plan;
+  final List<PlanPool> pools;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return IgnorePointer(
+      child: CustomPaint(
+        painter: _FlarePainter(
+          plan: plan,
+          pools: pools,
+          // Scaled by the skin, like every other halo in the app. Control Room
+          // says *near-black, hairlines, no bloom* and its strength is 0, so
+          // there it simply does not draw — rather than this card inventing a
+          // glow language of its own. See [HcGlow].
+          strength: t.glow.strength,
+        ),
+        size: Size.infinite,
+      ),
+    );
+  }
+}
+
+class _FlarePainter extends CustomPainter {
+  _FlarePainter({
+    required this.plan,
+    required this.pools,
+    required this.strength,
+  });
+
+  final HomePlan plan;
+  final List<PlanPool> pools;
+  final double strength;
+
+  /// How much light lands directly under a lamp at full strength.
+  ///
+  /// Modest on purpose. The plan is ground and the markers are figure, and a
+  /// pool bright enough to compete with a lit marker would be the card telling
+  /// you twice and drowning the drawing to do it.
+  static const _peak = 0.30;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (strength <= 0 || pools.isEmpty) return;
+    final fit = PlanFit.of(plan, size);
+    if (fit == null) return;
+
+    for (final pool in pools) {
+      final room = plan.roomAt(pool.at);
+      if (room == null || room.points.length < 3) continue;
+
+      final centre = fit.toCard(pool.at.x, pool.at.y);
+      final radius = fit.lengths(pool.reach);
+      if (radius <= 0) continue;
+
+      final alpha =
+          (_peak * strength * pool.strength.clamp(0.0, 1.0)).clamp(0.0, 1.0);
+      if (alpha <= 0) continue;
+
+      canvas.save();
+      canvas.clipPath(Path()
+        ..addPolygon(
+            [for (final p in room.points) fit.toCard(p.x, p.y)], true));
+      canvas.drawCircle(
+        centre,
+        radius,
+        Paint()
+          ..shader = RadialGradient(
+            colors: [
+              pool.tint.withValues(alpha: alpha),
+              pool.tint.withValues(alpha: 0),
+            ],
+            // Held near full for the first third, so there is a pool of light
+            // rather than a point of it: a gradient that starts falling at the
+            // centre reads as a dot with a blur, which is what the marker
+            // already is.
+            stops: const [0.30, 1.0],
+          ).createShader(Rect.fromCircle(center: centre, radius: radius)),
+      );
+      canvas.restore();
+    }
+  }
+
+  @override
+  bool shouldRepaint(_FlarePainter old) =>
+      !identical(old.plan, plan) ||
+      old.strength != strength ||
+      !listEquals(old.pools, pools);
+}
+
 /// A room you can press, shaped like the room.
 ///
 /// §7.4 called zones deferred and offered a marker bound to a room selection as

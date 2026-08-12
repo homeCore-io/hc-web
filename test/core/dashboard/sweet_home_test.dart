@@ -515,4 +515,51 @@ void _roomAtTests() {
       expect(sniffImageType(Uint8List.fromList(const [])), isNull);
     });
   });
+  group('a lamp', () {
+    HomePlan withLight(String inner, {String attrs = ''}) => _parse(_homeXml(
+          rooms: "<room name='Living'><point x='0' y='0'/>"
+              "<point x='400' y='0'/><point x='400' y='400'/>"
+              "<point x='0' y='400'/></room>",
+          furniture: "<light name='Ceiling' x='200' y='200' width='40' "
+              "depth='40' $attrs>$inner</light>",
+        ));
+
+    test('carries the colour it burns, which only the file knows', () {
+      // A device reports that it is on, never that it is a warm bulb in a
+      // paper shade. This is the only place that fact exists.
+      final plan = withLight("<lightSource x='200' y='200' z='240' "
+          "color='FFE0B0' diameter='20'/>");
+      expect(plan.lights.single.glow, 0xFFFFE0B0);
+    });
+
+    test('and how strong it is, defaulting the way the file does', () {
+      expect(withLight('', attrs: "power='0.8'").lights.single.power, 0.8);
+      // Sweet Home 3D's own default. Zero would be a lamp that is off.
+      expect(withLight('').lights.single.power, 0.5);
+      expect(withLight('').lights.single.glow, isNull);
+    });
+
+    test('survives the document, colour and all', () {
+      final plan = withLight(
+          "<lightSource x='200' y='200' z='240' color='FFE0B0'/>",
+          attrs: "power='0.8'");
+      final back = HomePlan.fromJson(plan.toJson()).lights.single;
+      expect(back.glow, 0xFFFFE0B0);
+      expect(back.power, 0.8);
+    });
+
+    test('is found under the marker standing on it', () {
+      final plan = withLight('');
+      expect(plan.lightAt(const PlanPoint(200, 200))?.name, 'Ceiling');
+      // Nudged a little: still plainly the same lamp.
+      expect(plan.lightAt(const PlanPoint(215, 210))?.name, 'Ceiling');
+    });
+
+    test('and is not borrowed by a marker dragged away from it', () {
+      // Past the tolerance the marker is about something else, and taking the
+      // nearest lamp's colour anyway would light a room from a lamp nobody
+      // pointed at.
+      expect(withLight('').lightAt(const PlanPoint(320, 200)), isNull);
+    });
+  });
 }

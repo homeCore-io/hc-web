@@ -334,6 +334,70 @@ class _FloorPlanCardState extends ConsumerState<FloorPlanCard> {
     return (room: name, area: inRoom.first.effectiveArea!, devices: inRoom);
   }
 
+  /// The light every lit lamp is currently throwing on the floor.
+  ///
+  /// **Two halves that only exist together.** The file knows where a lamp hangs
+  /// and what colour it burns; the house knows whether it is on and how far up.
+  /// Neither is any use alone — which is why this is the one thing §7.9 says
+  /// only an imported home can do, and why a picture cannot have it at any
+  /// budget.
+  ///
+  /// Taken over markers rather than over the file's lights, because a marker is
+  /// the only thing that has been *told* which device it is. An unbound lamp
+  /// stays dark on the plan however lit the room is, which is honest: nobody
+  /// has said what it stands for yet.
+  List<PlanPool> _pools(
+      List<FloorPlanMarker> markers, List<DeviceState> devices, Color accent) {
+    final plan = planFromConfig(widget.config);
+    if (plan == null) return const [];
+
+    final pools = <PlanPool>[];
+    for (final marker in markers) {
+      final at = marker.home;
+      if (at == null) continue;
+      final matched = selectDevicesForConfig(devices, marker.selection);
+      // Only things that can be *on*. A thermometer reading 21° is not a lamp,
+      // and a room lit by its own humidity sensor would be nonsense.
+      final lamps = [
+        for (final d in matched)
+          if (_actuable(d)) d
+      ];
+      final lit = [
+        for (final d in lamps)
+          if (isOn(d)) d
+      ];
+      if (lit.isEmpty) continue;
+
+      // What the file knows about this spot, if the marker is still standing
+      // where import put it.
+      final lamp = plan.lightAt(at);
+
+      // How far up the house has it. A marker speaking for a whole room is as
+      // bright as the brightest thing in it — the alternative, an average, has
+      // one lamp at full and three off reading as a quarter-lit room.
+      var level = 0.0;
+      for (final d in lit) {
+        final own = levelOf(d) ?? 1.0;
+        if (own > level) level = own;
+      }
+
+      pools.add(PlanPool(
+        at: at,
+        // The lamp's own colour where the file gave one. This is the single
+        // place in the card where a colour does not come from the skin, and it
+        // is right: a warm bulb in a paper shade is a fact about the house, the
+        // same kind of fact as the colour of its floor.
+        tint: lamp?.glow == null ? accent : Color(lamp!.glow!),
+        // In centimetres, so it scales with the drawing rather than with the
+        // card: a lamp lights the same three metres of floor whatever size the
+        // plan is being shown at.
+        reach: 120 + 360 * (lamp?.power ?? 0.5).clamp(0.0, 1.0),
+        strength: level,
+      ));
+    }
+    return pools;
+  }
+
   /// Something a press could switch, as opposed to something that only reports.
   static bool _actuable(DeviceState d) =>
       !d.isMediaPlayer && facetOf(d).presentation == TilePresentation.control;
@@ -487,6 +551,19 @@ class _FloorPlanCardState extends ConsumerState<FloorPlanCard> {
               fit: StackFit.expand,
               children: [
                 _Ground(url: url, config: widget.config, lit: _hovered),
+                // Light on the floor from the lamps that are on — above the
+                // drawing it falls on, below everything that answers a pointer.
+                //
+                // Not while placing: the wash is already saying the card is in
+                // a mode, and a designer moving markers is looking at where
+                // they are, not at what the house is doing.
+                if (!_placing)
+                  if (planFromConfig(widget.config) case final drawn?)
+                    PlanFlare(
+                      plan: drawn,
+                      pools: _pools(
+                          markers, devices, HcTokens.of(context).accent.active),
+                    ),
                 // Under the markers, so a dot standing in a room is still the
                 // thing you press when you press the dot.
                 ..._roomTargets(

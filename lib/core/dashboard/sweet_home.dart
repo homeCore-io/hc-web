@@ -54,6 +54,28 @@ class HomePlan {
     return null;
   }
 
+  /// The lamp standing at a point, or null if none is near enough.
+  ///
+  /// **How a marker finds what the file knows about it.** A marker placed by
+  /// import sits exactly where its `<light>` does, so this is usually an exact
+  /// hit; the tolerance is for the marker that has since been nudged. Beyond
+  /// it, the marker is taken to be about something else and lights the room in
+  /// the skin's accent rather than borrowing a colour from whatever lamp
+  /// happened to be closest.
+  PlanPiece? lightAt(PlanPoint p, {double within = 40}) {
+    PlanPiece? best;
+    var nearest = within * within;
+    for (final piece in lights) {
+      final dx = piece.x - p.x, dy = piece.y - p.y;
+      final d = dx * dx + dy * dy;
+      if (d <= nearest) {
+        nearest = d;
+        best = piece;
+      }
+    }
+    return best;
+  }
+
   /// One storey's worth, or the whole home when [id] is null.
   ///
   /// A card draws one level: two storeys are two cards, which is the shape the
@@ -454,6 +476,8 @@ class PlanPiece {
     this.width = 0,
     this.depth = 0,
     this.light = false,
+    this.glow,
+    this.power = 0.5,
     this.level,
   });
 
@@ -471,6 +495,19 @@ class PlanPiece {
   /// A `<light>` rather than a `<pieceOfFurniture>`. The reason import can
   /// offer a marker per lamp instead of asking someone to place them by hand.
   final bool light;
+
+  /// What colour this lamp burns, from its `<lightSource>`, or null.
+  ///
+  /// The file knows something the house does not: a device reports that it is
+  /// on, not that it is a warm bulb in a paper shade. This is the only place
+  /// that colour exists, and it is what lets a lit room spill light of its own
+  /// colour rather than of the skin's accent.
+  final int? glow;
+
+  /// How strong the lamp is, 0–1. Sweet Home 3D's own default is 0.5, which is
+  /// what a light with no `power` means rather than a lamp that is off.
+  final double power;
+
   final String? level;
 
   factory PlanPiece.fromJson(Map<String, dynamic> j) => PlanPiece(
@@ -481,6 +518,8 @@ class PlanPiece {
         width: _num(j['w']) ?? 0,
         depth: _num(j['d']) ?? 0,
         light: j['light'] == true,
+        glow: (j['lc'] as num?)?.toInt(),
+        power: _num(j['pw']) ?? 0.5,
         level: j['level'] as String?,
       );
 
@@ -492,6 +531,8 @@ class PlanPiece {
         if (width != 0) 'w': _round(width),
         if (depth != 0) 'd': _round(depth),
         if (light) 'light': true,
+        if (glow != null) 'lc': glow,
+        if (power != 0.5) 'pw': _round(power),
         if (level != null) 'level': level,
       };
 }
@@ -719,6 +760,16 @@ HomePlan parseHomeXml(XmlDocument doc) {
           width: _num(e.getAttribute('width')) ?? 0,
           depth: _num(e.getAttribute('depth')) ?? 0,
           light: tag == 'light',
+          // Only a lamp has either, and a `<lightSource>` is a child rather
+          // than an attribute because a lamp may hold several bulbs; the first
+          // is what the room is lit by as far as a floor plan cares.
+          glow: tag == 'light'
+              ? _colour(e
+                  .findElements('lightSource')
+                  .firstOrNull
+                  ?.getAttribute('color'))
+              : null,
+          power: tag == 'light' ? _num(e.getAttribute('power')) ?? 0.5 : 0.5,
           level: levelOf(e),
         ),
   ];
