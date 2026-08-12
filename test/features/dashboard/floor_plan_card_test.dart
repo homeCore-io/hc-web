@@ -6,11 +6,14 @@ import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hc_web/core/dashboard/floor_plan.dart';
+import 'package:hc_web/core/dashboard/sweet_home.dart';
 import 'package:hc_web/core/models/dashboard.dart';
 import 'package:hc_web/core/models/device_state.dart';
 import 'package:hc_web/core/providers/devices_provider.dart';
 import 'package:hc_web/design/skins.dart';
 import 'package:hc_web/features/dashboard/floor_plan_card.dart';
+import 'package:hc_web/features/dashboard/plan_view.dart';
 import 'package:hc_web/features/devices/device_sheet.dart';
 
 /// A picture of the house, with the house on it.
@@ -293,6 +296,7 @@ void main() {
   _dropTests();
   _inspectorTests();
   _pressTests();
+  _drawnHomeTests();
 
   testWidgets('naming a marker does not move it', (tester) async {
     // It did. The label was a sibling of the dot in a Row and the whole row was
@@ -865,5 +869,105 @@ void _pressTests() {
 
     expect(house.sent, isEmpty, reason: 'the designer switched a real light');
     expect(find.text('Label'), findsOneWidget, reason: 'it selected instead');
+  });
+}
+
+// ── a marker on a drawn home ───────────────────────────────────────────────
+
+/// The card is the wrong frame for an imported home. Its shape changes with the
+/// breakpoint and the drawing is letterboxed inside it, so a marker held as a
+/// fraction of the *card* slides off the room it was put in the moment the card
+/// is a different shape.
+
+const _wide = HomePlan(walls: [
+  PlanWall(x1: 0, y1: 0, x2: 1000, y2: 0),
+  PlanWall(x1: 0, y1: 200, x2: 1000, y2: 200),
+]);
+
+Map<String, dynamic> _drawnHome({PlanPoint? at}) => {
+      'plan': _wide.toJson(),
+      'markers': [
+        FloorPlanMarker(
+          selection: const {
+            'selection_mode': 'manual',
+            'device_ids': ['light.a'],
+          },
+          // A card fraction that is deliberately *wrong* for the home point, so
+          // a test cannot pass by accident on the fallback.
+          x: 0.9,
+          y: 0.9,
+          home: at ?? const PlanPoint(500, 100),
+        ).toJson(),
+      ],
+    };
+
+void _drawnHomeTests() {
+  testWidgets('a marker on a home holds its room through a reshape',
+      (tester) async {
+    Future<Offset> dotIn(Size card) async {
+      await tester.binding.setSurfaceSize(const Size(900, 900));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          devicesProvider
+              .overrideWith(() => _Devices([_light('light.a', on: true)])),
+        ],
+        child: MaterialApp(
+          theme: hcThemeFromTokens(HcSkin.midnight.tokens),
+          home: Scaffold(
+            body: Center(
+              child: SizedBox(
+                width: card.width,
+                height: card.height,
+                child: FloorPlanCard(config: _drawnHome()),
+              ),
+            ),
+          ),
+        ),
+      ));
+      await tester.pump();
+      final card0 = tester.getTopLeft(find.byType(FloorPlanCard));
+      return tester.getCenter(find.byType(Icon)) - card0;
+    }
+
+    // The same point of the home, drawn into two very differently shaped cards.
+    for (final card in [const Size(600, 200), const Size(300, 500)]) {
+      final expected = PlanFit.of(_wide, card)!.toCard(500, 100);
+      final actual = await dotIn(card);
+      expect(actual.dx, closeTo(expected.dx, 1),
+          reason: 'the marker left the home at $card');
+      expect(actual.dy, closeTo(expected.dy, 1),
+          reason: 'the marker left the home at $card');
+    }
+  });
+
+  testWidgets('dragging one writes centimetres, not a fraction of the card',
+      (tester) async {
+    Map<String, dynamic>? written;
+    await _pump(tester, _drawnHome(), [_light('light.a', on: true)],
+        entered: true, onConfigChanged: (c) => written = c);
+
+    await tester.drag(find.byType(Icon).first, const Offset(-40, 0));
+    await tester.pump();
+
+    final marker = (written!['markers'] as List).single as Map;
+    expect(marker['hx'], isNotNull);
+    expect(marker['hy'], isNotNull);
+    // The card is 400 wide and the home 1000cm, letterboxed — so 40pt of
+    // pointer is more than 40cm of house.
+    expect(marker['hx'] as double, lessThan(500));
+    expect(marker['hx'] as double, greaterThan(300));
+  });
+
+  testWidgets('and a home taken away leaves its markers roughly where they sat',
+      (tester) async {
+    // Both frames are stored, so removing the geometry falls back to the card
+    // fraction rather than piling every marker in one corner.
+    final config = _drawnHome()..remove('plan');
+    await _pump(tester, config, [_light('light.a', on: true)]);
+    final dot = tester.getCenter(find.byType(Icon)) -
+        tester.getTopLeft(find.byType(FloorPlanCard));
+    expect(dot.dx, closeTo(0.9 * 400, 1));
+    expect(dot.dy, closeTo(0.9 * 300, 1));
   });
 }

@@ -42,6 +42,51 @@ class PlanView extends StatelessWidget {
   }
 }
 
+/// Where a home sits inside a card, and how to get between the two.
+///
+/// **One transform, used by the drawing and by everything placed on it.** A
+/// marker on an imported home is anchored in the home's own centimetres, not in
+/// the card's — so a lamp stays in its room when the card is resized, moved to
+/// another breakpoint or zoomed, exactly as the walls do. Two copies of this
+/// arithmetic would be a plan whose markers drift off it at one size and not
+/// another, which is the kind of bug nobody reports and everybody notices.
+class PlanFit {
+  const PlanFit._(this._scale, this._dx, this._dy);
+
+  final double _scale;
+  final double _dx;
+  final double _dy;
+
+  /// Null when there is nothing to fit, or nowhere to fit it.
+  static PlanFit? of(HomePlan plan, Size size) {
+    final bounds = plan.bounds;
+    if (bounds == null || size.width <= 0 || size.height <= 0) return null;
+    if (bounds.width <= 0 || bounds.height <= 0) return null;
+    // Contain, and centred — a home cropped to fill the card is a home with
+    // rooms cut off it, which is the same reason mode 1 defaults to contain.
+    final scale = (size.width / bounds.width) < (size.height / bounds.height)
+        ? size.width / bounds.width
+        : size.height / bounds.height;
+    return PlanFit._(
+      scale,
+      (size.width - bounds.width * scale) / 2 - bounds.left * scale,
+      (size.height - bounds.height * scale) / 2 - bounds.top * scale,
+    );
+  }
+
+  Offset toCard(double x, double y) =>
+      Offset(x * _scale + _dx, y * _scale + _dy);
+
+  /// The inverse, for a marker being dragged: the pointer is in the card and
+  /// the document wants centimetres.
+  PlanPoint toHome(Offset local) =>
+      PlanPoint((local.dx - _dx) / _scale, (local.dy - _dy) / _scale);
+
+  /// Centimetres to card pixels, for anything that has a size as well as a
+  /// place — a wall's thickness, a sofa's footprint.
+  double lengths(double centimetres) => centimetres * _scale;
+}
+
 class _PlanPainter extends CustomPainter {
   _PlanPainter({
     required this.plan,
@@ -66,19 +111,10 @@ class _PlanPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final bounds = plan.bounds;
-    if (bounds == null || size.width <= 0 || size.height <= 0) return;
-    if (bounds.width <= 0 || bounds.height <= 0) return;
-
-    // Contain, and centred — a home cropped to fill the card is a home with
-    // rooms cut off it, which is the same reason mode 1 defaults to contain.
-    final scale = (size.width / bounds.width) < (size.height / bounds.height)
-        ? size.width / bounds.width
-        : size.height / bounds.height;
-    final dx = (size.width - bounds.width * scale) / 2 - bounds.left * scale;
-    final dy = (size.height - bounds.height * scale) / 2 - bounds.top * scale;
-
-    Offset at(double x, double y) => Offset(x * scale + dx, y * scale + dy);
+    // The same fit the markers use — see [PlanFit].
+    final fit = PlanFit.of(plan, size);
+    if (fit == null) return;
+    Offset at(double x, double y) => fit.toCard(x, y);
 
     // Rooms first: they are the floor, and everything else stands on it.
     final roomPaint = Paint()..color = fill.withValues(alpha: 0.55);
@@ -105,8 +141,8 @@ class _PlanPainter extends CustomPainter {
       canvas.drawRect(
         Rect.fromCenter(
           center: Offset.zero,
-          width: piece.width * scale,
-          height: piece.depth * scale,
+          width: fit.lengths(piece.width),
+          height: fit.lengths(piece.depth),
         ),
         piecePaint,
       );
@@ -123,17 +159,17 @@ class _PlanPainter extends CustomPainter {
       ..strokeCap = StrokeCap.square
       ..color = muted;
     for (final wall in plan.walls) {
-      wallPaint.strokeWidth = (wall.thickness * scale).clamp(1.0, 40.0);
+      wallPaint.strokeWidth = fit.lengths(wall.thickness).clamp(1.0, 40.0);
       canvas.drawLine(at(wall.x1, wall.y1), at(wall.x2, wall.y2), wallPaint);
     }
 
-    if (showNamesOn(size)) _names(canvas, at, scale);
+    if (showNamesOn(size)) _names(canvas, fit);
   }
 
   /// Below this the labels are noise on a thumbnail rather than help.
   bool showNamesOn(Size size) => size.shortestSide >= 160;
 
-  void _names(Canvas canvas, Offset Function(double, double) at, double scale) {
+  void _names(Canvas canvas, PlanFit fit) {
     for (final room in plan.rooms) {
       final name = room.name;
       final centre = room.centre;
@@ -153,9 +189,9 @@ class _PlanPainter extends CustomPainter {
         if (p.x < minX) minX = p.x;
         if (p.x > maxX) maxX = p.x;
       }
-      if (painter.width > (maxX - minX) * scale) continue;
+      if (painter.width > fit.lengths(maxX - minX)) continue;
 
-      final point = at(centre.x + room.nameDx, centre.y + room.nameDy);
+      final point = fit.toCard(centre.x + room.nameDx, centre.y + room.nameDy);
       final origin = point - Offset(painter.width / 2, painter.height / 2);
 
       // A backing, because a room's name sits at its middle and so does its

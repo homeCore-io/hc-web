@@ -100,6 +100,8 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  _anchorTests();
+
   group('the card config', () {
     test('an absent or unusable plan is simply no plan', () {
       expect(planFromConfig(const {}), isNull);
@@ -133,5 +135,58 @@ void main() {
       };
       expect(planFromConfig(config)!.walls, hasLength(2));
     });
+  });
+}
+
+// ── markers anchored to the home ───────────────────────────────────────────
+
+/// A card's shape changes with the breakpoint, and a drawn home is letterboxed
+/// inside it. A marker held as a fraction of the *card* slides off the room it
+/// was put in the moment the card is a different shape; held in the home's own
+/// centimetres it moves with the walls.
+
+void _anchorTests() {
+  const home = HomePlan(walls: [
+    // A wide home: 1000 x 200cm, so a card of any other aspect letterboxes it
+    // hard and the difference between the two frames is impossible to miss.
+    PlanWall(x1: 0, y1: 0, x2: 1000, y2: 0),
+    PlanWall(x1: 0, y1: 200, x2: 1000, y2: 200),
+  ]);
+
+  /// Where the fit puts the middle of the home, for a card of this shape.
+  Offset middleOn(Size card) => PlanFit.of(home, card)!.toCard(500, 100);
+
+  test('the fit centres a home in whatever card it is given', () {
+    expect(middleOn(const Size(1000, 200)), const Offset(500, 100));
+    // Twice as tall: same scale, letterboxed top and bottom.
+    expect(middleOn(const Size(1000, 400)), const Offset(500, 200));
+  });
+
+  test('and a point survives the round trip through it', () {
+    // Which is what a drag depends on: the pointer is in the card and the
+    // document wants centimetres.
+    final fit = PlanFit.of(home, const Size(600, 800))!;
+    final there = fit.toCard(320, 55);
+    final back = fit.toHome(there);
+    expect(back.x, closeTo(320, 0.001));
+    expect(back.y, closeTo(55, 0.001));
+  });
+
+  test('a marker in the home keeps its centimetres through the document', () {
+    const marker = FloorPlanMarker(
+      selection: {'selection_mode': 'manual'},
+      x: 0.5,
+      y: 0.5,
+      home: PlanPoint(500, 100),
+    );
+    final back = FloorPlanMarker.fromJson(marker.toJson());
+    expect(back.home, const PlanPoint(500, 100));
+    expect(back.x, 0.5, reason: 'the card fraction stays as the fallback');
+  });
+
+  test('a marker on a picture stores no home coordinates at all', () {
+    const marker = FloorPlanMarker(selection: {}, x: 0.25, y: 0.75);
+    expect(marker.toJson().containsKey('hx'), isFalse);
+    expect(FloorPlanMarker.fromJson(marker.toJson()).home, isNull);
   });
 }

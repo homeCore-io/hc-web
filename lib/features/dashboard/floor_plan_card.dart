@@ -235,12 +235,17 @@ class _FloorPlanCardState extends ConsumerState<FloorPlanCard> {
     final rb = context.findRenderObject();
     if (rb is! RenderBox) return;
     final local = rb.globalToLocal(global);
+    final fit = _fitFor(box);
 
     final markers = markersFromConfig(widget.config)
       ..add(FloorPlanMarker(
         selection: selectionFromPayload(payload.config),
         x: local.dx / box.width,
         y: local.dy / box.height,
+        // On a drawn home the card is the wrong frame, so the point is kept in
+        // the home's own centimetres as well. The fractions stay as the
+        // fallback for a card whose home is later removed.
+        home: fit?.toHome(local),
         // No label: a plan that starts life labelled is a word search, and the
         // inspector is where you give one a name it did not have.
       ));
@@ -251,11 +256,32 @@ class _FloorPlanCardState extends ConsumerState<FloorPlanCard> {
     final markers = markersFromConfig(widget.config);
     if (index < 0 || index >= markers.length) return;
     if (box.width <= 0 || box.height <= 0) return;
+    final fit = _fitFor(box);
     markers[index] = markers[index].copyWith(
       x: local.dx / box.width,
       y: local.dy / box.height,
+      home: fit?.toHome(local),
     );
     _write(markers);
+  }
+
+  /// The transform between this card and the home it is drawing, or null when
+  /// it is drawing a picture instead.
+  PlanFit? _fitFor(Size box) {
+    final plan = planFromConfig(widget.config);
+    return plan == null ? null : PlanFit.of(plan, box);
+  }
+
+  /// Where a marker sits on the card, in pixels.
+  ///
+  /// Anchored to the home when it has a place in one and the card still draws
+  /// that home; otherwise a fraction of the card. Both are stored, so removing
+  /// a home leaves every marker roughly where it looked rather than piled in
+  /// the corner.
+  Offset _pointOf(FloorPlanMarker marker, PlanFit? fit, Size size) {
+    final home = marker.home;
+    if (fit != null && home != null) return fit.toCard(home.x, home.y);
+    return Offset(marker.x * size.width, marker.y * size.height);
   }
 
   /// One marker, in whichever of its two lives this card is having.
@@ -310,6 +336,9 @@ class _FloorPlanCardState extends ConsumerState<FloorPlanCard> {
         final size = Size(box.maxWidth, box.maxHeight);
         final selected =
             _selected != null && _selected! < markers.length ? _selected : null;
+        // Computed once for the frame: the drawing and everything standing on
+        // it must agree, and recomputing per marker is how they stop agreeing.
+        final fit = _fitFor(size);
         return Focus(
           focusNode: _focus,
           onKeyEvent: (_, event) => _onKey(event),
@@ -336,10 +365,12 @@ class _FloorPlanCardState extends ConsumerState<FloorPlanCard> {
                   ),
                 for (final (index, marker) in markers.indexed)
                   Positioned(
-                    // Fractions, so the marker holds its place on the plan
-                    // through a resize, a zoom and a breakpoint change.
-                    left: marker.x * size.width,
-                    top: marker.y * size.height,
+                    // Never a pixel from the document: either the home's own
+                    // centimetres or a fraction of the card, so the marker
+                    // holds its place through a resize, a zoom and a
+                    // breakpoint change.
+                    left: _pointOf(marker, fit, size).dx,
+                    top: _pointOf(marker, fit, size).dy,
                     child: FractionalTranslation(
                       translation: const Offset(-0.5, -0.5),
                       child: _markerAt(

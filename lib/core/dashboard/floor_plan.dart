@@ -21,14 +21,29 @@ class FloorPlanMarker {
     required this.x,
     required this.y,
     this.label,
+    this.home,
   });
 
   /// A selection config — the same shape a device card's config carries.
   final Map<String, dynamic> selection;
 
-  /// Fractions of the image, 0–1, clamped on the way in and out.
+  /// Fractions of the card, 0–1, clamped on the way in and out.
   final double x;
   final double y;
+
+  /// Where this marker is in an **imported home's own centimetres**, for a
+  /// plan that has geometry — see [PlanFit].
+  ///
+  /// The card is the wrong frame for a drawn home. Its shape changes with the
+  /// breakpoint and the drawing is letterboxed inside it, so a marker held as a
+  /// fraction of the *card* slides off the room it was put in the moment the
+  /// card is a different shape. Held in the home's coordinates it is registered
+  /// to the walls, and moves exactly as they do.
+  ///
+  /// Null for a marker on a picture, which has no coordinates of its own to
+  /// speak of — [x] and [y] stay the answer there, and stay the fallback here
+  /// for a card whose home was removed underneath it.
+  final PlanPoint? home;
 
   /// What to write beside it, or null for nothing.
   ///
@@ -47,6 +62,10 @@ class FloorPlanMarker {
         label: (json['label'] as String?)?.trim().isEmpty ?? true
             ? null
             : (json['label'] as String).trim(),
+        home: json['hx'] is num && json['hy'] is num
+            ? PlanPoint(
+                (json['hx'] as num).toDouble(), (json['hy'] as num).toDouble())
+            : null,
       );
 
   Map<String, dynamic> toJson() => {
@@ -54,6 +73,7 @@ class FloorPlanMarker {
         'x': x,
         'y': y,
         if (label != null) 'label': label,
+        if (home != null) ...{'hx': home!.x, 'hy': home!.y},
       };
 
   FloorPlanMarker copyWith({
@@ -61,6 +81,7 @@ class FloorPlanMarker {
     double? x,
     double? y,
     Object? label = _keep,
+    Object? home = _keep,
   }) =>
       FloorPlanMarker(
         selection: selection ?? this.selection,
@@ -69,6 +90,7 @@ class FloorPlanMarker {
         // A sentinel, because null is a meaningful value here: "no label" is a
         // choice, and `label: null` has to be able to clear one.
         label: identical(label, _keep) ? this.label : label as String?,
+        home: identical(home, _keep) ? this.home : home as PlanPoint?,
       );
 
   static const _keep = Object();
