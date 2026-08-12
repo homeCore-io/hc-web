@@ -236,19 +236,33 @@ class _FloorPlanCardState extends ConsumerState<FloorPlanCard> {
     if (rb is! RenderBox) return;
     final local = rb.globalToLocal(global);
     final fit = _fitFor(box);
+    final markers = markersFromConfig(widget.config);
 
-    final markers = markersFromConfig(widget.config)
-      ..add(FloorPlanMarker(
-        selection: selectionFromPayload(payload.config),
-        x: local.dx / box.width,
-        y: local.dy / box.height,
-        // On a drawn home the card is the wrong frame, so the point is kept in
-        // the home's own centimetres as well. The fractions stay as the
-        // fallback for a card whose home is later removed.
-        home: fit?.toHome(local),
-        // No label: a plan that starts life labelled is a word search, and the
-        // inspector is where you give one a name it did not have.
-      ));
+    // Dropped *on* a marker that is waiting to be told what it is: bind that
+    // one rather than laying a second dot on top of it. This is how an
+    // imported home gets bound — the file placed the lamps, you say which
+    // device each one is, and the gesture is the same one that places a marker
+    // from nothing.
+    final waiting = _unboundAt(local, markers, fit, box);
+    if (waiting != null) {
+      markers[waiting] = markers[waiting]
+          .copyWith(selection: selectionFromPayload(payload.config));
+      _write(markers);
+      _select(waiting);
+      return;
+    }
+
+    markers.add(FloorPlanMarker(
+      selection: selectionFromPayload(payload.config),
+      x: local.dx / box.width,
+      y: local.dy / box.height,
+      // On a drawn home the card is the wrong frame, so the point is kept in
+      // the home's own centimetres as well. The fractions stay as the
+      // fallback for a card whose home is later removed.
+      home: fit?.toHome(local),
+      // No label: a plan that starts life labelled is a word search, and the
+      // inspector is where you give one a name it did not have.
+    ));
     _write(markers);
   }
 
@@ -263,6 +277,25 @@ class _FloorPlanCardState extends ConsumerState<FloorPlanCard> {
       home: fit?.toHome(local),
     );
     _write(markers);
+  }
+
+  /// The unbound marker under a point, if the drop is close enough to have
+  /// meant it.
+  ///
+  /// Only unbound ones: dropping a device on a marker that already stands for
+  /// something would be an edit nobody asked for, and the place to change what
+  /// a marker means is not a gesture you can make by half an inch of aim.
+  int? _unboundAt(
+      Offset local, List<FloorPlanMarker> markers, PlanFit? fit, Size box) {
+    // A little wider than the dot itself, so a drop that visually lands on a
+    // marker counts as one, and no wider — two lamps in the same room are
+    // often a hand's width apart on the drawing.
+    const reach = 22.0;
+    for (final (index, marker) in markers.indexed) {
+      if (!isUnbound(marker)) continue;
+      if ((_pointOf(marker, fit, box) - local).distance <= reach) return index;
+    }
+    return null;
   }
 
   /// The transform between this card and the home it is drawing, or null when
@@ -907,6 +940,16 @@ class _MarkerInspector extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: t.text.captionStyle.copyWith(color: t.surface.onBaseMuted),
             ),
+            // A marker the import placed is half a job, and the half that is
+            // left has no button — it is a drag, and a panel that named the
+            // state without naming the gesture would leave someone stuck
+            // looking at five dots that do nothing.
+            if (isUnbound(marker))
+              Text(
+                'Drop a device on it to say which one.',
+                style:
+                    t.text.captionStyle.copyWith(color: t.surface.onBaseMuted),
+              ),
             SizedBox(height: t.space.xs),
             _LabelField(value: marker.label ?? '', onChanged: onLabel),
             SizedBox(height: t.space.xs),
@@ -989,6 +1032,11 @@ class _LabelFieldState extends State<_LabelField> {
 /// marker — anything that lists or previews one must say the same words, or the
 /// two disagree about which marker you are looking at.
 String describeMarker(FloorPlanMarker marker, List<DeviceState> devices) {
+  // Placed by an import and not yet told what it stands for. Distinct from a
+  // marker whose device has since vanished: one is a job half done, the other
+  // is a thing gone wrong, and they want different words.
+  if (isUnbound(marker)) return 'Not bound yet';
+
   final area = marker.selection['area_name'];
   if (marker.selection['selection_mode'] == 'area' &&
       area is String &&

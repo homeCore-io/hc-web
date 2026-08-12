@@ -297,6 +297,7 @@ void main() {
   _inspectorTests();
   _pressTests();
   _drawnHomeTests();
+  _importedMarkerTests();
 
   testWidgets('naming a marker does not move it', (tester) async {
     // It did. The label was a sibling of the dot in a Row and the whole row was
@@ -969,5 +970,152 @@ void _drawnHomeTests() {
         tester.getTopLeft(find.byType(FloorPlanCard));
     expect(dot.dx, closeTo(0.9 * 400, 1));
     expect(dot.dy, closeTo(0.9 * 300, 1));
+  });
+}
+
+// ── markers the import placed ──────────────────────────────────────────────
+
+/// §7.9: every `<light>` in the file has a position, so an import can do the
+/// tedious half — a marker per lamp, already in the right room. It cannot do
+/// the other half: `<light name="Ceiling lamp">` will not match a device called
+/// `Overhead`, and a guess is a plan that quietly works the wrong lamp.
+
+const _lit = HomePlan(
+  rooms: [
+    PlanRoom(name: 'Living Room', points: [
+      PlanPoint(0, 0),
+      PlanPoint(400, 0),
+      PlanPoint(400, 400),
+      PlanPoint(0, 400),
+    ]),
+  ],
+  furniture: [
+    PlanPiece(name: 'Ceiling lamp', x: 200, y: 200, light: true),
+    PlanPiece(name: 'Sofa', x: 100, y: 300, width: 100, depth: 50),
+  ],
+);
+
+void _importedMarkerTests() {
+  test('an import places one marker per light, and binds none of them', () {
+    final placed = candidateMarkers(_lit);
+    expect(placed, hasLength(1), reason: 'the sofa is not a lamp');
+    expect(placed.single.home, const PlanPoint(200, 200));
+    expect(placed.single.label, 'Ceiling lamp',
+        reason: "the file's own name is the only way to tell dots apart");
+    expect(isUnbound(placed.single), isTrue);
+  });
+
+  testWidgets(
+      'an unbound marker matches nothing — it does not glow for the '
+      'whole house', (tester) async {
+    // The trap this avoids: an *empty* selection falls through to query mode,
+    // and a marker matching everything would light whenever any lamp anywhere
+    // was on.
+    final house = await _pump(
+      tester,
+      {
+        'plan': _lit.toJson(),
+        'markers': [for (final m in candidateMarkers(_lit)) m.toJson()],
+      },
+      [_light('light.a', on: true), _light('light.b', on: true)],
+    );
+
+    await tester.tap(find.byType(Icon).first, warnIfMissed: false);
+    await tester.pump();
+    expect(house.sent, isEmpty, reason: 'an unbound marker worked a light');
+  });
+
+  testWidgets('the panel says it is not bound, and how to bind it',
+      (tester) async {
+    await _pumpLive(
+      tester,
+      {
+        'plan': _lit.toJson(),
+        'markers': [for (final m in candidateMarkers(_lit)) m.toJson()],
+      },
+      const [],
+    );
+    await tester.tap(find.byType(Icon).first);
+    await tester.pump();
+
+    expect(find.text('Not bound yet'), findsOneWidget);
+    expect(find.textContaining('Drop a device on it'), findsOneWidget);
+  });
+
+  testWidgets('dropping a device on one binds it instead of adding another',
+      (tester) async {
+    Map<String, dynamic>? written;
+    await _pump(
+      tester,
+      {
+        'plan': _lit.toJson(),
+        'markers': [for (final m in candidateMarkers(_lit)) m.toJson()],
+      },
+      [_light('light.a', on: true)],
+      entered: true,
+      onConfigChanged: (c) => written = c,
+    );
+
+    final target =
+        tester.widget<DragTarget<Object>>(find.byType(DragTarget<Object>));
+    // Straight onto the lamp the import placed.
+    final onMarker = tester.getCenter(find.byType(Icon).first);
+    target.onAcceptWithDetails!(DragTargetDetails<Object>(
+      data: const DashboardWidgetModel(
+        id: 'w',
+        type: 'device_tile',
+        title: 'A light',
+        refreshPolicy: DashboardRefreshPolicy.passive,
+        config: {
+          'selection_mode': 'manual',
+          'device_ids': ['light.a'],
+        },
+      ),
+      offset: onMarker,
+    ));
+    await tester.pump();
+
+    final markers = (written!['markers'] as List).cast<Map>();
+    expect(markers, hasLength(1), reason: 'a second dot was laid on the first');
+    expect((markers.single['selection'] as Map)['device_ids'], ['light.a']);
+    expect(markers.single['label'], 'Ceiling lamp',
+        reason: 'the name the file gave it survives being bound');
+    expect(markers.single['hx'], 200,
+        reason: 'and so does the place the file put it');
+  });
+
+  testWidgets('a drop away from any of them still places a new marker',
+      (tester) async {
+    Map<String, dynamic>? written;
+    await _pump(
+      tester,
+      {
+        'plan': _lit.toJson(),
+        'markers': [for (final m in candidateMarkers(_lit)) m.toJson()],
+      },
+      [_light('light.a', on: true)],
+      entered: true,
+      onConfigChanged: (c) => written = c,
+    );
+
+    final target =
+        tester.widget<DragTarget<Object>>(find.byType(DragTarget<Object>));
+    final corner = tester.getTopLeft(find.byType(FloorPlanCard));
+    target.onAcceptWithDetails!(DragTargetDetails<Object>(
+      data: const DashboardWidgetModel(
+        id: 'w',
+        type: 'device_tile',
+        title: 'A light',
+        refreshPolicy: DashboardRefreshPolicy.passive,
+        config: {
+          'selection_mode': 'manual',
+          'device_ids': ['light.a'],
+        },
+      ),
+      offset: corner + const Offset(12, 12),
+    ));
+    await tester.pump();
+
+    expect((written!['markers'] as List), hasLength(2));
   });
 }

@@ -151,6 +151,65 @@ HomePlan? planFromConfig(Map<String, dynamic> config) {
   return plan.level(level is String && level.isNotEmpty ? level : null);
 }
 
+/// A marker that has been placed but not yet told what it stands for.
+///
+/// Encoded as a `manual` selection with an empty list, which resolves to
+/// nothing by construction. An *empty* selection would not: it falls through to
+/// `query` mode, and a marker matching the whole house would glow whenever any
+/// light anywhere was on.
+const unboundSelection = {
+  'selection_mode': 'manual',
+  'device_ids': <String>[],
+};
+
+bool isUnbound(FloorPlanMarker marker) {
+  final ids = marker.selection['device_ids'];
+  return marker.selection['selection_mode'] == 'manual' &&
+      ids is List &&
+      ids.isEmpty;
+}
+
+/// A marker for every light in an imported home, placed where the file says
+/// the lamp hangs and bound to nothing.
+///
+/// **Unbound on purpose.** `<light name="Ceiling lamp">` will not match a
+/// device called `Overhead`, and a guess here is not a small mistake: it is a
+/// plan that quietly works the wrong lamp, which is worse than a plan that
+/// admits it does not know yet. What import can do honestly is the tedious
+/// half — every lamp already at its own coordinates, each carrying the file's
+/// name for it and the room it stands in, so binding one is a choice among
+/// that room's lights rather than a hunt through the whole house.
+List<FloorPlanMarker> candidateMarkers(HomePlan plan) => [
+      for (final light in plan.lights)
+        FloorPlanMarker(
+          selection: Map<String, dynamic>.from(unboundSelection),
+          // Both frames, as everywhere: the home's own centimetres are what
+          // registers it to the drawing, and there is no card to be a fraction
+          // of at the moment a file is imported.
+          home: PlanPoint(light.x, light.y),
+          x: 0.5,
+          y: 0.5,
+          // The file's own name for it, which is the only way to tell five
+          // identical dots apart before any of them is bound.
+          label: light.name?.trim().isEmpty ?? true
+              ? plan.roomAt(PlanPoint(light.x, light.y))?.name
+              : light.name!.trim(),
+        ),
+    ];
+
+/// The markers an import should leave on a card, or null to leave it alone.
+///
+/// **Only onto a plan with nothing on it.** Re-importing a home someone has
+/// spent an hour binding markers on must not bury that work under a fresh set
+/// of unbound dots — and re-importing is the ordinary way to correct a file, so
+/// this is the common path rather than the careful one.
+List<FloorPlanMarker>? seedMarkersFor(
+    Map<String, dynamic> config, HomePlan plan) {
+  if (markersFromConfig(config).isNotEmpty) return null;
+  final placed = candidateMarkers(plan);
+  return placed.isEmpty ? null : placed;
+}
+
 /// Whether to invert the picture's luminance.
 ///
 /// Not a nicety. Floor plans in the wild are black line art on white, and a

@@ -255,6 +255,8 @@ void main() {
     });
   });
 
+  _roomAtTests();
+
   group('the document', () {
     test('survives a round trip, which is how it reaches a dashboard', () {
       final plan = _parse(_homeXml(
@@ -293,6 +295,50 @@ void main() {
         walls: "<wall xStart='0.123456' yStart='0' xEnd='1' yEnd='0'/>",
       )).toJson();
       expect(((json['walls'] as List).single as Map)['x1'], 0.1);
+    });
+  });
+}
+
+// ── which room is a lamp in ────────────────────────────────────────────────
+
+/// What turns "a lamp at (540, 635)" into "a lamp in the Bedroom", and so what
+/// turns binding a marker into a choice among that room's lights rather than a
+/// hunt through the whole house.
+
+void _roomAtTests() {
+  group('the room a point is in', () {
+    const lShaped = HomePlan(rooms: [
+      // An L: the notch at the bottom-right is *not* in the room, and a
+      // bounding-box test would say it is.
+      PlanRoom(name: 'Living', points: [
+        PlanPoint(0, 0),
+        PlanPoint(400, 0),
+        PlanPoint(400, 200),
+        PlanPoint(200, 200),
+        PlanPoint(200, 400),
+        PlanPoint(0, 400),
+      ]),
+      PlanRoom(name: 'Kitchen', points: [
+        PlanPoint(400, 0),
+        PlanPoint(600, 0),
+        PlanPoint(600, 400),
+        PlanPoint(400, 400),
+      ]),
+    ]);
+
+    test('is the one whose polygon holds it', () {
+      expect(lShaped.roomAt(const PlanPoint(100, 100))?.name, 'Living');
+      expect(lShaped.roomAt(const PlanPoint(500, 100))?.name, 'Kitchen');
+    });
+
+    test('and a notch in an L-shaped room is outside it', () {
+      // Plenty of real rooms are L-shaped, and this is exactly where a
+      // bounding box would put the hall's lamp in the living room.
+      expect(lShaped.roomAt(const PlanPoint(300, 300)), isNull);
+    });
+
+    test('a point in no room at all is no room, not the first one', () {
+      expect(lShaped.roomAt(const PlanPoint(-50, -50)), isNull);
     });
   });
 }

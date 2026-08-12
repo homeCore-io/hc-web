@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hc_web/core/dashboard/floor_plan.dart';
 import 'package:hc_web/core/dashboard/sweet_home.dart';
 import 'package:hc_web/design/skins.dart';
 import 'package:hc_web/features/dashboard/home_plan_field.dart';
@@ -48,6 +49,8 @@ Future<Map<String, Object?>> _pump(
 }
 
 void main() {
+  _seedTests();
+
   testWidgets('with no home it offers to import one', (tester) async {
     await _pump(tester, const {});
     expect(find.text('Import a home'), findsOneWidget);
@@ -101,5 +104,59 @@ void main() {
     expect(written['level'], 'l1');
     expect(written.containsKey('plan'), isFalse,
         reason: 'changing storey is not re-importing the home');
+  });
+}
+
+// ── what an import leaves behind ───────────────────────────────────────────
+
+void _seedTests() {
+  Map<String, dynamic> planWithLights() => const HomePlan(
+        walls: [PlanWall(x1: 0, y1: 0, x2: 400, y2: 0)],
+        furniture: [
+          PlanPiece(name: 'Ceiling lamp', x: 100, y: 100, light: true),
+          PlanPiece(name: 'Lamp 2', x: 300, y: 100, light: true),
+        ],
+      ).toJson();
+
+  testWidgets('the panel says markers were placed, so nobody hunts for them',
+      (tester) async {
+    await _pump(tester, {'plan': planWithLights()});
+    expect(find.textContaining('marker was placed for each light'),
+        findsOneWidget);
+  });
+
+  test('an import seeds a bare card, and leaves a bound one alone', () {
+    // Re-importing is the ordinary way to correct a file, so the careful case
+    // is the common one: a home someone has spent an hour binding must not be
+    // buried under a fresh set of unbound dots.
+    const plan = HomePlan(furniture: [
+      PlanPiece(name: 'Ceiling lamp', x: 100, y: 100, light: true),
+      PlanPiece(name: 'Lamp 2', x: 300, y: 100, light: true),
+    ]);
+
+    expect(seedMarkersFor(const {}, plan), hasLength(2));
+
+    final worked = {
+      'markers': [
+        const FloorPlanMarker(
+          selection: {
+            'selection_mode': 'manual',
+            'device_ids': ['light.a'],
+          },
+          x: 0.1,
+          y: 0.1,
+        ).toJson(),
+      ],
+    };
+    expect(seedMarkersFor(worked, plan), isNull);
+  });
+
+  test('a home with no lights in it seeds nothing rather than an empty list',
+      () {
+    expect(
+      seedMarkersFor(const {},
+          const HomePlan(walls: [PlanWall(x1: 0, y1: 0, x2: 1, y2: 0)])),
+      isNull,
+    );
   });
 }

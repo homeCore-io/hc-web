@@ -60,12 +60,18 @@ class _HomePlanFieldState extends State<HomePlanField> {
         setState(() => _note = 'That home has no walls or rooms in it.');
         return;
       }
+      // Every lamp in the file, already at its own coordinates — or nothing at
+      // all, if this card already has markers on it. See [seedMarkersFor].
+      final seed = seedMarkersFor(widget.config, plan);
+
       widget.onChanged({
         'plan': plan.toJson(),
         // A home with one storey has nothing to choose, and one with several
         // starts at the bottom — which is the floor someone means by "the
         // plan" nine times out of ten.
         'level': plan.levels.length > 1 ? plan.levels.first.id : null,
+        if (seed != null && seed.isNotEmpty)
+          'markers': [for (final m in seed) m.toJson()],
       });
       setState(() => _note = null);
     } on PlanImportException catch (e) {
@@ -132,7 +138,8 @@ class _HomePlanFieldState extends State<HomePlanField> {
                   'render in Picture above to get both — a perspective render '
                   'will not line up.'
               : 'Drawn in your skin, so it follows the theme and stays sharp '
-                  'at any size.',
+                  'at any size. A marker was placed for each light in the '
+                  'file — open the card to say which device each one is.',
           style: t.text.captionStyle.copyWith(color: t.surface.onBaseMuted),
         ),
       ],

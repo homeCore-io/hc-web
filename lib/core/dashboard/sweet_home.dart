@@ -41,6 +41,18 @@ class HomePlan {
   /// The lights, which are the reason a plan can place its own markers.
   Iterable<PlanPiece> get lights => furniture.where((p) => p.light);
 
+  /// The room a point falls in, or null for a hall the file never drew.
+  ///
+  /// What turns "a lamp at (540, 635)" into "a lamp in the Bedroom" — and so
+  /// what turns binding a marker from a hunt through 188 devices into a choice
+  /// among that room's. The geometry is in the file; this is just reading it.
+  PlanRoom? roomAt(PlanPoint p) {
+    for (final room in rooms) {
+      if (room.contains(p)) return room;
+    }
+    return null;
+  }
+
   /// One storey's worth, or the whole home when [id] is null.
   ///
   /// A card draws one level: two storeys are two cards, which is the shape the
@@ -245,6 +257,26 @@ class PlanRoom {
   /// it straight back on top.
   final double nameDx;
   final double nameDy;
+
+  /// Whether a point is inside this room.
+  ///
+  /// Ray casting, because a Sweet Home 3D room is an arbitrary polygon and
+  /// plenty of real ones are L-shaped — a bounding-box test would put the
+  /// hall's lamp in the living room and be wrong in exactly the homes that
+  /// most need the help.
+  bool contains(PlanPoint p) {
+    if (points.length < 3) return false;
+    var inside = false;
+    for (var i = 0, j = points.length - 1; i < points.length; j = i++) {
+      final a = points[i];
+      final b = points[j];
+      if ((a.y > p.y) != (b.y > p.y) &&
+          p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x) {
+        inside = !inside;
+      }
+    }
+    return inside;
+  }
 
   /// The middle of the polygon's extent — where a room's name goes, and where
   /// a marker for the room would sit if one placed itself.
