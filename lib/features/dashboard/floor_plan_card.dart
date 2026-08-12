@@ -13,6 +13,7 @@ import '../../design/tokens.dart';
 import '../devices/device_readings.dart';
 import '../devices/device_sheet.dart';
 import 'builtin_cards.dart';
+import 'plan_view.dart';
 
 /// A picture of the house, with the house on it.
 ///
@@ -523,12 +524,25 @@ class _Ground extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
+    // An imported home, if there is one. Drawn *over* the picture rather than
+    // instead of it: both can come from the same Sweet Home 3D file, and when
+    // they do — a top-down render plus the geometry that made it — they are
+    // registered to each other and belong on top of one another.
+    final drawn = planFromConfig(config);
+
     if (url.isEmpty) {
+      if (drawn != null) {
+        return ColoredBox(
+          color: t.surface.sunken,
+          child: PlanView(plan: drawn),
+        );
+      }
       return ColoredBox(
         color: t.surface.sunken,
         child: Center(
           child: Text(
-            'Choose a picture of your floor plan.',
+            'Choose a picture of your floor plan, or import a Sweet Home 3D '
+            'file.',
             style: t.text.bodySmallStyle.copyWith(color: t.surface.onBaseMuted),
           ),
         ),
@@ -572,6 +586,10 @@ class _Ground extends StatelessWidget {
             color: t.surface.base.withValues(alpha: planDim(config)),
           ),
         ),
+        // Above the scrim, and so undimmed. Dimming exists to make a photograph
+        // survivable underneath live state; a drawing already in the skin's own
+        // muted ink has nothing to be held back from.
+        if (drawn != null) PlanView(plan: drawn),
       ],
     );
   }

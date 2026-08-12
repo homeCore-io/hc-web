@@ -1647,18 +1647,26 @@ void registerBuiltinDashboardWidgets() {
       // typing coordinates.
       inPlaceLabel: 'Place markers',
       configFields: const [
-        WidgetConfigField('url', WidgetConfigKind.image, required: true),
+        WidgetConfigField('url', WidgetConfigKind.image, label: 'Picture'),
         WidgetConfigField('fit', WidgetConfigKind.choice,
             defaultValue: 'contain', options: ['contain', 'cover', 'fill']),
         // Dim and invert are the two controls that make an image survivable
         // behind live state — see the card's own doc for why invert is not a
-        // nicety.
+        // nicety. Neither touches an imported home: a drawing already in the
+        // skin's own ink has nothing to be held back from.
         WidgetConfigField('dim', WidgetConfigKind.integer, label: 'Dim'),
         WidgetConfigField('invert', WidgetConfigKind.boolean, label: 'Invert'),
+        WidgetConfigField('plan', WidgetConfigKind.homePlan,
+            label: 'Sweet Home 3D'),
       ],
-      validate: (c) => (c['url'] as String?)?.isNotEmpty == true
+      // A picture *or* a home — either is a plan, and a card with both is the
+      // combination worth aiming at. Requiring the picture, as this did, would
+      // make every imported home an invalid card.
+      validate: (c) => (c['url'] as String?)?.isNotEmpty == true ||
+              c['plan'] is Map
           ? null
-          : 'Give it a picture of your floor plan.',
+          : 'Give it a picture of your floor plan, or import a Sweet Home 3D '
+              'file.',
       builder: (context, a) => FloorPlanCard(
         config: a.config,
         entered: a.entered,

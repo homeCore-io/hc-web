@@ -1,5 +1,7 @@
 import 'dart:math' as math;
 
+import 'sweet_home.dart';
+
 /// A marker on a floor plan: something the house does, at a point on a picture.
 ///
 /// **The position is a fraction of the image, never a pixel.** A plan is drawn
@@ -108,6 +110,23 @@ double planDim(Map<String, dynamic> config) {
   final v = raw is num ? raw.toDouble() : 0.55;
   if (v.isNaN) return 0.55;
   return math.min(1.0, math.max(0.0, v));
+}
+
+/// The imported home a card draws, narrowed to the storey it is showing, or
+/// null for a card that has none.
+///
+/// Two keys, because they answer two questions: `plan` is the geometry a Sweet
+/// Home 3D import left behind, and `level` is which storey of it this card is.
+/// Two storeys are two cards — the grid already knows how to put two things on
+/// a page, and a plan that navigates between floors would be inventing a
+/// second, worse grid inside a card.
+HomePlan? planFromConfig(Map<String, dynamic> config) {
+  final raw = config['plan'];
+  if (raw is! Map) return null;
+  final plan = HomePlan.fromJson(raw.cast<String, dynamic>());
+  if (plan.isEmpty) return null;
+  final level = config['level'];
+  return plan.level(level is String && level.isNotEmpty ? level : null);
 }
 
 /// Whether to invert the picture's luminance.

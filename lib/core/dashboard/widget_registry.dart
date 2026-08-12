@@ -216,6 +216,15 @@ enum WidgetConfigKind {
   /// could choose from disk. Only the ones that are get the picker.
   image,
   stringList,
+
+  /// A home imported from a Sweet Home 3D archive, parsed in the browser and
+  /// stored as geometry in the card's own config.
+  ///
+  /// Not an [image] and not a [url]: nothing is uploaded and no address is
+  /// kept. The file is read here and what survives is numbers — which is the
+  /// whole reason the app can draw the home in the skin's own palette instead
+  /// of showing a photograph of one.
+  homePlan,
 }
 
 /// The type string core uses for a plugin-contributed card.
