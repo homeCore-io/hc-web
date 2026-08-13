@@ -155,6 +155,20 @@ class _PageGridState extends State<PageGrid> {
   Point _resizeStart = const Point(0, 0);
   Offset _resizeAccum = Offset.zero;
 
+  /// [items] in the order they should be painted: the grid, then whatever
+  /// floats above it, lowest first.
+  static List<GridItem> _stacked(List<GridItem> items) {
+    final grounded = [
+      for (final i in items)
+        if (!i.floating) i
+    ];
+    final floating = [
+      for (final i in items)
+        if (i.floating) i
+    ]..sort((a, b) => a.z.compareTo(b.z));
+    return [...grounded, ...floating];
+  }
+
   static GridItem? _itemById(List<GridItem> items, String id) {
     for (final i in items) {
       if (i.id == id) return i;
@@ -331,7 +345,11 @@ class _PageGridState extends State<PageGrid> {
                   ),
                 ),
 
-              for (final item in items)
+              // Paint order is stacking order. Grid items first — they cannot
+              // be underneath each other, so their order among themselves does
+              // not matter — then the floating ones by height. Sorted here
+              // rather than upstream so every caller gets it right by default.
+              for (final item in _stacked(items))
                 AnimatedPositioned(
                   key: ValueKey(item.id),
                   duration: _dragId == item.id

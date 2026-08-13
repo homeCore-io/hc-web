@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/dashboard/breakpoints.dart';
+import '../../core/dashboard/free_layer.dart';
 import '../../core/dashboard/grid_engine.dart';
 import '../../core/dashboard/layout_write.dart';
 import '../../core/dashboard/widget_registry.dart';
@@ -211,6 +212,11 @@ class _PageScreenState extends ConsumerState<PageScreen> {
             h: p.h,
             minW: WidgetRegistry.lookup(w.type)?.sizeHint.minW ?? 1,
             minH: WidgetRegistry.lookup(w.type)?.sizeHint.minH ?? 1,
+            // Lifted-ness travels with the element, in its config — see
+            // `free_layer.dart`. Read here, where the widget is in scope, so
+            // the engine never has to know what a config is.
+            floating: isFloating(w.config),
+            z: zOf(w.config),
           ),
     ];
   }
@@ -397,6 +403,11 @@ class _PageScreenState extends ConsumerState<PageScreen> {
             h: p.h,
             minW: WidgetRegistry.lookup(w.type)?.sizeHint.minW ?? 1,
             minH: WidgetRegistry.lookup(w.type)?.sizeHint.minH ?? 1,
+            // Lifted-ness travels with the element, in its config — see
+            // `free_layer.dart`. Read here, where the widget is in scope, so
+            // the engine never has to know what a config is.
+            floating: isFloating(w.config),
+            z: zOf(w.config),
           ),
     ];
   }
@@ -612,14 +623,27 @@ class _PageScreenState extends ConsumerState<PageScreen> {
         at & const Size(1, 1),
         Offset.zero & overlay.size,
       ),
-      items: const [
-        PopupMenuItem(value: 'configure', child: Text('Configure')),
-        PopupMenuItem(value: 'duplicate', child: Text('Duplicate')),
-        PopupMenuDivider(),
-        PopupMenuItem(value: 'half', child: Text('Half width')),
-        PopupMenuItem(value: 'full', child: Text('Full width')),
-        PopupMenuDivider(),
-        PopupMenuItem(value: 'remove', child: Text('Remove')),
+      items: [
+        const PopupMenuItem(value: 'configure', child: Text('Configure')),
+        const PopupMenuItem(value: 'duplicate', child: Text('Duplicate')),
+        const PopupMenuDivider(),
+        const PopupMenuItem(value: 'half', child: Text('Half width')),
+        const PopupMenuItem(value: 'full', child: Text('Full width')),
+        const PopupMenuDivider(),
+        // Named for what happens to the card, not for the mechanism. "Free
+        // layer" is our word; "float above the grid" is what you can see.
+        if (item.floating) ...[
+          const PopupMenuItem(
+              value: 'ground', child: Text('Put back in the grid')),
+          const PopupMenuItem(value: 'front', child: Text('Bring to front')),
+          const PopupMenuItem(value: 'forward', child: Text('Bring forward')),
+          const PopupMenuItem(value: 'backward', child: Text('Send backward')),
+          const PopupMenuItem(value: 'back', child: Text('Send to back')),
+        ] else
+          const PopupMenuItem(
+              value: 'lift', child: Text('Float above the grid')),
+        const PopupMenuDivider(),
+        const PopupMenuItem(value: 'remove', child: Text('Remove')),
       ],
     );
     if (choice == null || !mounted) return;
@@ -635,10 +659,88 @@ class _PageScreenState extends ConsumerState<PageScreen> {
       case 'full':
         _apply((e, its) => e.resize(its, id, columns, item.h), columns,
             byHand: true);
+      case 'lift':
+        _stack(id, StackMove.lift, columns);
+      case 'ground':
+        _stack(id, StackMove.ground, columns);
+      case 'front':
+        _stack(id, StackMove.front, columns);
+      case 'back':
+        _stack(id, StackMove.back, columns);
+      case 'forward':
+        _stack(id, StackMove.forward, columns);
+      case 'backward':
+        _stack(id, StackMove.backward, columns);
       case 'remove':
         _removeWidget(id, columns);
     }
   }
+
+  /// Lifts a card above the grid, puts it back, or moves it within the stack.
+  ///
+  /// One operation for all six controls, because they are all the same edit:
+  /// change the element's config, then re-derive the item the engine sees from
+  /// it. Doing those separately is how the two halves drift — the document says
+  /// floating and the layout still packs it, or the reverse.
+  ///
+  /// The engine runs afterwards so the grid closes up behind a card that has
+  /// just left it, which is the thing you want to see happen.
+  void _restack(String id, String label, int columns,
+      Map<String, dynamic> Function(Map<String, dynamic> config) change) {
+    final model = _draftWidgets?[id];
+    if (model == null) return;
+    _pushUndo(label);
+
+    final config = change(model.config);
+    setState(() {
+      _draftWidgets = {...?_draftWidgets, id: model.copyWith(config: config)};
+      _contentDirty = true;
+      // Lifting is arranging by hand: a card taken out of the flow has left a
+      // hole somebody chose, and a layout that repacked it on the next save
+      // would undo the whole gesture.
+      _goFree();
+      _commit(_engine(columns).normalize([
+        for (final i in _draftItems!)
+          if (i.id == id)
+            i.copyWith(floating: isFloating(config), z: zOf(config))
+          else
+            i,
+      ]));
+    });
+  }
+
+  /// One stacking request, from wherever it was made.
+  ///
+  /// The card menu and the inspector both go through here, so "forward" cannot
+  /// come to mean two different things depending on which control you reached
+  /// for. The heights in use are known here and nowhere else.
+  void _stack(String id, StackMove move, int columns) {
+    final model = _draftWidgets?[id];
+    if (model == null) return;
+    final label = switch (move) {
+      StackMove.lift => 'Float ${_cardLabel(model)}',
+      StackMove.ground => 'Ground ${_cardLabel(model)}',
+      _ => move.label,
+    };
+    _restack(
+        id,
+        label,
+        columns,
+        (c) => switch (move) {
+              StackMove.lift => lift(c, z: frontZ(_floatingZs)),
+              StackMove.ground => ground(c),
+              StackMove.front => withZ(c, frontZ(_floatingZs)),
+              StackMove.back => withZ(c, backZ(_floatingZs)),
+              StackMove.forward => withZ(c, stepZ(zOf(c), _floatingZs, 1)),
+              StackMove.backward => withZ(c, stepZ(zOf(c), _floatingZs, -1)),
+            });
+  }
+
+  /// The heights currently in use, for the stacking controls.
+  Iterable<int> get _floatingZs => [
+        for (final i in _draftItems ?? const <GridItem>[])
+          if (i.floating) i.z
+      ];
 
   /// A copy of a card, placed directly under the original.
   ///
@@ -1030,6 +1132,9 @@ class _PageScreenState extends ConsumerState<PageScreen> {
                   byHand: true,
                   label: align.label);
             },
+            onStack: _selectedCard == null
+                ? null
+                : (move) => _stack(_selectedCard!, move, columns),
             onBackgroundChanged: (next) {
               _pushUndo('Change the background', coalesce: 'background');
               setState(() {

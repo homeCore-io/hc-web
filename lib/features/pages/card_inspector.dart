@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/dashboard/card_style.dart';
+import '../../core/dashboard/free_layer.dart';
 import '../../core/dashboard/widget_registry.dart';
 import '../../core/models/dashboard.dart';
 import '../../core/providers/devices_provider.dart';
@@ -37,6 +38,9 @@ class CardInspector extends ConsumerWidget {
     required this.onRemove,
     required this.onClose,
     this.onRename,
+    this.floating = false,
+    this.z = 0,
+    this.onStack,
   });
 
   final DashboardWidgetModel model;
@@ -54,6 +58,13 @@ class CardInspector extends ConsumerWidget {
   /// cards both called "Several devices" and no way to tell them apart — here,
   /// on the page, or in the layers strip that lists them by name.
   final ValueChanged<String>? onRename;
+
+  /// Where this card sits relative to the grid, and how high in the stack.
+  final bool floating;
+  final int z;
+
+  /// Null outside the designer, where nothing can be restacked.
+  final ValueChanged<StackMove>? onStack;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -148,6 +159,8 @@ class CardInspector extends ConsumerWidget {
                 style: CardStyle.fromConfig(model.config),
                 onChanged: (style) => onChanged(style.toConfig(model.config)),
               ),
+            if (onStack != null)
+              _StackSection(floating: floating, z: z, onStack: onStack!),
             SizedBox(height: t.space.md),
             Align(
               alignment: Alignment.centerLeft,
@@ -585,6 +598,146 @@ class _StyleSection extends StatelessWidget {
             ),
         ],
       ),
+    );
+  }
+}
+
+/// Where the card sits relative to the grid — and, once it is above it, where
+/// it sits relative to everything else up there.
+///
+/// The same six moves as the card's own menu, because a right-click is where
+/// you go when you already know a thing exists and a panel is where you find
+/// out that it does. This one also *reports*: a card either competes for its
+/// cells or floats over them, and until now nothing on screen said which
+/// except the status bar, one line high, at the far bottom of the window.
+///
+/// The stacking row is hidden while the card is in the grid rather than
+/// disabled. Grid cards cannot be underneath anything, so "bring forward" is
+/// not a control that happens to be unavailable — it is a question that does
+/// not apply.
+class _StackSection extends StatelessWidget {
+  const _StackSection({
+    required this.floating,
+    required this.z,
+    required this.onStack,
+  });
+
+  final bool floating;
+  final int z;
+  final ValueChanged<StackMove> onStack;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SizedBox(height: t.space.md),
+        Row(
+          children: [
+            Expanded(
+              child: Text('DEPTH',
+                  style: t.text.overlineStyle
+                      .copyWith(color: t.surface.onBaseMuted)),
+            ),
+            if (floating)
+              Text('z$z',
+                  style: t.text.captionStyle.copyWith(
+                      color: t.surface.onBaseMuted,
+                      fontFeatures: t.numericFontFeatures)),
+          ],
+        ),
+        SizedBox(height: t.space.xs),
+        Row(
+          children: [
+            for (final option in const [false, true])
+              Padding(
+                padding: EdgeInsets.only(right: t.space.xs),
+                child: Semantics(
+                  button: true,
+                  selected: option == floating,
+                  child: GestureDetector(
+                    onTap: option == floating
+                        ? null
+                        : () =>
+                            onStack(option ? StackMove.lift : StackMove.ground),
+                    child: Container(
+                      padding: EdgeInsets.symmetric(
+                          horizontal: t.space.sm, vertical: t.space.xs / 2),
+                      decoration: BoxDecoration(
+                        color: option == floating ? t.surface.raised : null,
+                        borderRadius: BorderRadius.circular(t.radius.pill),
+                        border: Border.all(
+                          color: option == floating
+                              ? t.accent.active
+                              : t.stroke.hairline,
+                          width: t.stroke.width,
+                        ),
+                      ),
+                      child: Text(
+                        option ? 'Floating' : 'In the grid',
+                        style: t.text.captionStyle.copyWith(
+                            color: option == floating
+                                ? t.surface.onBase
+                                : t.surface.onBaseMuted),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+        SizedBox(height: t.space.xs),
+        Text(
+          floating
+              ? 'It sits on top of the grid. Nothing pushes it and it pushes '
+                  'nothing.'
+              : 'It takes up its cells, and the cards around it move out of '
+                  'the way.',
+          style: t.text.captionStyle
+              .copyWith(color: t.surface.onBaseMuted, height: 1.4),
+        ),
+        if (floating) ...[
+          SizedBox(height: t.space.sm),
+          Row(
+            children: [
+              for (final move in const [
+                StackMove.back,
+                StackMove.backward,
+                StackMove.forward,
+                StackMove.front,
+              ])
+                Expanded(
+                  child: Padding(
+                    padding: EdgeInsets.only(right: t.space.xs / 2),
+                    child: Tooltip(
+                      message: move.label,
+                      child: OutlinedButton(
+                        onPressed: () => onStack(move),
+                        style: OutlinedButton.styleFrom(
+                          padding: EdgeInsets.symmetric(vertical: t.space.xs),
+                          minimumSize: Size.zero,
+                          side: BorderSide(
+                              color: t.stroke.hairline, width: t.stroke.width),
+                        ),
+                        child: Icon(
+                          switch (move) {
+                            StackMove.back => Icons.vertical_align_bottom,
+                            StackMove.backward => Icons.keyboard_arrow_down,
+                            StackMove.forward => Icons.keyboard_arrow_up,
+                            _ => Icons.vertical_align_top,
+                          },
+                          size: 15,
+                          color: t.surface.onBase,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ],
     );
   }
 }

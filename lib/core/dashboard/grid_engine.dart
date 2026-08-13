@@ -26,6 +26,8 @@ class GridItem {
     this.sectionId,
     this.minW = 1,
     this.minH = 1,
+    this.floating = false,
+    this.z = 0,
   });
 
   final String id;
@@ -40,10 +42,23 @@ class GridItem {
   final int minW;
   final int minH;
 
+  /// This element sits *above* the grid rather than in it.
+  ///
+  /// A floating element keeps its cell geometry — it is still x/y/w/h, still
+  /// snapped, still within the column bound core validates — but it does not
+  /// compete for space: nothing pushes it, it pushes nothing, and gravity does
+  /// not pull it. See `free_layer.dart` for why this is a client-only change.
+  final bool floating;
+
+  /// Paint height among the floating. Meaningless for a grid item, which can
+  /// never be underneath anything.
+  final int z;
+
   int get right => x + w;
   int get bottom => y + h;
 
-  GridItem copyWith({int? x, int? y, int? w, int? h}) => GridItem(
+  GridItem copyWith({int? x, int? y, int? w, int? h, bool? floating, int? z}) =>
+      GridItem(
         id: id,
         x: x ?? this.x,
         y: y ?? this.y,
@@ -52,9 +67,21 @@ class GridItem {
         sectionId: sectionId,
         minW: minW,
         minH: minH,
+        floating: floating ?? this.floating,
+        z: z ?? this.z,
       );
 
+  /// Do these two compete for the same cells?
+  ///
+  /// **Overlapping is not the same as competing**, and that distinction is the
+  /// whole of the free layer. Two grid items in one cell is a layout that has
+  /// to be resolved; a floating element over a grid item is a design. So a
+  /// floating element on either side of the question answers *no*, and every
+  /// path in the engine — push, gravity, normalise, legality — inherits that
+  /// from one place.
   bool overlaps(GridItem o) =>
+      !floating &&
+      !o.floating &&
       sectionId == o.sectionId &&
       id != o.id &&
       x < o.right &&
@@ -70,13 +97,15 @@ class GridItem {
       other.y == y &&
       other.w == w &&
       other.h == h &&
-      other.sectionId == sectionId;
+      other.sectionId == sectionId &&
+      other.floating == floating &&
+      other.z == z;
 
   @override
-  int get hashCode => Object.hash(id, x, y, w, h, sectionId);
+  int get hashCode => Object.hash(id, x, y, w, h, sectionId, floating, z);
 
   @override
-  String toString() => '$id($x,$y ${w}x$h)';
+  String toString() => '$id($x,$y ${w}x$h${floating ? ' floating z$z' : ''})';
 }
 
 /// What empty space in a layout means. Mirrors core's `DashboardFlow`.
@@ -212,6 +241,13 @@ class GridEngine {
 
     final out = <GridItem>[];
     for (final item in ordered) {
+      // Clamped above like everything else — a floating card still has to be
+      // inside the grid core will accept — but never pushed down: the position
+      // is the design.
+      if (item.floating) {
+        out.add(item);
+        continue;
+      }
       var placed = item;
       while (out.any(placed.overlaps)) {
         placed = placed.copyWith(y: placed.y + 1);
@@ -283,6 +319,13 @@ class GridEngine {
 
     for (final item in ordered) {
       if (item.id == pinned) continue;
+      // A floating element is where it was put. Gravity would pull it to the
+      // top of the page, since nothing below it can block something that
+      // competes with nothing.
+      if (item.floating) {
+        out.add(item);
+        continue;
+      }
 
       var placed = item;
       while (placed.y > 0) {

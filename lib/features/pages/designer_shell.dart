@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/dashboard/free_layer.dart';
 import '../../core/dashboard/grid_engine.dart';
 import '../../core/models/dashboard.dart';
 import '../../design/hc_icons.dart';
@@ -66,6 +67,7 @@ class DesignerShell extends StatefulWidget {
     required this.undoLabel,
     required this.onUndo,
     required this.onBackgroundChanged,
+    this.onStack,
   });
 
   final DashboardDefinition dashboard;
@@ -112,6 +114,10 @@ class DesignerShell extends StatefulWidget {
 
   /// What the page sits on.
   final ValueChanged<DashboardBackground> onBackgroundChanged;
+
+  /// Lift the selection above the grid, put it back, or move it within the
+  /// stack. The page owns the arithmetic; this only forwards the request.
+  final ValueChanged<StackMove>? onStack;
 
   /// Fixed, because the frame is fixed. Panes that resized themselves would
   /// make the canvas scale jump while you worked in it.
@@ -316,6 +322,9 @@ class _DesignerShellState extends State<DesignerShell> {
                               onRemove: widget.onRemoveSelected,
                               onClose: widget.onDeselect,
                               onRename: widget.onRename,
+                              floating: widget.selectedItem?.floating ?? false,
+                              z: widget.selectedItem?.z ?? 0,
+                              onStack: widget.onStack,
                             ),
                     ),
                   ],
@@ -533,6 +542,9 @@ class _StatusBar extends StatelessWidget {
       // a control is one more thing to keep in step for no gain.
       if (selectedCount == 0) 'Nothing selected' else '$selectedCount selected',
       if (item != null) '${item!.w}×${item!.h} at ${item!.x},${item!.y}',
+      // Only when it is true. A card in the grid has no height to report and a
+      // status bar that says "grid" on every card is a word you stop reading.
+      if (item?.floating == true) 'floating · z${item!.z}',
       '$columns columns',
       // Named, because it changes what a drag does and there is nothing else
       // on screen that would tell you it flipped.

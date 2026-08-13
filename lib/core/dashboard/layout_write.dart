@@ -96,6 +96,12 @@ DashboardLayout deriveLayout(DashboardLayout l, List<GridItem> source) {
         h: i.h,
         minW: i.minW.clamp(1, columns),
         minH: i.minH,
+        // Carried, or deriving would quietly ground it: the packer would treat
+        // a floating card as competing for cells and shuffle the layout around
+        // something that was never in the way. Lifting is a property of the
+        // element, so it holds at every breakpoint — see `free_layer.dart`.
+        floating: i.floating,
+        z: i.z,
       ),
   ]);
   return l.copyWith(
