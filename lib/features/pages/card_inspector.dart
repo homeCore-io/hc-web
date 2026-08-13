@@ -30,7 +30,7 @@ import 'widget_config_form.dart';
 /// counted with the same function the card renders from, so the two cannot
 /// disagree. A card about to be empty says `No devices match` here, before it
 /// is ever saved — which is the whole point.
-class CardInspector extends ConsumerWidget {
+class CardInspector extends ConsumerStatefulWidget {
   const CardInspector({
     super.key,
     required this.model,
@@ -67,7 +67,28 @@ class CardInspector extends ConsumerWidget {
   final ValueChanged<StackMove>? onStack;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<CardInspector> createState() => _CardInspectorState();
+}
+
+class _CardInspectorState extends ConsumerState<CardInspector> {
+  /// Explicit, because an unmanaged scroll view on Flutter web draws no
+  /// scrollbar at all — the same finding the canvas records two files away.
+  /// A card with a long form then had fields below the fold with nothing on
+  /// screen admitting they were there, and the wheel did not reach them.
+  final _scroll = ScrollController();
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final model = widget.model;
+    final onChanged = widget.onChanged;
+    final onRename = widget.onRename;
+    final onStack = widget.onStack;
     final t = HcTokens.of(context);
     final descriptor = WidgetRegistry.lookup(model.type);
 
@@ -79,98 +100,105 @@ class CardInspector extends ConsumerWidget {
         border: Border.all(color: t.stroke.hairline, width: t.stroke.width),
       ),
       padding: EdgeInsets.all(t.space.md),
-      child: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    model.title.trim().isEmpty
-                        ? (descriptor?.title ?? model.type)
-                        : model.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: t.text.subtitleStyle.copyWith(
-                        color: t.surface.onBase, fontWeight: FontWeight.w600),
+      child: Scrollbar(
+        controller: _scroll,
+        thumbVisibility: true,
+        child: SingleChildScrollView(
+          controller: _scroll,
+          padding: EdgeInsets.only(right: t.space.sm),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      model.title.trim().isEmpty
+                          ? (descriptor?.title ?? model.type)
+                          : model.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: t.text.subtitleStyle.copyWith(
+                          color: t.surface.onBase, fontWeight: FontWeight.w600),
+                    ),
                   ),
+                  IconButton(
+                    onPressed: widget.onClose,
+                    icon: const Icon(Icons.close, size: 16),
+                    tooltip: 'Done with this card',
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ],
+              ),
+              if (descriptor != null)
+                Text(descriptor.title,
+                    style: t.text.captionStyle
+                        .copyWith(color: t.surface.onBaseMuted)),
+              SizedBox(height: t.space.md),
+              if (descriptor == null)
+                Text('This card type is not installed.',
+                    style: t.text.bodySmallStyle
+                        .copyWith(color: t.surface.onBaseMuted))
+              else ...[
+                WidgetConfigForm(
+                  // Keyed by card, or moving the selection to another card would
+                  // reuse the previous one's field state — its text controllers
+                  // still holding the last card's values.
+                  key: ValueKey(model.id),
+                  descriptor: descriptor,
+                  initial: model.config,
+                  onChanged: onChanged,
                 ),
-                IconButton(
-                  onPressed: onClose,
-                  icon: const Icon(Icons.close, size: 16),
-                  tooltip: 'Done with this card',
-                  visualDensity: VisualDensity.compact,
-                ),
+                // The card's own validator, inline. There is no Done here to
+                // hang it off, and an unsaveable card must say so where it is
+                // being edited rather than at the page's save.
+                if (descriptor.validate?.call(model.config) case final message?)
+                  Padding(
+                    padding: EdgeInsets.only(bottom: t.space.xs),
+                    child: Text(
+                      message,
+                      style: t.text.bodySmallStyle
+                          .copyWith(color: t.accent.danger),
+                    ),
+                  ),
+                _Preview(config: model.config, descriptor: descriptor),
+                // Which devices, listed and tickable — for the card types whose
+                // contents are a device selection. A room card was a live query
+                // with nothing showing what it held.
+                if (_selects(descriptor.type))
+                  CardMembers(config: model.config, onChanged: onChanged),
               ],
-            ),
-            if (descriptor != null)
-              Text(descriptor.title,
-                  style: t.text.captionStyle
-                      .copyWith(color: t.surface.onBaseMuted)),
-            SizedBox(height: t.space.md),
-            if (descriptor == null)
-              Text('This card type is not installed.',
-                  style: t.text.bodySmallStyle
-                      .copyWith(color: t.surface.onBaseMuted))
-            else ...[
-              WidgetConfigForm(
-                // Keyed by card, or moving the selection to another card would
-                // reuse the previous one's field state — its text controllers
-                // still holding the last card's values.
-                key: ValueKey(model.id),
-                descriptor: descriptor,
-                initial: model.config,
-                onChanged: onChanged,
-              ),
-              // The card's own validator, inline. There is no Done here to
-              // hang it off, and an unsaveable card must say so where it is
-              // being edited rather than at the page's save.
-              if (descriptor.validate?.call(model.config) case final message?)
-                Padding(
-                  padding: EdgeInsets.only(bottom: t.space.xs),
-                  child: Text(
-                    message,
-                    style:
-                        t.text.bodySmallStyle.copyWith(color: t.accent.danger),
-                  ),
+              // Style is offered only where there is a card to un-draw. A
+              // heading, a rule and a spacer have no surface at all, so a
+              // "background" switch on one would be a control with nothing
+              // behind it.
+              if (onRename != null)
+                _NameField(
+                  key: ValueKey('title-${model.id}'),
+                  value: model.title,
+                  hint: descriptor?.title ?? model.type,
+                  onChanged: onRename,
                 ),
-              _Preview(config: model.config, descriptor: descriptor),
-              // Which devices, listed and tickable — for the card types whose
-              // contents are a device selection. A room card was a live query
-              // with nothing showing what it held.
-              if (_selects(descriptor.type))
-                CardMembers(config: model.config, onChanged: onChanged),
+              if (descriptor != null && descriptor.chrome != WidgetChrome.bare)
+                _StyleSection(
+                  cardId: model.id,
+                  style: CardStyle.fromConfig(model.config),
+                  onChanged: (style) => onChanged(style.toConfig(model.config)),
+                ),
+              if (onStack != null)
+                _StackSection(
+                    floating: widget.floating, z: widget.z, onStack: onStack),
+              SizedBox(height: t.space.md),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  onPressed: widget.onRemove,
+                  child: Text('Remove from page',
+                      style: TextStyle(color: t.accent.danger)),
+                ),
+              ),
             ],
-            // Style is offered only where there is a card to un-draw. A
-            // heading, a rule and a spacer have no surface at all, so a
-            // "background" switch on one would be a control with nothing
-            // behind it.
-            if (onRename != null)
-              _NameField(
-                key: ValueKey('title-${model.id}'),
-                value: model.title,
-                hint: descriptor?.title ?? model.type,
-                onChanged: onRename!,
-              ),
-            if (descriptor != null && descriptor.chrome != WidgetChrome.bare)
-              _StyleSection(
-                cardId: model.id,
-                style: CardStyle.fromConfig(model.config),
-                onChanged: (style) => onChanged(style.toConfig(model.config)),
-              ),
-            if (onStack != null)
-              _StackSection(floating: floating, z: z, onStack: onStack!),
-            SizedBox(height: t.space.md),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton(
-                onPressed: onRemove,
-                child: Text('Remove from page',
-                    style: TextStyle(color: t.accent.danger)),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );

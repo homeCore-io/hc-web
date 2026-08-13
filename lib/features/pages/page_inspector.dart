@@ -18,7 +18,7 @@ import '../assets/asset_field.dart';
 /// looks. Whether gaps are kept was until now settable only as a side effect of
 /// dragging a card, and readable only in the status bar. A property of the page
 /// that you can trip over but not set is a property nobody controls.
-class PageInspector extends StatelessWidget {
+class PageInspector extends StatefulWidget {
   const PageInspector({
     super.key,
     required this.dashboard,
@@ -40,74 +40,100 @@ class PageInspector extends StatelessWidget {
   final ValueChanged<DashboardBackground>? onBackgroundChanged;
 
   @override
+  State<PageInspector> createState() => _PageInspectorState();
+}
+
+class _PageInspectorState extends State<PageInspector> {
+  /// See [CardInspector]: an unmanaged scroll view draws no scrollbar on web,
+  /// so a pane with more in it than fits says nothing about the fact.
+  final _scroll = ScrollController();
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final dashboard = widget.dashboard;
+    final layout = widget.layout;
+    final breakpoint = widget.breakpoint;
+    final cardCount = widget.cardCount;
+    final onFlowChanged = widget.onFlowChanged;
+    final onBackgroundChanged = widget.onBackgroundChanged;
     final t = HcTokens.of(context);
     final flow = layout?.flow ?? GridFlow.packed;
     final derived = layout?.derivedFrom;
 
-    return SingleChildScrollView(
-      padding: EdgeInsets.all(t.space.sm),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(dashboard.name,
-              style: t.text.subtitleStyle.copyWith(
-                  color: t.surface.onBase, fontWeight: FontWeight.w600)),
-          Text('This page',
-              style:
-                  t.text.captionStyle.copyWith(color: t.surface.onBaseMuted)),
-          SizedBox(height: t.space.md),
-          _Row(label: 'Cards', value: '$cardCount'),
-          _Row(label: 'Columns', value: '${layout?.columns ?? 12}'),
-          _Row(
-            label: 'Arranging',
-            value: switch (breakpoint) {
-              DashboardBreakpoint.mobile => 'Mobile',
-              DashboardBreakpoint.tablet => 'Tablet',
-              DashboardBreakpoint.desktop => 'Desktop',
-              DashboardBreakpoint.tv => 'Wall',
-            },
-          ),
-          SizedBox(height: t.space.md),
-          Text('SPACE',
-              style:
-                  t.text.overlineStyle.copyWith(color: t.surface.onBaseMuted)),
-          SizedBox(height: t.space.xs),
-          if (derived != null)
-            Text(
-              'This layout follows another one, so it is packed for its own '
-              'width. Arrange it by hand to give it gaps of its own.',
-              style: t.text.captionStyle
-                  .copyWith(color: t.surface.onBaseMuted, height: 1.4),
-            )
-          else ...[
-            _Choice(
-              value: flow,
-              onChanged: onFlowChanged,
+    return Scrollbar(
+      controller: _scroll,
+      thumbVisibility: true,
+      child: SingleChildScrollView(
+        controller: _scroll,
+        padding: EdgeInsets.all(t.space.sm),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(dashboard.name,
+                style: t.text.subtitleStyle.copyWith(
+                    color: t.surface.onBase, fontWeight: FontWeight.w600)),
+            Text('This page',
+                style:
+                    t.text.captionStyle.copyWith(color: t.surface.onBaseMuted)),
+            SizedBox(height: t.space.md),
+            _Row(label: 'Cards', value: '$cardCount'),
+            _Row(label: 'Columns', value: '${layout?.columns ?? 12}'),
+            _Row(
+              label: 'Arranging',
+              value: switch (breakpoint) {
+                DashboardBreakpoint.mobile => 'Mobile',
+                DashboardBreakpoint.tablet => 'Tablet',
+                DashboardBreakpoint.desktop => 'Desktop',
+                DashboardBreakpoint.tv => 'Wall',
+              },
             ),
-            SizedBox(height: t.space.xs),
-            Text(
-              flow == GridFlow.free
-                  ? 'Cards stay where you put them. Empty space is part of the '
-                      'design.'
-                  : 'Cards float up to close gaps, the way a dashboard packs '
-                      'itself.',
-              style: t.text.captionStyle
-                  .copyWith(color: t.surface.onBaseMuted, height: 1.4),
-            ),
-          ],
-          if (onBackgroundChanged != null) ...[
-            SizedBox(height: t.space.lg),
-            Text('BACKGROUND',
+            SizedBox(height: t.space.md),
+            Text('SPACE',
                 style: t.text.overlineStyle
                     .copyWith(color: t.surface.onBaseMuted)),
             SizedBox(height: t.space.xs),
-            _BackgroundControls(
-              value: dashboard.background ?? const DashboardBackground(),
-              onChanged: onBackgroundChanged!,
-            ),
+            if (derived != null)
+              Text(
+                'This layout follows another one, so it is packed for its own '
+                'width. Arrange it by hand to give it gaps of its own.',
+                style: t.text.captionStyle
+                    .copyWith(color: t.surface.onBaseMuted, height: 1.4),
+              )
+            else ...[
+              _Choice(
+                value: flow,
+                onChanged: onFlowChanged,
+              ),
+              SizedBox(height: t.space.xs),
+              Text(
+                flow == GridFlow.free
+                    ? 'Cards stay where you put them. Empty space is part of the '
+                        'design.'
+                    : 'Cards float up to close gaps, the way a dashboard packs '
+                        'itself.',
+                style: t.text.captionStyle
+                    .copyWith(color: t.surface.onBaseMuted, height: 1.4),
+              ),
+            ],
+            if (onBackgroundChanged != null) ...[
+              SizedBox(height: t.space.lg),
+              Text('BACKGROUND',
+                  style: t.text.overlineStyle
+                      .copyWith(color: t.surface.onBaseMuted)),
+              SizedBox(height: t.space.xs),
+              _BackgroundControls(
+                value: dashboard.background ?? const DashboardBackground(),
+                onChanged: onBackgroundChanged,
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
