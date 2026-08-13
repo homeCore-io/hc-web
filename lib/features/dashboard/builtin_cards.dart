@@ -47,6 +47,7 @@ import '../../core/providers/events_provider.dart';
 import '../../core/providers/modes_provider.dart';
 import '../../core/providers/scenes_provider.dart';
 import '../../core/providers/time_display_provider.dart';
+import 'code_card.dart';
 
 /// Which devices a device-oriented card shows, for a given config.
 ///
@@ -1734,6 +1735,51 @@ void registerBuiltinDashboardWidgets() {
           (c['url'] as String?)?.isNotEmpty == true ? null : 'A URL is needed.',
       builder: (context, a) =>
           _WebEmbedWidget(widgetModel: _modelOf(a, 'web_embed')),
+    ),
+    WidgetDescriptor(
+      type: 'code',
+      title: 'Code',
+      description: 'HTML, SVG and script you write, in a sandbox.',
+      icon: Icons.code,
+      // Big by default. The things people build here — a gauge, an instrument
+      // cluster, an animated readout — are the reason they reached for it, and
+      // a 4×2 rectangle is not where any of those live.
+      sizeHint: const WidgetSizeHint(
+          minW: 2, minH: 1, recommendedW: 6, recommendedH: 4),
+      // It draws to its own edges. A code element in a padded, titled box is a
+      // drawing in a frame, and the whole point is that the author decides what
+      // it looks like.
+      chrome: WidgetChrome.bleed,
+      // The frame offers the way in, as it does for the floor plan: entering
+      // hands the pointer to the sandbox so a control you just wrote can be
+      // pressed without leaving the designer.
+      inPlaceLabel: 'Try it',
+      configFields: const [
+        WidgetConfigField('html', WidgetConfigKind.code, label: 'Code'),
+        // The selection *is* the permission. Named plainly, because "grant" is
+        // our word for it and "which devices can it see" is the question.
+        WidgetConfigField('selection_mode', WidgetConfigKind.choice,
+            label: 'It can see',
+            defaultValue: 'manual',
+            options: ['manual', 'area', 'facet', 'query']),
+        WidgetConfigField('device_ids', WidgetConfigKind.deviceRefs,
+            label: 'Devices'),
+        WidgetConfigField('area_name', WidgetConfigKind.areaName,
+            label: 'Room'),
+        WidgetConfigField('facet', WidgetConfigKind.facet, label: 'Kind'),
+        WidgetConfigField('query', WidgetConfigKind.text, label: 'Search'),
+        WidgetConfigField('allow_network', WidgetConfigKind.boolean,
+            label: 'Allow network',
+            help: 'Off by default, so pasted code cannot call out of your '
+                'house. Turn it on only for code you wrote or trust.'),
+      ],
+      // No validator. An empty code element is not a broken one — it renders
+      // the starter, which says what the API is at the moment you want to know.
+      builder: (context, a) => CodeCard(
+        config: a.config,
+        editing: a.editing,
+        entered: a.entered,
+      ),
     ),
     WidgetDescriptor(
       type: 'dashboard_link',

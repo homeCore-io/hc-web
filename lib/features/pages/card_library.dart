@@ -407,6 +407,12 @@ class _CardLibraryState extends ConsumerState<CardLibrary> {
           'Image', 'image', 'a picture, scaled to the card', {'fit': 'cover'}),
       _Entry('Note', 'markdown', 'text you write',
           {'markdown': '# Note\nWrite something here.'}),
+      // Placed blank on purpose, like the floor plan: an empty code element
+      // renders its own starter, which says what the API is at the moment
+      // somebody wants to know. Granted nothing until it is told otherwise —
+      // the device selection is the permission, so the safe default is none.
+      _Entry('Code', 'code', 'html, svg and script you write',
+          {'selection_mode': 'manual', 'device_ids': <String>[]}),
     ]),
   ];
 }

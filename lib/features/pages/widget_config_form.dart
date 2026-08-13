@@ -12,6 +12,7 @@ import '../../shell/hc_sheet.dart';
 import '../devices/device_query.dart';
 import '../assets/asset_field.dart';
 import '../dashboard/home_plan_field.dart';
+import 'code_editor_sheet.dart';
 
 /// A widget's settings, built from the card's own [WidgetDescriptor.configFields].
 ///
@@ -214,6 +215,7 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
         WidgetConfigKind.choice => _choice(f),
         WidgetConfigKind.integer => _text(f, number: true),
         WidgetConfigKind.markdown => _text(f, lines: 5),
+        WidgetConfigKind.code => _code(f),
         WidgetConfigKind.url || WidgetConfigKind.text => _text(f),
         WidgetConfigKind.image => _image(f),
         WidgetConfigKind.homePlan => _homePlan(f),
@@ -273,6 +275,37 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
               _set(f.name, v.isEmpty ? null : v);
             }
           },
+        ),
+        _help(f),
+      ],
+    );
+  }
+
+  /// Code, which is not edited here.
+  ///
+  /// The inspector shows what is there and how much of it, and opens the place
+  /// it can actually be worked on. A textarea in a 340px column would be the
+  /// same mistake as the five-line markdown field, one language further along.
+  Widget _code(WidgetConfigField f) {
+    final source = '${_config[f.name] ?? ''}';
+    final lines = source.isEmpty ? 0 : '\n'.allMatches(source).length + 1;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _label(f),
+        OutlinedButton.icon(
+          onPressed: () async {
+            final next = await CodeEditorSheet.open(
+              context,
+              source: source,
+              config: _config,
+            );
+            if (next == null) return;
+            _set(f.name, next.isEmpty ? null : next);
+          },
+          icon: const Icon(Icons.code, size: 15),
+          label: Text(lines == 0 ? 'Write it' : 'Edit code · $lines lines'),
         ),
         _help(f),
       ],
