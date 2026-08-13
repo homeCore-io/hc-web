@@ -49,6 +49,7 @@ import '../../core/providers/scenes_provider.dart';
 import '../../core/providers/time_display_provider.dart';
 import 'code_card.dart';
 import 'gauge_card.dart';
+import 'svg_card.dart';
 
 /// Which devices a device-oriented card shows, for a given config.
 ///
@@ -1827,6 +1828,41 @@ void registerBuiltinDashboardWidgets() {
       // No validator. An empty code element is not a broken one — it renders
       // the starter, which says what the API is at the moment you want to know.
       builder: (context, a) => CodeCard(
+        config: a.config,
+        editing: a.editing,
+        entered: a.entered,
+      ),
+    ),
+    WidgetDescriptor(
+      type: 'svg',
+      title: 'Drawing',
+      description: 'Your own SVG, with the house wired into it.',
+      icon: Icons.brush_outlined,
+      sizeHint: const WidgetSizeHint(
+          minW: 2, minH: 1, recommendedW: 5, recommendedH: 4),
+      // It is the drawing, edge to edge. A picture in a padded, titled box is a
+      // picture in a frame.
+      chrome: WidgetChrome.bleed,
+      inPlaceLabel: 'Try it',
+      configFields: const [
+        WidgetConfigField('svg', WidgetConfigKind.svgSource, label: 'Drawing'),
+        WidgetConfigField('bindings', WidgetConfigKind.svgBindings,
+            label: 'Wiring'),
+        // The same grant as the code element, because it is the same sandbox.
+        WidgetConfigField('selection_mode', WidgetConfigKind.choice,
+            label: 'It can see',
+            defaultValue: 'manual',
+            options: ['manual', 'area', 'facet', 'query']),
+        WidgetConfigField('device_ids', WidgetConfigKind.deviceRefs,
+            label: 'Devices'),
+        WidgetConfigField('area_name', WidgetConfigKind.areaName,
+            label: 'Room'),
+        WidgetConfigField('facet', WidgetConfigKind.facet, label: 'Kind'),
+        WidgetConfigField('query', WidgetConfigKind.text, label: 'Search'),
+      ],
+      // No validator: an empty drawing renders the starter, which has two
+      // bindable ids in it and so answers the first question anyone has.
+      builder: (context, a) => SvgCard(
         config: a.config,
         editing: a.editing,
         entered: a.entered,

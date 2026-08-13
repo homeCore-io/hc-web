@@ -217,6 +217,14 @@ enum WidgetConfigKind {
   image,
   stringList,
 
+  /// A drawing the author brings, and the wires from it to the house.
+  ///
+  /// Two kinds rather than one because they are two questions asked in two
+  /// places: the picture is edited in a sheet with room to see it, and the
+  /// bindings are a list you build up beside the card while it draws.
+  svgSource,
+  svgBindings,
+
   /// Markup the author writes, run in a sandbox.
   ///
   /// Distinct from [markdown] because a five-line textarea is not where anyone

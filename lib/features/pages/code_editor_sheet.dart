@@ -29,6 +29,12 @@ class CodeEditorSheet extends StatefulWidget {
     super.key,
     required this.source,
     required this.config,
+    this.title = 'Code',
+    this.hint = 'HTML, SVG and script. `homecore.states`, '
+        '`homecore.onUpdate(fn)`, `homecore.set(id, patch)`.',
+    this.sourceKey = 'html',
+    this.starter = codeStarter,
+    this.preview,
   });
 
   /// What is stored today.
@@ -39,15 +45,50 @@ class CodeEditorSheet extends StatefulWidget {
   /// the card will do on the page.
   final Map<String, dynamic> config;
 
+  final String title;
+  final String hint;
+
+  /// Which config key the edited text belongs to. A bound drawing keeps its
+  /// source under `svg` and generates `html` from it, so the preview has to be
+  /// told which one it is editing.
+  final String sourceKey;
+
+  /// What an empty element is filled with, so the first thing anyone sees is a
+  /// working example rather than a blank page.
+  final String starter;
+
+  /// How to draw the thing being edited. Null means the code element itself —
+  /// the case this sheet was built for. A bound SVG passes its own card, so
+  /// the preview shows the drawing *with its bindings applied* rather than the
+  /// generated script.
+  final Widget Function(
+      Map<String, dynamic> config, ValueChanged<String> onLog)? preview;
+
   static Future<String?> open(
     BuildContext context, {
     required String source,
     required Map<String, dynamic> config,
+    String title = 'Code',
+    String? hint,
+    String sourceKey = 'html',
+    String starter = codeStarter,
+    Widget Function(Map<String, dynamic> config, ValueChanged<String> onLog)?
+        preview,
   }) =>
       showDialog<String>(
         context: context,
         barrierDismissible: false,
-        builder: (_) => CodeEditorSheet(source: source, config: config),
+        builder: (_) => CodeEditorSheet(
+          source: source,
+          config: config,
+          title: title,
+          hint: hint ??
+              'HTML, SVG and script. `homecore.states`, '
+                  '`homecore.onUpdate(fn)`, `homecore.set(id, patch)`.',
+          sourceKey: sourceKey,
+          starter: starter,
+          preview: preview,
+        ),
       );
 
   @override
@@ -113,6 +154,8 @@ class _CodeEditorSheetState extends State<CodeEditorSheet> {
             child: Column(
               children: [
                 _Bar(
+                  title: widget.title,
+                  hint: widget.hint,
                   dirty: _dirty,
                   onApply: _apply,
                   onCancel: () => Navigator.of(context).pop(),
@@ -132,14 +175,25 @@ class _CodeEditorSheetState extends State<CodeEditorSheet> {
                               child: Container(
                                 color: t.surface.sunken,
                                 padding: EdgeInsets.all(t.space.md),
-                                child: CodeCard(
-                                  // Keyed on the applied source so pressing
-                                  // Run tears the old document down rather
-                                  // than reusing a frame whose script has
-                                  // already run.
+                                // Keyed on the applied source so pressing Run
+                                // tears the old document down rather than
+                                // reusing a frame whose script has already run.
+                                child: KeyedSubtree(
                                   key: ValueKey(_applied),
-                                  config: {...widget.config, 'html': _applied},
-                                  onLog: _onLog,
+                                  child: widget.preview?.call(
+                                        {
+                                          ...widget.config,
+                                          widget.sourceKey: _applied
+                                        },
+                                        _onLog,
+                                      ) ??
+                                      CodeCard(
+                                        config: {
+                                          ...widget.config,
+                                          'html': _applied
+                                        },
+                                        onLog: _onLog,
+                                      ),
                                 ),
                               ),
                             ),
@@ -161,12 +215,16 @@ class _CodeEditorSheetState extends State<CodeEditorSheet> {
 
 class _Bar extends StatelessWidget {
   const _Bar({
+    required this.title,
+    required this.hint,
     required this.dirty,
     required this.onApply,
     required this.onCancel,
     required this.onSave,
   });
 
+  final String title;
+  final String hint;
   final bool dirty;
   final VoidCallback onApply;
   final VoidCallback onCancel;
@@ -186,16 +244,18 @@ class _Bar extends StatelessWidget {
           EdgeInsets.symmetric(horizontal: t.space.md, vertical: t.space.sm),
       child: Row(
         children: [
-          Text('Code',
+          Text(title,
               style: t.text.subtitleStyle.copyWith(
                   color: t.surface.onBase, fontWeight: FontWeight.w600)),
           SizedBox(width: t.space.md),
-          Text(
-            'HTML, SVG and script. `homecore.states`, `homecore.onUpdate(fn)`, '
-            '`homecore.set(id, patch)`.',
-            style: t.text.captionStyle.copyWith(color: t.surface.onBaseMuted),
+          Expanded(
+            child: Text(
+              hint,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: t.text.captionStyle.copyWith(color: t.surface.onBaseMuted),
+            ),
           ),
-          const Spacer(),
           if (dirty)
             Padding(
               padding: EdgeInsets.only(right: t.space.sm),

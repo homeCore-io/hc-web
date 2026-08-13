@@ -12,7 +12,10 @@ import '../../shell/hc_sheet.dart';
 import '../devices/device_query.dart';
 import '../assets/asset_field.dart';
 import '../dashboard/home_plan_field.dart';
+import '../../core/dashboard/svg_bindings.dart';
+import '../dashboard/svg_card.dart';
 import 'code_editor_sheet.dart';
+import 'svg_bindings_field.dart';
 
 /// A widget's settings, built from the card's own [WidgetDescriptor.configFields].
 ///
@@ -216,6 +219,8 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
         WidgetConfigKind.integer => _text(f, number: true),
         WidgetConfigKind.markdown => _text(f, lines: 5),
         WidgetConfigKind.code => _code(f),
+        WidgetConfigKind.svgSource => _svgSource(f),
+        WidgetConfigKind.svgBindings => _svgBindings(f),
         WidgetConfigKind.url || WidgetConfigKind.text => _text(f),
         WidgetConfigKind.image => _image(f),
         WidgetConfigKind.homePlan => _homePlan(f),
@@ -307,6 +312,55 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
           icon: const Icon(Icons.code, size: 15),
           label: Text(lines == 0 ? 'Write it' : 'Edit code · $lines lines'),
         ),
+        _help(f),
+      ],
+    );
+  }
+
+  /// The drawing, edited where it can be seen.
+  Widget _svgSource(WidgetConfigField f) {
+    final source = '${_config[f.name] ?? ''}';
+    final ids = svgElementIds(source.isEmpty ? svgStarter : source);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _label(f),
+        OutlinedButton.icon(
+          onPressed: () async {
+            final next = await CodeEditorSheet.open(
+              context,
+              source: source,
+              config: _config,
+              title: 'Drawing',
+              hint: 'Paste an SVG. Give the parts you want to drive an id, '
+                  'and they become bindable.',
+              sourceKey: svgSourceKey,
+              starter: svgStarter,
+              // The preview is the bound card, so what you see while editing is
+              // the drawing with the house in it rather than the raw file.
+              preview: (config, onLog) => SvgCard(config: config, onLog: onLog),
+            );
+            if (next == null) return;
+            _set(f.name, next.isEmpty ? null : next);
+          },
+          icon: const Icon(Icons.brush_outlined, size: 15),
+          label: Text(source.isEmpty
+              ? 'Paste a drawing'
+              : 'Edit drawing · ${ids.length} named '
+                  '${ids.length == 1 ? 'part' : 'parts'}'),
+        ),
+        _help(f),
+      ],
+    );
+  }
+
+  Widget _svgBindings(WidgetConfigField f) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _label(f),
+        SvgBindingsField(config: _config, onChanged: widget.onChanged),
         _help(f),
       ],
     );
@@ -528,7 +582,7 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
         _label(f),
         OutlinedButton(
           onPressed: () async {
-            final picked = await _pickDevices(context, devices,
+            final picked = await pickDevices(context, devices,
                 single: true, selected: {if (id != null) id});
             if (picked != null) {
               _set(f.name, picked.isEmpty ? null : picked.first);
@@ -559,7 +613,7 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
         _label(f),
         OutlinedButton(
           onPressed: () async {
-            final picked = await _pickDevices(context, devices,
+            final picked = await pickDevices(context, devices,
                 single: false, selected: ids);
             if (picked != null) _set(f.name, picked);
           },
@@ -613,7 +667,12 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
 
 /// A searchable device picker, single or multi. Returns the chosen ids, or null
 /// if dismissed. 167 devices is too many for a dropdown, so this searches.
-Future<List<String>?> _pickDevices(
+/// The device picker every field that names a device goes through.
+///
+/// Public because the SVG binding editor asks the same question in a different
+/// panel, and two pickers that drift apart is how "choose a device" comes to
+/// mean two things.
+Future<List<String>?> pickDevices(
     BuildContext context, List<DeviceState> devices,
     {required bool single, required Set<String> selected}) {
   return showHcSheet<List<String>>(

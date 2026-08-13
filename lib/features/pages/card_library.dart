@@ -450,6 +450,11 @@ class _CardLibraryState extends ConsumerState<CardLibrary> {
       // renders its own starter, which says what the API is at the moment
       // somebody wants to know. Granted nothing until it is told otherwise —
       // the device selection is the permission, so the safe default is none.
+      // Between the gauges we draw and the code you write: bring the artwork,
+      // wire it up in a list. Granted nothing until told otherwise, like the
+      // code element it shares a sandbox with.
+      _Entry('Drawing', 'svg', 'your svg, wired to the house',
+          {'selection_mode': 'manual', 'device_ids': <String>[]}),
       _Entry('Code', 'code', 'html, svg and script you write',
           {'selection_mode': 'manual', 'device_ids': <String>[]}),
     ]),
