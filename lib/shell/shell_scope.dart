@@ -111,6 +111,9 @@ const kNavItems = [
 const kPlaces = [
   NavItem('/', 'Home', HcIcons.home),
   NavItem('/manage', 'Manage', HcIcons.sliders),
+  // The page manager. Everything you can do *to* a page — import, export,
+  // start from a template, delete — lived at a URL nothing linked to.
+  NavItem('/dashboards', 'Pages', HcIcons.dashboards),
   NavItem('/devices', 'Devices', HcIcons.devices),
   NavItem('/automations', 'Automations', HcIcons.automations),
   NavItem('/media', 'Media', HcIcons.media),

@@ -1249,9 +1249,11 @@ class _PageMenu extends ConsumerWidget {
       tooltip: 'Page options',
       onSelected: (v) => onPageAction(context, ref, dashboard, v),
       itemBuilder: (_) => const [
+        PopupMenuItem(value: 'new', child: Text('New page')),
+        PopupMenuItem(value: 'duplicate', child: Text('Duplicate')),
+        PopupMenuDivider(),
         PopupMenuItem(value: 'rename', child: Text('Rename')),
         PopupMenuItem(value: 'home', child: Text('Set as Home page')),
-        PopupMenuItem(value: 'duplicate', child: Text('Duplicate')),
         PopupMenuItem(value: 'delete', child: Text('Delete')),
       ],
     );

@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -20,6 +21,13 @@ Future<void> onPageAction(
   String action,
 ) async {
   switch (action) {
+    // Creating a page is offered from the page you are on, because that is
+    // where you are when you decide you want another one. It was reachable only
+    // from the launcher and the Pages list, so the menu that could duplicate a
+    // page could not make one.
+    case 'new':
+      await createPage(context, ref);
+      break;
     case 'rename':
       final name = await _prompt(context, 'Rename page', dashboard.name);
       if (name == null || name.isEmpty) return;
@@ -56,9 +64,29 @@ Future<void> onPageAction(
 }
 
 /// Creates a blank page and navigates into it, in edit mode-ready state.
-Future<void> createPage(BuildContext context, WidgetRef ref) async {
+///
+/// **Nothing here may reach through [context] after the first `await`.** This
+/// is called from the hub launcher, which is a route that closes as part of the
+/// same gesture, and a `BuildContext` dies with the route it belongs to: the
+/// router and the messenger are taken *now*, while they are still real. Doing
+/// it the other way is what made New page look like it did nothing — the page
+/// was created and then never opened, because the `context.mounted` guard on
+/// the way out was false and silently skipped the navigation.
+///
+/// [dismiss] closes whatever surface offered the action, once there is a name
+/// to act on. It runs *after* the prompt rather than before, so the prompt is
+/// still being shown by a live route.
+Future<void> createPage(
+  BuildContext context,
+  WidgetRef ref, {
+  VoidCallback? dismiss,
+}) async {
+  final router = GoRouter.of(context);
+  final messenger = ScaffoldMessenger.of(context);
+
   final name = await _prompt(context, 'New page', 'New page');
   if (name == null || name.isEmpty) return;
+  dismiss?.call();
 
   final currentUser = await ref.read(currentUserProvider.future);
   final owner = currentUser?['id'] as String? ??
@@ -119,8 +147,32 @@ Future<void> createPage(BuildContext context, WidgetRef ref) async {
     widgets: const [],
   );
 
-  await ref.read(dashboardsProvider.notifier).createDashboard(page);
-  if (context.mounted) context.go('/pages/$id');
+  // **Loudly, or not at all.** A create that throws used to close the dialog
+  // and leave the house exactly as it was, which is indistinguishable from a
+  // button that is not wired up — and that is what it was reported as.
+  try {
+    await ref.read(dashboardsProvider.notifier).createDashboard(page);
+  } catch (e) {
+    messenger.showSnackBar(
+      SnackBar(content: Text('Could not create "$name": ${_short(e)}')),
+    );
+    return;
+  }
+
+  // Through the router taken above, not through `context`: by now the surface
+  // that offered this action has usually closed, and a page created but not
+  // opened is the same bug wearing a different hat.
+  router.go('/pages/$id');
+}
+
+/// The useful half of an error, without the stack or the wrapper type.
+String _short(Object e) {
+  final text = e is DioException
+      ? (e.response?.data is Map
+          ? '${(e.response!.data as Map)['error'] ?? e.message}'
+          : 'HTTP ${e.response?.statusCode ?? '—'}')
+      : e.toString();
+  return text.length > 120 ? '${text.substring(0, 117)}…' : text;
 }
 
 Future<String?> _prompt(BuildContext context, String title, String initial) {

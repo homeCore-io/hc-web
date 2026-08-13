@@ -360,6 +360,13 @@ class _CardLibraryState extends ConsumerState<CardLibrary> {
       _Entry('Scenes', 'scene_row', 'one tap each', {}),
       _Entry('Now playing', 'media_player', 'speakers and TVs',
           {'selection_mode': 'query', 'query': '', 'limit': 4}),
+      // **It was in no picker at all.** The whole floor plan feature could only
+      // be reached by already having one of these cards on the page, which
+      // meant editing the document by hand. Added blank on purpose: an empty
+      // one says what to do next — choose a picture, or import a Sweet Home 3D
+      // file — and the inspector is where both of those live.
+      _Entry('Floor plan', 'floor_plan', 'your home, with its lights on',
+          {'fit': 'contain'}),
     ]),
     // Data is its own family, not part of "Other". Three ways to show a
     // number, and which one you want depends on the room rather than on the
