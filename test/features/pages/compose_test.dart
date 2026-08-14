@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:hc_web/features/pages/page_background.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -141,6 +143,21 @@ Future<void> _dragCard(WidgetTester tester, String id, Offset by) async {
   await gesture.up();
   await tester.pumpAndSettle();
 }
+
+/// A preset or fit chip, by its label.
+Future<void> _chip(WidgetTester tester, String label) async {
+  await tester.tap(find.widgetWithText(GestureDetector, label).last);
+  await tester.pumpAndSettle();
+}
+
+Future<void> _typeSize(WidgetTester tester, String label, String value) async {
+  final field = find.widgetWithText(TextField, label);
+  await tester.enterText(field, value);
+  await tester.testTextInput.receiveAction(TextInputAction.done);
+  await tester.pumpAndSettle();
+}
+
+DashboardFrame _frame(WidgetTester tester) => _grid(tester).frame!;
 
 void main() {
   group('turning it on', () {
@@ -302,6 +319,143 @@ void main() {
       // `_DragBody`.
       expect(_item(tester, 'a').x, greaterThan(0),
           reason: 'dragging a card moves the card');
+    });
+  });
+
+  group('the canvas controls', () {
+    testWidgets('a preset resizes it', (tester) async {
+      await _open(tester);
+      await _toggleCompose(tester);
+      expect(_frame(tester).width, 1600);
+
+      await _chip(tester, '1080p');
+      expect(_frame(tester).width, 1920);
+      expect(_frame(tester).height, 1080);
+    });
+
+    testWidgets('and moves nothing on the page', (tester) async {
+      // A bigger canvas is more room, not a rearrangement. Scaling every
+      // rectangle to match would turn tapping a preset into an edit that
+      // touched every element.
+      await _open(tester);
+      await _toggleCompose(tester);
+      final before = _item(tester, 'b').rect!;
+
+      await _chip(tester, '4K');
+      expect(_item(tester, 'b').rect, before);
+    });
+
+    testWidgets('but does recompute the cells beside it', (tester) async {
+      // A cell is a fraction of the canvas width, so the same rectangle is a
+      // different column once the canvas is wider. Leaving them stale would
+      // let the fallback drift from the composition it approximates — and it
+      // is the stale one core validates.
+      await _open(tester);
+      await _toggleCompose(tester);
+      expect(_item(tester, 'b').x, 4);
+
+      await _chip(tester, '4K');
+      expect(_item(tester, 'b').x, lessThan(4));
+      for (final item in _grid(tester).items) {
+        expect(item.x, greaterThanOrEqualTo(0), reason: item.id);
+        expect(item.x + item.w, lessThanOrEqualTo(12), reason: item.id);
+      }
+    });
+
+    testWidgets('the fields take a size a preset does not cover',
+        (tester) async {
+      await _open(tester);
+      await _toggleCompose(tester);
+      await _typeSize(tester, 'Width', '2000');
+      expect(_frame(tester).width, 2000);
+    });
+
+    testWidgets('and refuse one that is not a canvas', (tester) async {
+      // A canvas with no size divides by zero on the way to the screen, and
+      // core rejects it. The field says what was typed back rather than
+      // silently becoming a 1.
+      await _open(tester);
+      await _toggleCompose(tester);
+      await _typeSize(tester, 'Width', '0');
+      expect(_frame(tester).width, 1600);
+
+      await _typeSize(tester, 'Width', 'wide');
+      expect(_frame(tester).width, 1600);
+    });
+
+    testWidgets('the height can be a promise or a starting point',
+        (tester) async {
+      await _open(tester);
+      await _toggleCompose(tester);
+      expect(_frame(tester).fit, DashboardFrameFit.scroll,
+          reason: 'what every page did before frames existed');
+
+      await _chip(tester, 'Fixed');
+      expect(_frame(tester).fit, DashboardFrameFit.fixed);
+    });
+
+    testWidgets('a fixed canvas is exactly its own height', (tester) async {
+      // It is a rectangle somebody composed. Growing it because something hangs
+      // over the edge would silently change the composition. Tall enough here
+      // that nothing is outside it.
+      await _open(tester);
+      await _toggleCompose(tester);
+      await _typeSize(tester, 'Height', '2000');
+      await _chip(tester, 'Fixed');
+
+      final board = tester.getRect(find.byType(PageGrid));
+      final scale = board.width / _frame(tester).width;
+      expect(board.height / scale, closeTo(2000, 2));
+    });
+
+    testWidgets('shrinking it does not swallow the cards it no longer covers',
+        (tester) async {
+      // Found by looking at it on the real house: a 1080-tall canvas over a
+      // page that ran to 1668 clipped three cards away with nothing to say so.
+      // A control that can silently hide your work is not finished.
+      await _open(tester);
+      await _toggleCompose(tester);
+      final before = _box(tester, 'b');
+
+      await _typeSize(tester, 'Height', '100');
+      await _chip(tester, 'Fixed');
+
+      expect(_item(tester, 'b').rect, isNotNull,
+          reason: 'the card is still on the page');
+      expect(_box(tester, 'b').top, closeTo(before.top, 1),
+          reason: 'and still where it was put, below the canvas edge');
+      // `b` is the lowest card, so the board reaches exactly its bottom.
+      expect(tester.getRect(find.byType(PageGrid)).height,
+          greaterThanOrEqualTo(before.bottom),
+          reason: 'the board reaches it, so it can be dragged back');
+    });
+
+    testWidgets('and it is shown whole, not cut off at the bottom',
+        (tester) async {
+      // Fit means show the whole thing, and for a fixed canvas the whole thing
+      // has a height — width alone would cut the bottom off a wall layout.
+      await _open(tester);
+      await _toggleCompose(tester);
+      await _chip(tester, '4K');
+      await _chip(tester, 'Fixed');
+
+      final pane = tester.getRect(find.byType(PageBackground));
+      final board = tester.getRect(find.byType(PageGrid));
+      expect(board.height, lessThanOrEqualTo(pane.height),
+          reason: 'the whole canvas fits in the pane');
+    });
+
+    testWidgets('undo puts the canvas back', (tester) async {
+      await _open(tester);
+      await _toggleCompose(tester);
+      await _chip(tester, '1080p');
+      expect(_frame(tester).width, 1920);
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyZ);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pumpAndSettle();
+      expect(_frame(tester).width, 1600);
     });
   });
 }

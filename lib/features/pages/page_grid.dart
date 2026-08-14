@@ -414,10 +414,15 @@ class _PageGridState extends State<PageGrid> {
         final double height;
         if (widget.frame case final frame?) {
           height = switch (frame.fit) {
-            // A fixed frame is exactly its own height: it is a rectangle
-            // somebody composed, and growing it because something hangs over
-            // the edge would silently change the composition.
-            DashboardFrameFit.fixed => frame.height,
+            // A fixed canvas *is* its own height — that is what a wall display
+            // shows. But while you are editing, a card that has fallen outside
+            // it has to stay reachable: shrinking the canvas under a page must
+            // not swallow the cards it no longer covers, or the control that
+            // resizes it is a control that silently deletes work. So the board
+            // grows to reach them and the canvas edge is drawn where it really
+            // is.
+            DashboardFrameFit.fixed =>
+              widget.editing ? math.max(frame.height, reach) : frame.height,
             // A scrolling frame's height is a starting point, so the board is
             // whichever is greater — the page grows past it.
             DashboardFrameFit.scroll => math.max(frame.height, reach),
@@ -563,10 +568,15 @@ class _PageGridState extends State<PageGrid> {
         // animates smoothly. Cards snap back to their live selves on release.
         final gesturing = _dragId != null || _resizeId != null;
 
+        // Room to drop a card below the last row while editing — but never on
+        // a fixed canvas, which is exactly its own height. Extra board there
+        // would mean the thing you are composing is not the thing being
+        // measured: Fit would scale to include the slack, and the bottom edge
+        // of the design would not be the bottom edge of the page.
+        final fixedCanvas = widget.frame?.fit == DashboardFrameFit.fixed;
         final board = SizedBox(
           width: double.infinity,
-          // Room to drop a card below the last row while editing.
-          height: height + (widget.editing ? stepY * 2 : 0),
+          height: height + (widget.editing && !fixedCanvas ? stepY * 2 : 0),
           child: Stack(
             children: [
               // The column grid, behind everything, while editing. A card's
@@ -657,6 +667,28 @@ class _PageGridState extends State<PageGrid> {
                           color: t.accent.active.withValues(alpha: 0.06),
                           border: Border.all(
                               color: t.accent.active, width: t.stroke.width),
+                        ),
+                      ),
+                    ),
+                  ),
+
+              // Where the canvas actually ends, when something is outside it.
+              // Without this the page simply looks longer than it is, and the
+              // cards past the edge look placed rather than stranded.
+              if (widget.frame case final frame?)
+                if (widget.editing && reach > frame.height + 0.5)
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    top: frame.height,
+                    bottom: 0,
+                    child: IgnorePointer(
+                      child: CustomPaint(
+                        painter: _OffCanvas(
+                          colour: t.surface.onBaseMuted,
+                          veil: t.surface.sunken.withValues(alpha: 0.55),
+                          style: t.text.captionStyle
+                              .copyWith(color: t.surface.onBaseMuted),
                         ),
                       ),
                     ),
@@ -942,6 +974,41 @@ class _ColumnGuides extends CustomPainter {
 /// anything?" and a stub between two cards makes you find the other end
 /// yourself. One line per position, however many cards share it — three cards
 /// on the same left edge is one guide, not three drawn on top of each other.
+/// Everything past the bottom edge of a fixed canvas.
+///
+/// Veiled rather than clipped. Clipping is what a wall display does — it shows
+/// the canvas and nothing else — but in the designer it would mean a card
+/// vanishing the moment you shortened the canvas, with no way to find it and
+/// nothing to say it had happened. This shows where the page ends and leaves
+/// what is beyond it visible, dimmed, and still draggable back.
+class _OffCanvas extends CustomPainter {
+  _OffCanvas({required this.colour, required this.veil, required this.style});
+
+  final Color colour;
+  final Color veil;
+  final TextStyle style;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.drawRect(Offset.zero & size, Paint()..color = veil);
+    canvas.drawLine(
+      Offset.zero,
+      Offset(size.width, 0),
+      Paint()
+        ..color = colour
+        ..strokeWidth = 1,
+    );
+    final text = TextPainter(
+      text: TextSpan(text: 'Off the canvas', style: style),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    text.paint(canvas, const Offset(6, 4));
+  }
+
+  @override
+  bool shouldRepaint(_OffCanvas old) => old.veil != veil;
+}
+
 /// A dashed frame around the group in hand, with its name on the corner.
 ///
 /// Dashed rather than solid because it is not an edge of anything drawn — no

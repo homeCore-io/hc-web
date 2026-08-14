@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/dashboard/canvas_view.dart';
+import '../../core/dashboard/frame.dart';
 import '../../core/dashboard/free_layer.dart';
 import '../../core/dashboard/grid_engine.dart';
 import '../../core/dashboard/groups.dart';
@@ -65,6 +66,7 @@ class DesignerShell extends StatefulWidget {
     required this.cardCount,
     required this.onFlowChanged,
     required this.onComposeChanged,
+    required this.onFrameChanged,
     required this.snapToGrid,
     required this.onSnapChanged,
     required this.onAlign,
@@ -128,6 +130,9 @@ class DesignerShell extends StatefulWidget {
 
   /// Turn composition on for this layout, or hand it back to the grid.
   final ValueChanged<bool>? onComposeChanged;
+
+  /// Resize the canvas, or change what its height promises.
+  final ValueChanged<DashboardFrame>? onFrameChanged;
 
   /// Whether a composed drag is pulled to the cell edges.
   final bool snapToGrid;
@@ -309,6 +314,15 @@ class _DesignerShellState extends State<DesignerShell> {
     }
   }
 
+  /// Everything in the window that is not canvas: the top bar, the layers
+  /// strip, the status bar and the horizontal ruler.
+  ///
+  /// An estimate, and deliberately one. Measuring it exactly would mean laying
+  /// the canvas out twice — and the only thing it feeds is the *initial* scale
+  /// of a fixed canvas, where being a little conservative shows the whole page
+  /// with a margin rather than clipping it.
+  static const _chromeHeight = 150.0;
+
   /// 50% to 200%, the range §3.1 asks for so a wall layout is designable on a
   /// laptop. Fit can go below the floor — a 1600px canvas in a 700px pane is
   /// 44% — because Fit is a promise to show the whole width, and refusing to
@@ -359,12 +373,36 @@ class _DesignerShellState extends State<DesignerShell> {
           // scale never applied to; now it simply starts at 1:1 like the rest.
           final width =
               widget.canvasWidth ?? (available <= 0 ? 1.0 : available);
-          final fit = (available / width).clamp(_minZoom, 1.0);
-          final scale = _zoom ?? fit;
 
           final layout = widget.layouts
               ?.where((l) => l.breakpoint == widget.breakpoint)
               .firstOrNull;
+
+          // Fit means *show the whole thing*, and for a fixed canvas the whole
+          // thing has a height. Width alone would cut the bottom off a wall
+          // layout — which is precisely the arrangement nobody can check
+          // without walking across the room to the wall it is for.
+          //
+          // The pane's height is not known until the row below has laid out, so
+          // it is taken from the frame we are in: everything above and below
+          // the canvas is fixed chrome, and being a few pixels out here shows
+          // up as a scale, not as a broken layout.
+          final double fit;
+          if (layout?.frame case final composed?
+              when composed.fit == DashboardFrameFit.fixed) {
+            final tall = frame.maxHeight - _chromeHeight - t.space.lg * 2;
+            // **Not clamped to the zoom floor.** A 4K canvas in this pane is
+            // 22%, and refusing to go below 50% would show three quarters of a
+            // wall while still calling itself Fit. The floor exists so the
+            // *stops* stay usable; Fit is a promise about what you can see, and
+            // a promise that quietly stops applying at some size is worse than
+            // a small number. Only a hair above zero, so a preposterous canvas
+            // still has a scale rather than vanishing.
+            fit = frameScale(composed, Size(available, tall)).clamp(0.02, 1.0);
+          } else {
+            fit = (available / width).clamp(_minZoom, 1.0);
+          }
+          final scale = _zoom ?? fit;
           // The canvas in pixels, at 1:1. Framing works in these units and
           // applies the scale itself, so a selection lands in the same place
           // whatever you were standing at when you asked.
@@ -546,6 +584,7 @@ class _DesignerShellState extends State<DesignerShell> {
                                   cardCount: widget.cardCount,
                                   onFlowChanged: widget.onFlowChanged,
                                   onComposeChanged: widget.onComposeChanged,
+                                  onFrameChanged: widget.onFrameChanged,
                                   snapToGrid: widget.snapToGrid,
                                   onSnapChanged: widget.onSnapChanged,
                                   onBackgroundChanged:

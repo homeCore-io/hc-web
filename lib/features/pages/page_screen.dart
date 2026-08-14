@@ -586,6 +586,57 @@ class _PageScreenState extends ConsumerState<PageScreen> {
     });
   }
 
+  /// Resize the canvas, or change what its height promises.
+  ///
+  /// **Nothing on the page moves.** Making a canvas bigger does not move what
+  /// is drawn on it — that is what a canvas is. The alternative, scaling every
+  /// rectangle to match, would turn typing in a number field into an edit that
+  /// touched every element on the page, and there is no way to do that *and*
+  /// leave a design somebody nudged into place alone.
+  ///
+  /// The cells are recomputed, because they must be: a cell is a fraction of
+  /// the canvas width, so the same rectangle is a different column once the
+  /// canvas is wider. Leaving them stale would let the snapped fallback drift
+  /// away from the composition it is supposed to approximate — and core
+  /// validates the stale one.
+  void _setFrame(DashboardFrame frame, DashboardBreakpoint breakpoint) {
+    if (_draftItems == null || _draftLayouts == null) return;
+    _pushUndo('Resize the canvas', coalesce: 'frame:${breakpoint.name}');
+    final geometry = CanvasGeometry(
+      width: frame.width,
+      columns: _draftLayouts!
+              .where((l) => l.breakpoint == breakpoint)
+              .map((l) => l.columns)
+              .firstOrNull ??
+          _defaultColumns,
+      rowHeight: _draftLayouts!
+              .where((l) => l.breakpoint == breakpoint)
+              .map((l) => l.rowHeight)
+              .firstOrNull ??
+          _defaultRowHeight,
+      gap: _draftLayouts!
+              .where((l) => l.breakpoint == breakpoint)
+              .map((l) => l.gap)
+              .firstOrNull ??
+          _defaultGap,
+    );
+    setState(() {
+      _draftLayouts = [
+        for (final l in _draftLayouts!)
+          if (l.breakpoint == breakpoint) l.copyWith(frame: frame) else l,
+      ];
+      _commit([
+        for (final i in _draftItems!)
+          if (i.rect case final rect?)
+            geometry
+                .snapToCells(i.id, rect, floating: i.floating, z: i.z)
+                .copyWith(rect: rect)
+          else
+            i,
+      ]);
+    });
+  }
+
   /// A composed element was put somewhere.
   ///
   /// Deliberately not through [_apply]: that runs the packing engine, which is
@@ -1642,6 +1693,7 @@ class _PageScreenState extends ConsumerState<PageScreen> {
               _touched.add(breakpoint);
             }),
             onComposeChanged: (on) => _setComposed(on, breakpoint, columns),
+            onFrameChanged: (frame) => _setFrame(frame, breakpoint),
             snapToGrid: _snapToGrid,
             onSnapChanged: (on) => setState(() => _snapToGrid = on),
           );
