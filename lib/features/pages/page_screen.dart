@@ -378,7 +378,18 @@ class _PageScreenState extends ConsumerState<PageScreen> {
   /// collections and a set. Bounded, because this is an undo affordance and not
   /// a document history.
   final List<_Snapshot> _undo = [];
+
+  /// The states undo has walked back past, newest last.
+  ///
+  /// There was no redo at all before this: undo was a one-way stack, so an
+  /// undo pressed once too often cost you the change with no way back. A
+  /// history panel over that would have been a list you can only walk in one
+  /// direction, which is not a history — it is a receipt.
+  final List<_Snapshot> _redo = [];
   static const _undoDepth = 20;
+
+  /// Whether the oldest state we hold has been dropped off the end of the cap.
+  bool _trimmed = false;
 
   /// Cards added during this edit, and not yet settled on every hand-arranged
   /// layout.
@@ -486,6 +497,9 @@ class _PageScreenState extends ConsumerState<PageScreen> {
       _contentDirty = false;
       _draftBackground = null;
       _undo.clear();
+      _redo.clear();
+      _trimmed = false;
+      _inside = null;
       _pendingPlacement.clear();
       _settled.clear();
     });
@@ -532,42 +546,124 @@ class _PageScreenState extends ConsumerState<PageScreen> {
   /// one kept, because that is the state before you started typing.
   void _pushUndo(String label, {String coalesce = ''}) {
     if (_draftItems == null) return;
+    // A new edit abandons the future. Keeping it would mean redo replaying a
+    // change onto a page that no longer has the thing it changed.
+    _redo.clear();
     if (coalesce.isNotEmpty &&
         _undo.isNotEmpty &&
         _undo.last.coalesce == coalesce) {
       return;
     }
-    _undo.add(_Snapshot(
-      label: label,
-      coalesce: coalesce,
-      items: List<GridItem>.of(_draftItems!),
-      layouts: List<DashboardLayout>.of(_draftLayouts ?? const []),
-      widgets: Map<String, DashboardWidgetModel>.of(_draftWidgets ?? const {}),
-      touched: Set<DashboardBreakpoint>.of(_touched),
-      contentDirty: _contentDirty,
-      selected: Set<String>.of(_selection),
-      background: _draftBackground,
-    ));
-    if (_undo.length > _undoDepth) _undo.removeAt(0);
+    _undo.add(_snapshotNow(label, coalesce));
+    if (_undo.length > _undoDepth) {
+      _undo.removeAt(0);
+      // The oldest state we hold is no longer the one the page opened in, and
+      // the history panel has to stop claiming it is.
+      _trimmed = true;
+    }
   }
 
-  void _undoLast() {
+  /// The draft exactly as it stands, labelled.
+  _Snapshot _snapshotNow(String label, String coalesce) => _Snapshot(
+        label: label,
+        coalesce: coalesce,
+        items: List<GridItem>.of(_draftItems ?? const []),
+        layouts: List<DashboardLayout>.of(_draftLayouts ?? const []),
+        widgets:
+            Map<String, DashboardWidgetModel>.of(_draftWidgets ?? const {}),
+        touched: Set<DashboardBreakpoint>.of(_touched),
+        contentDirty: _contentDirty,
+        selected: Set<String>.of(_selection),
+        background: _draftBackground,
+      );
+
+  /// Put the draft back to [snap], without a [setState] of its own.
+  ///
+  /// Callers wrap a whole move in one, because jumping several steps along the
+  /// history restores several snapshots and only the last one is worth drawing.
+  void _restore(_Snapshot snap) {
+    _draftItems = snap.items;
+    _draftLayouts = snap.layouts;
+    _draftWidgets = snap.widgets;
+    _touched
+      ..clear()
+      ..addAll(snap.touched);
+    _contentDirty = snap.contentDirty;
+    _draftBackground = snap.background;
+    // Restored too, but only if it survived — a snapshot taken before a card
+    // was added has no such card to select.
+    _selection
+      ..clear()
+      ..addAll(snap.selected.where(snap.widgets.containsKey));
+    // Standing inside a group that the snapshot has no members for is standing
+    // nowhere, and every click would then behave as though it were somewhere.
+    if (_inside case final here?) {
+      if (!snap.widgets.values.any((w) {
+        final path = groupOf(w.config);
+        return path != null && isUnder(path, here);
+      })) {
+        _inside = null;
+      }
+    }
+  }
+
+  /// One step back. The state being left becomes the one redo returns to.
+  void _stepBack() {
     if (_undo.isEmpty) return;
     final snap = _undo.removeLast();
+    // Labelled with the edit it undoes, so redo can name the same thing undo
+    // just named — they are two directions along one move, not two moves.
+    _redo.add(_snapshotNow(snap.label, snap.coalesce));
+    _restore(snap);
+  }
+
+  void _stepForward() {
+    if (_redo.isEmpty) return;
+    final snap = _redo.removeLast();
+    _undo.add(_snapshotNow(snap.label, snap.coalesce));
+    _restore(snap);
+  }
+
+  void _undoLast() => setState(_stepBack);
+  void _redoNext() => setState(_stepForward);
+
+  /// Everything this session has been through, oldest first.
+  ///
+  /// The panel shows *positions*, not edits: row 0 is where the page started
+  /// and every row after it is named for the change that produced it. That is
+  /// why the count is one more than the number of edits — you can stand before
+  /// the first one.
+  List<HistoryEntry> get _historyEntries {
+    if (_draftItems == null) return const [];
+    return [
+      HistoryEntry(
+        // Honest about the cap: once the oldest snapshot has been dropped this
+        // is no longer the state the page opened in, and saying "Opened" would
+        // promise a place you can no longer get back to.
+        label: _trimmed ? 'Earlier changes' : 'Opened',
+        future: false,
+      ),
+      for (var i = 0; i < _undo.length; i++)
+        HistoryEntry(label: _undo[i].label, future: false),
+      for (var i = _redo.length - 1; i >= 0; i--)
+        HistoryEntry(label: _redo[i].label, future: true),
+    ];
+  }
+
+  /// Which row of [_historyEntries] the draft is standing on.
+  int get _historyAt => _undo.length;
+
+  /// Walk to [index] by stepping, so one move and twenty are the same code.
+  void _jumpHistory(int index) {
+    final target = index.clamp(0, _undo.length + _redo.length);
+    if (target == _historyAt) return;
     setState(() {
-      _draftItems = snap.items;
-      _draftLayouts = snap.layouts;
-      _draftWidgets = snap.widgets;
-      _touched
-        ..clear()
-        ..addAll(snap.touched);
-      _contentDirty = snap.contentDirty;
-      _draftBackground = snap.background;
-      // Restored too, but only if it survived — a snapshot taken before a card
-      // was added has no such card to select.
-      _selection
-        ..clear()
-        ..addAll(snap.selected.where(snap.widgets.containsKey));
+      while (_historyAt > target) {
+        _stepBack();
+      }
+      while (_historyAt < target) {
+        _stepForward();
+      }
     });
   }
 
@@ -1437,6 +1533,12 @@ class _PageScreenState extends ConsumerState<PageScreen> {
                 _contentDirty = true;
               });
             },
+            canRedo: _redo.isNotEmpty,
+            redoLabel: _redo.isEmpty ? null : _redo.last.label,
+            onRedo: _redoNext,
+            history: _historyEntries,
+            historyAt: _historyAt,
+            onJumpHistory: _jumpHistory,
             canUndo: _undo.isNotEmpty,
             undoLabel: _undo.isEmpty ? null : _undo.last.label,
             onUndo: _undoLast,

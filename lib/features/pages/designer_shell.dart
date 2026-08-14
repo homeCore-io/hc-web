@@ -82,6 +82,12 @@ class DesignerShell extends StatefulWidget {
     required this.canUndo,
     required this.undoLabel,
     required this.onUndo,
+    required this.canRedo,
+    required this.redoLabel,
+    required this.onRedo,
+    required this.history,
+    required this.historyAt,
+    required this.onJumpHistory,
     required this.onBackgroundChanged,
     this.onStack,
   });
@@ -159,6 +165,18 @@ class DesignerShell extends StatefulWidget {
   /// What pressing it will undo, for the tooltip. Null when there is nothing.
   final String? undoLabel;
   final VoidCallback onUndo;
+
+  /// The other direction. Undo without it is a stack you can walk off the end
+  /// of — one press too many and the change is gone.
+  final bool canRedo;
+  final String? redoLabel;
+  final VoidCallback onRedo;
+
+  /// Every position the draft has stood in, oldest first, and which one it is
+  /// standing in now.
+  final List<HistoryEntry> history;
+  final int historyAt;
+  final ValueChanged<int> onJumpHistory;
 
   /// What the page sits on.
   final ValueChanged<DashboardBackground> onBackgroundChanged;
@@ -374,6 +392,12 @@ class _DesignerShellState extends State<DesignerShell> {
                 canUndo: widget.canUndo,
                 undoLabel: widget.undoLabel,
                 onUndo: widget.onUndo,
+                canRedo: widget.canRedo,
+                redoLabel: widget.redoLabel,
+                onRedo: widget.onRedo,
+                history: widget.history,
+                historyAt: widget.historyAt,
+                onJumpHistory: widget.onJumpHistory,
               ),
               if (widget.consequence case final line?)
                 Container(
@@ -416,6 +440,8 @@ class _DesignerShellState extends State<DesignerShell> {
                         },
                         onGroup: widget.onGroup,
                         onUngroup: widget.onUngroup,
+                        onUndo: widget.canUndo ? widget.onUndo : null,
+                        onRedo: widget.canRedo ? widget.onRedo : null,
                         child: _Ruled(
                           geometry: geometry,
                           scale: scale,
@@ -600,6 +626,12 @@ class _TopBar extends StatelessWidget {
     required this.canUndo,
     required this.undoLabel,
     required this.onUndo,
+    required this.canRedo,
+    required this.redoLabel,
+    required this.onRedo,
+    required this.history,
+    required this.historyAt,
+    required this.onJumpHistory,
   });
 
   final String title;
@@ -634,6 +666,12 @@ class _TopBar extends StatelessWidget {
   final bool canUndo;
   final String? undoLabel;
   final VoidCallback onUndo;
+  final bool canRedo;
+  final String? redoLabel;
+  final VoidCallback onRedo;
+  final List<HistoryEntry> history;
+  final int historyAt;
+  final ValueChanged<int> onJumpHistory;
 
   @override
   Widget build(BuildContext context) {
@@ -684,9 +722,22 @@ class _TopBar extends StatelessWidget {
             // verified by rasterising the font, never guessed.
             icon: const Icon(Icons.undo, size: 16),
             tooltip: canUndo
-                ? 'Undo ${undoLabel!.toLowerCase()}'
+                ? 'Undo ${undoLabel!.toLowerCase()}  ·  ctrl Z'
                 : 'Nothing to undo',
             visualDensity: VisualDensity.compact,
+          ),
+          IconButton(
+            onPressed: canRedo ? onRedo : null,
+            icon: const Icon(Icons.redo, size: 16),
+            tooltip: canRedo
+                ? 'Redo ${redoLabel!.toLowerCase()}  ·  ctrl shift Z'
+                : 'Nothing to redo',
+            visualDensity: VisualDensity.compact,
+          ),
+          _HistoryControl(
+            entries: history,
+            at: historyAt,
+            onJump: onJumpHistory,
           ),
           SizedBox(width: t.space.sm),
           // Canvas tools. Align first, because it acts on the thing you have
@@ -1045,6 +1096,8 @@ class _CanvasKeys extends StatelessWidget {
     required this.onPanKey,
     required this.onGroup,
     required this.onUngroup,
+    required this.onUndo,
+    required this.onRedo,
     required this.child,
   });
 
@@ -1060,6 +1113,8 @@ class _CanvasKeys extends StatelessWidget {
   final ValueChanged<bool> onPanKey;
   final VoidCallback? onGroup;
   final VoidCallback? onUngroup;
+  final VoidCallback? onUndo;
+  final VoidCallback? onRedo;
   final Widget child;
 
   void _step(int dx, int dy) => onNudge?.call(dx, dy);
@@ -1111,6 +1166,20 @@ class _CanvasKeys extends StatelessWidget {
             () => onUngroup?.call(),
         const SingleActivator(LogicalKeyboardKey.keyG,
             control: true, shift: true): () => onUngroup?.call(),
+        // Undo had no shortcut at all — it was a button in the top bar and
+        // nothing else, which for the most-pressed key in any editor is a gap
+        // rather than a preference.
+        const SingleActivator(LogicalKeyboardKey.keyZ, meta: true): () =>
+            onUndo?.call(),
+        const SingleActivator(LogicalKeyboardKey.keyZ, control: true): () =>
+            onUndo?.call(),
+        const SingleActivator(LogicalKeyboardKey.keyZ, meta: true, shift: true):
+            () => onRedo?.call(),
+        const SingleActivator(LogicalKeyboardKey.keyZ,
+            control: true, shift: true): () => onRedo?.call(),
+        // The other spelling of redo, which half the world's editors use.
+        const SingleActivator(LogicalKeyboardKey.keyY, control: true): () =>
+            onRedo?.call(),
       },
       // Autofocus, because the canvas is what you are working in the moment the
       // designer opens — a tool whose keyboard needs a click first is a tool
@@ -1458,6 +1527,126 @@ enum CanvasAlign {
       CanvasAlign.right => room,
     };
   }
+}
+
+/// Everywhere the draft has been, as a list you can step back into.
+///
+/// Undo answers *take that back*; this answers *take back the last four*, which
+/// is a different question and the one you have when you look up and find the
+/// page wrong. Pressing undo four times gets there too, but only if you can
+/// count the changes from memory — and the fourth press is the one that goes
+/// too far.
+///
+/// **A popup rather than a rail.** The two panes are already full and the whole
+/// visual interface is due a pass; a third permanent panel would be spending
+/// canvas width on something read a few times an hour. It hangs off the undo
+/// buttons, which is where you look when you want it.
+class _HistoryControl extends StatelessWidget {
+  const _HistoryControl({
+    required this.entries,
+    required this.at,
+    required this.onJump,
+  });
+
+  final List<HistoryEntry> entries;
+  final int at;
+  final ValueChanged<int> onJump;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    // One entry means the page has not been touched: there is nowhere else to
+    // stand and a list of one is a list about nothing.
+    final enabled = entries.length > 1;
+
+    return PopupMenuButton<int>(
+      enabled: enabled,
+      tooltip: enabled ? 'History' : 'Nothing has changed yet',
+      // Opens on the row you are standing on rather than at the top, so a
+      // twenty-deep history does not need scrolling to find *now*.
+      initialValue: at,
+      onSelected: onJump,
+      itemBuilder: (context) => [
+        for (var i = 0; i < entries.length; i++)
+          PopupMenuItem(
+            value: i,
+            height: 32,
+            child: _HistoryRow(entry: entries[i], current: i == at),
+          ),
+      ],
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: t.space.xs),
+        child: Icon(
+          Icons.history,
+          size: 16,
+          color: enabled ? t.surface.onBase : t.surface.onBaseMuted,
+        ),
+      ),
+    );
+  }
+}
+
+class _HistoryRow extends StatelessWidget {
+  const _HistoryRow({required this.entry, required this.current});
+
+  final HistoryEntry entry;
+  final bool current;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    // Three states, and they have to be told apart at a glance: where you are,
+    // what you have done, and what you have undone but could put back.
+    final colour = current
+        ? t.surface.onBase
+        : entry.future
+            ? t.surface.onBaseMuted
+            : t.surface.onBase;
+
+    return Row(
+      children: [
+        SizedBox(
+          width: t.space.md,
+          child: current
+              ? Icon(Icons.chevron_right, size: 14, color: t.accent.active)
+              : null,
+        ),
+        Flexible(
+          child: Text(
+            entry.label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: t.text.captionStyle.copyWith(
+              color: colour,
+              fontWeight: current ? FontWeight.w600 : null,
+              // Struck through, because "undone" is a fact about the change
+              // rather than about how loud it is — dimming alone reads as
+              // *less important*, which these are not.
+              decoration: entry.future ? TextDecoration.lineThrough : null,
+              decorationColor: t.surface.onBaseMuted,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// One place the draft has stood, for the history panel.
+///
+/// A *position*, not an edit — which is why there is always one more of these
+/// than there are changes: you can stand before the first one.
+class HistoryEntry {
+  const HistoryEntry({required this.label, required this.future});
+
+  /// The change that produced this state, or how the page began.
+  final String label;
+
+  /// Ahead of where the draft is now: somewhere undo has been walked back
+  /// past, and redo can return to. Shown, rather than dropped, because a
+  /// history that hides what you just undid cannot be used to change your mind
+  /// twice.
+  final bool future;
 }
 
 /// The two entries in the zoom menu that are rules rather than numbers.
