@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/dashboard/breakpoints.dart';
 import '../../core/dashboard/free_layer.dart';
 import '../../core/dashboard/grid_engine.dart';
+import '../../core/dashboard/groups.dart';
 import '../../core/dashboard/layout_write.dart';
 import '../../core/dashboard/widget_registry.dart';
 import '../../core/models/dashboard.dart';
@@ -126,23 +127,204 @@ class _PageScreenState extends ConsumerState<PageScreen> {
   /// not empty.
   String? get _selectedCard => _selection.length == 1 ? _selection.first : null;
 
+  /// The group you have stepped into, or null at the top of the page.
+  ///
+  /// A group is held as one thing, so getting at a single member means going
+  /// inside first. This is where you are standing; it is view state like the
+  /// zoom, never saved, and it survives no longer than the session.
+  String? _inside;
+
+  /// What group each element belongs to, by id.
+  Map<String, String?> get _paths => {
+        for (final e
+            in (_draftWidgets ?? const <String, DashboardWidgetModel>{})
+                .entries)
+          e.key: groupOf(e.value.config),
+      };
+
+  /// What clicking [id] on the canvas actually puts in hand.
+  ///
+  /// The element itself when it is loose or when you are already standing in
+  /// its group; otherwise every member of the group at the next level down.
+  Set<String> _clickHolds(String id, Map<String, String?> paths) {
+    final target = clickTarget(paths[id], _inside);
+    return target == null ? {id} : membersOf(paths, target);
+  }
+
   /// Replace the selection, or add to it — shift-click, in one place.
-  void _select(String? id, {bool additive = false}) {
+  ///
+  /// [direct] takes the element and only the element, whatever group it is in.
+  /// The elements strip addresses things individually — that is what a layers
+  /// panel is for — while the canvas holds clusters.
+  void _select(String? id, {bool additive = false, bool direct = false}) {
     setState(() {
       if (id == null) {
         _selection.clear();
         return;
       }
+      final paths = _paths;
+      // Reaching for something outside the group you are standing in steps you
+      // out of it. Ignoring the click instead would be a canvas that stops
+      // responding for reasons nothing on screen explains.
+      if (_inside case final here?) {
+        final path = paths[id];
+        if (path == null || !isUnder(path, here)) _inside = null;
+      }
+      final holds = direct ? {id} : _clickHolds(id, paths);
       if (!additive) {
         _selection
           ..clear()
-          ..add(id);
+          ..addAll(holds);
         return;
       }
       // Shift-clicking something already held takes it back out, which is how
-      // you fix a selection you overshot without starting again.
-      if (!_selection.remove(id)) _selection.add(id);
+      // you fix a selection you overshot without starting again. A group goes
+      // in and out whole.
+      if (holds.every(_selection.contains)) {
+        _selection.removeAll(holds);
+      } else {
+        _selection.addAll(holds);
+      }
     });
+  }
+
+  /// Step into the group under [id], so its members can be picked apart.
+  ///
+  /// Double-click, the gesture every drawing tool uses for it. Does nothing for
+  /// a loose element or one you are already as deep as.
+  void _enterGroup(String id) {
+    final paths = _paths;
+    final target = clickTarget(paths[id], _inside);
+    if (target == null) return;
+    setState(() {
+      _inside = target;
+      final holds = _clickHolds(id, paths);
+      _selection
+        ..clear()
+        ..addAll(holds);
+    });
+  }
+
+  /// Step back out one level, holding the group you were inside.
+  ///
+  /// Holding it rather than letting go: stepping out of a group to move the
+  /// whole thing is the reason you step out, and an empty selection would make
+  /// you click it again.
+  bool _leaveGroup() {
+    final here = _inside;
+    if (here == null) return false;
+    setState(() {
+      _inside = stepOut(here);
+      _selection
+        ..clear()
+        ..addAll(membersOf(_paths, here));
+    });
+    return true;
+  }
+
+  /// The single group every selected element is in, or null when there is not
+  /// one — which is what decides whether there is anything to name or dissolve.
+  String? get _groupInHand => _selection.isEmpty
+      ? null
+      : commonGroup(_selection.map((id) => _paths[id]));
+
+  /// The box to draw around the group in hand, and what to call it.
+  ///
+  /// Null unless the whole of one group is held: a partial selection inside a
+  /// group is not a group, and framing it would draw a container around
+  /// something that is not one.
+  (GridItem, String)? get _groupOutline {
+    final target = _groupInHand;
+    if (target == null) return null;
+    final members = membersOf(_paths, target);
+    if (members.length != _selection.length) return null;
+    final items = [
+      for (final i in _draftItems ?? const <GridItem>[])
+        if (members.contains(i.id)) i,
+    ];
+    if (items.isEmpty) return null;
+    var x = items.first.x, y = items.first.y;
+    var right = items.first.right, bottom = items.first.bottom;
+    for (final i in items) {
+      if (i.x < x) x = i.x;
+      if (i.y < y) y = i.y;
+      if (i.right > right) right = i.right;
+      if (i.bottom > bottom) bottom = i.bottom;
+    }
+    return (
+      GridItem(id: target, x: x, y: y, w: right - x, h: bottom - y),
+      // The name alone, not the path: the frame is drawn where the group is, so
+      // where it sits is already on screen.
+      nameOf(target),
+    );
+  }
+
+  /// Write a new path onto a set of elements, as one undoable edit.
+  void _writePaths(String label, Map<String, String?> next) {
+    final widgets = _draftWidgets;
+    if (widgets == null || next.isEmpty) return;
+    _pushUndo(label);
+    setState(() {
+      final updated = {...widgets};
+      for (final entry in next.entries) {
+        final model = updated[entry.key];
+        if (model == null) continue;
+        updated[entry.key] =
+            model.copyWith(config: withGroup(model.config, entry.value));
+      }
+      _draftWidgets = updated;
+      _contentDirty = true;
+    });
+  }
+
+  /// Hold these as one thing from now on.
+  void _groupSelection() {
+    if (_selection.isEmpty) return;
+    final paths = _paths;
+    final name = freshName(namesIn(paths.values, _inside));
+    final path = join(_inside, name);
+    _writePaths('Group ${_selection.length} elements', {
+      for (final id in _selection) id: regrouped(paths[id], path, _inside),
+    });
+  }
+
+  /// Dissolve the group in hand.
+  ///
+  /// Every member of it, not only what is selected: the group is going away, so
+  /// leaving part of the page still pointing at it would leave a group that
+  /// exists and cannot be selected.
+  void _ungroupSelection() {
+    final target = _groupInHand;
+    if (target == null) return;
+    final paths = _paths;
+    _writePaths('Ungroup ${nameOf(target)}', {
+      for (final id in membersOf(paths, target))
+        id: ungrouped(paths[id], target),
+    });
+    // Standing inside what was just dissolved is standing nowhere.
+    if (_inside case final here?) {
+      if (isUnder(here, target)) setState(() => _inside = stepOut(target));
+    }
+  }
+
+  /// Rename the group in hand, carrying everything under it.
+  void _renameGroup(String desired) {
+    final target = _groupInHand;
+    if (target == null) return;
+    final paths = _paths;
+    final siblings = namesIn(paths.values, parentOf(target))
+      ..remove(nameOf(target));
+    final to = join(parentOf(target), uniqueName(desired, siblings));
+    if (to == target) return;
+    _writePaths('Rename ${nameOf(target)}', {
+      for (final id in membersOf(paths, target))
+        id: renamedPath(paths[id], target, to),
+    });
+    if (_inside case final here?) {
+      if (isUnder(here, target)) {
+        setState(() => _inside = renamedPath(here, target, to));
+      }
+    }
   }
 
   bool _saving = false;
@@ -1102,12 +1284,20 @@ class _PageScreenState extends ConsumerState<PageScreen> {
                     // Shift keeps what you had; a plain band starts again, the
                     // same rule a click follows.
                     if (!additive) _selection.clear();
-                    _selection.addAll(caught);
+                    // Clipping one member of a group catches the group, the
+                    // same rule a click follows — a band that took three of a
+                    // cluster's four cards would then move three of them.
+                    final paths = _paths;
+                    for (final id in caught) {
+                      _selection.addAll(_clickHolds(id, paths));
+                    }
                   }),
                   onMenu: (id, at) => _cardMenu(id, at, columns),
                   onSelect: hasInspector || widget.designer
                       ? (id, additive) => _select(id, additive: additive)
                       : null,
+                  onEnterGroup: widget.designer ? _enterGroup : null,
+                  groupOutline: widget.designer ? _groupOutline : null,
                   selectedIds: _selection,
                   onDropCard: (payload, x, y) {
                     if (payload is DashboardWidgetModel) {
@@ -1149,14 +1339,31 @@ class _PageScreenState extends ConsumerState<PageScreen> {
               }
               _select(null);
             },
-            onDeselect: () => _select(null),
+            // Escape steps out of a group before it lets go of anything: the
+            // way out of something you went into is the first thing it should
+            // mean, and letting go as well would cost you the selection you
+            // stepped out to work on.
+            onDeselect: () {
+              if (_leaveGroup()) return;
+              _select(null);
+            },
+            groupInHand: _groupInHand,
+            inside: _inside,
+            onGroup: _selection.isEmpty ? null : _groupSelection,
+            onUngroup: _groupInHand == null ? null : _ungroupSelection,
+            onRenameGroup: _groupInHand == null ? null : _renameGroup,
+            onEnterGroup: _groupInHand == null
+                ? null
+                : () => _enterGroup(_selection.first),
             onSave: () => _save(dashboard),
             canvas: canvas(),
             canvasWidth: previewWidthFor(breakpoint),
             cardCount: items.length,
             items: items,
             widgetsById: widgetsById,
-            onSelectCard: (id) => _select(id),
+            // Directly: the strip is where you address one element, whatever
+            // group it is in. On the canvas a click holds the cluster.
+            onSelectCard: (id) => _select(id, direct: true),
             onRename: (name) => setState(() {
               final id = _selectedCard;
               final current = _draftWidgets?[id];

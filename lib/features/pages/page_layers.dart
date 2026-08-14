@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/dashboard/grid_engine.dart';
+import '../../core/dashboard/groups.dart' as groups;
 import '../../core/dashboard/widget_registry.dart';
 import '../../core/models/dashboard.dart';
 import '../../design/hc_icons.dart';
@@ -145,6 +146,7 @@ class PageLayers extends StatelessWidget {
                     icon: WidgetRegistry.lookup(model?.type ?? '')?.icon ??
                         Icons.widgets_outlined,
                     selected: item.id == selectedId,
+                    group: groups.groupOf(model?.config ?? const {}),
                     onTap: () => onSelect(item.id),
                   );
                 },
@@ -162,6 +164,7 @@ class _LayerChip extends StatelessWidget {
     required this.icon,
     required this.selected,
     required this.onTap,
+    this.group,
     this.floating = false,
   });
 
@@ -169,6 +172,16 @@ class _LayerChip extends StatelessWidget {
   final IconData icon;
   final bool selected;
   final VoidCallback onTap;
+
+  /// The group this element is in, if any.
+  ///
+  /// Named on the chip rather than nested in the strip: this is one row by
+  /// design — a tall list here takes height off the canvas — and a tree cannot
+  /// be one row. Naming is what the strip is for, so it names the group too.
+  /// Tapping still takes the element itself; picking things apart individually
+  /// is precisely what a layers panel is for, and the canvas is where a click
+  /// holds the cluster.
+  final String? group;
 
   /// Above the grid, and therefore able to sit on top of something. Marked
   /// rather than merely ordered: a strip of identical chips in a new order is
@@ -206,6 +219,21 @@ class _LayerChip extends StatelessWidget {
                   size: 13,
                   color: selected ? t.accent.active : t.surface.onBaseMuted),
               SizedBox(width: t.space.xs),
+              if (group case final path?) ...[
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 84),
+                  child: Text(
+                    groups.nameOf(path),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style:
+                        t.text.captionStyle.copyWith(color: t.accent.primary),
+                  ),
+                ),
+                Text(' / ',
+                    style: t.text.captionStyle
+                        .copyWith(color: t.surface.onBaseMuted)),
+              ],
               ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 130),
                 child: Text(

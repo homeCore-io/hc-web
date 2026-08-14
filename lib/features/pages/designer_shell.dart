@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/dashboard/canvas_view.dart';
 import '../../core/dashboard/free_layer.dart';
 import '../../core/dashboard/grid_engine.dart';
+import '../../core/dashboard/groups.dart';
 import '../../core/models/dashboard.dart';
 import '../../design/hc_icons.dart';
 import '../../design/tokens.dart';
@@ -67,6 +68,12 @@ class DesignerShell extends StatefulWidget {
     this.onNudge,
     this.onDuplicate,
     this.onSelectAll,
+    this.onGroup,
+    this.onUngroup,
+    this.onRenameGroup,
+    this.onEnterGroup,
+    required this.groupInHand,
+    required this.inside,
     required this.items,
     required this.widgetsById,
     required this.onSelectCard,
@@ -124,6 +131,20 @@ class DesignerShell extends StatefulWidget {
 
   /// Everything on this layout.
   final VoidCallback? onSelectAll;
+
+  /// Hold the selection as one thing, or stop.
+  final VoidCallback? onGroup;
+  final VoidCallback? onUngroup;
+  final ValueChanged<String>? onRenameGroup;
+
+  /// Step into the group in hand, so its members can be picked apart.
+  final VoidCallback? onEnterGroup;
+
+  /// The one group every selected element is in, as a path, or null.
+  final String? groupInHand;
+
+  /// The group you have stepped into, as a path. Null at the top of the page.
+  final String? inside;
 
   /// What is on the page, for the layers strip.
   final List<GridItem> items;
@@ -388,6 +409,8 @@ class _DesignerShellState extends State<DesignerShell> {
                           if (down == _panArmed) return;
                           setState(() => _panArmed = down);
                         },
+                        onGroup: widget.onGroup,
+                        onUngroup: widget.onUngroup,
                         child: _PanArea(
                           armed: _panArmed,
                           onPan: _panBy,
@@ -455,6 +478,11 @@ class _DesignerShellState extends State<DesignerShell> {
                               onAlign: widget.onAlign,
                               onRemove: widget.onRemoveSelected,
                               onDeselect: widget.onDeselect,
+                              groupInHand: widget.groupInHand,
+                              onGroup: widget.onGroup,
+                              onUngroup: widget.onUngroup,
+                              onRenameGroup: widget.onRenameGroup,
+                              onEnterGroup: widget.onEnterGroup,
                             )
                           : widget.selected == null
                               ? PageInspector(
@@ -504,6 +532,8 @@ class _DesignerShellState extends State<DesignerShell> {
                 dirty: widget.dirty,
                 saving: widget.saving,
                 panning: _panArmed,
+                groupInHand: widget.groupInHand,
+                inside: widget.inside,
               ),
             ],
           );
@@ -699,6 +729,134 @@ class _TopBar extends StatelessWidget {
   }
 }
 
+/// Grouping, in the pane that already talks about a crowd.
+///
+/// Two states rather than two panels: a selection that is not yet a group
+/// offers to become one, and a selection that *is* one names itself and offers
+/// the two things you can do to it. Splitting these into separate surfaces
+/// would hide the only control that creates a group behind knowing it exists.
+class _GroupSection extends StatefulWidget {
+  const _GroupSection({
+    required this.path,
+    required this.count,
+    required this.onGroup,
+    required this.onUngroup,
+    required this.onRename,
+    required this.onEnter,
+  });
+
+  final String? path;
+  final int count;
+  final VoidCallback? onGroup;
+  final VoidCallback? onUngroup;
+  final ValueChanged<String>? onRename;
+  final VoidCallback? onEnter;
+
+  @override
+  State<_GroupSection> createState() => _GroupSectionState();
+}
+
+class _GroupSectionState extends State<_GroupSection> {
+  late final TextEditingController _name =
+      TextEditingController(text: _label());
+
+  String _label() => widget.path == null ? '' : nameOf(widget.path!);
+
+  @override
+  void didUpdateWidget(_GroupSection old) {
+    super.didUpdateWidget(old);
+    // Only when the group itself changed. Rewriting the field on every rebuild
+    // would fight the person typing in it, and a rename lands as a new path —
+    // so the check has to be on the path, not on the text.
+    if (old.path != widget.path) _name.text = _label();
+  }
+
+  @override
+  void dispose() {
+    _name.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    final path = widget.path;
+
+    if (path == null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          OutlinedButton.icon(
+            onPressed: widget.onGroup,
+            icon: const Icon(Icons.folder_outlined, size: 15),
+            label: const Text('Group'),
+          ),
+          SizedBox(height: t.space.xs),
+          Text(
+            'One click will then hold all ${widget.count} of them. '
+            'Double-click to go inside and get at one.',
+            style: t.text.captionStyle
+                .copyWith(color: t.surface.onBaseMuted, height: 1.4),
+          ),
+        ],
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('GROUP',
+            style: t.text.overlineStyle.copyWith(color: t.surface.onBaseMuted)),
+        SizedBox(height: t.space.xs),
+        TextField(
+          controller: _name,
+          style: t.text.bodyStyle.copyWith(color: t.surface.onBase),
+          decoration: InputDecoration(
+            isDense: true,
+            prefixIcon: const Icon(Icons.folder_outlined, size: 15),
+            prefixIconConstraints:
+                BoxConstraints(minWidth: t.space.lg, minHeight: 0),
+            border: const OutlineInputBorder(),
+          ),
+          onSubmitted: widget.onRename,
+          // Also on losing focus: a name typed and then clicked away from is a
+          // name that was meant.
+          onTapOutside: (_) {
+            if (_name.text.trim() != _label()) {
+              widget.onRename?.call(_name.text);
+            }
+            FocusManager.instance.primaryFocus?.unfocus();
+          },
+        ),
+        if (parentOf(path) case final parent?) ...[
+          SizedBox(height: t.space.xs),
+          Text('in $parent',
+              style:
+                  t.text.captionStyle.copyWith(color: t.surface.onBaseMuted)),
+        ],
+        SizedBox(height: t.space.xs),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton(
+                onPressed: widget.onEnter,
+                child: const Text('Go inside'),
+              ),
+            ),
+            SizedBox(width: t.space.xs),
+            Expanded(
+              child: OutlinedButton(
+                onPressed: widget.onUngroup,
+                child: const Text('Ungroup'),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
 /// What the right pane says when you are holding a crowd.
 ///
 /// The inspector edits *a card* — a title, a config, a style — and none of
@@ -715,6 +873,11 @@ class _ManySelected extends StatelessWidget {
     required this.onDistribute,
     required this.onRemove,
     required this.onDeselect,
+    required this.groupInHand,
+    required this.onGroup,
+    required this.onUngroup,
+    required this.onRenameGroup,
+    required this.onEnterGroup,
   });
 
   final int count;
@@ -722,6 +885,13 @@ class _ManySelected extends StatelessWidget {
   final ValueChanged<bool>? onDistribute;
   final VoidCallback onRemove;
   final VoidCallback onDeselect;
+
+  /// The group all of them are in, or null when they are not one group.
+  final String? groupInHand;
+  final VoidCallback? onGroup;
+  final VoidCallback? onUngroup;
+  final ValueChanged<String>? onRenameGroup;
+  final VoidCallback? onEnterGroup;
 
   @override
   Widget build(BuildContext context) {
@@ -749,6 +919,15 @@ class _ManySelected extends StatelessWidget {
           Text('Arrow keys nudge them. Shift-click to add or remove one.',
               style: t.text.captionStyle
                   .copyWith(color: t.surface.onBaseMuted, height: 1.4)),
+          SizedBox(height: t.space.md),
+          _GroupSection(
+            path: groupInHand,
+            count: count,
+            onGroup: onGroup,
+            onUngroup: onUngroup,
+            onRename: onRenameGroup,
+            onEnter: onEnterGroup,
+          ),
           SizedBox(height: t.space.md),
           Text('ALIGN',
               style:
@@ -849,6 +1028,8 @@ class _CanvasKeys extends StatelessWidget {
     required this.onFit,
     required this.onFrameSelection,
     required this.onPanKey,
+    required this.onGroup,
+    required this.onUngroup,
     required this.child,
   });
 
@@ -862,6 +1043,8 @@ class _CanvasKeys extends StatelessWidget {
 
   /// Space went down, or came back up.
   final ValueChanged<bool> onPanKey;
+  final VoidCallback? onGroup;
+  final VoidCallback? onUngroup;
   final Widget child;
 
   void _step(int dx, int dy) => onNudge?.call(dx, dy);
@@ -903,6 +1086,16 @@ class _CanvasKeys extends StatelessWidget {
         // where anyone finds them the first time.
         const CharacterActivator('!'): onFit,
         const CharacterActivator('@'): onFrameSelection,
+        // Both spellings, because this is one of the few shortcuts people
+        // arrive already knowing and the modifier differs by platform.
+        const SingleActivator(LogicalKeyboardKey.keyG, meta: true): () =>
+            onGroup?.call(),
+        const SingleActivator(LogicalKeyboardKey.keyG, control: true): () =>
+            onGroup?.call(),
+        const SingleActivator(LogicalKeyboardKey.keyG, meta: true, shift: true):
+            () => onUngroup?.call(),
+        const SingleActivator(LogicalKeyboardKey.keyG,
+            control: true, shift: true): () => onUngroup?.call(),
       },
       // Autofocus, because the canvas is what you are working in the moment the
       // designer opens — a tool whose keyboard needs a click first is a tool
@@ -1012,6 +1205,8 @@ class _StatusBar extends StatelessWidget {
     required this.dirty,
     required this.saving,
     required this.panning,
+    required this.groupInHand,
+    required this.inside,
   });
 
   final int selectedCount;
@@ -1026,6 +1221,12 @@ class _StatusBar extends StatelessWidget {
   /// a cursor, which you are not looking at when you are about to drag.
   final bool panning;
 
+  final String? groupInHand;
+
+  /// Where you are standing. The one piece of state with no mark on the canvas
+  /// of its own, and the one that silently changes what every click does.
+  final String? inside;
+
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
@@ -1038,6 +1239,12 @@ class _StatusBar extends StatelessWidget {
       // next drag does.
       if (panning) 'Panning',
       if (selectedCount == 0) 'Nothing selected' else '$selectedCount selected',
+      // Named rather than counted: "3 selected" is equally true of a group and
+      // of three loose cards, and only one of those moves as a unit.
+      if (groupInHand case final path?) 'group ${nameOf(path)}',
+      // Where you are standing — the one piece of state with no mark of its own
+      // on the canvas, and the one that changes what every click does.
+      if (inside case final path?) 'inside $path',
       if (item != null) '${item!.w}×${item!.h} at ${item!.x},${item!.y}',
       // Only when it is true. A card in the grid has no height to report and a
       // status bar that says "grid" on every card is a word you stop reading.

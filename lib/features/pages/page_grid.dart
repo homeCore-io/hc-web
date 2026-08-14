@@ -36,6 +36,8 @@ class PageGrid extends StatefulWidget {
     this.onDropCard,
     this.onMenu,
     this.onSelect,
+    this.onEnterGroup,
+    this.groupOutline,
   });
 
   final List<GridItem> items;
@@ -97,6 +99,20 @@ class PageGrid extends StatefulWidget {
   /// something already in it.
   final void Function(String id, bool additive)? onSelect;
 
+  /// A double-click on a card: step into the group it belongs to.
+  ///
+  /// The gesture every drawing tool uses for it, and the only way to reach one
+  /// member of a group on the canvas — a single click deliberately holds the
+  /// whole cluster.
+  final void Function(String id)? onEnterGroup;
+
+  /// The group in hand, as a rectangle in cells and the name to write on it.
+  ///
+  /// Drawn as one dashed frame around the lot. Without it a group is
+  /// indistinguishable from three cards that happen to be selected together,
+  /// which is the difference the feature exists to make.
+  final (GridItem, String)? groupOutline;
+
   @override
   State<PageGrid> createState() => _PageGridState();
 }
@@ -104,6 +120,36 @@ class PageGrid extends StatefulWidget {
 class _PageGridState extends State<PageGrid> {
   /// The cell a dragged-in card is hovering over, in grid units.
   (int, int)? _dropCell;
+
+  /// The second half of a double-click, timed here rather than handed to
+  /// [GestureDetector.onDoubleTap].
+  ///
+  /// Flutter's double-tap recogniser makes a *single* tap wait out the
+  /// double-tap window before it fires, so wiring `onDoubleTap` put a third of
+  /// a second between clicking a card and seeing it selected. Selection has to
+  /// be instant — it is the most common thing anyone does here — so the first
+  /// click selects immediately and a second one inside the window additionally
+  /// steps into the group. Nothing is delayed and nothing is swallowed.
+  String? _lastTapId;
+  DateTime? _lastTapAt;
+
+  static const _doubleTapWindow = Duration(milliseconds: 400);
+
+  void _tapped(String id, bool additive) {
+    widget.onSelect!(id, additive);
+    final now = DateTime.now();
+    final again = _lastTapId == id &&
+        _lastTapAt != null &&
+        now.difference(_lastTapAt!) < _doubleTapWindow;
+    if (again) {
+      _lastTapId = null;
+      _lastTapAt = null;
+      widget.onEnterGroup?.call(id);
+      return;
+    }
+    _lastTapId = id;
+    _lastTapAt = now;
+  }
 
   /// The card the editor has been *entered* into, or null.
   ///
@@ -416,6 +462,31 @@ class _PageGridState extends State<PageGrid> {
                     ),
                   ),
 
+              // One frame around the group in hand. Without it a group looks
+              // exactly like three cards that happen to be selected at the same
+              // time, which is the whole difference the feature makes — and it
+              // is drawn a gap *outside* the cards so it reads as a container
+              // rather than as a fourth selection outline.
+              if (widget.groupOutline case (final box, final label))
+                Positioned(
+                  left: box.x * stepX - widget.gap / 2,
+                  top: box.y * stepY - widget.gap / 2,
+                  width: box.w * stepX,
+                  height: box.h * stepY,
+                  child: IgnorePointer(
+                    child: CustomPaint(
+                      painter: _GroupFrame(
+                        label: label,
+                        color: t.accent.primary,
+                        radius: Radius.circular(t.radius.md),
+                        style: t.text.captionStyle.copyWith(
+                            color: t.accent.primary,
+                            fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ),
+                ),
+
               // The lines saying what the held card agrees with. Above the
               // cards, because a guide under the thing it describes is a guide
               // you cannot see at the moment you need it.
@@ -499,7 +570,7 @@ class _PageGridState extends State<PageGrid> {
                           // Shift is read at the moment of the tap rather than
                           // tracked as state: a modifier held while the pointer
                           // was elsewhere is not a modifier held for this click.
-                          : () => widget.onSelect!(
+                          : () => _tapped(
                                 item.id,
                                 HardwareKeyboard.instance.isShiftPressed,
                               ),
@@ -664,6 +735,65 @@ class _ColumnGuides extends CustomPainter {
 /// anything?" and a stub between two cards makes you find the other end
 /// yourself. One line per position, however many cards share it — three cards
 /// on the same left edge is one guide, not three drawn on top of each other.
+/// A dashed frame around the group in hand, with its name on the corner.
+///
+/// Dashed rather than solid because it is not an edge of anything drawn — no
+/// group has a background or a border of its own, and a solid line would
+/// promise a container that is not there. The name sits *above* the frame, out
+/// of the way of whatever is in the top-left card.
+class _GroupFrame extends CustomPainter {
+  _GroupFrame({
+    required this.label,
+    required this.color,
+    required this.radius,
+    required this.style,
+  });
+
+  final String label;
+  final Color color;
+  final Radius radius;
+  final TextStyle style;
+
+  static const _dash = 6.0;
+  static const _gap = 4.0;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1
+      ..color = color;
+
+    final rect = RRect.fromRectAndRadius(Offset.zero & size, radius);
+    // Dashes measured along the path rather than drawn per edge, so the
+    // corners stay even instead of restarting the pattern four times.
+    final path = Path()..addRRect(rect);
+    for (final metric in path.computeMetrics()) {
+      var start = 0.0;
+      while (start < metric.length) {
+        final end = start + _dash;
+        canvas.drawPath(
+          metric.extractPath(start, end > metric.length ? metric.length : end),
+          paint,
+        );
+        start = end + _gap;
+      }
+    }
+
+    final text = TextPainter(
+      text: TextSpan(text: label, style: style),
+      textDirection: TextDirection.ltr,
+      maxLines: 1,
+      ellipsis: '…',
+    )..layout(maxWidth: size.width);
+    text.paint(canvas, Offset(0, -text.height - 2));
+  }
+
+  @override
+  bool shouldRepaint(_GroupFrame old) =>
+      old.label != label || old.color != color;
+}
+
 class _SmartGuides extends CustomPainter {
   const _SmartGuides({
     required this.guides,
