@@ -1,7 +1,9 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/dashboard/canvas_view.dart';
 import '../../core/dashboard/free_layer.dart';
 import '../../core/dashboard/grid_engine.dart';
 import '../../core/models/dashboard.dart';
@@ -45,6 +47,7 @@ class DesignerShell extends StatefulWidget {
     required this.saving,
     required this.dirty,
     required this.selectedCount,
+    required this.selectedIds,
     required this.selected,
     required this.selectedItem,
     required this.consequence,
@@ -83,6 +86,11 @@ class DesignerShell extends StatefulWidget {
   final bool saving;
   final bool dirty;
   final int selectedCount;
+
+  /// What is in hand, by id. The count answers "how many"; framing the
+  /// selection needs to know *which*, because the rectangle it scrolls to is
+  /// the box around those cards and nothing else.
+  final Set<String> selectedIds;
   final DashboardWidgetModel? selected;
   final GridItem? selectedItem;
   final String? consequence;
@@ -161,6 +169,12 @@ class _DesignerShellState extends State<DesignerShell> {
   /// hide the answer to a question you do not know you have yet.
   bool _layersOpen = true;
 
+  /// Space is down, so the canvas is a thing you drag rather than a thing you
+  /// arrange. Held here rather than read from [HardwareKeyboard] on each event
+  /// because the cursor has to change the moment the key goes down, before any
+  /// pointer has moved.
+  bool _panArmed = false;
+
   // Explicit controllers, because both scrollbars need one to stay visible and
   // the horizontal one has to be reachable at all.
   final _vertical = ScrollController();
@@ -171,6 +185,78 @@ class _DesignerShellState extends State<DesignerShell> {
     _vertical.dispose();
     _horizontal.dispose();
     super.dispose();
+  }
+
+  /// Drag the canvas under the window.
+  ///
+  /// Both axes at once, because a canvas that only pans vertically is the
+  /// problem this is here to solve: the wheel already does that, and the
+  /// right-hand edge of a 1600px page is what you cannot get to.
+  void _panBy(Offset delta) {
+    if (_horizontal.hasClients) {
+      final position = _horizontal.position;
+      _horizontal
+          .jumpTo(panned(position.pixels, delta.dx, position.maxScrollExtent));
+    }
+    if (_vertical.hasClients) {
+      final position = _vertical.position;
+      _vertical
+          .jumpTo(panned(position.pixels, delta.dy, position.maxScrollExtent));
+    }
+  }
+
+  /// Stand where you can see what is in hand.
+  ///
+  /// Two moves in one, and they have to be in that order: pick the scale that
+  /// shows the selection whole, then scroll it into the middle. Scrolling first
+  /// would aim at extents belonging to the old zoom.
+  void _frameSelection(CanvasGeometry geometry, double padding) {
+    final bounds = geometry.boundsOf(widget.items, widget.selectedIds);
+    // Nothing in hand, or the selection is not on this breakpoint's layout.
+    // Doing nothing is right: the alternative is a canvas that jumps somewhere
+    // you did not ask for and cannot name.
+    if (bounds == null) return;
+
+    final viewport = Size(
+      _horizontal.hasClients ? _horizontal.position.viewportDimension : 0,
+      // The vertical scroller measures the whole pane; the padding is inside
+      // its content, so it is not room the canvas actually gets.
+      _vertical.hasClients
+          ? _vertical.position.viewportDimension - padding * 2
+          : 0,
+    );
+    final scale = scaleToShow(bounds, viewport,
+        min: _minZoom, max: _maxZoom, margin: padding);
+
+    setState(() => _zoom = scale);
+    // The scroll extents only tell the truth once the canvas has been laid out
+    // at the new scale, so the second half waits a frame.
+    WidgetsBinding.instance
+        .addPostFrameCallback((_) => _centre(bounds, scale, padding));
+  }
+
+  void _centre(Rect bounds, double scale, double padding) {
+    if (!mounted) return;
+    if (_horizontal.hasClients) {
+      final position = _horizontal.position;
+      _horizontal.jumpTo(centreOn(
+        start: bounds.left * scale,
+        extent: bounds.width * scale,
+        viewport: position.viewportDimension,
+        maxScroll: position.maxScrollExtent,
+      ));
+    }
+    if (_vertical.hasClients) {
+      final position = _vertical.position;
+      _vertical.jumpTo(centreOn(
+        // Down by the padding, which is part of the scrolled content on this
+        // axis and not on the other one.
+        start: bounds.top * scale + padding,
+        extent: bounds.height * scale,
+        viewport: position.viewportDimension,
+        maxScroll: position.maxScrollExtent,
+      ));
+    }
   }
 
   /// 50% to 200%, the range §3.1 asks for so a wall layout is designable on a
@@ -222,6 +308,19 @@ class _DesignerShellState extends State<DesignerShell> {
           final fit = (available / width).clamp(_minZoom, 1.0);
           final scale = _zoom ?? fit;
 
+          final layout = widget.layouts
+              ?.where((l) => l.breakpoint == widget.breakpoint)
+              .firstOrNull;
+          // The canvas in pixels, at 1:1. Framing works in these units and
+          // applies the scale itself, so a selection lands in the same place
+          // whatever you were standing at when you asked.
+          final geometry = CanvasGeometry(
+            width: width,
+            columns: widget.columns,
+            rowHeight: layout?.rowHeight ?? 120,
+            gap: layout?.gap ?? 12,
+          );
+
           return Column(
             children: [
               _TopBar(
@@ -240,6 +339,8 @@ class _DesignerShellState extends State<DesignerShell> {
                 onZoom: (z) => setState(() => _zoom = z),
                 onZoomStep: (delta) =>
                     setState(() => _zoom = _step(scale, delta)),
+                onFrameSelection: () => _frameSelection(geometry, t.space.lg),
+                canFrame: widget.selectedCount > 0,
                 // Align works on one card or on many; distribute needs three.
                 onAlign: widget.selectedCount == 0 ? null : widget.onAlign,
                 onDistribute:
@@ -280,46 +381,57 @@ class _DesignerShellState extends State<DesignerShell> {
                             ? null
                             : widget.onRemoveSelected,
                         onDeselect: widget.onDeselect,
-                        child: Container(
-                          color: t.surface.sunken,
-                          // The page's own background, behind the canvas: you are
-                          // arranging cards *on* it, so it has to be visible
-                          // while you arrange them.
-                          child: PageBackground(
-                            background: widget.dashboard.background,
-                            // Two scrollers, because zoom has two directions. The
-                            // canvas draws the layout at the width that breakpoint
-                            // really has — 1600 for desktop — which the middle pane
-                            // is nowhere near once two panels take their 600; and
-                            // above Fit it is wider still. Vertical alone would
-                            // strand the right-hand edge of the page off-screen
-                            // with no way to reach it.
-                            // Both bars always drawn, both reachable.
-                            //
-                            // The nesting alone was not enough: Flutter web draws
-                            // no scrollbar for an unmanaged scroll view, and a
-                            // mouse wheel only ever reaches the vertical one — so
-                            // at any zoom where the canvas is wider than the pane,
-                            // the right-hand side of the page existed and could not
-                            // be got to. `ScaledCanvas` made the extent honest,
-                            // which is precisely what turned a slightly clipped
-                            // card into unreachable content.
-                            child: Scrollbar(
-                              controller: _vertical,
-                              thumbVisibility: true,
-                              child: SingleChildScrollView(
+                        onFit: () => setState(() => _zoom = null),
+                        onFrameSelection: () =>
+                            _frameSelection(geometry, t.space.lg),
+                        onPanKey: (down) {
+                          if (down == _panArmed) return;
+                          setState(() => _panArmed = down);
+                        },
+                        child: _PanArea(
+                          armed: _panArmed,
+                          onPan: _panBy,
+                          child: Container(
+                            color: t.surface.sunken,
+                            // The page's own background, behind the canvas: you are
+                            // arranging cards *on* it, so it has to be visible
+                            // while you arrange them.
+                            child: PageBackground(
+                              background: widget.dashboard.background,
+                              // Two scrollers, because zoom has two directions. The
+                              // canvas draws the layout at the width that breakpoint
+                              // really has — 1600 for desktop — which the middle pane
+                              // is nowhere near once two panels take their 600; and
+                              // above Fit it is wider still. Vertical alone would
+                              // strand the right-hand edge of the page off-screen
+                              // with no way to reach it.
+                              // Both bars always drawn, both reachable.
+                              //
+                              // The nesting alone was not enough: Flutter web draws
+                              // no scrollbar for an unmanaged scroll view, and a
+                              // mouse wheel only ever reaches the vertical one — so
+                              // at any zoom where the canvas is wider than the pane,
+                              // the right-hand side of the page existed and could not
+                              // be got to. `ScaledCanvas` made the extent honest,
+                              // which is precisely what turned a slightly clipped
+                              // card into unreachable content.
+                              child: Scrollbar(
                                 controller: _vertical,
-                                padding: EdgeInsets.all(t.space.lg),
-                                child: Scrollbar(
-                                  controller: _horizontal,
-                                  thumbVisibility: true,
-                                  child: SingleChildScrollView(
+                                thumbVisibility: true,
+                                child: SingleChildScrollView(
+                                  controller: _vertical,
+                                  padding: EdgeInsets.all(t.space.lg),
+                                  child: Scrollbar(
                                     controller: _horizontal,
-                                    scrollDirection: Axis.horizontal,
-                                    child: ScaledCanvas(
-                                      scale: scale,
-                                      child: SizedBox(
-                                          width: width, child: widget.canvas),
+                                    thumbVisibility: true,
+                                    child: SingleChildScrollView(
+                                      controller: _horizontal,
+                                      scrollDirection: Axis.horizontal,
+                                      child: ScaledCanvas(
+                                        scale: scale,
+                                        child: SizedBox(
+                                            width: width, child: widget.canvas),
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -391,6 +503,7 @@ class _DesignerShellState extends State<DesignerShell> {
                     GridFlow.packed,
                 dirty: widget.dirty,
                 saving: widget.saving,
+                panning: _panArmed,
               ),
             ],
           );
@@ -435,6 +548,8 @@ class _TopBar extends StatelessWidget {
     required this.effectiveZoom,
     required this.onZoom,
     required this.onZoomStep,
+    required this.onFrameSelection,
+    required this.canFrame,
     required this.onAlign,
     this.onDistribute,
     required this.canUndo,
@@ -461,6 +576,8 @@ class _TopBar extends StatelessWidget {
   final double effectiveZoom;
   final ValueChanged<double?> onZoom;
   final ValueChanged<int> onZoomStep;
+  final VoidCallback onFrameSelection;
+  final bool canFrame;
 
   /// Null when nothing is selected — align acts on the selection, and a live
   /// button that quietly does nothing is worse than a dim one.
@@ -562,6 +679,8 @@ class _TopBar extends StatelessWidget {
             effective: effectiveZoom,
             onZoom: onZoom,
             onStep: onZoomStep,
+            onFrameSelection: onFrameSelection,
+            canFrame: canFrame,
           ),
           SizedBox(width: t.space.md),
           if (dirty)
@@ -727,6 +846,9 @@ class _CanvasKeys extends StatelessWidget {
     required this.onSelectAll,
     required this.onRemove,
     required this.onDeselect,
+    required this.onFit,
+    required this.onFrameSelection,
+    required this.onPanKey,
     required this.child,
   });
 
@@ -735,6 +857,11 @@ class _CanvasKeys extends StatelessWidget {
   final VoidCallback? onSelectAll;
   final VoidCallback? onRemove;
   final VoidCallback onDeselect;
+  final VoidCallback onFit;
+  final VoidCallback onFrameSelection;
+
+  /// Space went down, or came back up.
+  final ValueChanged<bool> onPanKey;
   final Widget child;
 
   void _step(int dx, int dy) => onNudge?.call(dx, dy);
@@ -768,11 +895,109 @@ class _CanvasKeys extends StatelessWidget {
         const SingleActivator(LogicalKeyboardKey.backspace): () =>
             onRemove?.call(),
         const SingleActivator(LogicalKeyboardKey.escape): onDeselect,
+        // Bound to the *character*, not to shift-plus-a-digit. On this
+        // keyboard those are the same thing; on a layout where the digit row
+        // is shifted the other way round they are not, and a shortcut that
+        // silently does nothing on someone's keyboard is worse than one they
+        // have to find in the menu. Both are also in the zoom menu, which is
+        // where anyone finds them the first time.
+        const CharacterActivator('!'): onFit,
+        const CharacterActivator('@'): onFrameSelection,
       },
       // Autofocus, because the canvas is what you are working in the moment the
       // designer opens — a tool whose keyboard needs a click first is a tool
       // whose keyboard nobody finds.
-      child: Focus(autofocus: true, child: child),
+      child: Focus(
+        autofocus: true,
+        // Space is held, not pressed, so it cannot be a shortcut: the canvas
+        // has to know while it is down and again when it comes up.
+        onKeyEvent: (node, event) {
+          if (event.logicalKey != LogicalKeyboardKey.space) {
+            return KeyEventResult.ignored;
+          }
+          if (event is KeyDownEvent) onPanKey(true);
+          if (event is KeyUpEvent) onPanKey(false);
+          // Handled either way, including the repeats, so space does not also
+          // reach whatever a button would have done with it.
+          return KeyEventResult.handled;
+        },
+        // Alt-tab away mid-pan and the key-up lands in another window. Without
+        // this the canvas stays armed and the next click drags the page
+        // instead of selecting a card, with nothing on screen to explain why.
+        onFocusChange: (has) {
+          if (!has) onPanKey(false);
+        },
+        child: child,
+      ),
+    );
+  }
+}
+
+/// The canvas as something you can drag under the window.
+///
+/// Two ways in, because they suit different hands. **Middle-drag** works at any
+/// time and costs nothing: a plain [Listener] does not consume what it sees, so
+/// cards below still get their clicks, and Flutter's pan recognisers only
+/// accept the primary button — so a middle-drag on a card cannot also move it.
+/// **Space-drag** is the one that needs a mode, and while it is held this puts
+/// an opaque layer over the whole canvas: that is what stops the drag reaching
+/// a card, and it is also what makes the grab cursor honest, since the cursor
+/// would otherwise change over the background and not over a card.
+class _PanArea extends StatefulWidget {
+  const _PanArea({
+    required this.armed,
+    required this.onPan,
+    required this.child,
+  });
+
+  final bool armed;
+  final ValueChanged<Offset> onPan;
+  final Widget child;
+
+  @override
+  State<_PanArea> createState() => _PanAreaState();
+}
+
+class _PanAreaState extends State<_PanArea> {
+  bool _dragging = false;
+
+  @override
+  void didUpdateWidget(_PanArea old) {
+    super.didUpdateWidget(old);
+    // Space came up mid-drag: the overlay goes away and the pointer stream with
+    // it, so nothing else will ever tell us the drag ended.
+    if (!widget.armed && _dragging) _dragging = false;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final canvas = Listener(
+      onPointerMove: (event) {
+        if (event.buttons & kMiddleMouseButton != 0) widget.onPan(event.delta);
+      },
+      child: widget.child,
+    );
+
+    if (!widget.armed) return canvas;
+
+    return Stack(
+      children: [
+        canvas,
+        Positioned.fill(
+          child: MouseRegion(
+            cursor: _dragging
+                ? SystemMouseCursors.grabbing
+                : SystemMouseCursors.grab,
+            child: Listener(
+              behavior: HitTestBehavior.opaque,
+              onPointerDown: (_) => setState(() => _dragging = true),
+              onPointerMove: (event) => widget.onPan(event.delta),
+              onPointerUp: (_) => setState(() => _dragging = false),
+              onPointerCancel: (_) => setState(() => _dragging = false),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -786,6 +1011,7 @@ class _StatusBar extends StatelessWidget {
     required this.flow,
     required this.dirty,
     required this.saving,
+    required this.panning,
   });
 
   final int selectedCount;
@@ -795,6 +1021,11 @@ class _StatusBar extends StatelessWidget {
   final bool dirty;
   final bool saving;
 
+  /// Space is down. Worth saying because it changes what a drag does — the
+  /// same reason the flow is named here — and because the only other signal is
+  /// a cursor, which you are not looking at when you are about to drag.
+  final bool panning;
+
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
@@ -803,6 +1034,9 @@ class _StatusBar extends StatelessWidget {
       // else on screen said what the scale was; the control in the top bar now
       // shows the same number and can change it, and a status bar that repeats
       // a control is one more thing to keep in step for no gain.
+      // First, because while it is true it is the thing that decides what the
+      // next drag does.
+      if (panning) 'Panning',
       if (selectedCount == 0) 'Nothing selected' else '$selectedCount selected',
       if (item != null) '${item!.w}×${item!.h} at ${item!.x},${item!.y}',
       // Only when it is true. A card in the grid has no height to report and a
@@ -880,6 +1114,9 @@ enum CanvasAlign {
   }
 }
 
+/// The two entries in the zoom menu that are rules rather than numbers.
+enum _ZoomChoice { fit, selection }
+
 /// `−  100%  +`, with the middle opening the stops.
 ///
 /// The number is always shown, including under Fit, because "Fit" alone
@@ -891,12 +1128,19 @@ class _ZoomControl extends StatelessWidget {
     required this.effective,
     required this.onZoom,
     required this.onStep,
+    required this.onFrameSelection,
+    required this.canFrame,
   });
 
   final double? zoom;
   final double effective;
   final ValueChanged<double?> onZoom;
   final ValueChanged<int> onStep;
+
+  /// Stand where the selection is. Disabled with nothing in hand, because
+  /// there is nowhere to stand.
+  final VoidCallback onFrameSelection;
+  final bool canFrame;
 
   @override
   Widget build(BuildContext context) {
@@ -912,11 +1156,25 @@ class _ZoomControl extends StatelessWidget {
           tooltip: 'Zoom out',
           visualDensity: VisualDensity.compact,
         ),
-        PopupMenuButton<double?>(
-          tooltip: 'Zoom',
-          onSelected: onZoom,
+        PopupMenuButton<Object?>(
+          // The one place the navigation keys are written down. A shortcut
+          // nobody can discover is a shortcut nobody has.
+          tooltip: 'Zoom · shift 1 fits, shift 2 frames the selection,\n'
+              'space or middle-drag pans',
+          onSelected: (choice) {
+            if (choice is double) return onZoom(choice);
+            if (choice == _ZoomChoice.selection) return onFrameSelection();
+            onZoom(null);
+          },
           itemBuilder: (context) => [
-            const PopupMenuItem(value: null, child: Text('Fit')),
+            const PopupMenuItem(
+                value: _ZoomChoice.fit, child: Text('Fit  ·  shift 1')),
+            PopupMenuItem(
+              value: _ZoomChoice.selection,
+              enabled: canFrame,
+              child: const Text('Zoom to selection  ·  shift 2'),
+            ),
+            const PopupMenuDivider(),
             for (final stop in _DesignerShellState._stops)
               PopupMenuItem(
                 value: stop,

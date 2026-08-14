@@ -1131,6 +1131,7 @@ class _PageScreenState extends ConsumerState<PageScreen> {
             saving: _saving,
             dirty: _touched.isNotEmpty || _contentDirty,
             selectedCount: _selection.length,
+            selectedIds: _selection,
             selected: _draftWidgets?[_selectedCard],
             selectedItem: items
                 .where((i) => i.id == _selectedCard)
