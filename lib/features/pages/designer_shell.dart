@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/dashboard/free_layer.dart';
@@ -59,6 +60,10 @@ class DesignerShell extends StatefulWidget {
     required this.cardCount,
     required this.onFlowChanged,
     required this.onAlign,
+    this.onDistribute,
+    this.onNudge,
+    this.onDuplicate,
+    this.onSelectAll,
     required this.items,
     required this.widgetsById,
     required this.onSelectCard,
@@ -98,6 +103,19 @@ class DesignerShell extends StatefulWidget {
 
   /// Move the selection to one edge of the canvas, or to its middle.
   final ValueChanged<CanvasAlign>? onAlign;
+
+  /// Spread three or more evenly. Null below three, because there is nothing
+  /// to spread — see [GridEngine.distribute].
+  final ValueChanged<bool>? onDistribute;
+
+  /// Move the selection by a step, in cells.
+  final void Function(int dx, int dy)? onNudge;
+
+  /// Take a copy of everything in hand.
+  final VoidCallback? onDuplicate;
+
+  /// Everything on this layout.
+  final VoidCallback? onSelectAll;
 
   /// What is on the page, for the layers strip.
   final List<GridItem> items;
@@ -222,7 +240,10 @@ class _DesignerShellState extends State<DesignerShell> {
                 onZoom: (z) => setState(() => _zoom = z),
                 onZoomStep: (delta) =>
                     setState(() => _zoom = _step(scale, delta)),
-                onAlign: widget.selected == null ? null : widget.onAlign,
+                // Align works on one card or on many; distribute needs three.
+                onAlign: widget.selectedCount == 0 ? null : widget.onAlign,
+                onDistribute:
+                    widget.selectedCount < 3 ? null : widget.onDistribute,
                 canUndo: widget.canUndo,
                 undoLabel: widget.undoLabel,
                 onUndo: widget.onUndo,
@@ -251,46 +272,55 @@ class _DesignerShellState extends State<DesignerShell> {
                     // The canvas is the only thing allowed to be large. It
                     // scrolls inside itself; the frame around it never moves.
                     Expanded(
-                      child: Container(
-                        color: t.surface.sunken,
-                        // The page's own background, behind the canvas: you are
-                        // arranging cards *on* it, so it has to be visible
-                        // while you arrange them.
-                        child: PageBackground(
-                          background: widget.dashboard.background,
-                          // Two scrollers, because zoom has two directions. The
-                          // canvas draws the layout at the width that breakpoint
-                          // really has — 1600 for desktop — which the middle pane
-                          // is nowhere near once two panels take their 600; and
-                          // above Fit it is wider still. Vertical alone would
-                          // strand the right-hand edge of the page off-screen
-                          // with no way to reach it.
-                          // Both bars always drawn, both reachable.
-                          //
-                          // The nesting alone was not enough: Flutter web draws
-                          // no scrollbar for an unmanaged scroll view, and a
-                          // mouse wheel only ever reaches the vertical one — so
-                          // at any zoom where the canvas is wider than the pane,
-                          // the right-hand side of the page existed and could not
-                          // be got to. `ScaledCanvas` made the extent honest,
-                          // which is precisely what turned a slightly clipped
-                          // card into unreachable content.
-                          child: Scrollbar(
-                            controller: _vertical,
-                            thumbVisibility: true,
-                            child: SingleChildScrollView(
+                      child: _CanvasKeys(
+                        onNudge: widget.onNudge,
+                        onDuplicate: widget.onDuplicate,
+                        onSelectAll: widget.onSelectAll,
+                        onRemove: widget.selectedCount == 0
+                            ? null
+                            : widget.onRemoveSelected,
+                        onDeselect: widget.onDeselect,
+                        child: Container(
+                          color: t.surface.sunken,
+                          // The page's own background, behind the canvas: you are
+                          // arranging cards *on* it, so it has to be visible
+                          // while you arrange them.
+                          child: PageBackground(
+                            background: widget.dashboard.background,
+                            // Two scrollers, because zoom has two directions. The
+                            // canvas draws the layout at the width that breakpoint
+                            // really has — 1600 for desktop — which the middle pane
+                            // is nowhere near once two panels take their 600; and
+                            // above Fit it is wider still. Vertical alone would
+                            // strand the right-hand edge of the page off-screen
+                            // with no way to reach it.
+                            // Both bars always drawn, both reachable.
+                            //
+                            // The nesting alone was not enough: Flutter web draws
+                            // no scrollbar for an unmanaged scroll view, and a
+                            // mouse wheel only ever reaches the vertical one — so
+                            // at any zoom where the canvas is wider than the pane,
+                            // the right-hand side of the page existed and could not
+                            // be got to. `ScaledCanvas` made the extent honest,
+                            // which is precisely what turned a slightly clipped
+                            // card into unreachable content.
+                            child: Scrollbar(
                               controller: _vertical,
-                              padding: EdgeInsets.all(t.space.lg),
-                              child: Scrollbar(
-                                controller: _horizontal,
-                                thumbVisibility: true,
-                                child: SingleChildScrollView(
+                              thumbVisibility: true,
+                              child: SingleChildScrollView(
+                                controller: _vertical,
+                                padding: EdgeInsets.all(t.space.lg),
+                                child: Scrollbar(
                                   controller: _horizontal,
-                                  scrollDirection: Axis.horizontal,
-                                  child: ScaledCanvas(
-                                    scale: scale,
-                                    child: SizedBox(
-                                        width: width, child: widget.canvas),
+                                  thumbVisibility: true,
+                                  child: SingleChildScrollView(
+                                    controller: _horizontal,
+                                    scrollDirection: Axis.horizontal,
+                                    child: ScaledCanvas(
+                                      scale: scale,
+                                      child: SizedBox(
+                                          width: width, child: widget.canvas),
+                                    ),
                                   ),
                                 ),
                               ),
@@ -304,28 +334,40 @@ class _DesignerShellState extends State<DesignerShell> {
                       border: Border(
                           left: BorderSide(
                               color: t.stroke.hairline, width: t.stroke.width)),
-                      child: widget.selected == null
-                          ? PageInspector(
-                              dashboard: widget.dashboard,
-                              breakpoint: widget.breakpoint,
-                              layout: widget.layouts
-                                  ?.where(
-                                      (l) => l.breakpoint == widget.breakpoint)
-                                  .firstOrNull,
-                              cardCount: widget.cardCount,
-                              onFlowChanged: widget.onFlowChanged,
-                              onBackgroundChanged: widget.onBackgroundChanged,
-                            )
-                          : CardInspector(
-                              model: widget.selected!,
-                              onChanged: widget.onChanged,
+                      child: widget.selected == null && widget.selectedCount > 1
+                          ? _ManySelected(
+                              count: widget.selectedCount,
+                              onDistribute: widget.selectedCount < 3
+                                  ? null
+                                  : widget.onDistribute,
+                              onAlign: widget.onAlign,
                               onRemove: widget.onRemoveSelected,
-                              onClose: widget.onDeselect,
-                              onRename: widget.onRename,
-                              floating: widget.selectedItem?.floating ?? false,
-                              z: widget.selectedItem?.z ?? 0,
-                              onStack: widget.onStack,
-                            ),
+                              onDeselect: widget.onDeselect,
+                            )
+                          : widget.selected == null
+                              ? PageInspector(
+                                  dashboard: widget.dashboard,
+                                  breakpoint: widget.breakpoint,
+                                  layout: widget.layouts
+                                      ?.where((l) =>
+                                          l.breakpoint == widget.breakpoint)
+                                      .firstOrNull,
+                                  cardCount: widget.cardCount,
+                                  onFlowChanged: widget.onFlowChanged,
+                                  onBackgroundChanged:
+                                      widget.onBackgroundChanged,
+                                )
+                              : CardInspector(
+                                  model: widget.selected!,
+                                  onChanged: widget.onChanged,
+                                  onRemove: widget.onRemoveSelected,
+                                  onClose: widget.onDeselect,
+                                  onRename: widget.onRename,
+                                  floating:
+                                      widget.selectedItem?.floating ?? false,
+                                  z: widget.selectedItem?.z ?? 0,
+                                  onStack: widget.onStack,
+                                ),
                     ),
                   ],
                 ),
@@ -394,6 +436,7 @@ class _TopBar extends StatelessWidget {
     required this.onZoom,
     required this.onZoomStep,
     required this.onAlign,
+    this.onDistribute,
     required this.canUndo,
     required this.undoLabel,
     required this.onUndo,
@@ -422,6 +465,9 @@ class _TopBar extends StatelessWidget {
   /// Null when nothing is selected — align acts on the selection, and a live
   /// button that quietly does nothing is worse than a dim one.
   final ValueChanged<CanvasAlign>? onAlign;
+
+  /// Null below three selected, for the same reason.
+  final ValueChanged<bool>? onDistribute;
 
   final bool canUndo;
   final String? undoLabel;
@@ -490,6 +536,26 @@ class _TopBar extends StatelessWidget {
               tooltip: align.label,
               visualDensity: VisualDensity.compact,
             ),
+          // Distribute sits beside align because they are the same kind of
+          // move, and stays dim until there are three things to spread — the
+          // count is the whole precondition, so the control says it by being
+          // unavailable rather than by explaining itself.
+          IconButton(
+            onPressed: onDistribute == null ? null : () => onDistribute!(true),
+            icon: const Icon(Icons.horizontal_distribute, size: 16),
+            tooltip: onDistribute == null
+                ? 'Spread evenly — pick three or more'
+                : 'Spread evenly across',
+            visualDensity: VisualDensity.compact,
+          ),
+          IconButton(
+            onPressed: onDistribute == null ? null : () => onDistribute!(false),
+            icon: const Icon(Icons.vertical_distribute, size: 16),
+            tooltip: onDistribute == null
+                ? 'Spread evenly — pick three or more'
+                : 'Spread evenly down',
+            visualDensity: VisualDensity.compact,
+          ),
           SizedBox(width: t.space.sm),
           _ZoomControl(
             zoom: zoom,
@@ -510,6 +576,203 @@ class _TopBar extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// What the right pane says when you are holding a crowd.
+///
+/// The inspector edits *a card* — a title, a config, a style — and none of
+/// those have a single answer for three cards. Before this the pane fell back
+/// to the page's own properties, which was quietly wrong: it looked as though
+/// nothing was selected while the canvas showed three cards outlined.
+///
+/// So it reports the count and offers the operations that *do* mean something
+/// for a crowd, which are precisely the ones the toolbar grew for it.
+class _ManySelected extends StatelessWidget {
+  const _ManySelected({
+    required this.count,
+    required this.onAlign,
+    required this.onDistribute,
+    required this.onRemove,
+    required this.onDeselect,
+  });
+
+  final int count;
+  final ValueChanged<CanvasAlign>? onAlign;
+  final ValueChanged<bool>? onDistribute;
+  final VoidCallback onRemove;
+  final VoidCallback onDeselect;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return SingleChildScrollView(
+      padding: EdgeInsets.all(t.space.sm),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text('$count selected',
+                    style: t.text.subtitleStyle.copyWith(
+                        color: t.surface.onBase, fontWeight: FontWeight.w600)),
+              ),
+              IconButton(
+                onPressed: onDeselect,
+                icon: const Icon(Icons.close, size: 16),
+                tooltip: 'Let go',
+                visualDensity: VisualDensity.compact,
+              ),
+            ],
+          ),
+          Text('Arrow keys nudge them. Shift-click to add or remove one.',
+              style: t.text.captionStyle
+                  .copyWith(color: t.surface.onBaseMuted, height: 1.4)),
+          SizedBox(height: t.space.md),
+          Text('ALIGN',
+              style:
+                  t.text.overlineStyle.copyWith(color: t.surface.onBaseMuted)),
+          SizedBox(height: t.space.xs),
+          Row(
+            children: [
+              for (final align in CanvasAlign.values)
+                Expanded(
+                  child: Padding(
+                    padding: EdgeInsets.only(right: t.space.xs / 2),
+                    child: Tooltip(
+                      message: align.label,
+                      child: OutlinedButton(
+                        onPressed:
+                            onAlign == null ? null : () => onAlign!(align),
+                        style: OutlinedButton.styleFrom(
+                          padding: EdgeInsets.symmetric(vertical: t.space.xs),
+                          minimumSize: Size.zero,
+                          side: BorderSide(
+                              color: t.stroke.hairline, width: t.stroke.width),
+                        ),
+                        child:
+                            Icon(align.icon, size: 15, color: t.surface.onBase),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          SizedBox(height: t.space.md),
+          Text('SPREAD',
+              style:
+                  t.text.overlineStyle.copyWith(color: t.surface.onBaseMuted)),
+          SizedBox(height: t.space.xs),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed:
+                      onDistribute == null ? null : () => onDistribute!(true),
+                  child: const Text('Across'),
+                ),
+              ),
+              SizedBox(width: t.space.xs),
+              Expanded(
+                child: OutlinedButton(
+                  onPressed:
+                      onDistribute == null ? null : () => onDistribute!(false),
+                  child: const Text('Down'),
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: t.space.xs),
+          Text(
+            onDistribute == null
+                ? 'Spreading evenly needs three or more — with two, the one gap '
+                    'is already even.'
+                : 'The outermost two stay put; everything between them is '
+                    'spaced evenly.',
+            style: t.text.captionStyle
+                .copyWith(color: t.surface.onBaseMuted, height: 1.4),
+          ),
+          SizedBox(height: t.space.lg),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton(
+              onPressed: onRemove,
+              child: Text('Remove all $count',
+                  style: TextStyle(color: t.accent.danger)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The keyboard, over the canvas and nowhere else.
+///
+/// **Scoped deliberately.** These bindings live around the canvas rather than
+/// around the window, so an arrow key means "nudge the selection" while you are
+/// arranging and "move the caret" the moment you are typing a card's name.
+/// Shortcuts resolve from the focused node upward, so a focused text field
+/// takes its own keys first and this never has to guess.
+///
+/// Arrows step one cell; with shift, ten — the same pair of gestures every
+/// design tool has, and the reason a cell-accurate position no longer needs a
+/// drag to reach it.
+class _CanvasKeys extends StatelessWidget {
+  const _CanvasKeys({
+    required this.onNudge,
+    required this.onDuplicate,
+    required this.onSelectAll,
+    required this.onRemove,
+    required this.onDeselect,
+    required this.child,
+  });
+
+  final void Function(int dx, int dy)? onNudge;
+  final VoidCallback? onDuplicate;
+  final VoidCallback? onSelectAll;
+  final VoidCallback? onRemove;
+  final VoidCallback onDeselect;
+  final Widget child;
+
+  void _step(int dx, int dy) => onNudge?.call(dx, dy);
+
+  @override
+  Widget build(BuildContext context) {
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.arrowLeft): () => _step(-1, 0),
+        const SingleActivator(LogicalKeyboardKey.arrowRight): () => _step(1, 0),
+        const SingleActivator(LogicalKeyboardKey.arrowUp): () => _step(0, -1),
+        const SingleActivator(LogicalKeyboardKey.arrowDown): () => _step(0, 1),
+        const SingleActivator(LogicalKeyboardKey.arrowLeft, shift: true): () =>
+            _step(-10, 0),
+        const SingleActivator(LogicalKeyboardKey.arrowRight, shift: true): () =>
+            _step(10, 0),
+        const SingleActivator(LogicalKeyboardKey.arrowUp, shift: true): () =>
+            _step(0, -10),
+        const SingleActivator(LogicalKeyboardKey.arrowDown, shift: true): () =>
+            _step(0, 10),
+        const SingleActivator(LogicalKeyboardKey.keyD, meta: true): () =>
+            onDuplicate?.call(),
+        const SingleActivator(LogicalKeyboardKey.keyD, control: true): () =>
+            onDuplicate?.call(),
+        const SingleActivator(LogicalKeyboardKey.keyA, meta: true): () =>
+            onSelectAll?.call(),
+        const SingleActivator(LogicalKeyboardKey.keyA, control: true): () =>
+            onSelectAll?.call(),
+        const SingleActivator(LogicalKeyboardKey.delete): () =>
+            onRemove?.call(),
+        const SingleActivator(LogicalKeyboardKey.backspace): () =>
+            onRemove?.call(),
+        const SingleActivator(LogicalKeyboardKey.escape): onDeselect,
+      },
+      // Autofocus, because the canvas is what you are working in the moment the
+      // designer opens — a tool whose keyboard needs a click first is a tool
+      // whose keyboard nobody finds.
+      child: Focus(autofocus: true, child: child),
     );
   }
 }

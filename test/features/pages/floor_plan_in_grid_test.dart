@@ -99,7 +99,7 @@ Future<_Board> _pumpGrid(
                 editing: editing,
                 onMove: (id, x, y) => out.moved = (id, x, y),
                 onWidgetConfig: (id, next) => out.config = next,
-                onSelect: (id) => out.selected = id,
+                onSelect: (id, _) => out.selected = id,
                 onDropCard: (payload, x, y) => out.droppedCard = (x, y),
               ),
             ),

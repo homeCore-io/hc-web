@@ -31,7 +31,7 @@ class PageGrid extends StatefulWidget {
     this.onConfigure,
     this.onWidgetConfig,
     this.onAddAt,
-    this.selectedId,
+    this.selectedIds = const {},
     this.onDropCard,
     this.onMenu,
     this.onSelect,
@@ -71,7 +71,9 @@ class PageGrid extends StatefulWidget {
   /// The card the rail is showing. Marked on the canvas, because a panel that
   /// names a card while nothing on the board says which one is a panel about
   /// nothing you can see.
-  final String? selectedId;
+  /// Everything in hand. A set, because align, distribute and the keyboard all
+  /// act on more than one card — see `page_screen`'s `_selection`.
+  final Set<String> selectedIds;
 
   /// A card dragged in from the library, dropped at a cell.
   final void Function(Object payload, int x, int y)? onDropCard;
@@ -86,7 +88,9 @@ class PageGrid extends StatefulWidget {
   /// A plain click on a card. Null on the surfaces with nowhere to put a
   /// selection — the phone's in-place editor has no inspector beside it, and a
   /// card that highlights and then does nothing is a worse answer than none.
-  final void Function(String id)? onSelect;
+  /// [additive] is a shift-click: add to the selection, or take back out
+  /// something already in it.
+  final void Function(String id, bool additive)? onSelect;
 
   @override
   State<PageGrid> createState() => _PageGridState();
@@ -126,7 +130,7 @@ class _PageGridState extends State<PageGrid> {
     setState(() => _entered = id);
     // Entering is also choosing: the inspector should be showing the card you
     // are now working inside.
-    widget.onSelect?.call(id);
+    widget.onSelect?.call(id, false);
     _enteredFocus.requestFocus();
   }
 
@@ -370,7 +374,7 @@ class _PageGridState extends State<PageGrid> {
                       editing: widget.editing,
                       simplified: gesturing,
                       dragging: _dragId == item.id || _resizeId == item.id,
-                      selected: widget.selectedId == item.id,
+                      selected: widget.selectedIds.contains(item.id),
                       entered: _entered == item.id,
                       enteredFocus: _enteredFocus,
                       onEnter: () => _enter(item.id),
@@ -387,7 +391,13 @@ class _PageGridState extends State<PageGrid> {
                       onMenu: (pos) => widget.onMenu?.call(item.id, pos),
                       onSelect: widget.onSelect == null
                           ? null
-                          : () => widget.onSelect!(item.id),
+                          // Shift is read at the moment of the tap rather than
+                          // tracked as state: a modifier held while the pointer
+                          // was elsewhere is not a modifier held for this click.
+                          : () => widget.onSelect!(
+                                item.id,
+                                HardwareKeyboard.instance.isShiftPressed,
+                              ),
                       onDragStart: () => startDrag(item),
                       onDragUpdate: updateDrag,
                       onDragEnd: endDrag,

@@ -72,9 +72,9 @@ class _Snapshot {
   final Set<DashboardBreakpoint> touched;
   final bool contentDirty;
 
-  /// Which card was in the inspector. Undo puts you back where you were, and
+  /// What was in hand. Undo puts you back where you were, and
   /// where you were includes what you were looking at.
-  final String? selected;
+  final Set<String> selected;
   final DashboardBackground? background;
 }
 
@@ -110,7 +110,41 @@ class _PageScreenState extends ConsumerState<PageScreen> {
   Map<String, DashboardWidgetModel>? _draftWidgets;
 
   /// The card the inspector is showing, when there is room for one.
-  String? _selectedCard;
+  /// What is selected, in the order it was picked.
+  ///
+  /// A set rather than a single id, because align, distribute, group and every
+  /// keyboard action that moves something act on *what you have in hand* — and
+  /// with one id in hand, "distribute" has no meaning at all, which is why the
+  /// canvas shipped without it. See [GridEngine.distribute].
+  final _selection = <String>{};
+
+  /// The one selected card, or null when there is not exactly one.
+  ///
+  /// The inspector edits a card, not a crowd: two cards selected have two
+  /// titles and two configs and no honest single form. So the panel reads this
+  /// and shows the multi-selection summary when it is null but the selection is
+  /// not empty.
+  String? get _selectedCard => _selection.length == 1 ? _selection.first : null;
+
+  /// Replace the selection, or add to it — shift-click, in one place.
+  void _select(String? id, {bool additive = false}) {
+    setState(() {
+      if (id == null) {
+        _selection.clear();
+        return;
+      }
+      if (!additive) {
+        _selection
+          ..clear()
+          ..add(id);
+        return;
+      }
+      // Shift-clicking something already held takes it back out, which is how
+      // you fix a selection you overshot without starting again.
+      if (!_selection.remove(id)) _selection.add(id);
+    });
+  }
+
   bool _saving = false;
 
   bool get _editing => _draftItems != null;
@@ -329,7 +363,7 @@ class _PageScreenState extends ConsumerState<PageScreen> {
       widgets: Map<String, DashboardWidgetModel>.of(_draftWidgets ?? const {}),
       touched: Set<DashboardBreakpoint>.of(_touched),
       contentDirty: _contentDirty,
-      selected: _selectedCard,
+      selected: Set<String>.of(_selection),
       background: _draftBackground,
     ));
     if (_undo.length > _undoDepth) _undo.removeAt(0);
@@ -349,8 +383,9 @@ class _PageScreenState extends ConsumerState<PageScreen> {
       _draftBackground = snap.background;
       // Restored too, but only if it survived — a snapshot taken before a card
       // was added has no such card to select.
-      _selectedCard =
-          snap.widgets.containsKey(snap.selected) ? snap.selected : null;
+      _selection
+        ..clear()
+        ..addAll(snap.selected.where(snap.widgets.containsKey));
     });
   }
 
@@ -590,7 +625,7 @@ class _PageScreenState extends ConsumerState<PageScreen> {
     }
     setState(() {
       _draftWidgets = {...?_draftWidgets}..remove(id);
-      if (_selectedCard == id) _selectedCard = null;
+      _selection.remove(id);
       _commit(engine.remove(_draftItems!, id));
     });
   }
@@ -611,7 +646,7 @@ class _PageScreenState extends ConsumerState<PageScreen> {
         _draftItems?.where((i) => i.id == id).cast<GridItem?>().firstOrNull;
     if (model == null || item == null) return;
 
-    setState(() => _selectedCard = id);
+    _select(id);
 
     final overlay =
         Overlay.of(context).context.findRenderObject() as RenderBox?;
@@ -650,7 +685,7 @@ class _PageScreenState extends ConsumerState<PageScreen> {
 
     switch (choice) {
       case 'configure':
-        setState(() => _selectedCard = id);
+        _select(id);
       case 'duplicate':
         _duplicateCard(model, item, columns);
       case 'half':
@@ -767,7 +802,9 @@ class _PageScreenState extends ConsumerState<PageScreen> {
         item.x,
         item.bottom,
       ));
-      _selectedCard = copy.id;
+      _selection
+        ..clear()
+        ..add(copy.id);
     });
   }
 
@@ -806,7 +843,9 @@ class _PageScreenState extends ConsumerState<PageScreen> {
           : engine.addAt(_draftItems!, item, atX, atY ?? 0));
       // Select what was just placed: the next thing anyone does to a new card
       // is look at it, and the inspector is where that happens.
-      _selectedCard = created.id;
+      _selection
+        ..clear()
+        ..add(created.id);
     });
   }
 
@@ -870,7 +909,7 @@ class _PageScreenState extends ConsumerState<PageScreen> {
       _draftLayouts = null;
       _draftItems = null;
       _draftWidgets = null;
-      _selectedCard = null;
+      _selection.clear();
       _editingBreakpoint = null;
       _touched.clear();
       _contentDirty = false;
@@ -911,7 +950,7 @@ class _PageScreenState extends ConsumerState<PageScreen> {
     for (final w in widgets) {
       final message = WidgetRegistry.lookup(w.type)?.validate?.call(w.config);
       if (message != null) {
-        setState(() => _selectedCard = w.id);
+        _select(w.id);
         ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('${_cardLabel(w)}: $message')));
         return;
@@ -1049,7 +1088,7 @@ class _PageScreenState extends ConsumerState<PageScreen> {
                       byHand: true),
                   onRemove: (id) => _removeWidget(id, columns),
                   onConfigure: (id) => hasInspector || widget.designer
-                      ? setState(() => _selectedCard = id)
+                      ? _select(id)
                       : _configureWidget(id),
                   // A card that edits itself in place — the floor plan placing
                   // a marker. Straight into the same writer the inspector
@@ -1059,9 +1098,9 @@ class _PageScreenState extends ConsumerState<PageScreen> {
                   onAddAt: (x, y) => _addWidget(columns, atX: x, atY: y),
                   onMenu: (id, at) => _cardMenu(id, at, columns),
                   onSelect: hasInspector || widget.designer
-                      ? (id) => setState(() => _selectedCard = id)
+                      ? (id, additive) => _select(id, additive: additive)
                       : null,
-                  selectedId: _selectedCard,
+                  selectedIds: _selection,
                   onDropCard: (payload, x, y) {
                     if (payload is DashboardWidgetModel) {
                       _placeCard(payload, columns, atX: x, atY: y);
@@ -1083,7 +1122,7 @@ class _PageScreenState extends ConsumerState<PageScreen> {
             columns: columns,
             saving: _saving,
             dirty: _touched.isNotEmpty || _contentDirty,
-            selectedCount: _selectedCard == null ? 0 : 1,
+            selectedCount: _selection.length,
             selected: _draftWidgets?[_selectedCard],
             selectedItem: items
                 .where((i) => i.id == _selectedCard)
@@ -1095,17 +1134,20 @@ class _PageScreenState extends ConsumerState<PageScreen> {
             onPick: (created) => _placeCard(created, columns),
             onChanged: (config) => _configureLive(_selectedCard!, config),
             onRemoveSelected: () {
-              _removeWidget(_selectedCard!, columns);
-              setState(() => _selectedCard = null);
+              // Everything in hand, not just the one the inspector was showing.
+              for (final id in _selection.toList()) {
+                _removeWidget(id, columns);
+              }
+              _select(null);
             },
-            onDeselect: () => setState(() => _selectedCard = null),
+            onDeselect: () => _select(null),
             onSave: () => _save(dashboard),
             canvas: canvas(),
             canvasWidth: previewWidthFor(breakpoint),
             cardCount: items.length,
             items: items,
             widgetsById: widgetsById,
-            onSelectCard: (id) => setState(() => _selectedCard = id),
+            onSelectCard: (id) => _select(id),
             onRename: (name) => setState(() {
               final id = _selectedCard;
               final current = _draftWidgets?[id];
@@ -1122,16 +1164,53 @@ class _PageScreenState extends ConsumerState<PageScreen> {
             // as dragging there would — an alignment that used a private path
             // could land a card somewhere a drag could never put it.
             onAlign: (align) {
-              final id = _selectedCard;
-              final item = items.where((i) => i.id == id).firstOrNull;
-              if (id == null || item == null) return;
+              if (_selection.isEmpty) return;
+              // Every selected card, through the same engine call a drag makes
+              // — so aligning three cards settles exactly as dragging each of
+              // them there would.
               _apply(
-                  (e, its) =>
-                      e.move(its, id, align.xFor(item.w, columns), item.y),
+                  (e, its) => _selection.fold(
+                        its,
+                        (acc, id) {
+                          final item = acc.where((i) => i.id == id).firstOrNull;
+                          return item == null
+                              ? acc
+                              : e.move(
+                                  acc, id, align.xFor(item.w, columns), item.y);
+                        },
+                      ),
                   columns,
                   byHand: true,
                   label: align.label);
             },
+            onNudge: (dx, dy) => _apply(
+                (e, its) => e.nudge(its, _selection, dx, dy), columns,
+                byHand: true, label: 'Nudge'),
+            onDuplicate: _selection.isEmpty
+                ? null
+                : () {
+                    // Every selected card, each landing under its own original
+                    // — the same rule one card follows, applied to a crowd.
+                    for (final id in _selection.toList()) {
+                      final model = _draftWidgets?[id];
+                      final item =
+                          _draftItems?.where((i) => i.id == id).firstOrNull;
+                      if (model != null && item != null) {
+                        _duplicateCard(model, item, columns);
+                      }
+                    }
+                  },
+            onSelectAll: () => setState(() {
+              _selection
+                ..clear()
+                ..addAll(items.map((i) => i.id));
+            }),
+            onDistribute: (horizontal) => _apply(
+                (e, its) =>
+                    e.distribute(its, _selection, horizontal: horizontal),
+                columns,
+                byHand: true,
+                label: horizontal ? 'Spread across' : 'Spread down'),
             onStack: _selectedCard == null
                 ? null
                 : (move) => _stack(_selectedCard!, move, columns),
@@ -1255,10 +1334,9 @@ class _PageScreenState extends ConsumerState<PageScreen> {
                                     _configureLive(sel.id, config),
                                 onRemove: () {
                                   _removeWidget(sel.id, columns);
-                                  setState(() => _selectedCard = null);
+                                  _select(null);
                                 },
-                                onClose: () =>
-                                    setState(() => _selectedCard = null),
+                                onClose: () => _select(null),
                               ),
                             null => CardLibrary(
                                 onPick: (created) =>

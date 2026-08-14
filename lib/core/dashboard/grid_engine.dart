@@ -213,6 +213,90 @@ class GridEngine {
     return _settle(_resolve([...items, placed], placed), pinned: placed.id);
   }
 
+  /// Shifts every card in [ids] by the same step, as one block.
+  ///
+  /// **Not a loop of [move].** Moving a selection one card at a time lets the
+  /// members shove each other: the first card lands on the second, the second
+  /// is pushed down, and a nudge that should have translated three cards a
+  /// column to the right has rearranged them. So the whole selection is
+  /// translated first and only then resolved, with all of it pinned — the
+  /// cards that are not moving are the ones that give way.
+  ///
+  /// Clamped as a block too. If any card would leave the grid the whole step is
+  /// refused, because a nudge that moves two of three cards is worse than one
+  /// that moves none: it silently breaks the arrangement you were adjusting.
+  List<GridItem> nudge(List<GridItem> items, Set<String> ids, int dx, int dy) {
+    if (ids.isEmpty || (dx == 0 && dy == 0)) return items;
+
+    final moving = [
+      for (final i in items)
+        if (ids.contains(i.id)) i,
+    ];
+    if (moving.isEmpty) return items;
+
+    for (final i in moving) {
+      final x = i.x + dx;
+      final y = i.y + dy;
+      if (x < 0 || y < 0 || x + i.w > columns) return items;
+    }
+
+    final shifted = [
+      for (final i in items)
+        if (ids.contains(i.id)) i.copyWith(x: i.x + dx, y: i.y + dy) else i,
+    ];
+    return _settle(_resolveAround(shifted, ids), pinned: ids.first);
+  }
+
+  /// Spreads [ids] evenly between the two that are already furthest apart.
+  ///
+  /// **The outermost two do not move.** Distributing is about the gaps, not
+  /// about where the group sits, and a version that recentred everything would
+  /// be a different command wearing this one's name — you would reach for it to
+  /// tidy three cards and find the whole row had shifted.
+  ///
+  /// Fewer than three is a no-op rather than an error: with two there is one
+  /// gap and it is already even, which is why this control only lights up at
+  /// three. That is also why it could not exist before multi-select — it is the
+  /// one canvas tool with no single-card meaning at all.
+  ///
+  /// Positions are cells, so an even split rarely divides exactly. The rounding
+  /// accumulates from the true fractional position rather than from the last
+  /// placed card, which keeps the total width honest: five cards across eleven
+  /// columns end where they started instead of drifting a column to the right.
+  List<GridItem> distribute(List<GridItem> items, Set<String> ids,
+      {bool horizontal = true}) {
+    final chosen = [
+      for (final i in items)
+        if (ids.contains(i.id)) i,
+    ]..sort((a, b) => horizontal ? a.x.compareTo(b.x) : a.y.compareTo(b.y));
+    if (chosen.length < 3) return items;
+
+    final first = chosen.first;
+    final last = chosen.last;
+    // The space the middle cards have to share: the run between the outer two,
+    // less the room the cards themselves take up.
+    final span = horizontal
+        ? last.x - (first.x + first.w)
+        : last.y - (first.y + first.h);
+    final occupied = chosen
+        .skip(1)
+        .take(chosen.length - 2)
+        .fold<int>(0, (sum, i) => sum + (horizontal ? i.w : i.h));
+    final gap = (span - occupied) / (chosen.length - 1);
+
+    final moved = <String, GridItem>{};
+    var cursor = (horizontal ? first.x + first.w : first.y + first.h) + gap;
+    for (final item in chosen.skip(1).take(chosen.length - 2)) {
+      final at = cursor.round();
+      moved[item.id] = horizontal ? item.copyWith(x: at) : item.copyWith(y: at);
+      cursor += (horizontal ? item.w : item.h) + gap;
+    }
+
+    return _settle([
+      for (final i in items) moved[i.id] ?? i,
+    ]);
+  }
+
   List<GridItem> remove(List<GridItem> items, String id) => _settle([
         for (final i in items)
           if (i.id != id) i
@@ -273,9 +357,13 @@ class GridEngine {
   // -- internals -----------------------------------------------------------
 
   /// Pushes anything overlapping [moved] downward, cascading.
-  List<GridItem> _resolve(List<GridItem> items, GridItem moved) {
+  List<GridItem> _resolve(List<GridItem> items, GridItem moved) =>
+      _resolveAround(items, {moved.id});
+
+  /// The same, for a whole selection held in place at once.
+  List<GridItem> _resolveAround(List<GridItem> items, Set<String> held) {
     var out = [...items];
-    final settled = <String>{moved.id};
+    final settled = <String>{...held};
 
     // Bounded rather than `while (true)`: a cascade can only push each item
     // down, so it must terminate — but a bug here would otherwise hang the tab.
