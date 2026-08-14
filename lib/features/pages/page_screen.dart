@@ -1096,6 +1096,14 @@ class _PageScreenState extends ConsumerState<PageScreen> {
                   // entry per gesture rather than one per pixel.
                   onWidgetConfig: _configureLive,
                   onAddAt: (x, y) => _addWidget(columns, atX: x, atY: y),
+                  onMarquee: (x1, y1, x2, y2, additive) => setState(() {
+                    final caught = _engine(columns)
+                        .itemsIn(_draftItems ?? const [], x1, y1, x2, y2);
+                    // Shift keeps what you had; a plain band starts again, the
+                    // same rule a click follows.
+                    if (!additive) _selection.clear();
+                    _selection.addAll(caught);
+                  }),
                   onMenu: (id, at) => _cardMenu(id, at, columns),
                   onSelect: hasInspector || widget.designer
                       ? (id, additive) => _select(id, additive: additive)

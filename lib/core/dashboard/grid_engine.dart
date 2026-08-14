@@ -108,6 +108,34 @@ class GridItem {
   String toString() => '$id($x,$y ${w}x$h${floating ? ' floating z$z' : ''})';
 }
 
+/// A line drawn while a card is held, saying what it is lining up with.
+///
+/// Carries the card it agrees with as well as the position, because a guide
+/// that says *where* without saying *with what* is a line you have to trace
+/// with your eye to make sense of — and the whole point is not having to.
+class GridGuide {
+  const GridGuide.vertical(this.at, this.partner) : isVertical = true;
+  const GridGuide.horizontal(this.at, this.partner) : isVertical = false;
+
+  /// In cells, and fractional for a centre line.
+  final double at;
+  final bool isVertical;
+  final GridItem partner;
+
+  @override
+  bool operator ==(Object other) =>
+      other is GridGuide &&
+      other.at == at &&
+      other.isVertical == isVertical &&
+      other.partner.id == partner.id;
+
+  @override
+  int get hashCode => Object.hash(at, isVertical, partner.id);
+
+  @override
+  String toString() => '${isVertical ? 'V' : 'H'}$at with ${partner.id}';
+}
+
 /// What empty space in a layout means. Mirrors core's `DashboardFlow`.
 enum GridFlow {
   /// Gaps close: a card floats up until something stops it. Every layout
@@ -211,6 +239,74 @@ class GridEngine {
     // Pinned, like a move: the card the user just placed must not be the one
     // that gets pushed aside to make room for itself.
     return _settle(_resolve([...items, placed], placed), pinned: placed.id);
+  }
+
+  /// Which cards a rubber band has caught.
+  ///
+  /// **Touching counts.** A marquee that only took cards it fully enclosed
+  /// would make selecting a wide header mean dragging past both its ends, and
+  /// on a 12-column grid that is most of the page. Every tool that gets this
+  /// right for layout uses intersection; full containment is for vector points.
+  ///
+  /// The band is given in cells and normalised here, so a drag that went up and
+  /// to the left works exactly like one that went down and to the right — which
+  /// is not a nicety, it is half of all drags.
+  Set<String> itemsIn(List<GridItem> items, int x1, int y1, int x2, int y2) {
+    final left = x1 < x2 ? x1 : x2;
+    final right = x1 < x2 ? x2 : x1;
+    final top = y1 < y2 ? y1 : y2;
+    final bottom = y1 < y2 ? y2 : y1;
+    return {
+      for (final i in items)
+        if (i.x < right && i.right > left && i.y < bottom && i.bottom > top)
+          i.id,
+    };
+  }
+
+  /// Where [id] lines up with anything else on the page.
+  ///
+  /// The lines a design tool draws while you drag, and the reason alignment
+  /// stops being something you verify afterwards by squinting. Positions are
+  /// whole cells, so "aligned" is exact equality rather than a tolerance — the
+  /// grid has already done the hard part, and inventing a fuzzy match on top of
+  /// exact numbers would draw guides for things that are not aligned.
+  ///
+  /// Six edges are compared, not two: left, centre and right across, top,
+  /// middle and bottom down. Centre matters most and is the one you cannot
+  /// check by eye, because two cards of different widths share a centre at a
+  /// position neither of them has an edge at.
+  List<GridGuide> guidesFor(List<GridItem> items, String id) {
+    final moving = items.where((i) => i.id == id).firstOrNull;
+    if (moving == null) return const [];
+
+    final guides = <GridGuide>[];
+    // Doubled, so a centre that falls between two cells is still an integer
+    // and two odd-width cards can be found to share one.
+    int centreX(GridItem i) => i.x * 2 + i.w;
+    int middleY(GridItem i) => i.y * 2 + i.h;
+
+    for (final other in items) {
+      if (other.id == id) continue;
+      if (other.x == moving.x) {
+        guides.add(GridGuide.vertical(moving.x.toDouble(), other));
+      }
+      if (other.right == moving.right) {
+        guides.add(GridGuide.vertical(moving.right.toDouble(), other));
+      }
+      if (centreX(other) == centreX(moving)) {
+        guides.add(GridGuide.vertical(moving.x + moving.w / 2, other));
+      }
+      if (other.y == moving.y) {
+        guides.add(GridGuide.horizontal(moving.y.toDouble(), other));
+      }
+      if (other.bottom == moving.bottom) {
+        guides.add(GridGuide.horizontal(moving.bottom.toDouble(), other));
+      }
+      if (middleY(other) == middleY(moving)) {
+        guides.add(GridGuide.horizontal(moving.y + moving.h / 2, other));
+      }
+    }
+    return guides;
   }
 
   /// Shifts every card in [ids] by the same step, as one block.

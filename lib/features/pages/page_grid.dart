@@ -31,6 +31,7 @@ class PageGrid extends StatefulWidget {
     this.onConfigure,
     this.onWidgetConfig,
     this.onAddAt,
+    this.onMarquee,
     this.selectedIds = const {},
     this.onDropCard,
     this.onMenu,
@@ -67,6 +68,10 @@ class PageGrid extends StatefulWidget {
   /// you dragged them where you meant. Pointing at the place you want something
   /// is the difference between arranging a page and correcting one.
   final void Function(int x, int y)? onAddAt;
+
+  /// A rubber band was pulled from one cell to another. [additive] is shift:
+  /// add the catch to what is already in hand.
+  final void Function(int x1, int y1, int x2, int y2, bool additive)? onMarquee;
 
   /// The card the rail is showing. Marked on the canvas, because a panel that
   /// names a card while nothing on the board says which one is a panel about
@@ -147,6 +152,16 @@ class _PageGridState extends State<PageGrid> {
   // once, on release. That is what stops neighbours from oscillating under the
   // cursor and gives an honest WYSIWYG result.
   List<GridItem>? _baseline;
+
+  /// The rubber band, in cells, while one is being dragged out.
+  ///
+  /// **Tap adds, drag selects.** Both gestures start on the empty canvas and
+  /// the split is the honest one: a tap is pointing at a cell, which is what
+  /// placing a card means, and a drag is describing a region, which is what
+  /// selecting means. Neither has to be modal and neither steals the other.
+  (int, int)? _bandFrom;
+  (int, int)? _bandTo;
+
   List<GridItem>? _preview;
 
   // Move gesture.
@@ -171,6 +186,13 @@ class _PageGridState extends State<PageGrid> {
         if (i.floating) i
     ]..sort((a, b) => a.z.compareTo(b.z));
     return [...grounded, ...floating];
+  }
+
+  /// The cell under a point, clamped to the board.
+  static (int, int) _cellOf(Offset p, double stepX, double stepY, int columns) {
+    final x = (p.dx / stepX).floor().clamp(0, columns - 1);
+    final y = (p.dy / stepY).floor();
+    return (x, y < 0 ? 0 : y);
   }
 
   static GridItem? _itemById(List<GridItem> items, String id) {
@@ -308,23 +330,106 @@ class _PageGridState extends State<PageGrid> {
               // above them.
               if (widget.editing)
                 Positioned.fill(
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTapUp: widget.onAddAt == null
+                  // **Raw pointers, not a pan gesture.** The canvas lives
+                  // inside two scroll views, and a pan recogniser loses the
+                  // arena to them — every band drag became a scroll. A design
+                  // tool's artboard background belongs to the marquee; you
+                  // scroll it with the wheel or with the bars this shell draws
+                  // permanently. So the band takes the pointer directly rather
+                  // than negotiating for it.
+                  child: Listener(
+                    onPointerDown: widget.onMarquee == null
                         ? null
-                        : (details) {
-                            final p = details.localPosition;
-                            final x =
-                                (p.dx / stepX).floor().clamp(0, columns - 1);
-                            final y = (p.dy / stepY).floor();
-                            widget.onAddAt!(x, y < 0 ? 0 : y);
+                        : (e) => setState(() {
+                              _bandFrom = _cellOf(
+                                  e.localPosition, stepX, stepY, columns);
+                              _bandTo = _bandFrom;
+                            }),
+                    onPointerMove: widget.onMarquee == null
+                        ? null
+                        : (e) {
+                            if (_bandFrom == null) return;
+                            setState(() => _bandTo = _cellOf(
+                                e.localPosition, stepX, stepY, columns));
                           },
+                    onPointerUp: widget.onMarquee == null
+                        ? null
+                        : (_) {
+                            final from = _bandFrom;
+                            final to = _bandTo;
+                            setState(() {
+                              _bandFrom = null;
+                              _bandTo = null;
+                            });
+                            // Never left its cell: a tap that wobbled, and
+                            // placing a card is what a tap here is for.
+                            if (from == null || to == null || from == to) {
+                              return;
+                            }
+                            widget.onMarquee!(
+                              from.$1,
+                              from.$2,
+                              to.$1,
+                              to.$2,
+                              HardwareKeyboard.instance.isShiftPressed,
+                            );
+                          },
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTapUp: widget.onAddAt == null
+                          ? null
+                          : (details) {
+                              final p = details.localPosition;
+                              final x =
+                                  (p.dx / stepX).floor().clamp(0, columns - 1);
+                              final y = (p.dy / stepY).floor();
+                              widget.onAddAt!(x, y < 0 ? 0 : y);
+                            },
+                      child: CustomPaint(
+                        painter: _ColumnGuides(
+                          columns: columns,
+                          cellW: cellW,
+                          gap: widget.gap,
+                          color: t.stroke.hairline,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+
+              // The rubber band, while one is being pulled.
+              if (_bandFrom case final from?)
+                if (_bandTo case final to?)
+                  Positioned(
+                    left: (from.$1 < to.$1 ? from.$1 : to.$1) * stepX,
+                    top: (from.$2 < to.$2 ? from.$2 : to.$2) * stepY,
+                    width: ((from.$1 - to.$1).abs() + 1) * stepX - widget.gap,
+                    height: ((from.$2 - to.$2).abs() + 1) * stepY - widget.gap,
+                    child: IgnorePointer(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: t.accent.active.withValues(alpha: 0.06),
+                          border: Border.all(
+                              color: t.accent.active, width: t.stroke.width),
+                        ),
+                      ),
+                    ),
+                  ),
+
+              // The lines saying what the held card agrees with. Above the
+              // cards, because a guide under the thing it describes is a guide
+              // you cannot see at the moment you need it.
+              if (_dragId case final id?)
+                Positioned.fill(
+                  child: IgnorePointer(
                     child: CustomPaint(
-                      painter: _ColumnGuides(
-                        columns: columns,
-                        cellW: cellW,
+                      painter: _SmartGuides(
+                        guides: GridEngine(columns: columns)
+                            .guidesFor(_preview ?? widget.items, id),
+                        stepX: stepX,
+                        stepY: stepY,
                         gap: widget.gap,
-                        color: t.stroke.hairline,
+                        color: t.accent.primary,
                       ),
                     ),
                   ),
@@ -550,6 +655,67 @@ class _ColumnGuides extends CustomPainter {
       old.cellW != cellW ||
       old.gap != gap ||
       old.color != color;
+}
+
+/// The lines a held card agrees with.
+///
+/// Drawn the full width or height of the board rather than only between the two
+/// cards, because the question a guide answers is "is this in line with
+/// anything?" and a stub between two cards makes you find the other end
+/// yourself. One line per position, however many cards share it — three cards
+/// on the same left edge is one guide, not three drawn on top of each other.
+class _SmartGuides extends CustomPainter {
+  const _SmartGuides({
+    required this.guides,
+    required this.stepX,
+    required this.stepY,
+    required this.gap,
+    required this.color,
+  });
+
+  final List<GridGuide> guides;
+  final double stepX;
+  final double stepY;
+  final double gap;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (guides.isEmpty) return;
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1;
+
+    final drawn = <double>{};
+    for (final guide in guides) {
+      // Cell edges sit half a gap in from the step, so a guide on a card's
+      // right edge lands on the ink rather than in the gutter beside it.
+      final at = guide.isVertical
+          ? guide.at * stepX - gap / 2
+          : guide.at * stepY - gap / 2;
+      final key = guide.isVertical ? at : -at - 1;
+      if (!drawn.add(key)) continue;
+
+      canvas.drawLine(
+        guide.isVertical ? Offset(at, 0) : Offset(0, at),
+        guide.isVertical ? Offset(at, size.height) : Offset(size.width, at),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_SmartGuides old) {
+    if (old.guides.length != guides.length ||
+        old.stepX != stepX ||
+        old.color != color) {
+      return true;
+    }
+    for (var i = 0; i < guides.length; i++) {
+      if (old.guides[i] != guides[i]) return true;
+    }
+    return false;
+  }
 }
 
 /// The ghost arrangement, as dashed outlines.

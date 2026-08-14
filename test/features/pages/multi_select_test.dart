@@ -10,6 +10,7 @@ import 'package:hc_web/core/providers/dashboards_provider.dart';
 import 'package:hc_web/core/providers/devices_provider.dart';
 import 'package:hc_web/design/skins.dart';
 import 'package:hc_web/features/dashboard/builtin_cards.dart';
+import 'package:hc_web/features/pages/page_grid.dart';
 import 'package:hc_web/features/pages/page_screen.dart';
 
 /// The application's hands: holding more than one thing.
@@ -193,6 +194,62 @@ void main() {
       await _tapCard(tester, 'B', shift: true);
       await _tapCard(tester, 'C', shift: true);
       expect(find.textContaining('outermost two stay put'), findsOneWidget);
+    });
+  });
+
+  group('the rubber band', () {
+    /// Drags across the empty canvas below the cards, up and over them.
+    Future<void> band(WidgetTester tester, Offset from, Offset to,
+        {bool shift = false}) async {
+      if (shift) await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      final gesture = await tester.startGesture(from);
+      await tester.pump(const Duration(milliseconds: 20));
+      await gesture.moveTo(to);
+      await tester.pump(const Duration(milliseconds: 20));
+      await gesture.up();
+      await tester.pumpAndSettle();
+      if (shift) await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    }
+
+    /// The canvas's rect on screen. The board is drawn scaled to fit, so a
+    /// band has to be described in fractions of what is actually there rather
+    /// than in the grid's own cells.
+    Rect board(WidgetTester tester) => tester.getRect(find.byType(PageGrid));
+
+    testWidgets('pulled across the cards, it catches them', (tester) async {
+      await _open(tester);
+      final r = board(tester);
+      // Started on empty canvas below the row and pulled up over it. Starting
+      // *on* a card would drag that card, which is the right behaviour and the
+      // reason a band has to begin in open space.
+      await band(tester, Offset(r.left + 4, r.bottom - 4),
+          Offset(r.right - 4, r.top + 4));
+      expect(_status(tester), '3 selected');
+    });
+
+    testWidgets('a band that never leaves its cell is a tap, not a selection',
+        (tester) async {
+      // A wobbling tap must not select — placing a card is what a tap here is
+      // for, and a surprise selection would fight it.
+      await _open(tester);
+      final r = board(tester);
+      await band(tester, Offset(r.center.dx, r.bottom - 6),
+          Offset(r.center.dx + 2, r.bottom - 5));
+      expect(_status(tester), 'Nothing selected');
+    });
+
+    testWidgets('shift keeps what was already in hand', (tester) async {
+      await _open(tester);
+      final r = board(tester);
+      await _tapCard(tester, 'C');
+      expect(_status(tester), '1 selected');
+
+      // A band up the left-hand edge, from empty space below it: it catches A,
+      // and C stays because shift is held.
+      await band(tester, Offset(r.left + 4, r.bottom - 4),
+          Offset(r.left + r.width * 0.12, r.top + 4),
+          shift: true);
+      expect(_status(tester), '2 selected');
     });
   });
 
