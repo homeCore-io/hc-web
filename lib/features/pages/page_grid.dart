@@ -1,7 +1,12 @@
+import 'dart:math' as math;
+
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/dashboard/canvas_view.dart';
 import '../../core/dashboard/card_style.dart';
+import '../../core/dashboard/frame.dart';
 import '../../core/dashboard/grid_engine.dart';
 import '../../core/dashboard/widget_registry.dart';
 import '../../core/models/dashboard.dart';
@@ -38,6 +43,9 @@ class PageGrid extends StatefulWidget {
     this.onSelect,
     this.onEnterGroup,
     this.groupOutline,
+    this.frame,
+    this.snapToGrid = true,
+    this.onCompose,
   });
 
   final List<GridItem> items;
@@ -113,9 +121,115 @@ class PageGrid extends StatefulWidget {
   /// which is the difference the feature exists to make.
   final (GridItem, String)? groupOutline;
 
+  /// The canvas this layout is composed on, or null for a plain grid.
+  ///
+  /// Present, the board is the frame's own size and every element is drawn from
+  /// its rectangle rather than from its cells — see `frame.dart`. Absent, none
+  /// of this applies and the grid behaves exactly as it always has, which is
+  /// the case most pages are in.
+  final DashboardFrame? frame;
+
+  /// A composed element was moved or resized to [rect].
+  ///
+  /// Separate from [onMove] and [onResize] because it is a different edit: those
+  /// two report cells and the parent runs the packing engine on them, which is
+  /// exactly what must not happen to something somebody placed.
+  final void Function(String id, DashboardRect rect)? onCompose;
+
+  /// Whether a composed drag is pulled to the cell edges.
+  ///
+  /// A choice per gesture rather than a property of the document. This is the
+  /// one place "the grid is a magnet, not a law" has to actually be true.
+  final bool snapToGrid;
+
   @override
   State<PageGrid> createState() => _PageGridState();
 }
+
+/// Moving a card, on raw pointer events rather than a pan recogniser.
+///
+/// The canvas sits inside two scroll views, and a pan recogniser competes with
+/// them for the gesture. **In a real browser it wins** — this was checked
+/// against the live house, before and after, dragging horizontally, vertically
+/// and diagonally, and the pan version moved the card every time. Under
+/// `flutter_test` it does not: the harness synthesises one large move where a
+/// browser sends a stream of small ones, and the arena resolves the other way,
+/// so every drag became a scroll and no test could move a card at all.
+///
+/// So this is not a fix for a bug anybody could see. It is a fix for a gesture
+/// whose outcome depended on how the pointer events arrived, which meant the
+/// drag could not be tested — and composition needed testing more than the
+/// grid did, because a composed drag writes a rectangle rather than snapping
+/// to a cell that would have hidden small errors.
+///
+/// Raw pointers do not compete, so the outcome is the same either way. Tapping,
+/// the context menu and the long press stay on the [GestureDetector]
+/// underneath: a tap recogniser rejects itself once the pointer travels past
+/// the slop, so a drag cannot also read as a click.
+class _DragBody extends StatefulWidget {
+  const _DragBody({
+    required this.onDragStart,
+    required this.onDragUpdate,
+    required this.onDragEnd,
+    required this.child,
+  });
+
+  final VoidCallback onDragStart;
+  final ValueChanged<Offset> onDragUpdate;
+  final VoidCallback onDragEnd;
+  final Widget child;
+
+  @override
+  State<_DragBody> createState() => _DragBodyState();
+}
+
+class _DragBodyState extends State<_DragBody> {
+  Offset? _from;
+  bool _moving = false;
+
+  void _end() {
+    if (_moving) widget.onDragEnd();
+    _from = null;
+    _moving = false;
+  }
+
+  @override
+  Widget build(BuildContext context) => Listener(
+        onPointerDown: (event) {
+          // Primary only. The middle button pans the canvas and the secondary
+          // one opens the card menu; neither should move anything.
+          if (event.buttons != kPrimaryButton) return;
+          _from = event.localPosition;
+          _moving = false;
+        },
+        onPointerMove: (event) {
+          final from = _from;
+          if (from == null) return;
+          if (!_moving) {
+            // Past the slop before anything happens, or every click nudges the
+            // card by a pixel and the page is never quite where you left it.
+            if ((event.localPosition - from).distance < kTouchSlop) {
+              return;
+            }
+            _moving = true;
+            widget.onDragStart();
+          }
+          // The *local* delta: the board is drawn scaled, and the global one
+          // would move the card by screen pixels on a canvas measured in its
+          // own.
+          widget.onDragUpdate(event.localDelta);
+        },
+        onPointerUp: (_) => _end(),
+        onPointerCancel: (_) => _end(),
+        child: widget.child,
+      );
+}
+
+/// The smallest a composed element may be dragged to, in frame units.
+///
+/// Not zero: a card resized to nothing cannot be grabbed again, and core
+/// rejects a rectangle with no size. Roughly a finger.
+const double _minComposed = 24;
 
 class _PageGridState extends State<PageGrid> {
   /// The cell a dragged-in card is hovering over, in grid units.
@@ -150,6 +264,10 @@ class _PageGridState extends State<PageGrid> {
     _lastTapId = id;
     _lastTapAt = now;
   }
+
+  /// The rectangle a composed gesture started from, so a drag depends only on
+  /// how far the pointer has moved and not on the path it took.
+  DashboardRect? _gestureRect;
 
   /// The card the editor has been *entered* into, or null.
   ///
@@ -264,32 +382,87 @@ class _PageGridState extends State<PageGrid> {
         // untouched until release.
         final items = _preview ?? widget.items;
 
-        double leftOf(GridItem i) => i.x * stepX;
-        double topOf(GridItem i) => i.y * stepY;
-        double widthOf(GridItem i) => i.w * cellW + (i.w - 1) * widget.gap;
-        double heightOf(GridItem i) =>
-            i.h * widget.rowHeight + (i.h - 1) * widget.gap;
+        // The geometry of one cell, in the units the board is drawn in. When
+        // the layout is composed those units *are* the frame's, because the
+        // board is laid out at the frame's width — so a rectangle needs no
+        // conversion on the way to the screen, and a cell means the same thing
+        // to the guides, the rulers and the snap.
+        final geometry = CanvasGeometry(
+          width: c.maxWidth,
+          columns: columns,
+          rowHeight: widget.rowHeight,
+          gap: widget.gap,
+        );
+
+        // The one place the two representations are reconciled. Everything that
+        // draws goes through here, so "the rectangle is the truth and the cells
+        // are the fallback" is decided once.
+        DashboardRect boxOf(GridItem i) => rectFor(geometry, i, i.rect);
+
+        double leftOf(GridItem i) => boxOf(i).x;
+        double topOf(GridItem i) => boxOf(i).y;
+        double widthOf(GridItem i) => boxOf(i).w;
+        double heightOf(GridItem i) => boxOf(i).h;
 
         final maxRow =
             items.fold<int>(0, (m, i) => i.bottom > m ? i.bottom : m);
-        final height = maxRow <= 0
-            // An empty page still needs a board. Four rows is enough to read as
-            // a grid and to aim at, without pretending the page is longer than
-            // it is.
-            ? widget.rowHeight * (widget.editing ? 4 : 1) +
-                (widget.editing ? widget.gap * 3 : 0)
-            : maxRow * widget.rowHeight + (maxRow - 1) * widget.gap;
+        // How far down anything actually reaches, which for a composed page is
+        // not a multiple of a row.
+        final reach = items.fold<double>(
+            0, (m, i) => boxOf(i).bottom > m ? boxOf(i).bottom : m);
+
+        final double height;
+        if (widget.frame case final frame?) {
+          height = switch (frame.fit) {
+            // A fixed frame is exactly its own height: it is a rectangle
+            // somebody composed, and growing it because something hangs over
+            // the edge would silently change the composition.
+            DashboardFrameFit.fixed => frame.height,
+            // A scrolling frame's height is a starting point, so the board is
+            // whichever is greater — the page grows past it.
+            DashboardFrameFit.scroll => math.max(frame.height, reach),
+          };
+        } else if (maxRow <= 0) {
+          // An empty page still needs a board. Four rows is enough to read as
+          // a grid and to aim at, without pretending the page is longer than
+          // it is.
+          height = widget.rowHeight * (widget.editing ? 4 : 1) +
+              (widget.editing ? widget.gap * 3 : 0);
+        } else {
+          height = maxRow * widget.rowHeight + (maxRow - 1) * widget.gap;
+        }
+
+        /// The preview with [id]'s rectangle replaced — a composed element is
+        /// placed, not packed, so the engine is deliberately not consulted.
+        List<GridItem> composedPreview(String id, DashboardRect rect) => [
+              for (final i in _baseline!)
+                if (i.id == id)
+                  geometry
+                      .snapToCells(i.id, rect, floating: i.floating, z: i.z)
+                      .copyWith(rect: rect)
+                else
+                  i,
+            ];
 
         void startDrag(GridItem item) => setState(() {
               _baseline = List<GridItem>.of(widget.items);
               _preview = _baseline;
               _dragId = item.id;
               _dragStart = Point(item.x, item.y);
+              _gestureRect = item.rect;
               _accum = Offset.zero;
             });
 
         void updateDrag(Offset delta) {
           _accum += delta;
+          if (_gestureRect case final from?) {
+            final rect = from.copyWith(
+              x: geometry.snapX(from.x + _accum.dx, on: widget.snapToGrid),
+              y: geometry.snapY(from.y + _accum.dy, on: widget.snapToGrid),
+            );
+            setState(() => _preview = composedPreview(_dragId!, rect));
+            return;
+          }
           final tx = _dragStart.x + (_accum.dx / stepX).round();
           final ty = _dragStart.y + (_accum.dy / stepY).round();
           final engine = GridEngine(columns: columns);
@@ -303,12 +476,17 @@ class _PageGridState extends State<PageGrid> {
           // Commit once: the parent runs the identical move on the real draft,
           // so the card lands exactly where the preview showed it.
           if (id != null && settled != null) {
-            widget.onMove?.call(id, settled.x, settled.y);
+            if (settled.rect case final rect?) {
+              widget.onCompose?.call(id, rect);
+            } else {
+              widget.onMove?.call(id, settled.x, settled.y);
+            }
           }
           setState(() {
             _dragId = null;
             _baseline = null;
             _preview = null;
+            _gestureRect = null;
             _accum = Offset.zero;
           });
         }
@@ -318,6 +496,7 @@ class _PageGridState extends State<PageGrid> {
               _preview = _baseline;
               _resizeId = item.id;
               _resizeStart = Point(item.w, item.h);
+              _gestureRect = item.rect;
               _resizeAccum = Offset.zero;
             });
 
@@ -325,6 +504,22 @@ class _PageGridState extends State<PageGrid> {
           // Accumulate, like drag — a per-event delta rounds to zero almost
           // every frame and the resize feels dead.
           _resizeAccum += delta;
+          if (_gestureRect case final from?) {
+            // Snapped on the *far* edge, which is the one the pointer is
+            // holding. Snapping the width instead would move that edge to
+            // somewhere the near edge's offset put it, and a card whose left
+            // side is off-grid could never have a right side on it.
+            final right = geometry.snapX(from.right + _resizeAccum.dx,
+                on: widget.snapToGrid);
+            final bottom = geometry.snapY(from.bottom + _resizeAccum.dy,
+                on: widget.snapToGrid);
+            final rect = from.copyWith(
+              w: math.max(right - from.x, _minComposed),
+              h: math.max(bottom - from.y, _minComposed),
+            );
+            setState(() => _preview = composedPreview(_resizeId!, rect));
+            return;
+          }
           final tw = _resizeStart.x + (_resizeAccum.dx / stepX).round();
           final th = _resizeStart.y + (_resizeAccum.dy / stepY).round();
           final engine = GridEngine(columns: columns);
@@ -336,12 +531,17 @@ class _PageGridState extends State<PageGrid> {
           final id = _resizeId;
           final settled = id == null ? null : _itemById(_preview!, id);
           if (id != null && settled != null) {
-            widget.onResize?.call(id, settled.w, settled.h);
+            if (settled.rect case final rect?) {
+              widget.onCompose?.call(id, rect);
+            } else {
+              widget.onResize?.call(id, settled.w, settled.h);
+            }
           }
           setState(() {
             _resizeId = null;
             _baseline = null;
             _preview = null;
+            _gestureRect = null;
             _resizeAccum = Offset.zero;
           });
         }
@@ -1218,28 +1418,30 @@ class _Cell extends StatelessWidget {
         Positioned.fill(child: IgnorePointer(child: card)),
         // Drag anywhere on the body to move.
         Positioned.fill(
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            // Click to select. It reads as too obvious to write down, and it
-            // was missing: the only way to put a card in the inspector was to
-            // find the small round options button in its corner. Everything
-            // else about the canvas said "direct manipulation" and the first
-            // gesture anyone tries did nothing at all.
-            onTap: onSelect,
-            onPanStart: (_) => onDragStart(),
-            onPanUpdate: (d) => onDragUpdate(d.delta),
-            onPanEnd: (_) => onDragEnd(),
-            onSecondaryTapDown: (d) => onMenu(d.globalPosition),
-            // A long press is the same gesture on a touchscreen, and the
-            // in-place editor runs there too.
-            onLongPressStart: (d) => onMenu(d.globalPosition),
-            child: MouseRegion(
-              cursor: SystemMouseCursors.move,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  borderRadius: t.radius.mdR,
-                  border: Border.all(
-                    color: t.accent.active.withValues(alpha: 0.5),
+          child: _DragBody(
+            onDragStart: onDragStart,
+            onDragUpdate: onDragUpdate,
+            onDragEnd: onDragEnd,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              // Click to select. It reads as too obvious to write down, and it
+              // was missing: the only way to put a card in the inspector was to
+              // find the small round options button in its corner. Everything
+              // else about the canvas said "direct manipulation" and the first
+              // gesture anyone tries did nothing at all.
+              onTap: onSelect,
+              onSecondaryTapDown: (d) => onMenu(d.globalPosition),
+              // A long press is the same gesture on a touchscreen, and the
+              // in-place editor runs there too.
+              onLongPressStart: (d) => onMenu(d.globalPosition),
+              child: MouseRegion(
+                cursor: SystemMouseCursors.move,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: t.radius.mdR,
+                    border: Border.all(
+                      color: t.accent.active.withValues(alpha: 0.5),
+                    ),
                   ),
                 ),
               ),

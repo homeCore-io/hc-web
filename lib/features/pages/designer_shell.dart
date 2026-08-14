@@ -64,6 +64,9 @@ class DesignerShell extends StatefulWidget {
     required this.canvasWidth,
     required this.cardCount,
     required this.onFlowChanged,
+    required this.onComposeChanged,
+    required this.snapToGrid,
+    required this.onSnapChanged,
     required this.onAlign,
     this.onDistribute,
     this.onNudge,
@@ -122,6 +125,13 @@ class DesignerShell extends StatefulWidget {
   final double? canvasWidth;
   final int cardCount;
   final ValueChanged<GridFlow>? onFlowChanged;
+
+  /// Turn composition on for this layout, or hand it back to the grid.
+  final ValueChanged<bool>? onComposeChanged;
+
+  /// Whether a composed drag is pulled to the cell edges.
+  final bool snapToGrid;
+  final ValueChanged<bool>? onSnapChanged;
 
   /// Move the selection to one edge of the canvas, or to its middle.
   final ValueChanged<CanvasAlign>? onAlign;
@@ -535,6 +545,9 @@ class _DesignerShellState extends State<DesignerShell> {
                                       .firstOrNull,
                                   cardCount: widget.cardCount,
                                   onFlowChanged: widget.onFlowChanged,
+                                  onComposeChanged: widget.onComposeChanged,
+                                  snapToGrid: widget.snapToGrid,
+                                  onSnapChanged: widget.onSnapChanged,
                                   onBackgroundChanged:
                                       widget.onBackgroundChanged,
                                 )

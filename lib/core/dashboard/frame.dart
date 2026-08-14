@@ -23,7 +23,6 @@ library;
 import 'dart:math' as math;
 import 'dart:ui';
 
-import '../models/dashboard.dart';
 import 'canvas_view.dart';
 import 'grid_engine.dart';
 

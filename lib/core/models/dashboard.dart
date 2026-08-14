@@ -117,148 +117,6 @@ class DashboardWidgetPlacement {
       );
 }
 
-/// A rectangle in frame units — see [DashboardFrame].
-///
-/// Not clamped to the frame: bleeding a photograph off the edge of a page is
-/// something people do on purpose.
-class DashboardRect {
-  const DashboardRect({
-    required this.x,
-    required this.y,
-    required this.w,
-    required this.h,
-  });
-
-  final double x;
-  final double y;
-  final double w;
-  final double h;
-
-  double get right => x + w;
-  double get bottom => y + h;
-
-  DashboardRect copyWith({double? x, double? y, double? w, double? h}) =>
-      DashboardRect(
-        x: x ?? this.x,
-        y: y ?? this.y,
-        w: w ?? this.w,
-        h: h ?? this.h,
-      );
-
-  Map<String, dynamic> toJson() => {'x': x, 'y': y, 'w': w, 'h': h};
-
-  /// Null for anything that is not a complete, finite, positive rectangle.
-  ///
-  /// A half-written rect from a hand-edited document is not a position — it is
-  /// a card that lands nowhere — and falling back to the cells beside it is the
-  /// answer that still draws a page.
-  static DashboardRect? fromJson(Object? json) {
-    if (json is! Map) return null;
-    final x = _finite(json['x']);
-    final y = _finite(json['y']);
-    final w = _finite(json['w']);
-    final h = _finite(json['h']);
-    if (x == null || y == null || w == null || h == null) return null;
-    if (w <= 0 || h <= 0) return null;
-    return DashboardRect(x: x, y: y, w: w, h: h);
-  }
-
-  static double? _finite(Object? raw) {
-    if (raw is! num) return null;
-    final value = raw.toDouble();
-    return value.isFinite ? value : null;
-  }
-
-  @override
-  bool operator ==(Object other) =>
-      other is DashboardRect &&
-      other.x == x &&
-      other.y == y &&
-      other.w == w &&
-      other.h == h;
-
-  @override
-  int get hashCode => Object.hash(x, y, w, h);
-
-  @override
-  String toString() => 'Rect($x, $y, $w × $h)';
-}
-
-/// What the frame's height promises.
-enum DashboardFrameFit {
-  /// The height is a starting point: width sets the scale and the page grows
-  /// downward past the frame. How every dashboard has behaved until now.
-  scroll,
-
-  /// The whole frame is shown at once, scaled, and nothing scrolls. What a wall
-  /// display is.
-  fixed,
-}
-
-/// The canvas a layout is composed on.
-///
-/// Absent means the layout is a grid of cells and nothing else — every
-/// dashboard authored before this. Present, the cells become a snapping aid and
-/// the placement rectangles become the truth.
-class DashboardFrame {
-  const DashboardFrame({
-    required this.width,
-    required this.height,
-    this.fit = DashboardFrameFit.scroll,
-  });
-
-  final double width;
-  final double height;
-  final DashboardFrameFit fit;
-
-  DashboardFrame copyWith({
-    double? width,
-    double? height,
-    DashboardFrameFit? fit,
-  }) =>
-      DashboardFrame(
-        width: width ?? this.width,
-        height: height ?? this.height,
-        fit: fit ?? this.fit,
-      );
-
-  Map<String, dynamic> toJson() => {
-        'width': width,
-        'height': height,
-        'fit': _toSnakeCase(_enumName(fit)),
-      };
-
-  /// Null for anything that is not a usable canvas. A frame with no size would
-  /// divide by zero on the way to the screen.
-  static DashboardFrame? fromJson(Object? json) {
-    if (json is! Map) return null;
-    final width = DashboardRect._finite(json['width']);
-    final height = DashboardRect._finite(json['height']);
-    if (width == null || height == null) return null;
-    if (width <= 0 || height <= 0) return null;
-    return DashboardFrame(
-      width: width,
-      height: height,
-      fit: _frameFitFrom(json['fit']),
-    );
-  }
-
-  @override
-  bool operator ==(Object other) =>
-      other is DashboardFrame &&
-      other.width == width &&
-      other.height == height &&
-      other.fit == fit;
-
-  @override
-  int get hashCode => Object.hash(width, height, fit);
-}
-
-/// Absence reads as [DashboardFrameFit.scroll] — the behaviour of every
-/// dashboard authored before frames existed.
-DashboardFrameFit _frameFitFrom(Object? raw) =>
-    raw == 'fixed' ? DashboardFrameFit.fixed : DashboardFrameFit.scroll;
-
 class DashboardLayout {
   final DashboardBreakpoint breakpoint;
   final int columns;
@@ -432,6 +290,10 @@ DashboardLayout normalizeDashboardLayout(
         h: p.h,
         minW: mobile ? layout.columns : (hints[p.widgetId]?.minW ?? 1),
         minH: hints[p.widgetId]?.minH ?? 1,
+        // Never on mobile: that layout is a single column by construction, and
+        // a rectangle composed for a 1600-wide desktop describes positions the
+        // phone has no room for.
+        rect: mobile ? null : p.rect,
       ),
   ];
 

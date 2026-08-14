@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/dashboard/breakpoints.dart';
+import '../../core/dashboard/canvas_view.dart';
+import '../../core/dashboard/frame.dart';
 import '../../core/dashboard/free_layer.dart';
 import '../../core/dashboard/grid_engine.dart';
 import '../../core/dashboard/groups.dart';
@@ -126,6 +128,14 @@ class _PageScreenState extends ConsumerState<PageScreen> {
   /// and shows the multi-selection summary when it is null but the selection is
   /// not empty.
   String? get _selectedCard => _selection.length == 1 ? _selection.first : null;
+
+  /// Whether a composed drag is pulled to the cell edges.
+  ///
+  /// View state, like the zoom: how you are working on a page is not a fact
+  /// about the page. On by default, because the grid is what every existing
+  /// arrangement lines up with and a composition that starts by drifting off it
+  /// is a worse starting point than one that starts on it.
+  bool _snapToGrid = true;
 
   /// The group you have stepped into, or null at the top of the page.
   ///
@@ -524,6 +534,80 @@ class _PageScreenState extends ConsumerState<PageScreen> {
       items: items,
       edited: selected,
     );
+  }
+
+  /// The pixel shape of the layout being edited, in the units it is drawn in.
+  CanvasGeometry _geometry(int columns) {
+    final layout = _draftLayouts
+        ?.where((l) => l.breakpoint == _editingBreakpoint)
+        .firstOrNull;
+    return CanvasGeometry(
+      width: layout?.frame?.width ??
+          previewWidthFor(_editingBreakpoint ?? DashboardBreakpoint.desktop) ??
+          1600,
+      columns: columns,
+      rowHeight: layout?.rowHeight ?? _defaultRowHeight,
+      gap: layout?.gap ?? _defaultGap,
+    );
+  }
+
+  /// Turn composition on for a layout, or hand it back to the grid.
+  ///
+  /// **Nothing moves either way**, and that is the whole requirement. Turning it
+  /// on gives every element the rectangle its cells already describe, so the
+  /// page you were looking at is the page you get. Turning it off drops the
+  /// rectangles and leaves the cells, which have been kept in step all along —
+  /// so it costs you the fractions and nothing else.
+  ///
+  /// A page that rearranged itself the moment you enabled a mode would have
+  /// lost the arrangement the mode exists to let you refine.
+  void _setComposed(bool on, DashboardBreakpoint breakpoint, int columns) {
+    if (_draftItems == null || _draftLayouts == null) return;
+    _pushUndo(on ? 'Compose freely' : 'Back to the grid');
+    final geometry = _geometry(columns);
+    setState(() {
+      _draftLayouts = [
+        for (final l in _draftLayouts!)
+          if (l.breakpoint == breakpoint)
+            l.copyWith(
+              frame: on ? frameForGrid(geometry, _draftItems!) : null,
+              // Composed elements are placed, not packed, so a composed layout
+              // is a free one by construction — leaving it packed would mean
+              // the next save closed every gap somebody composed.
+              flow: on ? GridFlow.free : l.flow,
+            )
+          else
+            l,
+      ];
+      _commit([
+        for (final i in _draftItems!)
+          i.copyWith(rect: on ? geometry.rectOfItem(i) : null),
+      ]);
+    });
+  }
+
+  /// A composed element was put somewhere.
+  ///
+  /// Deliberately not through [_apply]: that runs the packing engine, which is
+  /// exactly what must not happen to something a person placed on a canvas.
+  /// The cells are recomputed alongside so the snapped approximation core
+  /// validates stays true to the rectangle.
+  void _composeCard(String id, DashboardRect rect, int columns) {
+    if (_draftItems == null) return;
+    _pushUndo('Move', coalesce: 'compose:$id');
+    final geometry = _geometry(columns);
+    setState(() {
+      _goFree();
+      _commit([
+        for (final i in _draftItems!)
+          if (i.id == id)
+            geometry
+                .snapToCells(id, rect, floating: i.floating, z: i.z)
+                .copyWith(rect: rect)
+          else
+            i,
+      ]);
+    });
   }
 
   /// The flow of the layout being edited. Everything that moves a card must
@@ -1394,6 +1478,9 @@ class _PageScreenState extends ConsumerState<PageScreen> {
                       : null,
                   onEnterGroup: widget.designer ? _enterGroup : null,
                   groupOutline: widget.designer ? _groupOutline : null,
+                  frame: layout.frame,
+                  onCompose: (id, rect) => _composeCard(id, rect, columns),
+                  snapToGrid: _snapToGrid,
                   selectedIds: _selection,
                   onDropCard: (payload, x, y) {
                     if (payload is DashboardWidgetModel) {
@@ -1453,7 +1540,11 @@ class _PageScreenState extends ConsumerState<PageScreen> {
                 : () => _enterGroup(_selection.first),
             onSave: () => _save(dashboard),
             canvas: canvas(),
-            canvasWidth: previewWidthFor(breakpoint),
+            // The frame *is* the canvas when there is one: composing at the
+            // size you designed for keeps a rectangle's units and the board's
+            // pixels the same thing, so nothing has to be converted on the way
+            // to the screen.
+            canvasWidth: layout.frame?.width ?? previewWidthFor(breakpoint),
             cardCount: items.length,
             items: items,
             widgetsById: widgetsById,
@@ -1550,6 +1641,9 @@ class _PageScreenState extends ConsumerState<PageScreen> {
               ];
               _touched.add(breakpoint);
             }),
+            onComposeChanged: (on) => _setComposed(on, breakpoint, columns),
+            snapToGrid: _snapToGrid,
+            onSnapChanged: (on) => setState(() => _snapToGrid = on),
           );
         }
 

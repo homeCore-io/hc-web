@@ -4,7 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hc_web/core/dashboard/canvas_view.dart';
 import 'package:hc_web/core/dashboard/frame.dart';
 import 'package:hc_web/core/dashboard/grid_engine.dart';
-import 'package:hc_web/core/models/dashboard.dart';
 
 /// The composition frame: fractional geometry, and the cells that must stay
 /// legal beside it.

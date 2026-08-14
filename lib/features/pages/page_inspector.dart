@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/dashboard/grid_engine.dart';
 import '../../core/models/dashboard.dart';
+import '../../design/components/hc_controls.dart';
 import '../../design/tokens.dart';
 import '../assets/asset_field.dart';
 
@@ -26,6 +27,9 @@ class PageInspector extends StatefulWidget {
     required this.layout,
     required this.cardCount,
     required this.onFlowChanged,
+    required this.onComposeChanged,
+    required this.snapToGrid,
+    required this.onSnapChanged,
     this.onBackgroundChanged,
   });
 
@@ -34,6 +38,14 @@ class PageInspector extends StatefulWidget {
   final DashboardLayout? layout;
   final int cardCount;
   final ValueChanged<GridFlow>? onFlowChanged;
+
+  /// Turn composition on, or hand the layout back to the grid.
+  final ValueChanged<bool>? onComposeChanged;
+
+  /// Whether a composed drag is pulled to the cell edges. View state — how you
+  /// are working on a page, not a fact about the page.
+  final bool snapToGrid;
+  final ValueChanged<bool>? onSnapChanged;
 
   /// Null outside the designer — the page inspector also renders where there is
   /// nothing to save into.
@@ -120,6 +132,41 @@ class _PageInspectorState extends State<PageInspector> {
                 style: t.text.captionStyle
                     .copyWith(color: t.surface.onBaseMuted, height: 1.4),
               ),
+            ],
+            if (widget.onComposeChanged case final onCompose?) ...[
+              SizedBox(height: t.space.lg),
+              Text('CANVAS',
+                  style: t.text.overlineStyle
+                      .copyWith(color: t.surface.onBaseMuted)),
+              SizedBox(height: t.space.xs),
+              _Toggle(
+                label: 'Compose freely',
+                value: layout?.isComposed ?? false,
+                onChanged: derived != null ? null : onCompose,
+              ),
+              Text(
+                derived != null
+                    ? 'This layout follows another one, so it has no canvas of '
+                        'its own to compose on.'
+                    : layout?.isComposed ?? false
+                        ? 'Cards sit anywhere on the canvas at any size. The '
+                            'grid is still here as something to line up with, '
+                            'and the cells are kept alongside so the page still '
+                            'opens as a grid anywhere that cannot read a canvas.'
+                        : 'Cards are whole cells of the grid. Turn this on to '
+                            'put them anywhere and at any size — nothing moves '
+                            'when you do.',
+                style: t.text.captionStyle
+                    .copyWith(color: t.surface.onBaseMuted, height: 1.4),
+              ),
+              if (layout?.isComposed ?? false) ...[
+                SizedBox(height: t.space.xs),
+                _Toggle(
+                  label: 'Snap to the grid',
+                  value: widget.snapToGrid,
+                  onChanged: widget.onSnapChanged,
+                ),
+              ],
             ],
             if (onBackgroundChanged != null) ...[
               SizedBox(height: t.space.lg),
@@ -260,6 +307,47 @@ class _Row extends StatelessWidget {
               style: t.text.bodySmallStyle.copyWith(
                   color: t.surface.onBase,
                   fontFeatures: t.numericFontFeatures)),
+        ],
+      ),
+    );
+  }
+}
+
+/// A labelled switch, using the house control rather than Material's.
+///
+/// `SwitchListTile` paints its background on the nearest `Material` ancestor,
+/// and this pane is a `DecoratedBox` — which Flutter asserts about, loudly,
+/// in every test that opens the designer.
+class _Toggle extends StatelessWidget {
+  const _Toggle({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final String label;
+  final bool value;
+  final ValueChanged<bool>? onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: t.space.xs / 2),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(label,
+                style: t.text.bodyStyle.copyWith(
+                    color: onChanged == null
+                        ? t.surface.onBaseMuted
+                        : t.surface.onBase)),
+          ),
+          HcToggle(
+            value: value,
+            onChanged: onChanged,
+            semanticLabel: label,
+          ),
         ],
       ),
     );

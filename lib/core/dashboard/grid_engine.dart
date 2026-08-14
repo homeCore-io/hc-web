@@ -15,6 +15,8 @@
 /// and gravity then pulls everything back up into the gaps.
 library;
 
+const Object _unchangedRect = Object();
+
 /// One card's box in grid units.
 class GridItem {
   const GridItem({
@@ -28,6 +30,7 @@ class GridItem {
     this.minH = 1,
     this.floating = false,
     this.z = 0,
+    this.rect,
   });
 
   final String id;
@@ -54,10 +57,38 @@ class GridItem {
   /// never be underneath anything.
   final int z;
 
+  /// Where this element really sits, when the layout is composed.
+  ///
+  /// The cells above are then a snapped approximation of it — see
+  /// `frame.dart`. Kept on the item rather than in a map beside it because
+  /// every operation on this canvas already flows through `GridItem`, and two
+  /// representations that have to be kept in step are two representations that
+  /// will not be.
+  final DashboardRect? rect;
+
+  /// Composed elements are placed, not packed.
+  ///
+  /// The same rule [floating] introduced, generalised: a card somebody put at a
+  /// particular point on a canvas is not competing for cells, so nothing
+  /// pushes it, it pushes nothing, and gravity does not pull it. Packing a
+  /// composition would be the layout engine overruling the design.
+  bool get isComposed => rect != null;
+
   int get right => x + w;
   int get bottom => y + h;
 
-  GridItem copyWith({int? x, int? y, int? w, int? h, bool? floating, int? z}) =>
+  /// [rect] takes a sentinel because null is meaningful for it: taking an
+  /// element back to plain cells is a real edit that would otherwise read as
+  /// *unchanged*.
+  GridItem copyWith({
+    int? x,
+    int? y,
+    int? w,
+    int? h,
+    bool? floating,
+    int? z,
+    Object? rect = _unchangedRect,
+  }) =>
       GridItem(
         id: id,
         x: x ?? this.x,
@@ -69,6 +100,9 @@ class GridItem {
         minH: minH,
         floating: floating ?? this.floating,
         z: z ?? this.z,
+        rect: identical(rect, _unchangedRect)
+            ? this.rect
+            : rect as DashboardRect?,
       );
 
   /// Do these two compete for the same cells?
@@ -82,6 +116,11 @@ class GridItem {
   bool overlaps(GridItem o) =>
       !floating &&
       !o.floating &&
+      // A composed element answers *no* for the same reason a floating one
+      // does: it was put where it is. Packing a composition would be the
+      // layout engine overruling the design.
+      !isComposed &&
+      !o.isComposed &&
       sectionId == o.sectionId &&
       id != o.id &&
       x < o.right &&
@@ -99,13 +138,18 @@ class GridItem {
       other.h == h &&
       other.sectionId == sectionId &&
       other.floating == floating &&
-      other.z == z;
+      other.z == z &&
+      // Part of identity, or a drag that moves a composed card without
+      // crossing a cell boundary would compare equal to where it started and
+      // the canvas would not repaint.
+      other.rect == rect;
 
   @override
-  int get hashCode => Object.hash(id, x, y, w, h, sectionId, floating, z);
+  int get hashCode => Object.hash(id, x, y, w, h, sectionId, floating, z, rect);
 
   @override
-  String toString() => '$id($x,$y ${w}x$h${floating ? ' floating z$z' : ''})';
+  String toString() => '$id($x,$y ${w}x$h${floating ? ' floating z$z' : ''}'
+      '${rect == null ? '' : ' $rect'})';
 }
 
 /// A line drawn while a card is held, saying what it is lining up with.
@@ -153,6 +197,148 @@ class GridGuide {
   @override
   String toString() => '${isVertical ? 'V' : 'H'}$at with ${partner.id}';
 }
+
+/// A rectangle in frame units — see [DashboardFrame].
+///
+/// Not clamped to the frame: bleeding a photograph off the edge of a page is
+/// something people do on purpose.
+class DashboardRect {
+  const DashboardRect({
+    required this.x,
+    required this.y,
+    required this.w,
+    required this.h,
+  });
+
+  final double x;
+  final double y;
+  final double w;
+  final double h;
+
+  double get right => x + w;
+  double get bottom => y + h;
+
+  DashboardRect copyWith({double? x, double? y, double? w, double? h}) =>
+      DashboardRect(
+        x: x ?? this.x,
+        y: y ?? this.y,
+        w: w ?? this.w,
+        h: h ?? this.h,
+      );
+
+  Map<String, dynamic> toJson() => {'x': x, 'y': y, 'w': w, 'h': h};
+
+  /// Null for anything that is not a complete, finite, positive rectangle.
+  ///
+  /// A half-written rect from a hand-edited document is not a position — it is
+  /// a card that lands nowhere — and falling back to the cells beside it is the
+  /// answer that still draws a page.
+  static DashboardRect? fromJson(Object? json) {
+    if (json is! Map) return null;
+    final x = _finite(json['x']);
+    final y = _finite(json['y']);
+    final w = _finite(json['w']);
+    final h = _finite(json['h']);
+    if (x == null || y == null || w == null || h == null) return null;
+    if (w <= 0 || h <= 0) return null;
+    return DashboardRect(x: x, y: y, w: w, h: h);
+  }
+
+  static double? _finite(Object? raw) {
+    if (raw is! num) return null;
+    final value = raw.toDouble();
+    return value.isFinite ? value : null;
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is DashboardRect &&
+      other.x == x &&
+      other.y == y &&
+      other.w == w &&
+      other.h == h;
+
+  @override
+  int get hashCode => Object.hash(x, y, w, h);
+
+  @override
+  String toString() => 'Rect($x, $y, $w × $h)';
+}
+
+/// What the frame's height promises.
+enum DashboardFrameFit {
+  /// The height is a starting point: width sets the scale and the page grows
+  /// downward past the frame. How every dashboard has behaved until now.
+  scroll,
+
+  /// The whole frame is shown at once, scaled, and nothing scrolls. What a wall
+  /// display is.
+  fixed,
+}
+
+/// The canvas a layout is composed on.
+///
+/// Absent means the layout is a grid of cells and nothing else — every
+/// dashboard authored before this. Present, the cells become a snapping aid and
+/// the placement rectangles become the truth.
+class DashboardFrame {
+  const DashboardFrame({
+    required this.width,
+    required this.height,
+    this.fit = DashboardFrameFit.scroll,
+  });
+
+  final double width;
+  final double height;
+  final DashboardFrameFit fit;
+
+  DashboardFrame copyWith({
+    double? width,
+    double? height,
+    DashboardFrameFit? fit,
+  }) =>
+      DashboardFrame(
+        width: width ?? this.width,
+        height: height ?? this.height,
+        fit: fit ?? this.fit,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'width': width,
+        'height': height,
+        'fit': fit.name,
+      };
+
+  /// Null for anything that is not a usable canvas. A frame with no size would
+  /// divide by zero on the way to the screen.
+  static DashboardFrame? fromJson(Object? json) {
+    if (json is! Map) return null;
+    final width = DashboardRect._finite(json['width']);
+    final height = DashboardRect._finite(json['height']);
+    if (width == null || height == null) return null;
+    if (width <= 0 || height <= 0) return null;
+    return DashboardFrame(
+      width: width,
+      height: height,
+      fit: _frameFitFrom(json['fit']),
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is DashboardFrame &&
+      other.width == width &&
+      other.height == height &&
+      other.fit == fit;
+
+  @override
+  int get hashCode => Object.hash(width, height, fit);
+}
+
+/// Absence reads as [DashboardFrameFit.scroll] — the behaviour of every
+/// dashboard authored before frames existed.
+DashboardFrameFit _frameFitFrom(Object? raw) =>
+    raw == 'fixed' ? DashboardFrameFit.fixed : DashboardFrameFit.scroll;
 
 /// What empty space in a layout means. Mirrors core's `DashboardFlow`.
 enum GridFlow {
