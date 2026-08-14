@@ -57,20 +57,33 @@ class DashboardWidgetPlacement {
   final int w;
   final int h;
 
+  /// Where the card really sits, when the layout has a frame.
+  ///
+  /// The cells above are then a *snapped approximation* of this, kept on
+  /// purpose: they are what core validates, what a client that predates frames
+  /// draws, and what the document falls back to if the frame is removed. See
+  /// `core/dashboard/frame.dart`.
+  final DashboardRect? rect;
+
   const DashboardWidgetPlacement({
     required this.widgetId,
     required this.x,
     required this.y,
     required this.w,
     required this.h,
+    this.rect,
   });
 
+  /// [rect] takes a sentinel because null is meaningful for it: clearing a
+  /// composed rectangle back to plain cells is a real edit, and
+  /// `copyWith(rect: null)` would otherwise silently mean *unchanged*.
   DashboardWidgetPlacement copyWith({
     String? widgetId,
     int? x,
     int? y,
     int? w,
     int? h,
+    Object? rect = _unchanged,
   }) {
     return DashboardWidgetPlacement(
       widgetId: widgetId ?? this.widgetId,
@@ -78,6 +91,7 @@ class DashboardWidgetPlacement {
       y: y ?? this.y,
       w: w ?? this.w,
       h: h ?? this.h,
+      rect: identical(rect, _unchanged) ? this.rect : rect as DashboardRect?,
     );
   }
 
@@ -87,6 +101,9 @@ class DashboardWidgetPlacement {
         'y': y,
         'w': w,
         'h': h,
+        // Omitted rather than null, matching core's `skip_serializing_if`. A
+        // page nobody has composed must not gain a key by being saved.
+        if (rect != null) 'rect': rect!.toJson(),
       };
 
   factory DashboardWidgetPlacement.fromJson(Map<String, dynamic> json) =>
@@ -96,8 +113,151 @@ class DashboardWidgetPlacement {
         y: json['y'] as int? ?? 0,
         w: json['w'] as int? ?? 1,
         h: json['h'] as int? ?? 1,
+        rect: DashboardRect.fromJson(json['rect']),
       );
 }
+
+/// A rectangle in frame units — see [DashboardFrame].
+///
+/// Not clamped to the frame: bleeding a photograph off the edge of a page is
+/// something people do on purpose.
+class DashboardRect {
+  const DashboardRect({
+    required this.x,
+    required this.y,
+    required this.w,
+    required this.h,
+  });
+
+  final double x;
+  final double y;
+  final double w;
+  final double h;
+
+  double get right => x + w;
+  double get bottom => y + h;
+
+  DashboardRect copyWith({double? x, double? y, double? w, double? h}) =>
+      DashboardRect(
+        x: x ?? this.x,
+        y: y ?? this.y,
+        w: w ?? this.w,
+        h: h ?? this.h,
+      );
+
+  Map<String, dynamic> toJson() => {'x': x, 'y': y, 'w': w, 'h': h};
+
+  /// Null for anything that is not a complete, finite, positive rectangle.
+  ///
+  /// A half-written rect from a hand-edited document is not a position — it is
+  /// a card that lands nowhere — and falling back to the cells beside it is the
+  /// answer that still draws a page.
+  static DashboardRect? fromJson(Object? json) {
+    if (json is! Map) return null;
+    final x = _finite(json['x']);
+    final y = _finite(json['y']);
+    final w = _finite(json['w']);
+    final h = _finite(json['h']);
+    if (x == null || y == null || w == null || h == null) return null;
+    if (w <= 0 || h <= 0) return null;
+    return DashboardRect(x: x, y: y, w: w, h: h);
+  }
+
+  static double? _finite(Object? raw) {
+    if (raw is! num) return null;
+    final value = raw.toDouble();
+    return value.isFinite ? value : null;
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is DashboardRect &&
+      other.x == x &&
+      other.y == y &&
+      other.w == w &&
+      other.h == h;
+
+  @override
+  int get hashCode => Object.hash(x, y, w, h);
+
+  @override
+  String toString() => 'Rect($x, $y, $w × $h)';
+}
+
+/// What the frame's height promises.
+enum DashboardFrameFit {
+  /// The height is a starting point: width sets the scale and the page grows
+  /// downward past the frame. How every dashboard has behaved until now.
+  scroll,
+
+  /// The whole frame is shown at once, scaled, and nothing scrolls. What a wall
+  /// display is.
+  fixed,
+}
+
+/// The canvas a layout is composed on.
+///
+/// Absent means the layout is a grid of cells and nothing else — every
+/// dashboard authored before this. Present, the cells become a snapping aid and
+/// the placement rectangles become the truth.
+class DashboardFrame {
+  const DashboardFrame({
+    required this.width,
+    required this.height,
+    this.fit = DashboardFrameFit.scroll,
+  });
+
+  final double width;
+  final double height;
+  final DashboardFrameFit fit;
+
+  DashboardFrame copyWith({
+    double? width,
+    double? height,
+    DashboardFrameFit? fit,
+  }) =>
+      DashboardFrame(
+        width: width ?? this.width,
+        height: height ?? this.height,
+        fit: fit ?? this.fit,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'width': width,
+        'height': height,
+        'fit': _toSnakeCase(_enumName(fit)),
+      };
+
+  /// Null for anything that is not a usable canvas. A frame with no size would
+  /// divide by zero on the way to the screen.
+  static DashboardFrame? fromJson(Object? json) {
+    if (json is! Map) return null;
+    final width = DashboardRect._finite(json['width']);
+    final height = DashboardRect._finite(json['height']);
+    if (width == null || height == null) return null;
+    if (width <= 0 || height <= 0) return null;
+    return DashboardFrame(
+      width: width,
+      height: height,
+      fit: _frameFitFrom(json['fit']),
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is DashboardFrame &&
+      other.width == width &&
+      other.height == height &&
+      other.fit == fit;
+
+  @override
+  int get hashCode => Object.hash(width, height, fit);
+}
+
+/// Absence reads as [DashboardFrameFit.scroll] — the behaviour of every
+/// dashboard authored before frames existed.
+DashboardFrameFit _frameFitFrom(Object? raw) =>
+    raw == 'fixed' ? DashboardFrameFit.fixed : DashboardFrameFit.scroll;
 
 class DashboardLayout {
   final DashboardBreakpoint breakpoint;
@@ -130,6 +290,16 @@ class DashboardLayout {
   /// layout authored.
   final GridFlow flow;
 
+  /// The canvas this layout is composed on, or null for a plain grid.
+  ///
+  /// Per layout rather than per dashboard, because the answer differs by
+  /// device — a wall is a fixed frame somebody composed, a phone is a column
+  /// that scrolls — and that is what a breakpoint is for.
+  final DashboardFrame? frame;
+
+  /// Whether this layout is composed rather than merely arranged.
+  bool get isComposed => frame != null;
+
   const DashboardLayout({
     required this.breakpoint,
     required this.columns,
@@ -138,6 +308,7 @@ class DashboardLayout {
     required this.placements,
     this.derivedFrom,
     this.flow = GridFlow.packed,
+    this.frame,
   });
 
   /// `derivedFrom` needs an explicit sentinel because null is a meaningful
@@ -152,6 +323,7 @@ class DashboardLayout {
     List<DashboardWidgetPlacement>? placements,
     Object? derivedFrom = _unchanged,
     GridFlow? flow,
+    Object? frame = _unchanged,
   }) {
     return DashboardLayout(
       breakpoint: breakpoint ?? this.breakpoint,
@@ -163,6 +335,10 @@ class DashboardLayout {
           ? this.derivedFrom
           : derivedFrom as DashboardBreakpoint?,
       flow: flow ?? this.flow,
+      // Same sentinel, same reason as `derivedFrom`: taking a composed layout
+      // back to a plain grid is a real edit that null alone cannot express.
+      frame:
+          identical(frame, _unchanged) ? this.frame : frame as DashboardFrame?,
     );
   }
 
@@ -184,6 +360,10 @@ class DashboardLayout {
         // it would mean a free layout edited by an older client silently
         // reverts to packed on its next save.
         'flow': flow.name,
+        // Omitted rather than null, matching core. A page nobody has composed
+        // must not gain a key by being saved — a document that grows keys by
+        // being read is one whose diffs stop meaning anything.
+        if (frame != null) 'frame': frame!.toJson(),
       };
 
   factory DashboardLayout.fromJson(Map<String, dynamic> json) =>
@@ -214,6 +394,7 @@ class DashboardLayout {
         // annoyance, while treating an unknown flow as free would leave gaps
         // in a layout authored expecting them closed.
         flow: json['flow'] == 'free' ? GridFlow.free : GridFlow.packed,
+        frame: DashboardFrame.fromJson(json['frame']),
       );
 }
 
