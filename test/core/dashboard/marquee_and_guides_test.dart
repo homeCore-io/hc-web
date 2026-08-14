@@ -88,4 +88,58 @@ void main() {
       expect(guides, isEmpty);
     });
   });
+
+  group('the measurement on a guide', () {
+    test('is the clear space between the two cards', () {
+      // `a` ends at row 2, `b` starts at row 5: three empty rows between them.
+      // Alignment says the edges agree; this says whether the space above
+      // matches the space below, which is the question you are really asking.
+      // Two cards of the same width at the same column agree on three lines —
+      // left, right and centre — and every one of them reports the same
+      // distance, because it is a fact about the pair.
+      final guides = engine.guidesFor([at('a', 2, 0), at('b', 2, 5)], 'a');
+      expect(guides, hasLength(3));
+      expect(guides.map((g) => g.gap), everyElement(3));
+      expect(guides.first.gapFrom, 2, reason: 'the space starts where a ends');
+    });
+
+    test('reads the same whichever card is above', () {
+      final guides = engine.guidesFor([at('a', 2, 5), at('b', 2, 0)], 'a');
+      expect(guides.map((g) => g.gap), everyElement(3));
+      expect(guides.first.gapFrom, 2);
+    });
+
+    test('is zero when they are touching', () {
+      // A real arrangement, and one you might well be aiming for — so it has a
+      // number rather than no measurement.
+      final guides = engine.guidesFor([at('a', 2, 0), at('b', 2, 2)], 'a');
+      expect(guides.map((g) => g.gap), everyElement(0));
+    });
+
+    test('is nothing at all when they overlap', () {
+      // A `0` here would claim they are touching, which is a different thing.
+      final guides = engine.guidesFor([
+        at('a', 2, 0, h: 4),
+        const GridItem(id: 'b', x: 2, y: 2, w: 2, h: 4),
+      ], 'a');
+      expect(guides.first.gap, isNull);
+    });
+
+    test('measures across for a guide that runs across', () {
+      // A horizontal guide is about two cards side by side, so the distance
+      // that matters is the horizontal one.
+      final guides = engine.guidesFor([at('a', 0, 3), at('b', 6, 3)], 'a');
+      expect(guides.map((g) => g.gap), everyElement(4),
+          reason: 'a ends at column 2, b starts at 6');
+      expect(guides.first.gapFrom, 2);
+    });
+
+    test('does not change which guide a guide is', () {
+      // Identity is the line and who it agrees with. Two guides differing only
+      // by a measurement are not two guides.
+      const partner = GridItem(id: 'b', x: 0, y: 0, w: 2, h: 2);
+      expect(const GridGuide.vertical(2, partner, gap: 3),
+          const GridGuide.vertical(2, partner, gap: 9));
+    });
+  });
 }

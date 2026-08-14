@@ -11,6 +11,7 @@ import '../../core/models/dashboard.dart';
 import '../../design/hc_icons.dart';
 import '../../design/tokens.dart';
 import 'breakpoint_bar.dart';
+import 'canvas_rulers.dart';
 import 'card_inspector.dart';
 import 'card_library.dart';
 import 'page_inspector.dart';
@@ -320,6 +321,10 @@ class _DesignerShellState extends State<DesignerShell> {
           final available = frame.maxWidth -
               DesignerShell._libraryWidth -
               DesignerShell._inspectorWidth -
+              // The ruler down the left-hand edge is not canvas. Left out of
+              // this, Fit would pick a scale twenty pixels too wide and quietly
+              // stop meaning what it says.
+              CanvasRuler.thickness -
               t.space.lg * 2;
           // Wall has no preview width — it *is* the big end — so it takes the
           // pane's own width. Before zoom that made it the one breakpoint the
@@ -411,49 +416,59 @@ class _DesignerShellState extends State<DesignerShell> {
                         },
                         onGroup: widget.onGroup,
                         onUngroup: widget.onUngroup,
-                        child: _PanArea(
-                          armed: _panArmed,
-                          onPan: _panBy,
-                          child: Container(
-                            color: t.surface.sunken,
-                            // The page's own background, behind the canvas: you are
-                            // arranging cards *on* it, so it has to be visible
-                            // while you arrange them.
-                            child: PageBackground(
-                              background: widget.dashboard.background,
-                              // Two scrollers, because zoom has two directions. The
-                              // canvas draws the layout at the width that breakpoint
-                              // really has — 1600 for desktop — which the middle pane
-                              // is nowhere near once two panels take their 600; and
-                              // above Fit it is wider still. Vertical alone would
-                              // strand the right-hand edge of the page off-screen
-                              // with no way to reach it.
-                              // Both bars always drawn, both reachable.
-                              //
-                              // The nesting alone was not enough: Flutter web draws
-                              // no scrollbar for an unmanaged scroll view, and a
-                              // mouse wheel only ever reaches the vertical one — so
-                              // at any zoom where the canvas is wider than the pane,
-                              // the right-hand side of the page existed and could not
-                              // be got to. `ScaledCanvas` made the extent honest,
-                              // which is precisely what turned a slightly clipped
-                              // card into unreachable content.
-                              child: Scrollbar(
-                                controller: _vertical,
-                                thumbVisibility: true,
-                                child: SingleChildScrollView(
+                        child: _Ruled(
+                          geometry: geometry,
+                          scale: scale,
+                          lead: t.space.lg,
+                          horizontal: _horizontal,
+                          vertical: _vertical,
+                          items: widget.items,
+                          selected: widget.selectedIds,
+                          child: _PanArea(
+                            armed: _panArmed,
+                            onPan: _panBy,
+                            child: Container(
+                              color: t.surface.sunken,
+                              // The page's own background, behind the canvas: you are
+                              // arranging cards *on* it, so it has to be visible
+                              // while you arrange them.
+                              child: PageBackground(
+                                background: widget.dashboard.background,
+                                // Two scrollers, because zoom has two directions. The
+                                // canvas draws the layout at the width that breakpoint
+                                // really has — 1600 for desktop — which the middle pane
+                                // is nowhere near once two panels take their 600; and
+                                // above Fit it is wider still. Vertical alone would
+                                // strand the right-hand edge of the page off-screen
+                                // with no way to reach it.
+                                // Both bars always drawn, both reachable.
+                                //
+                                // The nesting alone was not enough: Flutter web draws
+                                // no scrollbar for an unmanaged scroll view, and a
+                                // mouse wheel only ever reaches the vertical one — so
+                                // at any zoom where the canvas is wider than the pane,
+                                // the right-hand side of the page existed and could not
+                                // be got to. `ScaledCanvas` made the extent honest,
+                                // which is precisely what turned a slightly clipped
+                                // card into unreachable content.
+                                child: Scrollbar(
                                   controller: _vertical,
-                                  padding: EdgeInsets.all(t.space.lg),
-                                  child: Scrollbar(
-                                    controller: _horizontal,
-                                    thumbVisibility: true,
-                                    child: SingleChildScrollView(
+                                  thumbVisibility: true,
+                                  child: SingleChildScrollView(
+                                    controller: _vertical,
+                                    padding: EdgeInsets.all(t.space.lg),
+                                    child: Scrollbar(
                                       controller: _horizontal,
-                                      scrollDirection: Axis.horizontal,
-                                      child: ScaledCanvas(
-                                        scale: scale,
-                                        child: SizedBox(
-                                            width: width, child: widget.canvas),
+                                      thumbVisibility: true,
+                                      child: SingleChildScrollView(
+                                        controller: _horizontal,
+                                        scrollDirection: Axis.horizontal,
+                                        child: ScaledCanvas(
+                                          scale: scale,
+                                          child: SizedBox(
+                                              width: width,
+                                              child: widget.canvas),
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -1122,6 +1137,130 @@ class _CanvasKeys extends StatelessWidget {
         },
         child: child,
       ),
+    );
+  }
+}
+
+/// The canvas with a ruler down two of its edges.
+///
+/// Both are driven by the scroll controllers rather than living inside them:
+/// a ruler that scrolled with the page would leave the page it measures. They
+/// rebuild on every scroll notification, which is why this listens to the
+/// controllers directly instead of the shell rebuilding whole.
+class _Ruled extends StatelessWidget {
+  const _Ruled({
+    required this.geometry,
+    required this.scale,
+    required this.lead,
+    required this.horizontal,
+    required this.vertical,
+    required this.items,
+    required this.selected,
+    required this.child,
+  });
+
+  final CanvasGeometry geometry;
+  final double scale;
+  final double lead;
+  final ScrollController horizontal;
+  final ScrollController vertical;
+  final List<GridItem> items;
+  final Set<String> selected;
+  final Widget child;
+
+  /// Where the selection begins and ends, in cells, on each axis.
+  ///
+  /// This is what earns the strips their twenty pixels: *how wide is this and
+  /// where does it sit* becomes something you look at rather than two numbers
+  /// you read off the floor of the window and subtract.
+  ((int, int)?, (int, int)?) get _spans {
+    final held = [
+      for (final i in items)
+        if (selected.contains(i.id)) i,
+    ];
+    if (held.isEmpty) return (null, null);
+    var x = held.first.x, right = held.first.right;
+    var y = held.first.y, bottom = held.first.bottom;
+    for (final i in held) {
+      if (i.x < x) x = i.x;
+      if (i.y < y) y = i.y;
+      if (i.right > right) right = i.right;
+      if (i.bottom > bottom) bottom = i.bottom;
+    }
+    return ((x, right), (y, bottom));
+  }
+
+  /// Enough rows to cover the page, with room to drag past the end of it.
+  int get _rows {
+    var last = 0;
+    for (final i in items) {
+      if (i.bottom > last) last = i.bottom;
+    }
+    return last + 6;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    final (across, down) = _spans;
+    final border = BorderSide(color: t.stroke.hairline, width: t.stroke.width);
+
+    return Column(
+      children: [
+        Row(
+          children: [
+            // The corner where the two meet. Filled rather than left as a hole,
+            // which would show the canvas through a square that measures
+            // nothing.
+            Container(
+              width: CanvasRuler.thickness,
+              height: CanvasRuler.thickness,
+              decoration: BoxDecoration(
+                color: t.surface.raised,
+                border: Border(bottom: border, right: border),
+              ),
+            ),
+            Expanded(
+              child: AnimatedBuilder(
+                animation: horizontal,
+                builder: (context, _) => CanvasRuler(
+                  horizontal: true,
+                  step: geometry.stepX,
+                  scale: scale,
+                  offset:
+                      horizontal.hasClients ? horizontal.position.pixels : 0,
+                  lead: lead,
+                  cells: geometry.columns,
+                  span: across,
+                ),
+              ),
+            ),
+          ],
+        ),
+        Expanded(
+          child: Row(
+            // Stretched, or the ruler collapses: a Row hands its children loose
+            // cross-axis constraints, and a strip whose height comes from its
+            // painter has no height at all.
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              AnimatedBuilder(
+                animation: vertical,
+                builder: (context, _) => CanvasRuler(
+                  horizontal: false,
+                  step: geometry.stepY,
+                  scale: scale,
+                  offset: vertical.hasClients ? vertical.position.pixels : 0,
+                  lead: lead,
+                  cells: _rows,
+                  span: down,
+                ),
+              ),
+              Expanded(child: child),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

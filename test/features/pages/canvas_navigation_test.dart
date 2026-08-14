@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hc_web/core/dashboard/canvas_view.dart';
 import 'package:hc_web/core/dashboard/grid_engine.dart';
 import 'package:hc_web/core/models/dashboard.dart';
 import 'package:hc_web/core/models/device_state.dart';
@@ -11,6 +12,7 @@ import 'package:hc_web/core/providers/dashboards_provider.dart';
 import 'package:hc_web/core/providers/devices_provider.dart';
 import 'package:hc_web/design/skins.dart';
 import 'package:hc_web/features/dashboard/builtin_cards.dart';
+import 'package:hc_web/features/pages/canvas_rulers.dart';
 import 'package:hc_web/features/pages/page_background.dart';
 import 'package:hc_web/features/pages/page_grid.dart';
 import 'package:hc_web/features/pages/page_layers.dart';
@@ -334,6 +336,89 @@ void main() {
     });
   });
 
+  group('the rulers', () {
+    CanvasRuler ruler(WidgetTester tester, {required bool horizontal}) => tester
+        .widgetList<CanvasRuler>(find.byType(CanvasRuler))
+        .firstWhere((r) => r.horizontal == horizontal);
+
+    Finder finder(bool horizontal) => find.byWidgetPredicate(
+        (w) => w is CanvasRuler && w.horizontal == horizontal);
+
+    /// Where the ruler says cell [n] begins, in screen coordinates.
+    double says(WidgetTester tester, int n, {required bool horizontal}) {
+      final r = ruler(tester, horizontal: horizontal);
+      final rect = tester.getRect(finder(horizontal));
+      final along = edgeOf(n, r.step, r.scale, r.offset, r.lead);
+      return (horizontal ? rect.left : rect.top) + along;
+    }
+
+    testWidgets('point at the cell they claim to', (tester) async {
+      // The arithmetic that is easy to get wrong and impossible to see wrong:
+      // the vertical padding is inside the scrolled content on one axis and
+      // outside the scroller on the other, so counting it twice puts every
+      // number half an inch off the thing it names.
+      await _open(tester);
+      final card = _cardRect(tester, 'a');
+      expect(says(tester, 0, horizontal: true), closeTo(card.left, 1));
+      expect(says(tester, 0, horizontal: false), closeTo(card.top, 1));
+    });
+
+    testWidgets('still point at it after the canvas has moved', (tester) async {
+      await _open(tester);
+      final gesture = await tester.startGesture(
+        _pane(tester).center,
+        kind: PointerDeviceKind.mouse,
+        buttons: kMiddleMouseButton,
+      );
+      await gesture.moveBy(const Offset(0, -160));
+      await tester.pump();
+      await gesture.up();
+      await tester.pumpAndSettle();
+
+      expect(_down(tester), 160, reason: 'the canvas moved');
+      final card = _cardRect(tester, 'a');
+      expect(says(tester, 0, horizontal: false), closeTo(card.top, 1));
+    });
+
+    testWidgets('shade nothing until something is held', (tester) async {
+      await _open(tester);
+      expect(ruler(tester, horizontal: true).span, isNull);
+      expect(ruler(tester, horizontal: false).span, isNull);
+    });
+
+    testWidgets('shade where the selection begins and ends', (tester) async {
+      // What earns the strips their twenty pixels: how wide is this and where
+      // does it sit, answered by looking.
+      await _open(tester);
+      await _tapCard(tester, 'B');
+      // `b` is a 2-wide card at column 4, two rows tall at row 0.
+      expect(ruler(tester, horizontal: true).span, (4, 6));
+      expect(ruler(tester, horizontal: false).span, (0, 2));
+    });
+
+    testWidgets('shade the box around a crowd, not each of them',
+        (tester) async {
+      await _open(tester);
+      await _tapCard(tester, 'A');
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pumpAndSettle();
+
+      // From `a` at column 0 to `far`, which ends at column 11 and row 20.
+      expect(ruler(tester, horizontal: true).span, (0, 11));
+      expect(ruler(tester, horizontal: false).span, (0, 20));
+    });
+
+    testWidgets('mark every column of the grid', (tester) async {
+      await _open(tester);
+      expect(ruler(tester, horizontal: true).cells, 12);
+      // And enough rows to reach past the last card, so there is somewhere to
+      // drag one to.
+      expect(ruler(tester, horizontal: false).cells, greaterThan(20));
+    });
+  });
+
   group('fit', () {
     testWidgets('goes back to showing the whole width', (tester) async {
       await _open(tester);
@@ -343,8 +428,18 @@ void main() {
 
       await _press(tester, LogicalKeyboardKey.digit1, '!');
       expect(_zoom(tester), contains('Fit'));
-      // Fit is a rule, not a number — the canvas is no wider than the pane.
+      // Fit is a rule, not a number — the canvas is no wider than the pane, so
+      // there is nowhere left to scroll sideways. The rulers take twenty pixels
+      // that are not canvas, and leaving them out of the sum would make Fit
+      // quietly stop meaning what it says.
       expect(_across(tester), 0);
+      expect(
+        tester
+            .state<ScrollableState>(_scrollers.at(1))
+            .position
+            .maxScrollExtent,
+        0,
+      );
     });
   });
 }

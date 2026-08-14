@@ -501,6 +501,13 @@ class _PageGridState extends State<PageGrid> {
                         stepY: stepY,
                         gap: widget.gap,
                         color: t.accent.primary,
+                        labelStyle: t.text.captionStyle.copyWith(
+                          color: t.surface.base,
+                          fontWeight: FontWeight.w600,
+                          fontFeatures: t.numericFontFeatures,
+                        ),
+                        labelBackground: t.accent.primary,
+                        labelRadius: t.radius.xsR,
                       ),
                     ),
                   ),
@@ -801,6 +808,9 @@ class _SmartGuides extends CustomPainter {
     required this.stepY,
     required this.gap,
     required this.color,
+    required this.labelStyle,
+    required this.labelBackground,
+    required this.labelRadius,
   });
 
   final List<GridGuide> guides;
@@ -808,6 +818,15 @@ class _SmartGuides extends CustomPainter {
   final double stepY;
   final double gap;
   final Color color;
+
+  /// For the measurement written on the line. Alignment tells you the edges
+  /// agree; the number tells you whether the space above matches the space
+  /// below, which is what you are actually judging when you drag something
+  /// into a row of others — and the one thing you cannot do by eye across a
+  /// scrolled canvas.
+  final TextStyle labelStyle;
+  final Color labelBackground;
+  final BorderRadius labelRadius;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -817,6 +836,12 @@ class _SmartGuides extends CustomPainter {
       ..strokeWidth = 1;
 
     final drawn = <double>{};
+    // One measurement per pair of cards, not one per line. Two cards of the
+    // same width at the same column agree on three guides and every one of
+    // them reports the same distance — three identical labels stacked on top
+    // of each other would read as noise, or worse, as three measurements.
+    final measured = <String>{};
+
     for (final guide in guides) {
       // Cell edges sit half a gap in from the step, so a guide on a card's
       // right edge lands on the ink rather than in the gutter beside it.
@@ -824,14 +849,49 @@ class _SmartGuides extends CustomPainter {
           ? guide.at * stepX - gap / 2
           : guide.at * stepY - gap / 2;
       final key = guide.isVertical ? at : -at - 1;
-      if (!drawn.add(key)) continue;
+      if (drawn.add(key)) {
+        canvas.drawLine(
+          guide.isVertical ? Offset(at, 0) : Offset(0, at),
+          guide.isVertical ? Offset(at, size.height) : Offset(size.width, at),
+          paint,
+        );
+      }
 
-      canvas.drawLine(
-        guide.isVertical ? Offset(at, 0) : Offset(0, at),
-        guide.isVertical ? Offset(at, size.height) : Offset(size.width, at),
-        paint,
+      final cells = guide.gap;
+      if (cells == null) continue;
+      if (!measured.add('${guide.partner.id}:${guide.isVertical}')) continue;
+
+      // Midway along the space itself, so the number sits *in* the gap it is
+      // describing rather than beside one of the two cards.
+      final step = guide.isVertical ? stepY : stepX;
+      final middle = (guide.gapFrom + cells / 2) * step - gap / 2;
+      _label(
+        canvas,
+        cells.toStringAsFixed(0),
+        guide.isVertical ? Offset(at, middle) : Offset(middle, at),
       );
     }
+  }
+
+  void _label(Canvas canvas, String text, Offset centre) {
+    final painter = TextPainter(
+      text: TextSpan(text: text, style: labelStyle),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    final box = Rect.fromCenter(
+      center: centre,
+      width: painter.width + 8,
+      height: painter.height + 2,
+    );
+    canvas.drawRRect(
+      labelRadius.toRRect(box),
+      Paint()..color = labelBackground,
+    );
+    painter.paint(
+      canvas,
+      Offset(box.center.dx - painter.width / 2,
+          box.center.dy - painter.height / 2),
+    );
   }
 
   @override
@@ -842,7 +902,14 @@ class _SmartGuides extends CustomPainter {
       return true;
     }
     for (var i = 0; i < guides.length; i++) {
-      if (old.guides[i] != guides[i]) return true;
+      // The measurement is not part of a guide's identity, so it has to be
+      // compared here explicitly — a card dragged further from the one it is
+      // still aligned with changes the number and nothing else.
+      if (old.guides[i] != guides[i] ||
+          old.guides[i].gap != guides[i].gap ||
+          old.guides[i].gapFrom != guides[i].gapFrom) {
+        return true;
+      }
     }
     return false;
   }

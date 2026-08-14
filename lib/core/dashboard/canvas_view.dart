@@ -117,6 +117,30 @@ double centreOn({
   return (start + extent / 2 - viewport / 2).clamp(0.0, maxScroll);
 }
 
+/// Where cell [n]'s leading edge lands on screen, along one axis.
+///
+/// [lead] is the padding between the pane and the canvas — part of the scrolled
+/// content on the vertical axis and outside the scroller on the horizontal one,
+/// which is why the caller passes it rather than this assuming either.
+double edgeOf(int n, double step, double scale, double offset, double lead) =>
+    lead + n * step * scale - offset;
+
+/// How many cells to skip between numbered ticks so the labels do not collide.
+///
+/// Rulers are marked in **cells**, not pixels, because cells are the only
+/// positions a card can actually take: a ruler reading 137px would describe a
+/// place you cannot put anything. But a cell is only ~60px at half zoom and a
+/// row is 120, so at some scales every tick fits and at others they overlap —
+/// and a ruler whose numbers overlap is worse than one with fewer of them.
+int tickStride(double step, double scale, {double room = 34}) {
+  final each = step * scale;
+  if (each <= 0) return 1;
+  for (final stride in const [1, 2, 5, 10, 20, 50]) {
+    if (each * stride >= room) return stride;
+  }
+  return 100;
+}
+
 /// Where a drag of [delta] leaves a scroll offset.
 ///
 /// Inverted, because panning moves the *canvas* under a fixed window: dragging

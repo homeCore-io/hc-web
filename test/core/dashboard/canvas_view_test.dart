@@ -168,6 +168,41 @@ void main() {
     });
   });
 
+  group('the ruler', () {
+    test('puts cell zero where the canvas starts', () {
+      expect(edgeOf(0, 134, 1, 0, 24), 24);
+    });
+
+    test('follows the canvas as it scrolls and scales', () {
+      // The ruler is chrome — it does not scroll — so it has to be told where
+      // the canvas got to, or it describes a page that has moved out from
+      // under it.
+      expect(edgeOf(2, 100, 1, 0, 24), 224);
+      expect(edgeOf(2, 100, 1, 50, 24), 174);
+      expect(edgeOf(2, 100, 0.5, 0, 24), 124);
+    });
+
+    test('numbers every cell when every cell has room', () {
+      // A row is 132 tall at 1:1 — nothing collides.
+      expect(tickStride(132, 1), 1);
+    });
+
+    test('thins the numbers out rather than letting them collide', () {
+      // At half zoom a column is 67px and still fits; at a quarter it is 33 and
+      // does not, so the ruler counts in twos. A ruler whose numbers overlap is
+      // worse than one with fewer of them.
+      expect(tickStride(134, 0.5), 1);
+      expect(tickStride(134, 0.25), 2);
+      expect(tickStride(134, 0.05), 10);
+    });
+
+    test('never asks for a stride of zero', () {
+      // A degenerate scale would otherwise loop forever drawing tick zero.
+      expect(tickStride(0, 1), 1);
+      expect(tickStride(134, 0), 1);
+    });
+  });
+
   group('panning', () {
     test('dragging right shows what was off the left edge', () {
       // The canvas moves under a fixed window, so a rightward drag is a

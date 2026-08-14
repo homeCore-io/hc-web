@@ -114,14 +114,32 @@ class GridItem {
 /// that says *where* without saying *with what* is a line you have to trace
 /// with your eye to make sense of — and the whole point is not having to.
 class GridGuide {
-  const GridGuide.vertical(this.at, this.partner) : isVertical = true;
-  const GridGuide.horizontal(this.at, this.partner) : isVertical = false;
+  const GridGuide.vertical(this.at, this.partner, {this.gap, this.gapFrom = 0})
+      : isVertical = true;
+  const GridGuide.horizontal(this.at, this.partner,
+      {this.gap, this.gapFrom = 0})
+      : isVertical = false;
 
   /// In cells, and fractional for a centre line.
   final double at;
   final bool isVertical;
   final GridItem partner;
 
+  /// The clear space between the two cards, in cells, on the axis this guide
+  /// does *not* run along — and where that space begins.
+  ///
+  /// Null when they overlap on that axis, because there is then no gap to
+  /// report and a `0` would claim they are touching.
+  ///
+  /// Alignment tells you two edges agree; it does not tell you whether the
+  /// space above this card matches the space below it, which is the question
+  /// you are actually asking when you drag something into a row of others.
+  final double? gap;
+  final double gapFrom;
+
+  /// Identity is the line and who it agrees with. The measurement is a fact
+  /// *about* that line rather than part of which line it is, so it stays out
+  /// of this — two guides that differ only by a gap are not two guides.
   @override
   bool operator ==(Object other) =>
       other is GridGuide &&
@@ -287,26 +305,51 @@ class GridEngine {
 
     for (final other in items) {
       if (other.id == id) continue;
+      // Measured once per partner, on each axis: every guide between the same
+      // two cards reports the same distance, because it is a fact about the
+      // pair rather than about which edges happen to line up.
+      final down =
+          _clearBetween(moving.y, moving.bottom, other.y, other.bottom);
+      final across =
+          _clearBetween(moving.x, moving.right, other.x, other.right);
+
       if (other.x == moving.x) {
-        guides.add(GridGuide.vertical(moving.x.toDouble(), other));
+        guides.add(GridGuide.vertical(moving.x.toDouble(), other,
+            gap: down?.$1, gapFrom: down?.$2 ?? 0));
       }
       if (other.right == moving.right) {
-        guides.add(GridGuide.vertical(moving.right.toDouble(), other));
+        guides.add(GridGuide.vertical(moving.right.toDouble(), other,
+            gap: down?.$1, gapFrom: down?.$2 ?? 0));
       }
       if (centreX(other) == centreX(moving)) {
-        guides.add(GridGuide.vertical(moving.x + moving.w / 2, other));
+        guides.add(GridGuide.vertical(moving.x + moving.w / 2, other,
+            gap: down?.$1, gapFrom: down?.$2 ?? 0));
       }
       if (other.y == moving.y) {
-        guides.add(GridGuide.horizontal(moving.y.toDouble(), other));
+        guides.add(GridGuide.horizontal(moving.y.toDouble(), other,
+            gap: across?.$1, gapFrom: across?.$2 ?? 0));
       }
       if (other.bottom == moving.bottom) {
-        guides.add(GridGuide.horizontal(moving.bottom.toDouble(), other));
+        guides.add(GridGuide.horizontal(moving.bottom.toDouble(), other,
+            gap: across?.$1, gapFrom: across?.$2 ?? 0));
       }
       if (middleY(other) == middleY(moving)) {
-        guides.add(GridGuide.horizontal(moving.y + moving.h / 2, other));
+        guides.add(GridGuide.horizontal(moving.y + moving.h / 2, other,
+            gap: across?.$1, gapFrom: across?.$2 ?? 0));
       }
     }
     return guides;
+  }
+
+  /// The clear cells between two spans, and where that space begins.
+  ///
+  /// Null when they overlap: a `0` there would claim they are touching, which
+  /// is a different arrangement and one you might well be aiming for.
+  static (double, double)? _clearBetween(
+      int aFrom, int aTo, int bFrom, int bTo) {
+    if (bFrom >= aTo) return ((bFrom - aTo).toDouble(), aTo.toDouble());
+    if (aFrom >= bTo) return ((aFrom - bTo).toDouble(), bTo.toDouble());
+    return null;
   }
 
   /// Shifts every card in [ids] by the same step, as one block.
