@@ -58,6 +58,19 @@ class _RouterNotifier extends ChangeNotifier {
   }
 }
 
+/// What the router must know before it can decide anything: whether there is a
+/// session, and which page "home" means.
+///
+/// It is resolved *before* the router exists — see [_BootGate] — so that
+/// [_buildRouter]'s redirect can read both synchronously. That is the whole
+/// point of this provider; see the note on the redirect for what an `await`
+/// there cost.
+final appBootProvider = FutureProvider<String>((ref) async {
+  await ref.watch(authProvider.future);
+  final prefs = await SharedPreferences.getInstance();
+  return prefs.getString(kLandingRouteKey) ?? '/';
+});
+
 GoRouter _buildRouter(Ref ref) {
   final notifier = _RouterNotifier(ref);
   // Honour the user's chosen Home page once, on the first landing — after that
@@ -66,31 +79,40 @@ GoRouter _buildRouter(Ref ref) {
   return GoRouter(
     initialLocation: '/',
     refreshListenable: notifier,
-    redirect: (context, state) async {
-      // Read the CURRENT state, not `authProvider.future`.
-      //
-      // `.future` is itself a provider, and reading it from here handed back a
-      // future that had already completed with the value from the first read.
-      // Signing out set the state to `AsyncData(false)`, `_RouterNotifier`
-      // fired, this redirect re-ran — and still saw `true`, so it left you on
-      // the page you had just signed out of. That is the whole Sign out bug:
-      // every part worked except the one that asked.
-      //
-      // The await is kept for the first resolution only, so the app does not
-      // flash the house before bouncing to login on a cold load. Once there is
-      // a value, the live one is what counts — which is safe precisely because
-      // `_RouterNotifier` re-runs this on every change.
-      final auth = ref.read(authProvider);
-      final isLoggedIn = auth.hasValue
-          ? auth.requireValue
-          : await ref.read(authProvider.future);
+    // SYNCHRONOUS, and it has to stay that way.
+    //
+    // This used to `await authProvider.future` on the first pass so the app
+    // would not flash the house before bouncing to login. It deadlocked: the
+    // await is pending when auth resolves, `_RouterNotifier` fires on that same
+    // transition, and go_router starts a SECOND redirect pass over the first.
+    // Both then completed, and the router delivered neither — no route was ever
+    // built. The symptom was a deep link that spun forever with no error and no
+    // failed request: `/#/pages/<id>` hung on a cold load while the same page
+    // opened instantly once the app was already running, because a warm
+    // navigation never awaits. It was mistaken for a dashboard-ownership bug
+    // for three days; ownership had nothing to do with it.
+    //
+    // So nothing here may await. Anything the decision needs is resolved by
+    // [appBootProvider] before the router is constructed at all.
+    //
+    // Read the CURRENT state, not `authProvider.future`. `.future` is itself a
+    // provider, and reading it from here handed back a future that had already
+    // completed with the value from the first read. Signing out set the state to
+    // `AsyncData(false)`, `_RouterNotifier` fired, this redirect re-ran — and
+    // still saw `true`, so it left you on the page you had just signed out of.
+    // That is the whole Sign out bug: every part worked except the one that
+    // asked.
+    redirect: (context, state) {
+      // `?? false` covers exactly one case: `login()` sets the state back to
+      // `AsyncLoading`, which drops the value. You are on /login while that is
+      // in flight, so "not signed in yet" is the right answer.
+      final isLoggedIn = ref.read(authProvider).value ?? false;
       final isLoginPage = state.matchedLocation == '/login';
       if (!isLoggedIn && !isLoginPage) return '/login';
       if (isLoggedIn && isLoginPage) return '/';
       if (isLoggedIn && !honouredLanding && state.matchedLocation == '/') {
         honouredLanding = true;
-        final prefs = await SharedPreferences.getInstance();
-        final landing = prefs.getString(kLandingRouteKey) ?? '/';
+        final landing = ref.read(appBootProvider).value ?? '/';
         if (landing != '/') return landing;
       }
       return null;
@@ -314,8 +336,72 @@ GoRouter _buildRouter(Ref ref) {
 
 final routerProvider = Provider<GoRouter>((ref) => _buildRouter(ref));
 
-class HomecoreApp extends ConsumerWidget {
+/// Holds the app on a splash until [appBootProvider] has an answer, and only
+/// then builds the router.
+///
+/// The waiting has to happen *somewhere* — a cold load cannot know whether it
+/// is entitled to the page in the URL until the stored token has been checked
+/// against the server. It used to happen inside the router's redirect, as an
+/// `await`, which deadlocked go_router (see [_buildRouter]). Here it costs
+/// nothing: the browser's URL is untouched while this waits, so the deep link
+/// is still there when the router finally reads it.
+class HomecoreApp extends ConsumerStatefulWidget {
   const HomecoreApp({super.key});
+
+  @override
+  ConsumerState<HomecoreApp> createState() => _HomecoreAppState();
+}
+
+class _HomecoreAppState extends ConsumerState<HomecoreApp> {
+  /// Latched on purpose: once the app has routed it never goes back behind the
+  /// gate. `login()` puts auth into a loading state again, and tearing the
+  /// router down there would drop the navigation history mid-sign-in.
+  bool _booted = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final boot = ref.watch(appBootProvider);
+    _booted = _booted || !boot.isLoading;
+    return _booted ? const _RoutedApp() : const _BootSplash();
+  }
+}
+
+/// The one frame a cold load is allowed to show before it knows anything.
+///
+/// Deliberately NOT a `MaterialApp`, and this is load-bearing rather than
+/// fussy. Any app widget brings a Navigator, and on the web a Navigator reports
+/// its route to the browser — so a `MaterialApp(home: ...)` here rewrote the
+/// address bar to `/` while it waited, and the deep link the gate exists to
+/// protect was gone by the time the router read it. `/#/pages/<id>` opened the
+/// house instead: the original bug, moved rather than fixed.
+///
+/// It still resolves the skin the way [_RoutedApp] does, so the boot does not
+/// flash white on a dark house.
+class _BootSplash extends ConsumerWidget {
+  const _BootSplash();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = resolveSkin(
+      choice: ref.watch(skinOverrideProvider),
+      shell: HcShell.touch,
+      skins: ref.watch(skinsProvider).value ?? const <SkinDocument>[],
+    );
+    return Theme(
+      data: hcThemeFromTokens(tokens),
+      child: Directionality(
+        textDirection: TextDirection.ltr,
+        child: ColoredBox(
+          color: tokens.surface.base,
+          child: const Center(child: CircularProgressIndicator()),
+        ),
+      ),
+    );
+  }
+}
+
+class _RoutedApp extends ConsumerWidget {
+  const _RoutedApp();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

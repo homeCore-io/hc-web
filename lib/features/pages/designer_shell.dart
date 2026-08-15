@@ -15,6 +15,7 @@ import 'breakpoint_bar.dart';
 import 'canvas_rulers.dart';
 import 'card_inspector.dart';
 import 'card_library.dart';
+import 'inspector_controls.dart';
 import 'page_inspector.dart';
 import 'page_background.dart';
 import 'page_layers.dart';
@@ -79,6 +80,8 @@ class DesignerShell extends StatefulWidget {
     this.onUngroup,
     this.onRenameGroup,
     this.onEnterGroup,
+    this.groupBox,
+    this.onGroupBox,
     required this.groupInHand,
     required this.inside,
     required this.items,
@@ -173,6 +176,12 @@ class DesignerShell extends StatefulWidget {
 
   /// The one group every selected element is in, as a path, or null.
   final String? groupInHand;
+
+  /// How the group in hand is styled, or null while it is only a name.
+  final GroupBox? groupBox;
+
+  /// Restyle the group in hand.
+  final ValueChanged<GroupBox>? onGroupBox;
 
   /// The group you have stepped into, as a path. Null at the top of the page.
   final String? inside;
@@ -590,6 +599,8 @@ class _DesignerShellState extends State<DesignerShell> {
                               onUngroup: widget.onUngroup,
                               onRenameGroup: widget.onRenameGroup,
                               onEnterGroup: widget.onEnterGroup,
+                              groupBox: widget.groupBox,
+                              onGroupBox: widget.onGroupBox,
                             )
                           : widget.selected == null
                               ? PageInspector(
@@ -879,6 +890,8 @@ class _GroupSection extends StatefulWidget {
     required this.onUngroup,
     required this.onRename,
     required this.onEnter,
+    required this.box,
+    required this.onBox,
   });
 
   final String? path;
@@ -887,6 +900,13 @@ class _GroupSection extends StatefulWidget {
   final VoidCallback? onUngroup;
   final ValueChanged<String>? onRename;
   final VoidCallback? onEnter;
+
+  /// How this group is styled, or null while it is only a name.
+  final GroupBox? box;
+
+  /// Restyle it. Null means the surface has nowhere to write — the phone's
+  /// in-place editor has no document to save a container into.
+  final ValueChanged<GroupBox>? onBox;
 
   @override
   State<_GroupSection> createState() => _GroupSectionState();
@@ -917,6 +937,7 @@ class _GroupSectionState extends State<_GroupSection> {
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
     final path = widget.path;
+    final box = widget.box;
 
     if (path == null) {
       return Column(
@@ -988,6 +1009,55 @@ class _GroupSectionState extends State<_GroupSection> {
             ),
           ],
         ),
+        if (widget.onBox case final write?) ...[
+          SizedBox(height: t.space.md),
+          Text('CONTAINER',
+              style:
+                  t.text.overlineStyle.copyWith(color: t.surface.onBaseMuted)),
+          SizedBox(height: t.space.xs),
+          // The switch that turns a name into a body. Off is not a missing
+          // setting, it is what a group has always been — so the copy says what
+          // turning it on *does* rather than naming the field.
+          InspectorToggle(
+            label: 'Draw a box around it',
+            value: box != null,
+            onChanged: (on) => write(
+              on
+                  ? GroupBox(path: path, padding: t.space.md)
+                  : GroupBox(path: path),
+            ),
+          ),
+          if (box case final styled?) ...[
+            SizedBox(height: t.space.xs),
+            InspectorSlider(
+              label: 'Padding',
+              value: styled.padding,
+              max: 64,
+              onChanged: (v) => write(styled.copyWith(padding: v)),
+            ),
+            InspectorSlider(
+              label: 'Corner',
+              value: styled.radius ?? 0,
+              max: 48,
+              onChanged: (v) =>
+                  write(styled.copyWith(radius: v <= 0 ? null : v)),
+            ),
+            SizedBox(height: t.space.xs),
+            InspectorToggle(
+              label: 'Clip what sticks out',
+              value: styled.clip,
+              onChanged: (v) => write(styled.copyWith(clip: v)),
+            ),
+            SizedBox(height: t.space.xs),
+            Text(
+              styled.rect == null
+                  ? 'The box fits its members and follows them as they move.'
+                  : 'The box is where you put it. Members move inside it.',
+              style: t.text.captionStyle
+                  .copyWith(color: t.surface.onBaseMuted, height: 1.4),
+            ),
+          ],
+        ],
       ],
     );
   }
@@ -1014,6 +1084,8 @@ class _ManySelected extends StatelessWidget {
     required this.onUngroup,
     required this.onRenameGroup,
     required this.onEnterGroup,
+    required this.groupBox,
+    required this.onGroupBox,
   });
 
   final int count;
@@ -1028,6 +1100,8 @@ class _ManySelected extends StatelessWidget {
   final VoidCallback? onUngroup;
   final ValueChanged<String>? onRenameGroup;
   final VoidCallback? onEnterGroup;
+  final GroupBox? groupBox;
+  final ValueChanged<GroupBox>? onGroupBox;
 
   @override
   Widget build(BuildContext context) {
@@ -1063,6 +1137,8 @@ class _ManySelected extends StatelessWidget {
             onUngroup: onUngroup,
             onRename: onRenameGroup,
             onEnter: onEnterGroup,
+            box: groupBox,
+            onBox: onGroupBox,
           ),
           SizedBox(height: t.space.md),
           Text('ALIGN',

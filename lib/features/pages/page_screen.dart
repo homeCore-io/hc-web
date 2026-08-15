@@ -9,6 +9,7 @@ import '../../core/dashboard/canvas_view.dart';
 import '../../core/dashboard/frame.dart';
 import '../../core/dashboard/free_layer.dart';
 import '../../core/dashboard/grid_engine.dart';
+import '../../core/dashboard/group_frame.dart';
 import '../../core/dashboard/groups.dart';
 import '../../core/dashboard/layout_write.dart';
 import '../../core/dashboard/page_starts.dart';
@@ -18,6 +19,7 @@ import '../../core/models/dashboard.dart';
 import '../../core/providers/dashboards_provider.dart';
 import '../../core/providers/devices_provider.dart';
 import '../../design/components/hc_controls.dart';
+import '../../design/components/hc_dialog.dart';
 import '../../design/hc_icons.dart';
 import '../../design/tokens.dart';
 import '../../shell/shell_scope.dart';
@@ -163,6 +165,18 @@ class _PageScreenState extends ConsumerState<PageScreen> {
           e.key: groupOf(e.value.config),
       };
 
+  /// The same map, from whichever copy of the widgets is being drawn.
+  ///
+  /// [_paths] reads the draft, which is null outside an edit — fine for the
+  /// grouping *gestures*, which only exist while editing. Containers are not a
+  /// gesture: they are part of the page, so in view mode the membership has to
+  /// come from the saved widgets or every container would resolve to nothing
+  /// the moment you left the editor.
+  Map<String, String?> _pathsIn(Map<String, DashboardWidgetModel> widgets) =>
+      _draftWidgets != null
+          ? _paths
+          : {for (final e in widgets.entries) e.key: groupOf(e.value.config)};
+
   /// What clicking [id] on the canvas actually puts in hand.
   ///
   /// The element itself when it is loose or when you are already standing in
@@ -278,6 +292,38 @@ class _PageScreenState extends ConsumerState<PageScreen> {
       // where it sits is already on screen.
       nameOf(target),
     );
+  }
+
+  /// Give the group in hand a body, or change the one it has.
+  ///
+  /// Written onto the layout being edited and no other. A container is a box on
+  /// a *page*, and the page differs by breakpoint — styling a group on the wall
+  /// must not put a background behind it on the phone, where the same cards are
+  /// a single scrolling column and the box would enclose the whole screen.
+  ///
+  /// A box that says nothing the default would not is *removed* rather than
+  /// stored, which is what makes the switch in the panel reversible: turning
+  /// the container off leaves the group exactly as it was before anyone gave it
+  /// one, rather than leaving a row behind that means nothing.
+  void _setGroupBox(GroupBox next) {
+    final layouts = _draftLayouts;
+    if (layouts == null || _editingBreakpoint == null) return;
+    _pushUndo(next.isPlain ? 'Remove the container' : 'Change the container',
+        coalesce: 'group-box-${next.path}');
+    setState(() {
+      _draftLayouts = [
+        for (final l in layouts)
+          if (l.breakpoint != _editingBreakpoint)
+            l
+          else
+            l.copyWith(groups: [
+              for (final g in l.groups)
+                if (g.path != next.path) g,
+              if (!next.isPlain) next,
+            ]),
+      ];
+      _contentDirty = true;
+    });
   }
 
   /// Write a new path onto a set of elements, as one undoable edit.
@@ -1466,9 +1512,21 @@ class _PageScreenState extends ConsumerState<PageScreen> {
     try {
       // No rebuild here: every gesture already reprojected the draft through
       // writeArrangement, so this is a push of what the bar has been showing.
+      // Containers whose group no longer exists, dropped on the way out.
+      //
+      // Core accepts them — it has to, because it cannot tell an emptied group
+      // from a mistyped one, and rejecting the first would make deleting the
+      // last card in a group fail to save. So the collecting is the client's
+      // job, and here is the moment it can be done without guessing: the
+      // widgets being written are exactly the membership.
+      final live = livePaths(widgets.map((w) => groupOf(w.config)));
+      final layouts = [
+        for (final l in _draftLayouts!)
+          l.groups.isEmpty ? l : l.copyWith(groups: prunedBoxes(l.groups, live))
+      ];
       final next = d.copyWith(
         widgets: widgets,
-        layouts: _draftLayouts,
+        layouts: layouts,
         background: _draftBackground,
         updatedAt: DateTime.now(),
       );
@@ -1488,6 +1546,21 @@ class _PageScreenState extends ConsumerState<PageScreen> {
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
     final async = ref.watch(dashboardsProvider);
+    // A page that cannot load must SAY so. `async.value == null` used to cover
+    // both "still arriving" and "the request failed", and the second one drew
+    // the first one's spinner — forever, with no message and nothing to press.
+    // A page that never resolves and never explains itself is indistinguishable
+    // from a hung app, which is exactly how the cold-load router deadlock read
+    // for three days.
+    if (async.hasError && async.value == null) {
+      return Scaffold(
+        backgroundColor: t.surface.base,
+        body: _PageLoadFailed(
+          error: async.error!,
+          onRetry: () => ref.invalidate(dashboardsProvider),
+        ),
+      );
+    }
     // Still arriving is not the same as not there. "Page not found." while the
     // list loads is a claim about the house that is false — the same failure as
     // a card announcing "No devices match" before any device has arrived — and
@@ -1653,6 +1726,13 @@ class _PageScreenState extends ConsumerState<PageScreen> {
                       : null,
                   onEnterGroup: widget.designer ? _enterGroup : null,
                   groupOutline: widget.designer ? _groupOutline : null,
+                  // Not gated on `designer`, unlike the outline above: a
+                  // container is part of the page. The dashed frame says "this
+                  // is what you have hold of" and belongs to the tool; a
+                  // background belongs to the document and has to be there when
+                  // somebody is only looking at it.
+                  groupStyles: layout.groups,
+                  groupPaths: _pathsIn(widgetsById),
                   frame: layout.frame,
                   onCompose: (id, rect) => _composeCard(id, rect, columns),
                   snapToGrid: _snapToGrid,
@@ -1713,6 +1793,12 @@ class _PageScreenState extends ConsumerState<PageScreen> {
             onEnterGroup: _groupInHand == null
                 ? null
                 : () => _enterGroup(_selection.first),
+            groupBox: _groupInHand == null
+                ? null
+                : layout.groupBox(_groupInHand!)?.isPlain ?? true
+                    ? null
+                    : layout.groupBox(_groupInHand!),
+            onGroupBox: _groupInHand == null ? null : _setGroupBox,
             onSave: () => _save(dashboard),
             canvas: canvas(),
             emptyStart: emptyStart(),
@@ -2169,6 +2255,45 @@ class _PreviewFrame extends StatelessWidget {
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: width!),
         child: child,
+      ),
+    );
+  }
+}
+
+/// The page list did not arrive, so this page cannot be drawn.
+///
+/// Says which page, says why, and offers the one useful action. The failure it
+/// reports is almost never about this page in particular — the list is the
+/// whole house's — so it names the page rather than blaming it.
+class _PageLoadFailed extends StatelessWidget {
+  const _PageLoadFailed({required this.error, required this.onRetry});
+
+  final Object error;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(HcIcons.warning, color: t.accent.danger, size: 32),
+            SizedBox(height: t.space.md),
+            Text('This page could not be loaded.',
+                style: t.text.titleStyle.copyWith(color: t.surface.onBase)),
+            SizedBox(height: t.space.sm),
+            Text(
+              '$error',
+              textAlign: TextAlign.center,
+              style: t.text.bodyStyle.copyWith(color: t.surface.onBaseMuted),
+            ),
+            SizedBox(height: t.space.lg),
+            HcButton(label: 'Try again', onPressed: onRetry),
+          ],
+        ),
       ),
     );
   }
