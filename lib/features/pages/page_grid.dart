@@ -639,6 +639,22 @@ class _PageGridState extends State<PageGrid> {
           width: double.infinity,
           height: height + (widget.editing && !fixedCanvas ? stepY * 2 : 0),
           child: Stack(
+            // The board is where the page's things ARE, not a frame they may
+            // not leave. A `Stack` clips to its own bounds by default, and that
+            // default quietly contradicted what this file already says about
+            // composed elements: a card may sit at a negative x on purpose,
+            // because bleeding something past the edge of a page is a thing
+            // people do. It could not — the board cut it off.
+            //
+            // A group container made that visible. Its padding puts its edge
+            // outside its members, so a group flush with the top-left corner
+            // drew only the two sides that had room, which reads as a broken
+            // border rather than as a clip.
+            //
+            // Overflow is still bounded: the scroll viewport this sits in does
+            // the real clipping, so bleeding reaches the page's own margin and
+            // stops there — it cannot paint over the rulers or the rails.
+            clipBehavior: Clip.none,
             children: [
               // The column grid, behind everything, while editing. A card's
               // width is only meaningful as a count of columns, and counting
