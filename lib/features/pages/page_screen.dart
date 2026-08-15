@@ -12,6 +12,7 @@ import '../../core/dashboard/grid_engine.dart';
 import '../../core/dashboard/groups.dart';
 import '../../core/dashboard/layout_write.dart';
 import '../../core/dashboard/page_starts.dart';
+import '../../core/text/humanize.dart';
 import '../../core/dashboard/widget_registry.dart';
 import '../../core/models/dashboard.dart';
 import '../../core/providers/dashboards_provider.dart';
@@ -602,7 +603,7 @@ class _PageScreenState extends ConsumerState<PageScreen> {
   /// One undo entry for the whole thing, because it is one decision. Undoing a
   /// start card by card would be undoing something nobody did.
   void _startPage(PageStartKind kind, DashboardBreakpoint breakpoint,
-      int columns, String? room) {
+      int columns, String? room, String? label) {
     if (_draftItems == null || _draftLayouts == null) return;
     // Blank changes nothing, so it is not an edit — it is the chooser being
     // dismissed. Pushing an undo entry for it would put a step in the history
@@ -611,7 +612,7 @@ class _PageScreenState extends ConsumerState<PageScreen> {
       setState(() => _dismissedStart = true);
       return;
     }
-    final cards = startCards(kind, room: room);
+    final cards = startCards(kind, room: room, label: label);
     final frame = startFrame(kind);
     _pushUndo('Start the page');
 
@@ -1568,6 +1569,34 @@ class _PageScreenState extends ConsumerState<PageScreen> {
             (_draftLayouts ?? const []).any((l) => l.breakpoint == source) &&
             layout.derivedFrom == null;
 
+        // What an empty page offers instead of a board. Hidden the moment the
+        // page has something on it *or* a canvas under it — a wall start puts
+        // nothing on the page, so counting cards alone would leave the offer
+        // covering the canvas it had just made.
+        Widget? emptyStart() => items.isEmpty &&
+                widget.designer &&
+                layout.frame == null &&
+                !_dismissedStart
+            ? _EmptyPage(
+                editing: true,
+                rooms: roomsBySize(
+                  ref
+                          .watch(devicesProvider)
+                          .asData
+                          ?.value
+                          // The same filter the card itself applies, so the
+                          // count promises what the card delivers — see
+                          // `selectDevicesForConfig`.
+                          .where((d) => !d.isSystem && d.deviceType != 'scene')
+                          .map((d) => d.effectiveArea) ??
+                      const [],
+                  name: humanize,
+                ),
+                onStart: (kind, {String? room, String? label}) =>
+                    _startPage(kind, breakpoint, columns, room, label),
+              )
+            : null;
+
         // The canvas, shared by both presentations. In the designer it is the
         // middle pane; in the page it is the whole body.
         Widget canvas() => items.isEmpty && !_editing
@@ -1576,87 +1605,65 @@ class _PageScreenState extends ConsumerState<PageScreen> {
             // than a grid of nothing — see `page_starts.dart`. Only while
             // genuinely empty: once there is one card on it, the page is the
             // page and the starting points would be in the way.
-            // Hidden the moment the page has something on it *or* a canvas
-            // under it — a wall start puts nothing on the page, so counting
-            // cards alone would leave the chooser covering the canvas it had
-            // just made.
-            : items.isEmpty &&
-                    widget.designer &&
-                    layout.frame == null &&
-                    !_dismissedStart
-                ? _EmptyPage(
-                    editing: true,
-                    rooms: roomsBySize(
-                      ref
-                              .watch(devicesProvider)
-                              .asData
-                              ?.value
-                              .where((d) => !d.isSystem)
-                              .map((d) => d.effectiveArea) ??
-                          const [],
-                    ),
-                    onStart: (kind, {String? room}) =>
-                        _startPage(kind, breakpoint, columns, room),
-                  )
-                : _PreviewFrame(
-                    width: _editing ? previewWidthFor(breakpoint) : null,
-                    child: PageGrid(
-                      items: items,
-                      widgetsById: widgetsById,
-                      columns: columns,
-                      rowHeight: rowHeight,
-                      gap: gap,
-                      editing: _editing,
-                      ghostItems: _editing && _draftLayouts != null
-                          ? _ghostFor(breakpoint, source, _draftLayouts!)
-                          : const [],
-                      onMove: (id, x, y) => _apply(
-                          (e, its) => e.move(its, id, x, y), columns,
-                          byHand: true),
-                      onResize: (id, w, h) => _apply(
-                          (e, its) => e.resize(its, id, w, h), columns,
-                          byHand: true),
-                      onRemove: (id) => _removeWidget(id, columns),
-                      onConfigure: (id) => hasInspector || widget.designer
-                          ? _select(id)
-                          : _configureWidget(id),
-                      // A card that edits itself in place — the floor plan placing
-                      // a marker. Straight into the same writer the inspector
-                      // uses, so it lands in the draft and coalesces into one undo
-                      // entry per gesture rather than one per pixel.
-                      onWidgetConfig: _configureLive,
-                      onAddAt: (x, y) => _addWidget(columns, atX: x, atY: y),
-                      onMarquee: (x1, y1, x2, y2, additive) => setState(() {
-                        final caught = _engine(columns)
-                            .itemsIn(_draftItems ?? const [], x1, y1, x2, y2);
-                        // Shift keeps what you had; a plain band starts again, the
-                        // same rule a click follows.
-                        if (!additive) _selection.clear();
-                        // Clipping one member of a group catches the group, the
-                        // same rule a click follows — a band that took three of a
-                        // cluster's four cards would then move three of them.
-                        final paths = _paths;
-                        for (final id in caught) {
-                          _selection.addAll(_clickHolds(id, paths));
-                        }
-                      }),
-                      onMenu: (id, at) => _cardMenu(id, at, columns),
-                      onSelect: hasInspector || widget.designer
-                          ? (id, additive) => _select(id, additive: additive)
-                          : null,
-                      onEnterGroup: widget.designer ? _enterGroup : null,
-                      groupOutline: widget.designer ? _groupOutline : null,
-                      frame: layout.frame,
-                      onCompose: (id, rect) => _composeCard(id, rect, columns),
-                      snapToGrid: _snapToGrid,
-                      selectedIds: _selection,
-                      onDropCard: (payload, x, y) {
-                        if (payload is DashboardWidgetModel) {
-                          _placeCard(payload, columns, atX: x, atY: y);
-                        }
-                      },
-                    ),
-                  );
+            : _PreviewFrame(
+                width: _editing ? previewWidthFor(breakpoint) : null,
+                child: PageGrid(
+                  items: items,
+                  widgetsById: widgetsById,
+                  columns: columns,
+                  rowHeight: rowHeight,
+                  gap: gap,
+                  editing: _editing,
+                  ghostItems: _editing && _draftLayouts != null
+                      ? _ghostFor(breakpoint, source, _draftLayouts!)
+                      : const [],
+                  onMove: (id, x, y) => _apply(
+                      (e, its) => e.move(its, id, x, y), columns,
+                      byHand: true),
+                  onResize: (id, w, h) => _apply(
+                      (e, its) => e.resize(its, id, w, h), columns,
+                      byHand: true),
+                  onRemove: (id) => _removeWidget(id, columns),
+                  onConfigure: (id) => hasInspector || widget.designer
+                      ? _select(id)
+                      : _configureWidget(id),
+                  // A card that edits itself in place — the floor plan placing
+                  // a marker. Straight into the same writer the inspector
+                  // uses, so it lands in the draft and coalesces into one undo
+                  // entry per gesture rather than one per pixel.
+                  onWidgetConfig: _configureLive,
+                  onAddAt: (x, y) => _addWidget(columns, atX: x, atY: y),
+                  onMarquee: (x1, y1, x2, y2, additive) => setState(() {
+                    final caught = _engine(columns)
+                        .itemsIn(_draftItems ?? const [], x1, y1, x2, y2);
+                    // Shift keeps what you had; a plain band starts again, the
+                    // same rule a click follows.
+                    if (!additive) _selection.clear();
+                    // Clipping one member of a group catches the group, the
+                    // same rule a click follows — a band that took three of a
+                    // cluster's four cards would then move three of them.
+                    final paths = _paths;
+                    for (final id in caught) {
+                      _selection.addAll(_clickHolds(id, paths));
+                    }
+                  }),
+                  onMenu: (id, at) => _cardMenu(id, at, columns),
+                  onSelect: hasInspector || widget.designer
+                      ? (id, additive) => _select(id, additive: additive)
+                      : null,
+                  onEnterGroup: widget.designer ? _enterGroup : null,
+                  groupOutline: widget.designer ? _groupOutline : null,
+                  frame: layout.frame,
+                  onCompose: (id, rect) => _composeCard(id, rect, columns),
+                  snapToGrid: _snapToGrid,
+                  selectedIds: _selection,
+                  onDropCard: (payload, x, y) {
+                    if (payload is DashboardWidgetModel) {
+                      _placeCard(payload, columns, atX: x, atY: y);
+                    }
+                  },
+                ),
+              );
 
         if (widget.designer) {
           return DesignerShell(
@@ -1708,6 +1715,7 @@ class _PageScreenState extends ConsumerState<PageScreen> {
                 : () => _enterGroup(_selection.first),
             onSave: () => _save(dashboard),
             canvas: canvas(),
+            emptyStart: emptyStart(),
             // The frame *is* the canvas when there is one: composing at the
             // size you designed for keeps a rectangle's units and the board's
             // pixels the same thing, so nothing has to be converted on the way
@@ -2182,10 +2190,11 @@ class _EmptyPage extends StatelessWidget {
   final bool editing;
 
   /// The rooms this house has, busiest first.
-  final List<(String, int)> rooms;
+  final List<StartRoom> rooms;
 
   /// Null outside the designer, where there is nowhere to put the result.
-  final void Function(PageStartKind kind, {String? room})? onStart;
+  final void Function(PageStartKind kind, {String? room, String? label})?
+      onStart;
 
   @override
   Widget build(BuildContext context) {
@@ -2247,18 +2256,23 @@ class _EmptyPage extends StatelessWidget {
                     ? null
                     : PopupMenuButton<String>(
                         tooltip: 'Choose a room',
-                        onSelected: (room) =>
-                            onStart(PageStartKind.room, room: room),
+                        onSelected: (area) => onStart(
+                          PageStartKind.room,
+                          room: area,
+                          label: rooms.firstWhere((r) => r.area == area).label,
+                        ),
                         itemBuilder: (context) => [
-                          for (final (name, count) in rooms)
+                          for (final room in rooms)
                             PopupMenuItem(
-                              value: name,
+                              // The area as stored is what selects the
+                              // devices; the label is only what you read.
+                              value: room.area,
                               height: 34,
                               child: Row(
                                 children: [
-                                  Expanded(child: Text(name)),
+                                  Expanded(child: Text(room.label)),
                                   SizedBox(width: t.space.sm),
-                                  Text('$count',
+                                  Text('${room.count}',
                                       style: t.text.captionStyle.copyWith(
                                           color: t.surface.onBaseMuted,
                                           fontFeatures: t.numericFontFeatures)),

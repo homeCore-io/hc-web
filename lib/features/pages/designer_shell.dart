@@ -62,6 +62,7 @@ class DesignerShell extends StatefulWidget {
     required this.onDeselect,
     required this.onSave,
     required this.canvas,
+    required this.emptyStart,
     required this.canvasWidth,
     required this.cardCount,
     required this.onFlowChanged,
@@ -121,6 +122,14 @@ class DesignerShell extends StatefulWidget {
   final VoidCallback onDeselect;
   final VoidCallback onSave;
   final Widget canvas;
+
+  /// What a page with nothing on it offers instead of a canvas.
+  ///
+  /// Rendered **unscaled**, in place of the board rather than on it: these are
+  /// chrome, not content. Drawn inside the canvas they inherit its zoom, so at
+  /// the Fit a 1600px layout gets on a laptop they came out at half size in the
+  /// corner of an empty board — an offer you have to lean in to read.
+  final Widget? emptyStart;
 
   /// The width this breakpoint's layout is drawn at, or null when it is the
   /// viewport's own.
@@ -537,12 +546,21 @@ class _DesignerShellState extends State<DesignerShell> {
                                       child: SingleChildScrollView(
                                         controller: _horizontal,
                                         scrollDirection: Axis.horizontal,
-                                        child: ScaledCanvas(
-                                          scale: scale,
-                                          child: SizedBox(
-                                              width: width,
-                                              child: widget.canvas),
-                                        ),
+                                        child: widget.emptyStart == null
+                                            ? ScaledCanvas(
+                                                scale: scale,
+                                                child: SizedBox(
+                                                    width: width,
+                                                    child: widget.canvas),
+                                              )
+                                            : SizedBox(
+                                                // The pane's own width, so the
+                                                // offer is centred in what you
+                                                // are looking at rather than in
+                                                // a board that is not there.
+                                                width: available,
+                                                child: widget.emptyStart,
+                                              ),
                                       ),
                                     ),
                                   ),

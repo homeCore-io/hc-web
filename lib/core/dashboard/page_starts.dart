@@ -59,7 +59,7 @@ enum PageStartKind {
 /// An empty or missing room gives nothing, because a card selecting on no area
 /// at all shows the whole house — which is not what "this room" means and is a
 /// surprising page to be handed.
-List<StartCard> startCards(PageStartKind kind, {String? room}) {
+List<StartCard> startCards(PageStartKind kind, {String? room, String? label}) {
   switch (kind) {
     case PageStartKind.blank:
     case PageStartKind.wall:
@@ -70,7 +70,10 @@ List<StartCard> startCards(PageStartKind kind, {String? room}) {
       return [
         StartCard(
           type: 'device_grid',
-          title: area,
+          // The room as a person writes it, not as the house stores it: areas
+          // arrive normalised (`living_room`), and a card titled that reads
+          // like a database row.
+          title: (label?.trim().isNotEmpty ?? false) ? label!.trim() : area,
           // Selected by area rather than by listing the devices: a room start
           // should keep meaning the room after somebody plugs in a new lamp.
           config: {'selection_mode': 'area', 'area_name': area},
@@ -99,24 +102,44 @@ DashboardFrame? startFrame(PageStartKind kind) => switch (kind) {
 /// Whether [kind] needs a room chosen before it can do anything.
 bool startNeedsRoom(PageStartKind kind) => kind == PageStartKind.room;
 
-/// The rooms on offer, commonest first, with how many devices are in each.
+/// One room on offer: the area as the house stores it, as a person writes it,
+/// and how many devices are in it.
+typedef StartRoom = ({String area, String label, int count});
+
+/// The rooms on offer, commonest first.
 ///
 /// Sorted by size because the room somebody wants a page for is far more often
 /// the busy one than the one that sorts first alphabetically — and because a
 /// room with one device in it makes a thin page.
-List<(String, int)> roomsBySize(Iterable<String?> areas) {
+///
+/// [areas] must arrive already filtered to the devices a card would actually
+/// show. A count that includes what the card then hides is a promise of a
+/// fuller room than you get — and scenes alone were the difference between
+/// "Living Room 31" here and "Living Room 18" in the library beside it.
+///
+/// [name] turns a stored area into a written one. Absent, the raw value is
+/// used, which is right for a test and wrong for a person.
+List<StartRoom> roomsBySize(
+  Iterable<String?> areas, {
+  String Function(String)? name,
+}) {
   final counts = <String, int>{};
   for (final area in areas) {
-    final name = area?.trim() ?? '';
-    if (name.isEmpty) continue;
-    counts[name] = (counts[name] ?? 0) + 1;
+    final raw = area?.trim() ?? '';
+    if (raw.isEmpty) continue;
+    counts[raw] = (counts[raw] ?? 0) + 1;
   }
-  final out = counts.entries.map((e) => (e.key, e.value)).toList();
+  final out = [
+    for (final e in counts.entries)
+      (area: e.key, label: name?.call(e.key) ?? e.key, count: e.value),
+  ];
   out.sort((a, b) {
-    final size = b.$2.compareTo(a.$2);
+    final size = b.count.compareTo(a.count);
     // Alphabetical within a size, so the list does not reshuffle every time a
     // device goes offline and comes back.
-    return size != 0 ? size : a.$1.toLowerCase().compareTo(b.$1.toLowerCase());
+    return size != 0
+        ? size
+        : a.label.toLowerCase().compareTo(b.label.toLowerCase());
   });
   return out;
 }

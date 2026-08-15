@@ -24,6 +24,15 @@ void main() {
       expect(cards.single.title, 'Kitchen');
     });
 
+    test('is titled the way a person writes the room', () {
+      // The area selects; the label is what goes on the card.
+      final card = startCards(PageStartKind.room,
+              room: 'living_room', label: 'Living Room')
+          .single;
+      expect(card.title, 'Living Room');
+      expect(card.config['area_name'], 'living_room');
+    });
+
     test('selects by area, not by listing what is in the room today', () {
       // Or the page stops meaning the room the moment somebody plugs in a lamp.
       final card = startCards(PageStartKind.room, room: 'Kitchen').single;
@@ -71,21 +80,32 @@ void main() {
       // the one that sorts first alphabetically.
       final rooms = roomsBySize(
           ['Kitchen', 'Attic', 'Kitchen', 'Kitchen', 'Garage', 'Garage']);
-      expect(rooms.first, ('Kitchen', 3));
-      expect(rooms[1], ('Garage', 2));
-      expect(rooms.last, ('Attic', 1));
+      expect(rooms.map((r) => (r.area, r.count)),
+          [('Kitchen', 3), ('Garage', 2), ('Attic', 1)]);
     });
 
     test('are alphabetical within a size', () {
       // So the list does not reshuffle every time a device drops off and comes
       // back.
       final rooms = roomsBySize(['Zebra', 'apple', 'Zebra', 'apple']);
-      expect(rooms.map((r) => r.$1), ['apple', 'Zebra']);
+      expect(rooms.map((r) => r.area), ['apple', 'Zebra']);
     });
 
     test('ignore devices with no room', () {
       final rooms = roomsBySize(['Kitchen', null, '', '  ', 'Kitchen']);
-      expect(rooms, [('Kitchen', 2)]);
+      expect(rooms.map((r) => (r.area, r.count)), [('Kitchen', 2)]);
+    });
+
+    test('are written the way a person writes them', () {
+      // Areas arrive normalised — `living_room` — and a menu of database rows
+      // is a menu nobody recognises their own house in.
+      final rooms = roomsBySize(['living_room', 'living_room'],
+          name: (a) => a
+              .split('_')
+              .map((w) => w[0].toUpperCase() + w.substring(1))
+              .join(' '));
+      expect(rooms.single.area, 'living_room', reason: 'what selects devices');
+      expect(rooms.single.label, 'Living Room', reason: 'what you read');
     });
 
     test('are nothing at all on a house with no areas', () {
