@@ -194,7 +194,7 @@ void main() {
         reason: 'c is not in the group, so nothing cuts it');
   });
 
-  testWidgets('a container is actually distinguishable from the canvas',
+  testWidgets('a container is visible, and sits UNDER the cards on it',
       (tester) async {
     // The bug this exists for, and it cost two browser rounds. The first
     // version painted the container in `surface.raised`; the second in
@@ -234,12 +234,34 @@ void main() {
           ))
           .decoration as BoxDecoration;
       final tokens = skin.tokens;
-      final over = Color.alphaBlend(decoration.color!, tokens.surface.base);
+      final base = tokens.surface.base;
+      final fill = Color.alphaBlend(decoration.color!, base);
+      final edge = Color.alphaBlend(decoration.border!.top.color, base);
+
+      // The EDGE is what says where the container is, so it is the thing that
+      // has to clear the canvas outright.
       expect(
-        _contrast(over, tokens.surface.base),
-        greaterThan(1.1),
-        reason: '$skin draws its group container at a colour indistinguishable '
-            'from the canvas behind it — the container is invisible',
+        _contrast(edge, base),
+        greaterThan(2.0),
+        reason: '$skin draws no visible edge on a group container, and the '
+            'fill alone is not allowed to carry it',
+      );
+
+      // The FILL only lifts the area off the canvas. It must move — an
+      // unlifted container is a border floating in space — but it must stay
+      // BELOW `raised`, or the backdrop is brighter than the cards standing on
+      // it and reads as one big card behind three small ones. That is exactly
+      // what shipped to the house at 7%, and no assertion about mere
+      // difference from the canvas would have caught it.
+      final lift = (_lum(fill) - _lum(base)).abs();
+      final card = (_lum(tokens.surface.raised) - _lum(base)).abs();
+      expect(lift, greaterThan(0.0),
+          reason: '$skin fills a group container with the canvas colour');
+      expect(
+        lift,
+        lessThan(card),
+        reason: '$skin lifts a group container past `surface.raised` — the '
+            'backdrop is brighter than the cards sitting on it',
       );
     }
   });
