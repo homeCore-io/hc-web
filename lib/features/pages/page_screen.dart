@@ -18,6 +18,7 @@ import '../../core/models/dashboard.dart';
 import '../../core/providers/dashboards_provider.dart';
 import '../../core/providers/devices_provider.dart';
 import '../../design/components/hc_controls.dart';
+import '../../design/components/hc_dialog.dart';
 import '../../design/hc_icons.dart';
 import '../../design/tokens.dart';
 import '../../shell/shell_scope.dart';
@@ -1488,6 +1489,21 @@ class _PageScreenState extends ConsumerState<PageScreen> {
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
     final async = ref.watch(dashboardsProvider);
+    // A page that cannot load must SAY so. `async.value == null` used to cover
+    // both "still arriving" and "the request failed", and the second one drew
+    // the first one's spinner — forever, with no message and nothing to press.
+    // A page that never resolves and never explains itself is indistinguishable
+    // from a hung app, which is exactly how the cold-load router deadlock read
+    // for three days.
+    if (async.hasError && async.value == null) {
+      return Scaffold(
+        backgroundColor: t.surface.base,
+        body: _PageLoadFailed(
+          error: async.error!,
+          onRetry: () => ref.invalidate(dashboardsProvider),
+        ),
+      );
+    }
     // Still arriving is not the same as not there. "Page not found." while the
     // list loads is a claim about the house that is false — the same failure as
     // a card announcing "No devices match" before any device has arrived — and
@@ -2169,6 +2185,45 @@ class _PreviewFrame extends StatelessWidget {
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: width!),
         child: child,
+      ),
+    );
+  }
+}
+
+/// The page list did not arrive, so this page cannot be drawn.
+///
+/// Says which page, says why, and offers the one useful action. The failure it
+/// reports is almost never about this page in particular — the list is the
+/// whole house's — so it names the page rather than blaming it.
+class _PageLoadFailed extends StatelessWidget {
+  const _PageLoadFailed({required this.error, required this.onRetry});
+
+  final Object error;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(HcIcons.warning, color: t.accent.danger, size: 32),
+            SizedBox(height: t.space.md),
+            Text('This page could not be loaded.',
+                style: t.text.titleStyle.copyWith(color: t.surface.onBase)),
+            SizedBox(height: t.space.sm),
+            Text(
+              '$error',
+              textAlign: TextAlign.center,
+              style: t.text.bodyStyle.copyWith(color: t.surface.onBaseMuted),
+            ),
+            SizedBox(height: t.space.lg),
+            HcButton(label: 'Try again', onPressed: onRetry),
+          ],
+        ),
       ),
     );
   }
