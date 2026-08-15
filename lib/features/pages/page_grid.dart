@@ -848,24 +848,33 @@ class _PageGridState extends State<PageGrid> {
                   child: IgnorePointer(
                     child: DecoratedBox(
                       decoration: BoxDecoration(
-                        // Tinted by the CONTRASTING colour, not by a surface
-                        // token, and the numbers are why. A container sits
-                        // behind cards that are themselves `raised`, so it
-                        // cannot use that; and Midnight's `sunken` is
-                        // #0d1116 against a #0b0e13 ground — three values
-                        // apart, which is invisible. Every surface token in a
-                        // skin is a near neighbour of the others by design.
+                        // **The edge defines it; the fill only lifts it.**
                         //
-                        // `onBase` is the one colour a skin guarantees stands
-                        // apart from its ground. A 7% wash of it clears the
-                        // canvas on all four skins (1.13–1.35 contrast) and
-                        // still sits below a card, which is where a backdrop
-                        // belongs.
-                        color: t.surface.onBase.withValues(alpha: 0.07),
+                        // Tinted by the CONTRASTING colour rather than a
+                        // surface token, because every surface token in a skin
+                        // is a near neighbour of the others by design —
+                        // Midnight's `sunken` is #0d1116 against a #0b0e13
+                        // ground, three values apart, and shipped invisible.
+                        //
+                        // But a fill bright enough to carry the container on
+                        // its own overshoots `raised` and ends up BRIGHTER
+                        // than the cards standing on it, which reads as one
+                        // big card behind three small ones. On the house at 7%
+                        // it did exactly that. The two jobs cannot both go to
+                        // the fill, so they are split: 3% keeps the wash below
+                        // `raised` on all four skins, and the border does the
+                        // work of saying where the container ends.
+                        color: t.surface.onBase.withValues(alpha: 0.03),
                         borderRadius: BorderRadius.circular(
                             container.box.radius ?? t.radius.lg),
                         border: Border.all(
-                          color: t.surface.onBase.withValues(alpha: 0.16),
+                          // 0.35, set by the weakest skin rather than the
+                          // prettiest. Soft Home is light, so a dark `onBase`
+                          // line gains ratio slowly: this is 2.9:1 on Midnight
+                          // and only 2.1:1 there, and anything that reached
+                          // 3:1 on Soft Home would be a glaring 5:1 rule on
+                          // the dark three.
+                          color: t.surface.onBase.withValues(alpha: 0.35),
                           width: t.stroke.width,
                         ),
                       ),
