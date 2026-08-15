@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../../core/dashboard/grid_engine.dart';
 import '../../core/models/dashboard.dart';
-import '../../design/components/hc_controls.dart';
 import '../../design/tokens.dart';
 import '../assets/asset_field.dart';
+import 'inspector_controls.dart';
 
 /// The page itself, when no card is selected.
 ///
@@ -143,7 +143,7 @@ class _PageInspectorState extends State<PageInspector> {
                   style: t.text.overlineStyle
                       .copyWith(color: t.surface.onBaseMuted)),
               SizedBox(height: t.space.xs),
-              _Toggle(
+              InspectorToggle(
                 label: 'Compose freely',
                 value: layout?.isComposed ?? false,
                 onChanged: derived != null ? null : onCompose,
@@ -165,7 +165,7 @@ class _PageInspectorState extends State<PageInspector> {
               ),
               if (layout?.frame case final frame?) ...[
                 SizedBox(height: t.space.xs),
-                _Toggle(
+                InspectorToggle(
                   label: 'Snap to the grid',
                   value: widget.snapToGrid,
                   onChanged: widget.onSnapChanged,
@@ -225,13 +225,13 @@ class _BackgroundControlsState extends State<_BackgroundControls> {
               widget.onChanged(v.copyWith(image: s.isEmpty ? null : s)),
         ),
         SizedBox(height: t.space.xs),
-        _Slider(
+        InspectorSlider(
           label: 'Blur',
           value: v.blur,
           max: 40,
           onChanged: (n) => widget.onChanged(v.copyWith(blur: n)),
         ),
-        _Slider(
+        InspectorSlider(
           label: 'Dim',
           value: v.dim * 100,
           max: 100,
@@ -244,51 +244,6 @@ class _BackgroundControlsState extends State<_BackgroundControls> {
               : 'Blurred and dimmed behind the cards; the cards stay sharp.',
           style: t.text.captionStyle
               .copyWith(color: t.surface.onBaseMuted, height: 1.4),
-        ),
-      ],
-    );
-  }
-}
-
-class _Slider extends StatelessWidget {
-  const _Slider({
-    required this.label,
-    required this.value,
-    required this.max,
-    required this.onChanged,
-  });
-
-  final String label;
-  final double value;
-  final double max;
-  final ValueChanged<double> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = HcTokens.of(context);
-    return Row(
-      children: [
-        SizedBox(
-          width: 44,
-          child: Text(label,
-              style: t.text.bodySmallStyle.copyWith(color: t.surface.onBase)),
-        ),
-        Expanded(
-          child: Slider(
-            value: value.clamp(0, max),
-            max: max,
-            divisions: max.round(),
-            label: '${value.round()}',
-            onChanged: onChanged,
-          ),
-        ),
-        SizedBox(
-          width: 28,
-          child: Text('${value.round()}',
-              textAlign: TextAlign.right,
-              style: t.text.captionStyle.copyWith(
-                  color: t.surface.onBaseMuted,
-                  fontFeatures: t.numericFontFeatures)),
         ),
       ],
     );
@@ -550,42 +505,6 @@ class _Preset extends StatelessWidget {
                 color: selected ? t.surface.onBase : t.surface.onBaseMuted),
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _Toggle extends StatelessWidget {
-  const _Toggle({
-    required this.label,
-    required this.value,
-    required this.onChanged,
-  });
-
-  final String label;
-  final bool value;
-  final ValueChanged<bool>? onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = HcTokens.of(context);
-    return Padding(
-      padding: EdgeInsets.symmetric(vertical: t.space.xs / 2),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(label,
-                style: t.text.bodyStyle.copyWith(
-                    color: onChanged == null
-                        ? t.surface.onBaseMuted
-                        : t.surface.onBase)),
-          ),
-          HcToggle(
-            value: value,
-            onChanged: onChanged,
-            semanticLabel: label,
-          ),
-        ],
       ),
     );
   }

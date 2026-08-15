@@ -9,6 +9,7 @@ import '../../core/dashboard/canvas_view.dart';
 import '../../core/dashboard/frame.dart';
 import '../../core/dashboard/free_layer.dart';
 import '../../core/dashboard/grid_engine.dart';
+import '../../core/dashboard/group_frame.dart';
 import '../../core/dashboard/groups.dart';
 import '../../core/dashboard/layout_write.dart';
 import '../../core/dashboard/page_starts.dart';
@@ -164,6 +165,18 @@ class _PageScreenState extends ConsumerState<PageScreen> {
           e.key: groupOf(e.value.config),
       };
 
+  /// The same map, from whichever copy of the widgets is being drawn.
+  ///
+  /// [_paths] reads the draft, which is null outside an edit — fine for the
+  /// grouping *gestures*, which only exist while editing. Containers are not a
+  /// gesture: they are part of the page, so in view mode the membership has to
+  /// come from the saved widgets or every container would resolve to nothing
+  /// the moment you left the editor.
+  Map<String, String?> _pathsIn(Map<String, DashboardWidgetModel> widgets) =>
+      _draftWidgets != null
+          ? _paths
+          : {for (final e in widgets.entries) e.key: groupOf(e.value.config)};
+
   /// What clicking [id] on the canvas actually puts in hand.
   ///
   /// The element itself when it is loose or when you are already standing in
@@ -279,6 +292,38 @@ class _PageScreenState extends ConsumerState<PageScreen> {
       // where it sits is already on screen.
       nameOf(target),
     );
+  }
+
+  /// Give the group in hand a body, or change the one it has.
+  ///
+  /// Written onto the layout being edited and no other. A container is a box on
+  /// a *page*, and the page differs by breakpoint — styling a group on the wall
+  /// must not put a background behind it on the phone, where the same cards are
+  /// a single scrolling column and the box would enclose the whole screen.
+  ///
+  /// A box that says nothing the default would not is *removed* rather than
+  /// stored, which is what makes the switch in the panel reversible: turning
+  /// the container off leaves the group exactly as it was before anyone gave it
+  /// one, rather than leaving a row behind that means nothing.
+  void _setGroupBox(GroupBox next) {
+    final layouts = _draftLayouts;
+    if (layouts == null || _editingBreakpoint == null) return;
+    _pushUndo(next.isPlain ? 'Remove the container' : 'Change the container',
+        coalesce: 'group-box-${next.path}');
+    setState(() {
+      _draftLayouts = [
+        for (final l in layouts)
+          if (l.breakpoint != _editingBreakpoint)
+            l
+          else
+            l.copyWith(groups: [
+              for (final g in l.groups)
+                if (g.path != next.path) g,
+              if (!next.isPlain) next,
+            ]),
+      ];
+      _contentDirty = true;
+    });
   }
 
   /// Write a new path onto a set of elements, as one undoable edit.
@@ -1467,9 +1512,21 @@ class _PageScreenState extends ConsumerState<PageScreen> {
     try {
       // No rebuild here: every gesture already reprojected the draft through
       // writeArrangement, so this is a push of what the bar has been showing.
+      // Containers whose group no longer exists, dropped on the way out.
+      //
+      // Core accepts them — it has to, because it cannot tell an emptied group
+      // from a mistyped one, and rejecting the first would make deleting the
+      // last card in a group fail to save. So the collecting is the client's
+      // job, and here is the moment it can be done without guessing: the
+      // widgets being written are exactly the membership.
+      final live = livePaths(widgets.map((w) => groupOf(w.config)));
+      final layouts = [
+        for (final l in _draftLayouts!)
+          l.groups.isEmpty ? l : l.copyWith(groups: prunedBoxes(l.groups, live))
+      ];
       final next = d.copyWith(
         widgets: widgets,
-        layouts: _draftLayouts,
+        layouts: layouts,
         background: _draftBackground,
         updatedAt: DateTime.now(),
       );
@@ -1669,6 +1726,13 @@ class _PageScreenState extends ConsumerState<PageScreen> {
                       : null,
                   onEnterGroup: widget.designer ? _enterGroup : null,
                   groupOutline: widget.designer ? _groupOutline : null,
+                  // Not gated on `designer`, unlike the outline above: a
+                  // container is part of the page. The dashed frame says "this
+                  // is what you have hold of" and belongs to the tool; a
+                  // background belongs to the document and has to be there when
+                  // somebody is only looking at it.
+                  groupStyles: layout.groups,
+                  groupPaths: _pathsIn(widgetsById),
                   frame: layout.frame,
                   onCompose: (id, rect) => _composeCard(id, rect, columns),
                   snapToGrid: _snapToGrid,
@@ -1729,6 +1793,12 @@ class _PageScreenState extends ConsumerState<PageScreen> {
             onEnterGroup: _groupInHand == null
                 ? null
                 : () => _enterGroup(_selection.first),
+            groupBox: _groupInHand == null
+                ? null
+                : layout.groupBox(_groupInHand!)?.isPlain ?? true
+                    ? null
+                    : layout.groupBox(_groupInHand!),
+            onGroupBox: _groupInHand == null ? null : _setGroupBox,
             onSave: () => _save(dashboard),
             canvas: canvas(),
             emptyStart: emptyStart(),

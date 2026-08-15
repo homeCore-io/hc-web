@@ -23,6 +23,50 @@
 library;
 
 import 'grid_engine.dart';
+import 'groups.dart';
+
+/// A group's body, resolved: the box it styles and where that box actually is.
+///
+/// Resolved wherever the members' rectangles are known, and nowhere else. That
+/// is the board, not the document: on an uncomposed page a card's rectangle
+/// depends on the width it is being drawn at, so resolving upstream would mean
+/// guessing it. Two answers to "where is this group" is how a container ends up
+/// somewhere its members are not.
+typedef GroupContainer = ({String path, GroupBox box, DashboardRect rect});
+
+/// Every group with a body, resolved against the members it currently has.
+///
+/// [rectOf] is how a member id becomes a rectangle — the same reconciliation
+/// the cards are drawn from, so a container cannot disagree with what is inside
+/// it. Groups whose box resolves to nothing are dropped: an empty group that
+/// was never given a rect has no honest position.
+///
+/// Ancestors resolve against their descendants' members too, because
+/// [membersOf] is segment-aware — `Wall` contains everything under
+/// `Wall/Lights`.
+List<GroupContainer> resolveGroups(
+  Iterable<GroupBox> boxes,
+  Map<String, String?> paths,
+  DashboardRect? Function(String id) rectOf,
+) {
+  final resolved = <GroupContainer>[];
+  for (final box in boxes) {
+    final members = <DashboardRect>[];
+    for (final id in membersOf(paths, box.path)) {
+      final rect = rectOf(id);
+      if (rect != null) members.add(rect);
+    }
+    final bounds = groupBounds(box, members);
+    if (bounds == null) continue;
+    resolved.add((path: box.path, box: box, rect: bounds));
+  }
+  // Outermost first, so a nested container paints on top of the one that holds
+  // it rather than under it. Depth by path segments; ties keep their order,
+  // which is the order they were authored in.
+  resolved.sort((a, b) =>
+      '/'.allMatches(a.path).length.compareTo('/'.allMatches(b.path).length));
+  return resolved;
+}
 
 /// The bounding box of [rects], or null when there are none.
 ///

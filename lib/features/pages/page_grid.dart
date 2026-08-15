@@ -8,6 +8,8 @@ import '../../core/dashboard/canvas_view.dart';
 import '../../core/dashboard/card_style.dart';
 import '../../core/dashboard/frame.dart';
 import '../../core/dashboard/grid_engine.dart';
+import '../../core/dashboard/group_frame.dart';
+import '../../core/dashboard/groups.dart';
 import '../../core/dashboard/widget_registry.dart';
 import '../../core/models/dashboard.dart';
 import '../../design/components/hc_surface.dart';
@@ -43,6 +45,8 @@ class PageGrid extends StatefulWidget {
     this.onSelect,
     this.onEnterGroup,
     this.groupOutline,
+    this.groupStyles = const [],
+    this.groupPaths = const {},
     this.frame,
     this.snapToGrid = true,
     this.onCompose,
@@ -120,6 +124,25 @@ class PageGrid extends StatefulWidget {
   /// indistinguishable from three cards that happen to be selected together,
   /// which is the difference the feature exists to make.
   final (GridItem, String)? groupOutline;
+
+  /// The groups that have been given a body, and who is in each one.
+  ///
+  /// Both halves are needed and neither can be resolved without the other:
+  /// membership lives in the widgets' config, which only the draft knows, and
+  /// the rectangles are in the board's units, which only this widget's
+  /// LayoutBuilder knows. So the styles and the paths come down and the
+  /// resolution happens here, once, against the same `boxOf` the cards are
+  /// drawn from — a container that computed its position from anything else
+  /// could disagree with what is inside it.
+  ///
+  /// Unlike [groupOutline] these are part of the *page*, not part of the
+  /// selection: they are drawn in view mode too, behind everything, because a
+  /// container that only existed while you were editing would not be a
+  /// container.
+  final List<GroupBox> groupStyles;
+
+  /// Which group each element is in — see `groups.dart`.
+  final Map<String, String?> groupPaths;
 
   /// The canvas this layout is composed on, or null for a plain grid.
   ///
@@ -351,6 +374,32 @@ class _PageGridState extends State<PageGrid> {
   }
 
   /// The cell under a point, clamped to the board.
+  /// [child] cut to [box], which is in board units while the child's own
+  /// coordinates start at its top-left — hence the translation.
+  ///
+  /// Returns the child untouched when there is nothing to clip to, so a page
+  /// with no clipping group pays for none of this: no extra layer, no extra
+  /// render object, and the widget tree its tests walk is the one it was.
+  static Widget _clipped(
+    String id,
+    DashboardRect? box,
+    double left,
+    double top,
+    Widget child,
+  ) {
+    if (box == null) return child;
+    return ClipRect(
+      key: ValueKey('group-clip:$id'),
+      clipper: _ClipTo(Rect.fromLTWH(
+        box.x - left,
+        box.y - top,
+        box.w,
+        box.h,
+      )),
+      child: child,
+    );
+  }
+
   static (int, int) _cellOf(Offset p, double stepX, double stepY, int columns) {
     final x = (p.dx / stepX).floor().clamp(0, columns - 1);
     final y = (p.dy / stepY).floor();
@@ -396,6 +445,29 @@ class _PageGridState extends State<PageGrid> {
         // draws goes through here, so "the rectangle is the truth and the cells
         // are the fallback" is decided once.
         DashboardRect boxOf(GridItem i) => rectFor(geometry, i, i.rect);
+
+        // The groups with a body, resolved against the very rectangles the
+        // cards are about to be drawn from. Empty for every page that has not
+        // styled a group, which is all of them until somebody does.
+        final containers = widget.groupStyles.isEmpty
+            ? const <GroupContainer>[]
+            : resolveGroups(widget.groupStyles, widget.groupPaths, (id) {
+                for (final i in items) {
+                  if (i.id == id) return boxOf(i);
+                }
+                return null;
+              });
+
+        // Only the members of a group that actually clips. A nested clip wins
+        // over its ancestor's, because `resolveGroups` orders outermost first
+        // and the inner box is the tighter promise.
+        final clipTo = <String, DashboardRect>{};
+        for (final container in containers) {
+          if (!container.box.clip) continue;
+          for (final id in membersOf(widget.groupPaths, container.path)) {
+            clipTo[id] = container.rect;
+          }
+        }
 
         double leftOf(GridItem i) => boxOf(i).x;
         double topOf(GridItem i) => boxOf(i).y;
@@ -753,6 +825,54 @@ class _PageGridState extends State<PageGrid> {
                   ),
                 ),
 
+              // The groups that have been given a body, under everything they
+              // contain. Part of the page rather than part of the selection —
+              // drawn in view mode too, because a container that appeared only
+              // while you were editing would not be a container.
+              //
+              // `IgnorePointer` throughout: a container is a backdrop, not a
+              // target. Clicking one has to reach the card underneath, or the
+              // moment you give a group a background you can no longer press
+              // anything in it.
+              for (final container in containers)
+                Positioned(
+                  // Keyed by path so a test — and the inspector — can name the
+                  // one container it means. Every card carries a DecoratedBox
+                  // of its own, so "the box behind this group" is not something
+                  // a type finder can pick out.
+                  key: ValueKey('group-box:${container.path}'),
+                  left: container.rect.x,
+                  top: container.rect.y,
+                  width: container.rect.w,
+                  height: container.rect.h,
+                  child: IgnorePointer(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        // Tinted by the CONTRASTING colour, not by a surface
+                        // token, and the numbers are why. A container sits
+                        // behind cards that are themselves `raised`, so it
+                        // cannot use that; and Midnight's `sunken` is
+                        // #0d1116 against a #0b0e13 ground — three values
+                        // apart, which is invisible. Every surface token in a
+                        // skin is a near neighbour of the others by design.
+                        //
+                        // `onBase` is the one colour a skin guarantees stands
+                        // apart from its ground. A 7% wash of it clears the
+                        // canvas on all four skins (1.13–1.35 contrast) and
+                        // still sits below a card, which is where a backdrop
+                        // belongs.
+                        color: t.surface.onBase.withValues(alpha: 0.07),
+                        borderRadius: BorderRadius.circular(
+                            container.box.radius ?? t.radius.lg),
+                        border: Border.all(
+                          color: t.surface.onBase.withValues(alpha: 0.16),
+                          width: t.stroke.width,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+
               // Paint order is stacking order. Grid items first — they cannot
               // be underneath each other, so their order among themselves does
               // not matter — then the floating ones by height. Sorted here
@@ -768,47 +888,53 @@ class _PageGridState extends State<PageGrid> {
                   top: _dragId == item.id ? draggedTop(item) : topOf(item),
                   width: widthOf(item),
                   height: heightOf(item),
-                  child: RepaintBoundary(
-                    child: _Cell(
-                      onConfigChanged: widget.onWidgetConfig == null
-                          ? null
-                          : (next) => widget.onWidgetConfig!(item.id, next),
-                      item: item,
-                      model: widget.widgetsById[item.id],
-                      editing: widget.editing,
-                      simplified: gesturing,
-                      dragging: _dragId == item.id || _resizeId == item.id,
-                      selected: widget.selectedIds.contains(item.id),
-                      entered: _entered == item.id,
-                      enteredFocus: _enteredFocus,
-                      onEnter: () => _enter(item.id),
-                      onLeave: _leave,
-                      // Only while resizing. During a move the position is
-                      // already legible from where the card is; during a
-                      // resize the number of cells is exactly what you are
-                      // aiming at and the only thing you cannot read off the
-                      // screen.
-                      sizeLabel:
-                          _resizeId == item.id ? '${item.w}×${item.h}' : null,
-                      onRemove: () => widget.onRemove?.call(item.id),
-                      onConfigure: () => widget.onConfigure?.call(item.id),
-                      onMenu: (pos) => widget.onMenu?.call(item.id, pos),
-                      onSelect: widget.onSelect == null
-                          ? null
-                          // Shift is read at the moment of the tap rather than
-                          // tracked as state: a modifier held while the pointer
-                          // was elsewhere is not a modifier held for this click.
-                          : () => _tapped(
-                                item.id,
-                                HardwareKeyboard.instance.isShiftPressed,
-                              ),
-                      onDragStart: () => startDrag(item),
-                      onDragUpdate: updateDrag,
-                      onDragEnd: endDrag,
-                      onResizeStart: (handle) => startResize(item, handle),
-                      composed: item.isComposed,
-                      onResizeUpdate: updateResize,
-                      onResizeEnd: endResize,
+                  child: _clipped(
+                    item.id,
+                    clipTo[item.id],
+                    _dragId == item.id ? draggedLeft(item) : leftOf(item),
+                    _dragId == item.id ? draggedTop(item) : topOf(item),
+                    RepaintBoundary(
+                      child: _Cell(
+                        onConfigChanged: widget.onWidgetConfig == null
+                            ? null
+                            : (next) => widget.onWidgetConfig!(item.id, next),
+                        item: item,
+                        model: widget.widgetsById[item.id],
+                        editing: widget.editing,
+                        simplified: gesturing,
+                        dragging: _dragId == item.id || _resizeId == item.id,
+                        selected: widget.selectedIds.contains(item.id),
+                        entered: _entered == item.id,
+                        enteredFocus: _enteredFocus,
+                        onEnter: () => _enter(item.id),
+                        onLeave: _leave,
+                        // Only while resizing. During a move the position is
+                        // already legible from where the card is; during a
+                        // resize the number of cells is exactly what you are
+                        // aiming at and the only thing you cannot read off the
+                        // screen.
+                        sizeLabel:
+                            _resizeId == item.id ? '${item.w}×${item.h}' : null,
+                        onRemove: () => widget.onRemove?.call(item.id),
+                        onConfigure: () => widget.onConfigure?.call(item.id),
+                        onMenu: (pos) => widget.onMenu?.call(item.id, pos),
+                        onSelect: widget.onSelect == null
+                            ? null
+                            // Shift is read at the moment of the tap rather than
+                            // tracked as state: a modifier held while the pointer
+                            // was elsewhere is not a modifier held for this click.
+                            : () => _tapped(
+                                  item.id,
+                                  HardwareKeyboard.instance.isShiftPressed,
+                                ),
+                        onDragStart: () => startDrag(item),
+                        onDragUpdate: updateDrag,
+                        onDragEnd: endDrag,
+                        onResizeStart: (handle) => startResize(item, handle),
+                        composed: item.isComposed,
+                        onResizeUpdate: updateResize,
+                        onResizeEnd: endResize,
+                      ),
                     ),
                   ),
                 ),
@@ -1005,6 +1131,19 @@ class _OffCanvas extends CustomPainter {
 /// group has a background or a border of its own, and a solid line would
 /// promise a container that is not there. The name sits *above* the frame, out
 /// of the way of whatever is in the top-left card.
+/// A fixed rectangle in the child's own coordinates.
+class _ClipTo extends CustomClipper<Rect> {
+  const _ClipTo(this.rect);
+
+  final Rect rect;
+
+  @override
+  Rect getClip(Size size) => rect;
+
+  @override
+  bool shouldReclip(_ClipTo old) => old.rect != rect;
+}
+
 class _GroupFrame extends CustomPainter {
   _GroupFrame({
     required this.label,
