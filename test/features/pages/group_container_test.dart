@@ -266,6 +266,37 @@ void main() {
     }
   });
 
+  testWidgets('the board lets a container bleed past its own edge',
+      (tester) async {
+    // A container's padding puts its edge OUTSIDE its members, so a group
+    // flush with the top-left corner of a page sits partly outside the board.
+    // A `Stack` clips to its bounds by default, and that default drew only the
+    // two sides of the box that had room — which reads as a broken border, not
+    // as a clip. It was visible on the house and invisible here, because
+    // clipping changes what is painted and not what is laid out: `getRect`
+    // reports the same rectangle either way.
+    //
+    // So this asserts the property that fixes it rather than the symptom. The
+    // scroll viewport above still does the real clipping, so bleeding reaches
+    // the page's margin and stops.
+    await _pump(tester, const [GroupBox(path: 'Wall', padding: 16)]);
+    final board = tester.widget<Stack>(find.descendant(
+      of: find.byType(PageGrid),
+      matching: find.byType(Stack),
+    ));
+    expect(
+      board.clipBehavior,
+      Clip.none,
+      reason: 'the board clips its own contents, so a container padded around '
+          'a card at the page edge loses that edge — and so does a composed '
+          'card deliberately bled past it',
+    );
+
+    // And the geometry really does go negative, which is what needs the room.
+    final a = tester.getRect(find.byKey(const ValueKey('a')));
+    expect(_container(tester).left, lessThan(a.left));
+  });
+
   testWidgets('a group that does not clip adds no clip layer', (tester) async {
     // Not a micro-optimisation. Every page in the house goes through this
     // widget, and a clip layer per card on every one of them for a feature
