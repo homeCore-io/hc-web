@@ -76,6 +76,10 @@ const _configPlaces = [
   NavItem('/cameras', 'Cameras', HcIcons.camera),
   NavItem('/modes', 'Modes', HcIcons.modes),
   NavItem('/events', 'Events', HcIcons.events),
+  // The page manager — import, export, duplicate, delete, start from a
+  // template. The launcher lists your pages and can make one, but everything
+  // else you can do *to* a page lived at a URL with nothing linking to it.
+  NavItem('/dashboards', 'Pages', HcIcons.dashboards),
   NavItem('/manage', 'Manage', HcIcons.sliders),
 ];
 
@@ -164,9 +168,14 @@ class _HubLauncher extends ConsumerWidget {
                           selected: location == '/pages/${d.id}',
                           onTap: () => goTo('/pages/${d.id}'),
                         ),
+                      // The launcher closes *after* the name is given, not
+                      // before: popping first left `context` pointing at a
+                      // route being torn down, and everything the create did
+                      // afterwards — including opening the new page — was a
+                      // lookup through a corpse. See [createPage].
                       _NewPageCard(onTap: () {
-                        Navigator.of(context).pop();
-                        createPage(context, ref);
+                        final navigator = Navigator.of(context);
+                        createPage(context, ref, dismiss: navigator.pop);
                       }),
                     ],
                   ),

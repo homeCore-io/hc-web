@@ -57,20 +57,33 @@ class DashboardWidgetPlacement {
   final int w;
   final int h;
 
+  /// Where the card really sits, when the layout has a frame.
+  ///
+  /// The cells above are then a *snapped approximation* of this, kept on
+  /// purpose: they are what core validates, what a client that predates frames
+  /// draws, and what the document falls back to if the frame is removed. See
+  /// `core/dashboard/frame.dart`.
+  final DashboardRect? rect;
+
   const DashboardWidgetPlacement({
     required this.widgetId,
     required this.x,
     required this.y,
     required this.w,
     required this.h,
+    this.rect,
   });
 
+  /// [rect] takes a sentinel because null is meaningful for it: clearing a
+  /// composed rectangle back to plain cells is a real edit, and
+  /// `copyWith(rect: null)` would otherwise silently mean *unchanged*.
   DashboardWidgetPlacement copyWith({
     String? widgetId,
     int? x,
     int? y,
     int? w,
     int? h,
+    Object? rect = _unchanged,
   }) {
     return DashboardWidgetPlacement(
       widgetId: widgetId ?? this.widgetId,
@@ -78,6 +91,7 @@ class DashboardWidgetPlacement {
       y: y ?? this.y,
       w: w ?? this.w,
       h: h ?? this.h,
+      rect: identical(rect, _unchanged) ? this.rect : rect as DashboardRect?,
     );
   }
 
@@ -87,6 +101,9 @@ class DashboardWidgetPlacement {
         'y': y,
         'w': w,
         'h': h,
+        // Omitted rather than null, matching core's `skip_serializing_if`. A
+        // page nobody has composed must not gain a key by being saved.
+        if (rect != null) 'rect': rect!.toJson(),
       };
 
   factory DashboardWidgetPlacement.fromJson(Map<String, dynamic> json) =>
@@ -96,6 +113,7 @@ class DashboardWidgetPlacement {
         y: json['y'] as int? ?? 0,
         w: json['w'] as int? ?? 1,
         h: json['h'] as int? ?? 1,
+        rect: DashboardRect.fromJson(json['rect']),
       );
 }
 
@@ -130,6 +148,16 @@ class DashboardLayout {
   /// layout authored.
   final GridFlow flow;
 
+  /// The canvas this layout is composed on, or null for a plain grid.
+  ///
+  /// Per layout rather than per dashboard, because the answer differs by
+  /// device — a wall is a fixed frame somebody composed, a phone is a column
+  /// that scrolls — and that is what a breakpoint is for.
+  final DashboardFrame? frame;
+
+  /// Whether this layout is composed rather than merely arranged.
+  bool get isComposed => frame != null;
+
   const DashboardLayout({
     required this.breakpoint,
     required this.columns,
@@ -138,6 +166,7 @@ class DashboardLayout {
     required this.placements,
     this.derivedFrom,
     this.flow = GridFlow.packed,
+    this.frame,
   });
 
   /// `derivedFrom` needs an explicit sentinel because null is a meaningful
@@ -152,6 +181,7 @@ class DashboardLayout {
     List<DashboardWidgetPlacement>? placements,
     Object? derivedFrom = _unchanged,
     GridFlow? flow,
+    Object? frame = _unchanged,
   }) {
     return DashboardLayout(
       breakpoint: breakpoint ?? this.breakpoint,
@@ -163,6 +193,10 @@ class DashboardLayout {
           ? this.derivedFrom
           : derivedFrom as DashboardBreakpoint?,
       flow: flow ?? this.flow,
+      // Same sentinel, same reason as `derivedFrom`: taking a composed layout
+      // back to a plain grid is a real edit that null alone cannot express.
+      frame:
+          identical(frame, _unchanged) ? this.frame : frame as DashboardFrame?,
     );
   }
 
@@ -184,6 +218,10 @@ class DashboardLayout {
         // it would mean a free layout edited by an older client silently
         // reverts to packed on its next save.
         'flow': flow.name,
+        // Omitted rather than null, matching core. A page nobody has composed
+        // must not gain a key by being saved — a document that grows keys by
+        // being read is one whose diffs stop meaning anything.
+        if (frame != null) 'frame': frame!.toJson(),
       };
 
   factory DashboardLayout.fromJson(Map<String, dynamic> json) =>
@@ -214,6 +252,7 @@ class DashboardLayout {
         // annoyance, while treating an unknown flow as free would leave gaps
         // in a layout authored expecting them closed.
         flow: json['flow'] == 'free' ? GridFlow.free : GridFlow.packed,
+        frame: DashboardFrame.fromJson(json['frame']),
       );
 }
 
@@ -251,6 +290,10 @@ DashboardLayout normalizeDashboardLayout(
         h: p.h,
         minW: mobile ? layout.columns : (hints[p.widgetId]?.minW ?? 1),
         minH: hints[p.widgetId]?.minH ?? 1,
+        // Never on mobile: that layout is a single column by construction, and
+        // a rectangle composed for a 1600-wide desktop describes positions the
+        // phone has no room for.
+        rect: mobile ? null : p.rect,
       ),
   ];
 

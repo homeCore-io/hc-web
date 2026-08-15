@@ -1,7 +1,12 @@
+import 'dart:math' as math;
+
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/dashboard/canvas_view.dart';
 import '../../core/dashboard/card_style.dart';
+import '../../core/dashboard/frame.dart';
 import '../../core/dashboard/grid_engine.dart';
 import '../../core/dashboard/widget_registry.dart';
 import '../../core/models/dashboard.dart';
@@ -31,10 +36,16 @@ class PageGrid extends StatefulWidget {
     this.onConfigure,
     this.onWidgetConfig,
     this.onAddAt,
-    this.selectedId,
+    this.onMarquee,
+    this.selectedIds = const {},
     this.onDropCard,
     this.onMenu,
     this.onSelect,
+    this.onEnterGroup,
+    this.groupOutline,
+    this.frame,
+    this.snapToGrid = true,
+    this.onCompose,
   });
 
   final List<GridItem> items;
@@ -68,10 +79,16 @@ class PageGrid extends StatefulWidget {
   /// is the difference between arranging a page and correcting one.
   final void Function(int x, int y)? onAddAt;
 
+  /// A rubber band was pulled from one cell to another. [additive] is shift:
+  /// add the catch to what is already in hand.
+  final void Function(int x1, int y1, int x2, int y2, bool additive)? onMarquee;
+
   /// The card the rail is showing. Marked on the canvas, because a panel that
   /// names a card while nothing on the board says which one is a panel about
   /// nothing you can see.
-  final String? selectedId;
+  /// Everything in hand. A set, because align, distribute and the keyboard all
+  /// act on more than one card — see `page_screen`'s `_selection`.
+  final Set<String> selectedIds;
 
   /// A card dragged in from the library, dropped at a cell.
   final void Function(Object payload, int x, int y)? onDropCard;
@@ -86,15 +103,169 @@ class PageGrid extends StatefulWidget {
   /// A plain click on a card. Null on the surfaces with nowhere to put a
   /// selection — the phone's in-place editor has no inspector beside it, and a
   /// card that highlights and then does nothing is a worse answer than none.
-  final void Function(String id)? onSelect;
+  /// [additive] is a shift-click: add to the selection, or take back out
+  /// something already in it.
+  final void Function(String id, bool additive)? onSelect;
+
+  /// A double-click on a card: step into the group it belongs to.
+  ///
+  /// The gesture every drawing tool uses for it, and the only way to reach one
+  /// member of a group on the canvas — a single click deliberately holds the
+  /// whole cluster.
+  final void Function(String id)? onEnterGroup;
+
+  /// The group in hand, as a rectangle in cells and the name to write on it.
+  ///
+  /// Drawn as one dashed frame around the lot. Without it a group is
+  /// indistinguishable from three cards that happen to be selected together,
+  /// which is the difference the feature exists to make.
+  final (GridItem, String)? groupOutline;
+
+  /// The canvas this layout is composed on, or null for a plain grid.
+  ///
+  /// Present, the board is the frame's own size and every element is drawn from
+  /// its rectangle rather than from its cells — see `frame.dart`. Absent, none
+  /// of this applies and the grid behaves exactly as it always has, which is
+  /// the case most pages are in.
+  final DashboardFrame? frame;
+
+  /// A composed element was moved or resized to [rect].
+  ///
+  /// Separate from [onMove] and [onResize] because it is a different edit: those
+  /// two report cells and the parent runs the packing engine on them, which is
+  /// exactly what must not happen to something somebody placed.
+  final void Function(String id, DashboardRect rect)? onCompose;
+
+  /// Whether a composed drag is pulled to the cell edges.
+  ///
+  /// A choice per gesture rather than a property of the document. This is the
+  /// one place "the grid is a magnet, not a law" has to actually be true.
+  final bool snapToGrid;
 
   @override
   State<PageGrid> createState() => _PageGridState();
 }
 
+/// Moving a card, on raw pointer events rather than a pan recogniser.
+///
+/// The canvas sits inside two scroll views, and a pan recogniser competes with
+/// them for the gesture. **In a real browser it wins** — this was checked
+/// against the live house, before and after, dragging horizontally, vertically
+/// and diagonally, and the pan version moved the card every time. Under
+/// `flutter_test` it does not: the harness synthesises one large move where a
+/// browser sends a stream of small ones, and the arena resolves the other way,
+/// so every drag became a scroll and no test could move a card at all.
+///
+/// So this is not a fix for a bug anybody could see. It is a fix for a gesture
+/// whose outcome depended on how the pointer events arrived, which meant the
+/// drag could not be tested — and composition needed testing more than the
+/// grid did, because a composed drag writes a rectangle rather than snapping
+/// to a cell that would have hidden small errors.
+///
+/// Raw pointers do not compete, so the outcome is the same either way. Tapping,
+/// the context menu and the long press stay on the [GestureDetector]
+/// underneath: a tap recogniser rejects itself once the pointer travels past
+/// the slop, so a drag cannot also read as a click.
+class _DragBody extends StatefulWidget {
+  const _DragBody({
+    required this.onDragStart,
+    required this.onDragUpdate,
+    required this.onDragEnd,
+    required this.child,
+  });
+
+  final VoidCallback onDragStart;
+  final ValueChanged<Offset> onDragUpdate;
+  final VoidCallback onDragEnd;
+  final Widget child;
+
+  @override
+  State<_DragBody> createState() => _DragBodyState();
+}
+
+class _DragBodyState extends State<_DragBody> {
+  Offset? _from;
+  bool _moving = false;
+
+  void _end() {
+    if (_moving) widget.onDragEnd();
+    _from = null;
+    _moving = false;
+  }
+
+  @override
+  Widget build(BuildContext context) => Listener(
+        onPointerDown: (event) {
+          // Primary only. The middle button pans the canvas and the secondary
+          // one opens the card menu; neither should move anything.
+          if (event.buttons != kPrimaryButton) return;
+          _from = event.localPosition;
+          _moving = false;
+        },
+        onPointerMove: (event) {
+          final from = _from;
+          if (from == null) return;
+          if (!_moving) {
+            // Past the slop before anything happens, or every click nudges the
+            // card by a pixel and the page is never quite where you left it.
+            if ((event.localPosition - from).distance < kTouchSlop) {
+              return;
+            }
+            _moving = true;
+            widget.onDragStart();
+          }
+          // The *local* delta: the board is drawn scaled, and the global one
+          // would move the card by screen pixels on a canvas measured in its
+          // own.
+          widget.onDragUpdate(event.localDelta);
+        },
+        onPointerUp: (_) => _end(),
+        onPointerCancel: (_) => _end(),
+        child: widget.child,
+      );
+}
+
 class _PageGridState extends State<PageGrid> {
   /// The cell a dragged-in card is hovering over, in grid units.
   (int, int)? _dropCell;
+
+  /// The second half of a double-click, timed here rather than handed to
+  /// [GestureDetector.onDoubleTap].
+  ///
+  /// Flutter's double-tap recogniser makes a *single* tap wait out the
+  /// double-tap window before it fires, so wiring `onDoubleTap` put a third of
+  /// a second between clicking a card and seeing it selected. Selection has to
+  /// be instant — it is the most common thing anyone does here — so the first
+  /// click selects immediately and a second one inside the window additionally
+  /// steps into the group. Nothing is delayed and nothing is swallowed.
+  String? _lastTapId;
+  DateTime? _lastTapAt;
+
+  static const _doubleTapWindow = Duration(milliseconds: 400);
+
+  void _tapped(String id, bool additive) {
+    widget.onSelect!(id, additive);
+    final now = DateTime.now();
+    final again = _lastTapId == id &&
+        _lastTapAt != null &&
+        now.difference(_lastTapAt!) < _doubleTapWindow;
+    if (again) {
+      _lastTapId = null;
+      _lastTapAt = null;
+      widget.onEnterGroup?.call(id);
+      return;
+    }
+    _lastTapId = id;
+    _lastTapAt = now;
+  }
+
+  /// The rectangle a composed gesture started from, so a drag depends only on
+  /// how far the pointer has moved and not on the path it took.
+  DashboardRect? _gestureRect;
+
+  /// Which edge or corner is being pulled. Always the bottom-right for a cell
+  /// card, which has only one grip.
+  ResizeHandle _handle = ResizeHandle.bottomRight;
 
   /// The card the editor has been *entered* into, or null.
   ///
@@ -126,7 +297,7 @@ class _PageGridState extends State<PageGrid> {
     setState(() => _entered = id);
     // Entering is also choosing: the inspector should be showing the card you
     // are now working inside.
-    widget.onSelect?.call(id);
+    widget.onSelect?.call(id, false);
     _enteredFocus.requestFocus();
   }
 
@@ -143,6 +314,16 @@ class _PageGridState extends State<PageGrid> {
   // once, on release. That is what stops neighbours from oscillating under the
   // cursor and gives an honest WYSIWYG result.
   List<GridItem>? _baseline;
+
+  /// The rubber band, in cells, while one is being dragged out.
+  ///
+  /// **Tap adds, drag selects.** Both gestures start on the empty canvas and
+  /// the split is the honest one: a tap is pointing at a cell, which is what
+  /// placing a card means, and a drag is describing a region, which is what
+  /// selecting means. Neither has to be modal and neither steals the other.
+  (int, int)? _bandFrom;
+  (int, int)? _bandTo;
+
   List<GridItem>? _preview;
 
   // Move gesture.
@@ -154,6 +335,27 @@ class _PageGridState extends State<PageGrid> {
   String? _resizeId;
   Point _resizeStart = const Point(0, 0);
   Offset _resizeAccum = Offset.zero;
+
+  /// [items] in the order they should be painted: the grid, then whatever
+  /// floats above it, lowest first.
+  static List<GridItem> _stacked(List<GridItem> items) {
+    final grounded = [
+      for (final i in items)
+        if (!i.floating) i
+    ];
+    final floating = [
+      for (final i in items)
+        if (i.floating) i
+    ]..sort((a, b) => a.z.compareTo(b.z));
+    return [...grounded, ...floating];
+  }
+
+  /// The cell under a point, clamped to the board.
+  static (int, int) _cellOf(Offset p, double stepX, double stepY, int columns) {
+    final x = (p.dx / stepX).floor().clamp(0, columns - 1);
+    final y = (p.dy / stepY).floor();
+    return (x, y < 0 ? 0 : y);
+  }
 
   static GridItem? _itemById(List<GridItem> items, String id) {
     for (final i in items) {
@@ -178,32 +380,92 @@ class _PageGridState extends State<PageGrid> {
         // untouched until release.
         final items = _preview ?? widget.items;
 
-        double leftOf(GridItem i) => i.x * stepX;
-        double topOf(GridItem i) => i.y * stepY;
-        double widthOf(GridItem i) => i.w * cellW + (i.w - 1) * widget.gap;
-        double heightOf(GridItem i) =>
-            i.h * widget.rowHeight + (i.h - 1) * widget.gap;
+        // The geometry of one cell, in the units the board is drawn in. When
+        // the layout is composed those units *are* the frame's, because the
+        // board is laid out at the frame's width — so a rectangle needs no
+        // conversion on the way to the screen, and a cell means the same thing
+        // to the guides, the rulers and the snap.
+        final geometry = CanvasGeometry(
+          width: c.maxWidth,
+          columns: columns,
+          rowHeight: widget.rowHeight,
+          gap: widget.gap,
+        );
+
+        // The one place the two representations are reconciled. Everything that
+        // draws goes through here, so "the rectangle is the truth and the cells
+        // are the fallback" is decided once.
+        DashboardRect boxOf(GridItem i) => rectFor(geometry, i, i.rect);
+
+        double leftOf(GridItem i) => boxOf(i).x;
+        double topOf(GridItem i) => boxOf(i).y;
+        double widthOf(GridItem i) => boxOf(i).w;
+        double heightOf(GridItem i) => boxOf(i).h;
 
         final maxRow =
             items.fold<int>(0, (m, i) => i.bottom > m ? i.bottom : m);
-        final height = maxRow <= 0
-            // An empty page still needs a board. Four rows is enough to read as
-            // a grid and to aim at, without pretending the page is longer than
-            // it is.
-            ? widget.rowHeight * (widget.editing ? 4 : 1) +
-                (widget.editing ? widget.gap * 3 : 0)
-            : maxRow * widget.rowHeight + (maxRow - 1) * widget.gap;
+        // How far down anything actually reaches, which for a composed page is
+        // not a multiple of a row.
+        final reach = items.fold<double>(
+            0, (m, i) => boxOf(i).bottom > m ? boxOf(i).bottom : m);
+
+        final double height;
+        if (widget.frame case final frame?) {
+          height = switch (frame.fit) {
+            // A fixed canvas *is* its own height — that is what a wall display
+            // shows. But while you are editing, a card that has fallen outside
+            // it has to stay reachable: shrinking the canvas under a page must
+            // not swallow the cards it no longer covers, or the control that
+            // resizes it is a control that silently deletes work. So the board
+            // grows to reach them and the canvas edge is drawn where it really
+            // is.
+            DashboardFrameFit.fixed =>
+              widget.editing ? math.max(frame.height, reach) : frame.height,
+            // A scrolling frame's height is a starting point, so the board is
+            // whichever is greater — the page grows past it.
+            DashboardFrameFit.scroll => math.max(frame.height, reach),
+          };
+        } else if (maxRow <= 0) {
+          // An empty page still needs a board. Four rows is enough to read as
+          // a grid and to aim at, without pretending the page is longer than
+          // it is.
+          height = widget.rowHeight * (widget.editing ? 4 : 1) +
+              (widget.editing ? widget.gap * 3 : 0);
+        } else {
+          height = maxRow * widget.rowHeight + (maxRow - 1) * widget.gap;
+        }
+
+        /// The preview with [id]'s rectangle replaced — a composed element is
+        /// placed, not packed, so the engine is deliberately not consulted.
+        List<GridItem> composedPreview(String id, DashboardRect rect) => [
+              for (final i in _baseline!)
+                if (i.id == id)
+                  geometry
+                      .snapToCells(i.id, rect, floating: i.floating, z: i.z)
+                      .copyWith(rect: rect)
+                else
+                  i,
+            ];
 
         void startDrag(GridItem item) => setState(() {
               _baseline = List<GridItem>.of(widget.items);
               _preview = _baseline;
               _dragId = item.id;
               _dragStart = Point(item.x, item.y);
+              _gestureRect = item.rect;
               _accum = Offset.zero;
             });
 
         void updateDrag(Offset delta) {
           _accum += delta;
+          if (_gestureRect case final from?) {
+            final rect = from.copyWith(
+              x: geometry.snapX(from.x + _accum.dx, on: widget.snapToGrid),
+              y: geometry.snapY(from.y + _accum.dy, on: widget.snapToGrid),
+            );
+            setState(() => _preview = composedPreview(_dragId!, rect));
+            return;
+          }
           final tx = _dragStart.x + (_accum.dx / stepX).round();
           final ty = _dragStart.y + (_accum.dy / stepY).round();
           final engine = GridEngine(columns: columns);
@@ -217,21 +479,28 @@ class _PageGridState extends State<PageGrid> {
           // Commit once: the parent runs the identical move on the real draft,
           // so the card lands exactly where the preview showed it.
           if (id != null && settled != null) {
-            widget.onMove?.call(id, settled.x, settled.y);
+            if (settled.rect case final rect?) {
+              widget.onCompose?.call(id, rect);
+            } else {
+              widget.onMove?.call(id, settled.x, settled.y);
+            }
           }
           setState(() {
             _dragId = null;
             _baseline = null;
             _preview = null;
+            _gestureRect = null;
             _accum = Offset.zero;
           });
         }
 
-        void startResize(GridItem item) => setState(() {
+        void startResize(GridItem item, ResizeHandle handle) => setState(() {
               _baseline = List<GridItem>.of(widget.items);
               _preview = _baseline;
               _resizeId = item.id;
               _resizeStart = Point(item.w, item.h);
+              _gestureRect = item.rect;
+              _handle = handle;
               _resizeAccum = Offset.zero;
             });
 
@@ -239,6 +508,12 @@ class _PageGridState extends State<PageGrid> {
           // Accumulate, like drag — a per-event delta rounds to zero almost
           // every frame and the resize feels dead.
           _resizeAccum += delta;
+          if (_gestureRect case final from?) {
+            final rect = geometry.resizedBy(from, _handle, _resizeAccum,
+                snap: widget.snapToGrid);
+            setState(() => _preview = composedPreview(_resizeId!, rect));
+            return;
+          }
           final tw = _resizeStart.x + (_resizeAccum.dx / stepX).round();
           final th = _resizeStart.y + (_resizeAccum.dy / stepY).round();
           final engine = GridEngine(columns: columns);
@@ -250,12 +525,17 @@ class _PageGridState extends State<PageGrid> {
           final id = _resizeId;
           final settled = id == null ? null : _itemById(_preview!, id);
           if (id != null && settled != null) {
-            widget.onResize?.call(id, settled.w, settled.h);
+            if (settled.rect case final rect?) {
+              widget.onCompose?.call(id, rect);
+            } else {
+              widget.onResize?.call(id, settled.w, settled.h);
+            }
           }
           setState(() {
             _resizeId = null;
             _baseline = null;
             _preview = null;
+            _gestureRect = null;
             _resizeAccum = Offset.zero;
           });
         }
@@ -277,10 +557,15 @@ class _PageGridState extends State<PageGrid> {
         // animates smoothly. Cards snap back to their live selves on release.
         final gesturing = _dragId != null || _resizeId != null;
 
+        // Room to drop a card below the last row while editing — but never on
+        // a fixed canvas, which is exactly its own height. Extra board there
+        // would mean the thing you are composing is not the thing being
+        // measured: Fit would scale to include the slack, and the bottom edge
+        // of the design would not be the bottom edge of the page.
+        final fixedCanvas = widget.frame?.fit == DashboardFrameFit.fixed;
         final board = SizedBox(
           width: double.infinity,
-          // Room to drop a card below the last row while editing.
-          height: height + (widget.editing ? stepY * 2 : 0),
+          height: height + (widget.editing && !fixedCanvas ? stepY * 2 : 0),
           child: Stack(
             children: [
               // The column grid, behind everything, while editing. A card's
@@ -290,23 +575,160 @@ class _PageGridState extends State<PageGrid> {
               // above them.
               if (widget.editing)
                 Positioned.fill(
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTapUp: widget.onAddAt == null
+                  // **Raw pointers, not a pan gesture.** The canvas lives
+                  // inside two scroll views, and a pan recogniser loses the
+                  // arena to them — every band drag became a scroll. A design
+                  // tool's artboard background belongs to the marquee; you
+                  // scroll it with the wheel or with the bars this shell draws
+                  // permanently. So the band takes the pointer directly rather
+                  // than negotiating for it.
+                  child: Listener(
+                    onPointerDown: widget.onMarquee == null
                         ? null
-                        : (details) {
-                            final p = details.localPosition;
-                            final x =
-                                (p.dx / stepX).floor().clamp(0, columns - 1);
-                            final y = (p.dy / stepY).floor();
-                            widget.onAddAt!(x, y < 0 ? 0 : y);
+                        : (e) => setState(() {
+                              _bandFrom = _cellOf(
+                                  e.localPosition, stepX, stepY, columns);
+                              _bandTo = _bandFrom;
+                            }),
+                    onPointerMove: widget.onMarquee == null
+                        ? null
+                        : (e) {
+                            if (_bandFrom == null) return;
+                            setState(() => _bandTo = _cellOf(
+                                e.localPosition, stepX, stepY, columns));
                           },
+                    onPointerUp: widget.onMarquee == null
+                        ? null
+                        : (_) {
+                            final from = _bandFrom;
+                            final to = _bandTo;
+                            setState(() {
+                              _bandFrom = null;
+                              _bandTo = null;
+                            });
+                            // Never left its cell: a tap that wobbled, and
+                            // placing a card is what a tap here is for.
+                            if (from == null || to == null || from == to) {
+                              return;
+                            }
+                            widget.onMarquee!(
+                              from.$1,
+                              from.$2,
+                              to.$1,
+                              to.$2,
+                              HardwareKeyboard.instance.isShiftPressed,
+                            );
+                          },
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTapUp: widget.onAddAt == null
+                          ? null
+                          : (details) {
+                              final p = details.localPosition;
+                              final x =
+                                  (p.dx / stepX).floor().clamp(0, columns - 1);
+                              final y = (p.dy / stepY).floor();
+                              widget.onAddAt!(x, y < 0 ? 0 : y);
+                            },
+                      child: CustomPaint(
+                        painter: _ColumnGuides(
+                          columns: columns,
+                          cellW: cellW,
+                          gap: widget.gap,
+                          color: t.stroke.hairline,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+
+              // The rubber band, while one is being pulled.
+              if (_bandFrom case final from?)
+                if (_bandTo case final to?)
+                  Positioned(
+                    left: (from.$1 < to.$1 ? from.$1 : to.$1) * stepX,
+                    top: (from.$2 < to.$2 ? from.$2 : to.$2) * stepY,
+                    width: ((from.$1 - to.$1).abs() + 1) * stepX - widget.gap,
+                    height: ((from.$2 - to.$2).abs() + 1) * stepY - widget.gap,
+                    child: IgnorePointer(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: t.accent.active.withValues(alpha: 0.06),
+                          border: Border.all(
+                              color: t.accent.active, width: t.stroke.width),
+                        ),
+                      ),
+                    ),
+                  ),
+
+              // Where the canvas actually ends, when something is outside it.
+              // Without this the page simply looks longer than it is, and the
+              // cards past the edge look placed rather than stranded.
+              if (widget.frame case final frame?)
+                if (widget.editing && reach > frame.height + 0.5)
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    top: frame.height,
+                    bottom: 0,
+                    child: IgnorePointer(
+                      child: CustomPaint(
+                        painter: _OffCanvas(
+                          colour: t.surface.onBaseMuted,
+                          veil: t.surface.sunken.withValues(alpha: 0.55),
+                          style: t.text.captionStyle
+                              .copyWith(color: t.surface.onBaseMuted),
+                        ),
+                      ),
+                    ),
+                  ),
+
+              // One frame around the group in hand. Without it a group looks
+              // exactly like three cards that happen to be selected at the same
+              // time, which is the whole difference the feature makes — and it
+              // is drawn a gap *outside* the cards so it reads as a container
+              // rather than as a fourth selection outline.
+              if (widget.groupOutline case (final box, final label))
+                Positioned(
+                  left: box.x * stepX - widget.gap / 2,
+                  top: box.y * stepY - widget.gap / 2,
+                  width: box.w * stepX,
+                  height: box.h * stepY,
+                  child: IgnorePointer(
                     child: CustomPaint(
-                      painter: _ColumnGuides(
-                        columns: columns,
-                        cellW: cellW,
+                      painter: _GroupFrame(
+                        label: label,
+                        color: t.accent.primary,
+                        radius: Radius.circular(t.radius.md),
+                        style: t.text.captionStyle.copyWith(
+                            color: t.accent.primary,
+                            fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ),
+                ),
+
+              // The lines saying what the held card agrees with. Above the
+              // cards, because a guide under the thing it describes is a guide
+              // you cannot see at the moment you need it.
+              if (_dragId case final id?)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: CustomPaint(
+                      painter: _SmartGuides(
+                        guides: GridEngine(columns: columns)
+                            .guidesFor(_preview ?? widget.items, id),
+                        stepX: stepX,
+                        stepY: stepY,
                         gap: widget.gap,
-                        color: t.stroke.hairline,
+                        color: t.accent.primary,
+                        labelStyle: t.text.captionStyle.copyWith(
+                          color: t.surface.base,
+                          fontWeight: FontWeight.w600,
+                          fontFeatures: t.numericFontFeatures,
+                        ),
+                        labelBackground: t.accent.primary,
+                        labelRadius: t.radius.xsR,
                       ),
                     ),
                   ),
@@ -331,7 +753,11 @@ class _PageGridState extends State<PageGrid> {
                   ),
                 ),
 
-              for (final item in items)
+              // Paint order is stacking order. Grid items first — they cannot
+              // be underneath each other, so their order among themselves does
+              // not matter — then the floating ones by height. Sorted here
+              // rather than upstream so every caller gets it right by default.
+              for (final item in _stacked(items))
                 AnimatedPositioned(
                   key: ValueKey(item.id),
                   duration: _dragId == item.id
@@ -352,7 +778,7 @@ class _PageGridState extends State<PageGrid> {
                       editing: widget.editing,
                       simplified: gesturing,
                       dragging: _dragId == item.id || _resizeId == item.id,
-                      selected: widget.selectedId == item.id,
+                      selected: widget.selectedIds.contains(item.id),
                       entered: _entered == item.id,
                       enteredFocus: _enteredFocus,
                       onEnter: () => _enter(item.id),
@@ -369,11 +795,18 @@ class _PageGridState extends State<PageGrid> {
                       onMenu: (pos) => widget.onMenu?.call(item.id, pos),
                       onSelect: widget.onSelect == null
                           ? null
-                          : () => widget.onSelect!(item.id),
+                          // Shift is read at the moment of the tap rather than
+                          // tracked as state: a modifier held while the pointer
+                          // was elsewhere is not a modifier held for this click.
+                          : () => _tapped(
+                                item.id,
+                                HardwareKeyboard.instance.isShiftPressed,
+                              ),
                       onDragStart: () => startDrag(item),
                       onDragUpdate: updateDrag,
                       onDragEnd: endDrag,
-                      onResizeStart: () => startResize(item),
+                      onResizeStart: (handle) => startResize(item, handle),
+                      composed: item.isComposed,
                       onResizeUpdate: updateResize,
                       onResizeEnd: endResize,
                     ),
@@ -524,6 +957,221 @@ class _ColumnGuides extends CustomPainter {
       old.color != color;
 }
 
+/// The lines a held card agrees with.
+///
+/// Drawn the full width or height of the board rather than only between the two
+/// cards, because the question a guide answers is "is this in line with
+/// anything?" and a stub between two cards makes you find the other end
+/// yourself. One line per position, however many cards share it — three cards
+/// on the same left edge is one guide, not three drawn on top of each other.
+/// Everything past the bottom edge of a fixed canvas.
+///
+/// Veiled rather than clipped. Clipping is what a wall display does — it shows
+/// the canvas and nothing else — but in the designer it would mean a card
+/// vanishing the moment you shortened the canvas, with no way to find it and
+/// nothing to say it had happened. This shows where the page ends and leaves
+/// what is beyond it visible, dimmed, and still draggable back.
+class _OffCanvas extends CustomPainter {
+  _OffCanvas({required this.colour, required this.veil, required this.style});
+
+  final Color colour;
+  final Color veil;
+  final TextStyle style;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.drawRect(Offset.zero & size, Paint()..color = veil);
+    canvas.drawLine(
+      Offset.zero,
+      Offset(size.width, 0),
+      Paint()
+        ..color = colour
+        ..strokeWidth = 1,
+    );
+    final text = TextPainter(
+      text: TextSpan(text: 'Off the canvas', style: style),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    text.paint(canvas, const Offset(6, 4));
+  }
+
+  @override
+  bool shouldRepaint(_OffCanvas old) => old.veil != veil;
+}
+
+/// A dashed frame around the group in hand, with its name on the corner.
+///
+/// Dashed rather than solid because it is not an edge of anything drawn — no
+/// group has a background or a border of its own, and a solid line would
+/// promise a container that is not there. The name sits *above* the frame, out
+/// of the way of whatever is in the top-left card.
+class _GroupFrame extends CustomPainter {
+  _GroupFrame({
+    required this.label,
+    required this.color,
+    required this.radius,
+    required this.style,
+  });
+
+  final String label;
+  final Color color;
+  final Radius radius;
+  final TextStyle style;
+
+  static const _dash = 6.0;
+  static const _gap = 4.0;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1
+      ..color = color;
+
+    final rect = RRect.fromRectAndRadius(Offset.zero & size, radius);
+    // Dashes measured along the path rather than drawn per edge, so the
+    // corners stay even instead of restarting the pattern four times.
+    final path = Path()..addRRect(rect);
+    for (final metric in path.computeMetrics()) {
+      var start = 0.0;
+      while (start < metric.length) {
+        final end = start + _dash;
+        canvas.drawPath(
+          metric.extractPath(start, end > metric.length ? metric.length : end),
+          paint,
+        );
+        start = end + _gap;
+      }
+    }
+
+    final text = TextPainter(
+      text: TextSpan(text: label, style: style),
+      textDirection: TextDirection.ltr,
+      maxLines: 1,
+      ellipsis: '…',
+    )..layout(maxWidth: size.width);
+    text.paint(canvas, Offset(0, -text.height - 2));
+  }
+
+  @override
+  bool shouldRepaint(_GroupFrame old) =>
+      old.label != label || old.color != color;
+}
+
+class _SmartGuides extends CustomPainter {
+  const _SmartGuides({
+    required this.guides,
+    required this.stepX,
+    required this.stepY,
+    required this.gap,
+    required this.color,
+    required this.labelStyle,
+    required this.labelBackground,
+    required this.labelRadius,
+  });
+
+  final List<GridGuide> guides;
+  final double stepX;
+  final double stepY;
+  final double gap;
+  final Color color;
+
+  /// For the measurement written on the line. Alignment tells you the edges
+  /// agree; the number tells you whether the space above matches the space
+  /// below, which is what you are actually judging when you drag something
+  /// into a row of others — and the one thing you cannot do by eye across a
+  /// scrolled canvas.
+  final TextStyle labelStyle;
+  final Color labelBackground;
+  final BorderRadius labelRadius;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (guides.isEmpty) return;
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1;
+
+    final drawn = <double>{};
+    // One measurement per pair of cards, not one per line. Two cards of the
+    // same width at the same column agree on three guides and every one of
+    // them reports the same distance — three identical labels stacked on top
+    // of each other would read as noise, or worse, as three measurements.
+    final measured = <String>{};
+
+    for (final guide in guides) {
+      // Cell edges sit half a gap in from the step, so a guide on a card's
+      // right edge lands on the ink rather than in the gutter beside it.
+      final at = guide.isVertical
+          ? guide.at * stepX - gap / 2
+          : guide.at * stepY - gap / 2;
+      final key = guide.isVertical ? at : -at - 1;
+      if (drawn.add(key)) {
+        canvas.drawLine(
+          guide.isVertical ? Offset(at, 0) : Offset(0, at),
+          guide.isVertical ? Offset(at, size.height) : Offset(size.width, at),
+          paint,
+        );
+      }
+
+      final cells = guide.gap;
+      if (cells == null) continue;
+      if (!measured.add('${guide.partner.id}:${guide.isVertical}')) continue;
+
+      // Midway along the space itself, so the number sits *in* the gap it is
+      // describing rather than beside one of the two cards.
+      final step = guide.isVertical ? stepY : stepX;
+      final middle = (guide.gapFrom + cells / 2) * step - gap / 2;
+      _label(
+        canvas,
+        cells.toStringAsFixed(0),
+        guide.isVertical ? Offset(at, middle) : Offset(middle, at),
+      );
+    }
+  }
+
+  void _label(Canvas canvas, String text, Offset centre) {
+    final painter = TextPainter(
+      text: TextSpan(text: text, style: labelStyle),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    final box = Rect.fromCenter(
+      center: centre,
+      width: painter.width + 8,
+      height: painter.height + 2,
+    );
+    canvas.drawRRect(
+      labelRadius.toRRect(box),
+      Paint()..color = labelBackground,
+    );
+    painter.paint(
+      canvas,
+      Offset(box.center.dx - painter.width / 2,
+          box.center.dy - painter.height / 2),
+    );
+  }
+
+  @override
+  bool shouldRepaint(_SmartGuides old) {
+    if (old.guides.length != guides.length ||
+        old.stepX != stepX ||
+        old.color != color) {
+      return true;
+    }
+    for (var i = 0; i < guides.length; i++) {
+      // The measurement is not part of a guide's identity, so it has to be
+      // compared here explicitly — a card dragged further from the one it is
+      // still aligned with changes the number and nothing else.
+      if (old.guides[i] != guides[i] ||
+          old.guides[i].gap != guides[i].gap ||
+          old.guides[i].gapFrom != guides[i].gapFrom) {
+        return true;
+      }
+    }
+    return false;
+  }
+}
+
 /// The ghost arrangement, as dashed outlines.
 ///
 /// Dashed rather than a faint solid: a solid box reads as another card, and the
@@ -638,6 +1286,7 @@ class _Cell extends StatelessWidget {
     required this.onDragUpdate,
     required this.onDragEnd,
     required this.onResizeStart,
+    required this.composed,
     required this.onResizeUpdate,
     required this.onResizeEnd,
   });
@@ -673,7 +1322,12 @@ class _Cell extends StatelessWidget {
   final VoidCallback onDragStart;
   final ValueChanged<Offset> onDragUpdate;
   final VoidCallback onDragEnd;
-  final VoidCallback onResizeStart;
+  final ValueChanged<ResizeHandle> onResizeStart;
+
+  /// Composed cards get all eight handles; a cell card keeps its one grip,
+  /// because a cell card is anchored top-left and only its extent is in
+  /// question.
+  final bool composed;
   final ValueChanged<Offset> onResizeUpdate;
   final VoidCallback onResizeEnd;
 
@@ -827,28 +1481,30 @@ class _Cell extends StatelessWidget {
         Positioned.fill(child: IgnorePointer(child: card)),
         // Drag anywhere on the body to move.
         Positioned.fill(
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            // Click to select. It reads as too obvious to write down, and it
-            // was missing: the only way to put a card in the inspector was to
-            // find the small round options button in its corner. Everything
-            // else about the canvas said "direct manipulation" and the first
-            // gesture anyone tries did nothing at all.
-            onTap: onSelect,
-            onPanStart: (_) => onDragStart(),
-            onPanUpdate: (d) => onDragUpdate(d.delta),
-            onPanEnd: (_) => onDragEnd(),
-            onSecondaryTapDown: (d) => onMenu(d.globalPosition),
-            // A long press is the same gesture on a touchscreen, and the
-            // in-place editor runs there too.
-            onLongPressStart: (d) => onMenu(d.globalPosition),
-            child: MouseRegion(
-              cursor: SystemMouseCursors.move,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  borderRadius: t.radius.mdR,
-                  border: Border.all(
-                    color: t.accent.active.withValues(alpha: 0.5),
+          child: _DragBody(
+            onDragStart: onDragStart,
+            onDragUpdate: onDragUpdate,
+            onDragEnd: onDragEnd,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              // Click to select. It reads as too obvious to write down, and it
+              // was missing: the only way to put a card in the inspector was to
+              // find the small round options button in its corner. Everything
+              // else about the canvas said "direct manipulation" and the first
+              // gesture anyone tries did nothing at all.
+              onTap: onSelect,
+              onSecondaryTapDown: (d) => onMenu(d.globalPosition),
+              // A long press is the same gesture on a touchscreen, and the
+              // in-place editor runs there too.
+              onLongPressStart: (d) => onMenu(d.globalPosition),
+              child: MouseRegion(
+                cursor: SystemMouseCursors.move,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: t.radius.mdR,
+                    border: Border.all(
+                      color: t.accent.active.withValues(alpha: 0.5),
+                    ),
                   ),
                 ),
               ),
@@ -902,35 +1558,149 @@ class _Cell extends StatelessWidget {
               ),
             ),
           ),
-        // Resize from the bottom-right.
-        Positioned(
-          right: 0,
-          bottom: 0,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onPanStart: (_) => onResizeStart(),
-            onPanUpdate: (d) => onResizeUpdate(d.delta),
-            onPanEnd: (_) => onResizeEnd(),
-            child: MouseRegion(
-              cursor: SystemMouseCursors.resizeDownRight,
-              child: Semantics(
-                // A bare corner to drag was invisible to assistive tech and
-                // unnamed to everyone else.
-                label: 'Resize card',
-                child: Container(
-                  width: 22,
-                  height: 22,
-                  alignment: Alignment.center,
-                  child: Icon(HcIcons.grip,
-                      size: 13, color: t.accent.active.withValues(alpha: 0.8)),
+        // Resize. One grip on a cell card, eight on a composed one — see
+        // [ResizeHandle].
+        if (!composed)
+          Positioned(
+            right: 0,
+            bottom: 0,
+            child: _Grip(
+              handle: ResizeHandle.bottomRight,
+              onStart: onResizeStart,
+              onUpdate: onResizeUpdate,
+              onEnd: onResizeEnd,
+              child: Container(
+                width: 22,
+                height: 22,
+                alignment: Alignment.center,
+                child: Icon(HcIcons.grip,
+                    size: 13, color: t.accent.active.withValues(alpha: 0.8)),
+              ),
+            ),
+          )
+        // Only on the card in hand. Eight grips on every card at once is a
+        // board of dots rather than a page you can read.
+        else if (selected)
+          for (final handle in ResizeHandle.values)
+            Positioned(
+              // Inside the card's own bounds, never outside them: a Stack does
+              // not hit-test a child beyond its edges, so a handle hanging off
+              // the corner would be drawn and not grabbable.
+              //
+              // An edge handle spans its whole side *less the corners*, so the
+              // two never fight over the same pixel — the corner is the one
+              // that resizes both axes, and losing it to the edge lying on top
+              // of it would cost the gesture people reach for most.
+              // Pinned to the edges it moves, and stretched across the axis it
+              // does not.
+              left: handle.movesRight ? null : 0,
+              right: handle.movesLeft ? null : 0,
+              top: handle.movesBottom ? null : 0,
+              bottom: handle.movesTop ? null : 0,
+              width: handle.movesLeft || handle.movesRight ? _gripSize : null,
+              height: handle.movesTop || handle.movesBottom ? _gripSize : null,
+              child: Padding(
+                padding: EdgeInsets.symmetric(
+                  horizontal:
+                      handle.movesLeft || handle.movesRight ? 0 : _gripSize,
+                  vertical:
+                      handle.movesTop || handle.movesBottom ? 0 : _gripSize,
+                ),
+                child: _Grip(
+                  handle: handle,
+                  onStart: onResizeStart,
+                  onUpdate: onResizeUpdate,
+                  onEnd: onResizeEnd,
+                  child: Center(
+                    child: Container(
+                      width: 7,
+                      height: 7,
+                      decoration: BoxDecoration(
+                        color: t.surface.base,
+                        border: Border.all(color: t.accent.active),
+                        borderRadius: t.radius.xsR,
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),
-          ),
-        ),
       ],
     );
   }
+}
+
+/// How big a resize handle is to hit.
+///
+/// Sixteen rather than the seven that is drawn: the dot is the affordance, the
+/// box around it is what you actually have to land on, and a handle you have to
+/// aim at is a handle you avoid.
+const double _gripSize = 16;
+
+/// One resize handle. Raw pointers, for the reason [_DragBody] gives: inside
+/// two scroll views a pan recogniser's outcome depends on how the events
+/// arrive.
+class _Grip extends StatefulWidget {
+  const _Grip({
+    required this.handle,
+    required this.onStart,
+    required this.onUpdate,
+    required this.onEnd,
+    required this.child,
+  });
+
+  final ResizeHandle handle;
+  final ValueChanged<ResizeHandle> onStart;
+  final ValueChanged<Offset> onUpdate;
+  final VoidCallback onEnd;
+  final Widget child;
+
+  @override
+  State<_Grip> createState() => _GripState();
+}
+
+class _GripState extends State<_Grip> {
+  bool _pulling = false;
+
+  static const _cursors = {
+    ResizeHandle.topLeft: SystemMouseCursors.resizeUpLeft,
+    ResizeHandle.top: SystemMouseCursors.resizeUp,
+    ResizeHandle.topRight: SystemMouseCursors.resizeUpRight,
+    ResizeHandle.right: SystemMouseCursors.resizeRight,
+    ResizeHandle.bottomRight: SystemMouseCursors.resizeDownRight,
+    ResizeHandle.bottom: SystemMouseCursors.resizeDown,
+    ResizeHandle.bottomLeft: SystemMouseCursors.resizeDownLeft,
+    ResizeHandle.left: SystemMouseCursors.resizeLeft,
+  };
+
+  void _end() {
+    if (_pulling) widget.onEnd();
+    _pulling = false;
+  }
+
+  @override
+  Widget build(BuildContext context) => MouseRegion(
+        cursor: _cursors[widget.handle]!,
+        child: Listener(
+          behavior: HitTestBehavior.opaque,
+          onPointerDown: (event) {
+            if (event.buttons != kPrimaryButton) return;
+            _pulling = true;
+            widget.onStart(widget.handle);
+          },
+          onPointerMove: (event) {
+            if (_pulling) widget.onUpdate(event.localDelta);
+          },
+          onPointerUp: (_) => _end(),
+          onPointerCancel: (_) => _end(),
+          child: Semantics(
+            // A bare corner to drag was invisible to assistive tech and
+            // unnamed to everyone else.
+            label: 'Resize card',
+            child: widget.child,
+          ),
+        ),
+      );
 }
 
 /// The way out of a card you are inside.

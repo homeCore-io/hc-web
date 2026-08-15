@@ -217,6 +217,21 @@ enum WidgetConfigKind {
   image,
   stringList,
 
+  /// A drawing the author brings, and the wires from it to the house.
+  ///
+  /// Two kinds rather than one because they are two questions asked in two
+  /// places: the picture is edited in a sheet with room to see it, and the
+  /// bindings are a list you build up beside the card while it draws.
+  svgSource,
+  svgBindings,
+
+  /// Markup the author writes, run in a sandbox.
+  ///
+  /// Distinct from [markdown] because a five-line textarea is not where anyone
+  /// writes a gauge: this kind opens an editor with room to work and a live
+  /// preview beside it, and it is the one field whose value is a program.
+  code,
+
   /// A home imported from a Sweet Home 3D archive, parsed in the browser and
   /// stored as geometry in the card's own config.
   ///

@@ -45,6 +45,17 @@ class CardLibrary extends ConsumerStatefulWidget {
 class _CardLibraryState extends ConsumerState<CardLibrary> {
   String _query = '';
 
+  /// Explicit, for the reason [CardInspector] records: Flutter web draws no
+  /// scrollbar for an unmanaged scroll view, so fifteen rooms above four
+  /// collapsed groups looked like the whole library.
+  final _scroll = ScrollController();
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
   /// Which groups are open. Rooms and devices start open because they are the
   /// answer most of the time; the rest start closed so fifteen rooms do not
   /// push everything else into the bottom third of the panel, which is what
@@ -238,99 +249,106 @@ class _CardLibraryState extends ConsumerState<CardLibrary> {
           ),
           SizedBox(height: t.space.md),
           Expanded(
-            child: ListView(
-              children: [
-                if (devices == null)
-                  Text('Loading the house…',
-                      style: t.text.captionStyle
-                          .copyWith(color: t.surface.onBaseMuted))
-                else ...[
-                  if (shownRooms.isNotEmpty) ...[
-                    _Heading(
-                      label: 'Rooms',
-                      count: shownRooms.length,
-                      open: _open.contains('Rooms'),
-                      onTap: () => setState(() => _toggle('Rooms')),
-                    ),
-                    if (_open.contains('Rooms'))
-                      for (final room in shownRooms)
-                        _RoomRow(
-                          room: room,
-                          onTap: () => _placeRoom(room),
-                          payload: () => _roomCard(room),
-                        ),
-                    SizedBox(height: t.space.sm),
-                  ] else if (_query.isEmpty && rooms.isEmpty)
-                    Padding(
-                      padding: EdgeInsets.only(bottom: t.space.md),
-                      child: Text(
-                        'No rooms yet. Assign devices to rooms in Manage and '
-                        'they will show up here.',
-                        style: t.text.captionStyle.copyWith(
-                            color: t.surface.onBaseMuted, height: 1.4),
+            child: Scrollbar(
+              controller: _scroll,
+              thumbVisibility: true,
+              child: ListView(
+                controller: _scroll,
+                padding: EdgeInsets.only(right: t.space.sm),
+                children: [
+                  if (devices == null)
+                    Text('Loading the house…',
+                        style: t.text.captionStyle
+                            .copyWith(color: t.surface.onBaseMuted))
+                  else ...[
+                    if (shownRooms.isNotEmpty) ...[
+                      _Heading(
+                        label: 'Rooms',
+                        count: shownRooms.length,
+                        open: _open.contains('Rooms'),
+                        onTap: () => setState(() => _toggle('Rooms')),
                       ),
-                    ),
-                  // Kinds sit under rooms because the room is the answer more
-                  // often: "the kitchen" before "every light". Both are one
-                  // drag, and neither asks anyone to meet the word "facet".
-                  if (shownKinds.isNotEmpty) ...[
-                    _Heading(
-                      label: 'Kinds',
-                      count: shownKinds.length,
-                      open: _open.contains('Kinds') || _query.isNotEmpty,
-                      onTap: () => setState(() => _toggle('Kinds')),
-                    ),
-                    if (_open.contains('Kinds') || _query.isNotEmpty)
-                      for (final kind in shownKinds)
-                        _KindRow(
-                          kind: kind,
-                          onTap: () => widget.onPick(_kindCard(kind)),
-                          payload: () => _kindCard(kind),
-                        ),
-                    SizedBox(height: t.space.sm),
-                  ],
-                ],
-                if (devices != null && _query.isNotEmpty) ...[
-                  if (_matchingDevices(devices).isNotEmpty) ...[
-                    _Heading(
-                      label: 'Devices found',
-                      count: _matchingDevices(devices).length,
-                      open: true,
-                      onTap: () {},
-                    ),
-                    for (final d in _matchingDevices(devices).take(12))
-                      _PlainRow(
-                        label: d.displayName,
-                        hint: humanize(d.effectiveArea ?? ''),
-                        type: 'device_tile',
-                        onTap: () => widget.onPick(_deviceCard(d)),
-                        payload: () => _deviceCard(d),
-                      ),
-                    SizedBox(height: t.space.md),
-                  ],
-                ],
-                for (final group in _groups)
-                  if (group.entries.any((e) => _matches(e.label))) ...[
-                    _Heading(
-                      label: group.label,
-                      count:
-                          group.entries.where((e) => _matches(e.label)).length,
-                      open: _open.contains(group.label) || _query.isNotEmpty,
-                      onTap: () => setState(() => _toggle(group.label)),
-                    ),
-                    if (_open.contains(group.label) || _query.isNotEmpty)
-                      for (final entry in group.entries)
-                        if (_matches(entry.label))
-                          _PlainRow(
-                            label: entry.label,
-                            hint: entry.hint,
-                            type: entry.type,
-                            onTap: () => widget.onPick(_entryCard(entry)),
-                            payload: () => _entryCard(entry),
+                      if (_open.contains('Rooms'))
+                        for (final room in shownRooms)
+                          _RoomRow(
+                            room: room,
+                            onTap: () => _placeRoom(room),
+                            payload: () => _roomCard(room),
                           ),
-                    SizedBox(height: t.space.sm),
+                      SizedBox(height: t.space.sm),
+                    ] else if (_query.isEmpty && rooms.isEmpty)
+                      Padding(
+                        padding: EdgeInsets.only(bottom: t.space.md),
+                        child: Text(
+                          'No rooms yet. Assign devices to rooms in Manage and '
+                          'they will show up here.',
+                          style: t.text.captionStyle.copyWith(
+                              color: t.surface.onBaseMuted, height: 1.4),
+                        ),
+                      ),
+                    // Kinds sit under rooms because the room is the answer more
+                    // often: "the kitchen" before "every light". Both are one
+                    // drag, and neither asks anyone to meet the word "facet".
+                    if (shownKinds.isNotEmpty) ...[
+                      _Heading(
+                        label: 'Kinds',
+                        count: shownKinds.length,
+                        open: _open.contains('Kinds') || _query.isNotEmpty,
+                        onTap: () => setState(() => _toggle('Kinds')),
+                      ),
+                      if (_open.contains('Kinds') || _query.isNotEmpty)
+                        for (final kind in shownKinds)
+                          _KindRow(
+                            kind: kind,
+                            onTap: () => widget.onPick(_kindCard(kind)),
+                            payload: () => _kindCard(kind),
+                          ),
+                      SizedBox(height: t.space.sm),
+                    ],
                   ],
-              ],
+                  if (devices != null && _query.isNotEmpty) ...[
+                    if (_matchingDevices(devices).isNotEmpty) ...[
+                      _Heading(
+                        label: 'Devices found',
+                        count: _matchingDevices(devices).length,
+                        open: true,
+                        onTap: () {},
+                      ),
+                      for (final d in _matchingDevices(devices).take(12))
+                        _PlainRow(
+                          label: d.displayName,
+                          hint: humanize(d.effectiveArea ?? ''),
+                          type: 'device_tile',
+                          onTap: () => widget.onPick(_deviceCard(d)),
+                          payload: () => _deviceCard(d),
+                        ),
+                      SizedBox(height: t.space.md),
+                    ],
+                  ],
+                  for (final group in _groups)
+                    if (group.entries.any((e) => _matches(e.label))) ...[
+                      _Heading(
+                        label: group.label,
+                        count: group.entries
+                            .where((e) => _matches(e.label))
+                            .length,
+                        open: _open.contains(group.label) || _query.isNotEmpty,
+                        onTap: () => setState(() => _toggle(group.label)),
+                      ),
+                      if (_open.contains(group.label) || _query.isNotEmpty)
+                        for (final entry in group.entries)
+                          if (_matches(entry.label))
+                            _PlainRow(
+                              label: entry.label,
+                              hint: entry.hint,
+                              type: entry.type,
+                              onTap: () => widget.onPick(_entryCard(entry)),
+                              payload: () => _entryCard(entry),
+                            ),
+                      SizedBox(height: t.space.sm),
+                    ],
+                ],
+              ),
             ),
           ),
         ],
@@ -360,6 +378,13 @@ class _CardLibraryState extends ConsumerState<CardLibrary> {
       _Entry('Scenes', 'scene_row', 'one tap each', {}),
       _Entry('Now playing', 'media_player', 'speakers and TVs',
           {'selection_mode': 'query', 'query': '', 'limit': 4}),
+      // **It was in no picker at all.** The whole floor plan feature could only
+      // be reached by already having one of these cards on the page, which
+      // meant editing the document by hand. Added blank on purpose: an empty
+      // one says what to do next — choose a picture, or import a Sweet Home 3D
+      // file — and the inspector is where both of those live.
+      _Entry('Floor plan', 'floor_plan', 'your home, with its lights on',
+          {'fit': 'contain'}),
     ]),
     // Data is its own family, not part of "Other". Three ways to show a
     // number, and which one you want depends on the room rather than on the
@@ -368,6 +393,27 @@ class _CardLibraryState extends ConsumerState<CardLibrary> {
     _Group('Data', [
       _Entry('Gauge', 'gauge', 'one reading against a range',
           {'min': 0, 'max': 100}),
+      // The same element with its card taken off and its number turned down —
+      // the piece you stack. Three of these at three sizes on the free layer
+      // is the instrument cluster that used to need a page of JavaScript, and
+      // offering only the full dial would keep that a secret.
+      _Entry('Arc', 'gauge', 'a ring you can stack', {
+        'min': 0,
+        'max': 100,
+        'readout': 'none',
+        'thickness': 10,
+        'color': 'accent',
+        ..._bareCard,
+      }),
+      _Entry('Bar', 'gauge', 'a reading as a line', {
+        'min': 0,
+        'max': 100,
+        'shape': 'bar',
+        'readout': 'none',
+        'thickness': 10,
+        'color': 'accent',
+        ..._bareCard,
+      }),
       _Entry('Reading', 'device_reading', 'one number, large', {}),
       _Entry('Chart', 'history_chart', 'a value over time',
           {'timeframe_hours': 24}),
@@ -400,6 +446,17 @@ class _CardLibraryState extends ConsumerState<CardLibrary> {
           'Image', 'image', 'a picture, scaled to the card', {'fit': 'cover'}),
       _Entry('Note', 'markdown', 'text you write',
           {'markdown': '# Note\nWrite something here.'}),
+      // Placed blank on purpose, like the floor plan: an empty code element
+      // renders its own starter, which says what the API is at the moment
+      // somebody wants to know. Granted nothing until it is told otherwise —
+      // the device selection is the permission, so the safe default is none.
+      // Between the gauges we draw and the code you write: bring the artwork,
+      // wire it up in a list. Granted nothing until told otherwise, like the
+      // code element it shares a sandbox with.
+      _Entry('Drawing', 'svg', 'your svg, wired to the house',
+          {'selection_mode': 'manual', 'device_ids': <String>[]}),
+      _Entry('Code', 'code', 'html, svg and script you write',
+          {'selection_mode': 'manual', 'device_ids': <String>[]}),
     ]),
   ];
 }

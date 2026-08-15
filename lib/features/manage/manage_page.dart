@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/devices/presentation.dart';
+import '../../core/providers/dashboards_provider.dart';
 import '../../core/providers/areas_provider.dart';
 import '../devices/device_query.dart';
 import '../../core/providers/automations_provider.dart';
@@ -89,6 +90,19 @@ class ManagePage extends ConsumerWidget {
         icon: HcIcons.devices,
         title: 'Devices',
         detail: devices == null ? null : '${devices.length} devices',
+      ),
+      // Pages had no entry here and none in the launcher's Manage row either,
+      // so the one screen that can import, export or delete a page was
+      // reachable only by typing its URL.
+      _Entry(
+        route: '/dashboards',
+        icon: HcIcons.dashboards,
+        title: 'Pages',
+        detail: switch (ref.watch(dashboardsProvider)) {
+          AsyncData(:final value) =>
+            value.length == 1 ? '1 page' : '${value.length} pages',
+          _ => null,
+        },
       ),
       _Entry(
         route: '/scenes',

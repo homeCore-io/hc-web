@@ -37,6 +37,11 @@ class ManageShell extends ConsumerWidget {
         group: SectionGroup.house, path: '/automations'),
     ManageSection('devices', 'Devices', HcIcons.devices,
         group: SectionGroup.house, path: '/devices'),
+    // Pages: import, export, duplicate, delete, start from a template. It was
+    // in no list anywhere — not this rail, not the launcher, not the landing
+    // pane — so the only way to it was to know the URL.
+    ManageSection('pages', 'Pages', HcIcons.dashboards,
+        group: SectionGroup.house, path: '/dashboards'),
     ManageSection('scenes', 'Scenes', HcIcons.scenes,
         group: SectionGroup.house, path: '/scenes'),
     ManageSection('areas', 'Areas & rooms', Icons.meeting_room_outlined,

@@ -5,11 +5,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/dashboard/breakpoints.dart';
+import '../../core/dashboard/canvas_view.dart';
+import '../../core/dashboard/frame.dart';
+import '../../core/dashboard/free_layer.dart';
 import '../../core/dashboard/grid_engine.dart';
+import '../../core/dashboard/groups.dart';
 import '../../core/dashboard/layout_write.dart';
+import '../../core/dashboard/page_starts.dart';
+import '../../core/text/humanize.dart';
 import '../../core/dashboard/widget_registry.dart';
 import '../../core/models/dashboard.dart';
 import '../../core/providers/dashboards_provider.dart';
+import '../../core/providers/devices_provider.dart';
 import '../../design/components/hc_controls.dart';
 import '../../design/hc_icons.dart';
 import '../../design/tokens.dart';
@@ -71,9 +78,9 @@ class _Snapshot {
   final Set<DashboardBreakpoint> touched;
   final bool contentDirty;
 
-  /// Which card was in the inspector. Undo puts you back where you were, and
+  /// What was in hand. Undo puts you back where you were, and
   /// where you were includes what you were looking at.
-  final String? selected;
+  final Set<String> selected;
   final DashboardBackground? background;
 }
 
@@ -109,7 +116,238 @@ class _PageScreenState extends ConsumerState<PageScreen> {
   Map<String, DashboardWidgetModel>? _draftWidgets;
 
   /// The card the inspector is showing, when there is room for one.
-  String? _selectedCard;
+  /// What is selected, in the order it was picked.
+  ///
+  /// A set rather than a single id, because align, distribute, group and every
+  /// keyboard action that moves something act on *what you have in hand* — and
+  /// with one id in hand, "distribute" has no meaning at all, which is why the
+  /// canvas shipped without it. See [GridEngine.distribute].
+  final _selection = <String>{};
+
+  /// The one selected card, or null when there is not exactly one.
+  ///
+  /// The inspector edits a card, not a crowd: two cards selected have two
+  /// titles and two configs and no honest single form. So the panel reads this
+  /// and shows the multi-selection summary when it is null but the selection is
+  /// not empty.
+  String? get _selectedCard => _selection.length == 1 ? _selection.first : null;
+
+  /// The starting points have been dismissed for this session.
+  ///
+  /// View state, and only for the *blank* start: the other two hide the chooser
+  /// by putting something on the page or a canvas under it, which is a fact
+  /// about the document and survives a reload. "Just the grid" changes nothing
+  /// at all, so the only thing it can mean is *stop offering*.
+  bool _dismissedStart = false;
+
+  /// Whether a composed drag is pulled to the cell edges.
+  ///
+  /// View state, like the zoom: how you are working on a page is not a fact
+  /// about the page. On by default, because the grid is what every existing
+  /// arrangement lines up with and a composition that starts by drifting off it
+  /// is a worse starting point than one that starts on it.
+  bool _snapToGrid = true;
+
+  /// The group you have stepped into, or null at the top of the page.
+  ///
+  /// A group is held as one thing, so getting at a single member means going
+  /// inside first. This is where you are standing; it is view state like the
+  /// zoom, never saved, and it survives no longer than the session.
+  String? _inside;
+
+  /// What group each element belongs to, by id.
+  Map<String, String?> get _paths => {
+        for (final e
+            in (_draftWidgets ?? const <String, DashboardWidgetModel>{})
+                .entries)
+          e.key: groupOf(e.value.config),
+      };
+
+  /// What clicking [id] on the canvas actually puts in hand.
+  ///
+  /// The element itself when it is loose or when you are already standing in
+  /// its group; otherwise every member of the group at the next level down.
+  Set<String> _clickHolds(String id, Map<String, String?> paths) {
+    final target = clickTarget(paths[id], _inside);
+    return target == null ? {id} : membersOf(paths, target);
+  }
+
+  /// Replace the selection, or add to it — shift-click, in one place.
+  ///
+  /// [direct] takes the element and only the element, whatever group it is in.
+  /// The elements strip addresses things individually — that is what a layers
+  /// panel is for — while the canvas holds clusters.
+  void _select(String? id, {bool additive = false, bool direct = false}) {
+    setState(() {
+      if (id == null) {
+        _selection.clear();
+        return;
+      }
+      final paths = _paths;
+      // Reaching for something outside the group you are standing in steps you
+      // out of it. Ignoring the click instead would be a canvas that stops
+      // responding for reasons nothing on screen explains.
+      if (_inside case final here?) {
+        final path = paths[id];
+        if (path == null || !isUnder(path, here)) _inside = null;
+      }
+      final holds = direct ? {id} : _clickHolds(id, paths);
+      if (!additive) {
+        _selection
+          ..clear()
+          ..addAll(holds);
+        return;
+      }
+      // Shift-clicking something already held takes it back out, which is how
+      // you fix a selection you overshot without starting again. A group goes
+      // in and out whole.
+      if (holds.every(_selection.contains)) {
+        _selection.removeAll(holds);
+      } else {
+        _selection.addAll(holds);
+      }
+    });
+  }
+
+  /// Step into the group under [id], so its members can be picked apart.
+  ///
+  /// Double-click, the gesture every drawing tool uses for it. Does nothing for
+  /// a loose element or one you are already as deep as.
+  void _enterGroup(String id) {
+    final paths = _paths;
+    final target = clickTarget(paths[id], _inside);
+    if (target == null) return;
+    setState(() {
+      _inside = target;
+      final holds = _clickHolds(id, paths);
+      _selection
+        ..clear()
+        ..addAll(holds);
+    });
+  }
+
+  /// Step back out one level, holding the group you were inside.
+  ///
+  /// Holding it rather than letting go: stepping out of a group to move the
+  /// whole thing is the reason you step out, and an empty selection would make
+  /// you click it again.
+  bool _leaveGroup() {
+    final here = _inside;
+    if (here == null) return false;
+    setState(() {
+      _inside = stepOut(here);
+      _selection
+        ..clear()
+        ..addAll(membersOf(_paths, here));
+    });
+    return true;
+  }
+
+  /// The single group every selected element is in, or null when there is not
+  /// one — which is what decides whether there is anything to name or dissolve.
+  String? get _groupInHand => _selection.isEmpty
+      ? null
+      : commonGroup(_selection.map((id) => _paths[id]));
+
+  /// The box to draw around the group in hand, and what to call it.
+  ///
+  /// Null unless the whole of one group is held: a partial selection inside a
+  /// group is not a group, and framing it would draw a container around
+  /// something that is not one.
+  (GridItem, String)? get _groupOutline {
+    final target = _groupInHand;
+    if (target == null) return null;
+    final members = membersOf(_paths, target);
+    if (members.length != _selection.length) return null;
+    final items = [
+      for (final i in _draftItems ?? const <GridItem>[])
+        if (members.contains(i.id)) i,
+    ];
+    if (items.isEmpty) return null;
+    var x = items.first.x, y = items.first.y;
+    var right = items.first.right, bottom = items.first.bottom;
+    for (final i in items) {
+      if (i.x < x) x = i.x;
+      if (i.y < y) y = i.y;
+      if (i.right > right) right = i.right;
+      if (i.bottom > bottom) bottom = i.bottom;
+    }
+    return (
+      GridItem(id: target, x: x, y: y, w: right - x, h: bottom - y),
+      // The name alone, not the path: the frame is drawn where the group is, so
+      // where it sits is already on screen.
+      nameOf(target),
+    );
+  }
+
+  /// Write a new path onto a set of elements, as one undoable edit.
+  void _writePaths(String label, Map<String, String?> next) {
+    final widgets = _draftWidgets;
+    if (widgets == null || next.isEmpty) return;
+    _pushUndo(label);
+    setState(() {
+      final updated = {...widgets};
+      for (final entry in next.entries) {
+        final model = updated[entry.key];
+        if (model == null) continue;
+        updated[entry.key] =
+            model.copyWith(config: withGroup(model.config, entry.value));
+      }
+      _draftWidgets = updated;
+      _contentDirty = true;
+    });
+  }
+
+  /// Hold these as one thing from now on.
+  void _groupSelection() {
+    if (_selection.isEmpty) return;
+    final paths = _paths;
+    final name = freshName(namesIn(paths.values, _inside));
+    final path = join(_inside, name);
+    _writePaths('Group ${_selection.length} elements', {
+      for (final id in _selection) id: regrouped(paths[id], path, _inside),
+    });
+  }
+
+  /// Dissolve the group in hand.
+  ///
+  /// Every member of it, not only what is selected: the group is going away, so
+  /// leaving part of the page still pointing at it would leave a group that
+  /// exists and cannot be selected.
+  void _ungroupSelection() {
+    final target = _groupInHand;
+    if (target == null) return;
+    final paths = _paths;
+    _writePaths('Ungroup ${nameOf(target)}', {
+      for (final id in membersOf(paths, target))
+        id: ungrouped(paths[id], target),
+    });
+    // Standing inside what was just dissolved is standing nowhere.
+    if (_inside case final here?) {
+      if (isUnder(here, target)) setState(() => _inside = stepOut(target));
+    }
+  }
+
+  /// Rename the group in hand, carrying everything under it.
+  void _renameGroup(String desired) {
+    final target = _groupInHand;
+    if (target == null) return;
+    final paths = _paths;
+    final siblings = namesIn(paths.values, parentOf(target))
+      ..remove(nameOf(target));
+    final to = join(parentOf(target), uniqueName(desired, siblings));
+    if (to == target) return;
+    _writePaths('Rename ${nameOf(target)}', {
+      for (final id in membersOf(paths, target))
+        id: renamedPath(paths[id], target, to),
+    });
+    if (_inside case final here?) {
+      if (isUnder(here, target)) {
+        setState(() => _inside = renamedPath(here, target, to));
+      }
+    }
+  }
+
   bool _saving = false;
 
   bool get _editing => _draftItems != null;
@@ -161,7 +399,18 @@ class _PageScreenState extends ConsumerState<PageScreen> {
   /// collections and a set. Bounded, because this is an undo affordance and not
   /// a document history.
   final List<_Snapshot> _undo = [];
+
+  /// The states undo has walked back past, newest last.
+  ///
+  /// There was no redo at all before this: undo was a one-way stack, so an
+  /// undo pressed once too often cost you the change with no way back. A
+  /// history panel over that would have been a list you can only walk in one
+  /// direction, which is not a history — it is a receipt.
+  final List<_Snapshot> _redo = [];
   static const _undoDepth = 20;
+
+  /// Whether the oldest state we hold has been dropped off the end of the cap.
+  bool _trimmed = false;
 
   /// Cards added during this edit, and not yet settled on every hand-arranged
   /// layout.
@@ -211,6 +460,11 @@ class _PageScreenState extends ConsumerState<PageScreen> {
             h: p.h,
             minW: WidgetRegistry.lookup(w.type)?.sizeHint.minW ?? 1,
             minH: WidgetRegistry.lookup(w.type)?.sizeHint.minH ?? 1,
+            // Lifted-ness travels with the element, in its config — see
+            // `free_layer.dart`. Read here, where the widget is in scope, so
+            // the engine never has to know what a config is.
+            floating: isFloating(w.config),
+            z: zOf(w.config),
           ),
     ];
   }
@@ -264,6 +518,10 @@ class _PageScreenState extends ConsumerState<PageScreen> {
       _contentDirty = false;
       _draftBackground = null;
       _undo.clear();
+      _redo.clear();
+      _trimmed = false;
+      _dismissedStart = false;
+      _inside = null;
       _pendingPlacement.clear();
       _settled.clear();
     });
@@ -290,6 +548,211 @@ class _PageScreenState extends ConsumerState<PageScreen> {
     );
   }
 
+  /// The pixel shape of the layout being edited, in the units it is drawn in.
+  CanvasGeometry _geometry(int columns) {
+    final layout = _draftLayouts
+        ?.where((l) => l.breakpoint == _editingBreakpoint)
+        .firstOrNull;
+    return CanvasGeometry(
+      width: layout?.frame?.width ??
+          previewWidthFor(_editingBreakpoint ?? DashboardBreakpoint.desktop) ??
+          1600,
+      columns: columns,
+      rowHeight: layout?.rowHeight ?? _defaultRowHeight,
+      gap: layout?.gap ?? _defaultGap,
+    );
+  }
+
+  /// Turn composition on for a layout, or hand it back to the grid.
+  ///
+  /// **Nothing moves either way**, and that is the whole requirement. Turning it
+  /// on gives every element the rectangle its cells already describe, so the
+  /// page you were looking at is the page you get. Turning it off drops the
+  /// rectangles and leaves the cells, which have been kept in step all along —
+  /// so it costs you the fractions and nothing else.
+  ///
+  /// A page that rearranged itself the moment you enabled a mode would have
+  /// lost the arrangement the mode exists to let you refine.
+  void _setComposed(bool on, DashboardBreakpoint breakpoint, int columns) {
+    if (_draftItems == null || _draftLayouts == null) return;
+    _pushUndo(on ? 'Compose freely' : 'Back to the grid');
+    final geometry = _geometry(columns);
+    setState(() {
+      _draftLayouts = [
+        for (final l in _draftLayouts!)
+          if (l.breakpoint == breakpoint)
+            l.copyWith(
+              frame: on ? frameForGrid(geometry, _draftItems!) : null,
+              // Composed elements are placed, not packed, so a composed layout
+              // is a free one by construction — leaving it packed would mean
+              // the next save closed every gap somebody composed.
+              flow: on ? GridFlow.free : l.flow,
+            )
+          else
+            l,
+      ];
+      _commit([
+        for (final i in _draftItems!)
+          i.copyWith(rect: on ? geometry.rectOfItem(i) : null),
+      ]);
+    });
+  }
+
+  /// Begin a page from one of the starting points — see `page_starts.dart`.
+  ///
+  /// One undo entry for the whole thing, because it is one decision. Undoing a
+  /// start card by card would be undoing something nobody did.
+  void _startPage(PageStartKind kind, DashboardBreakpoint breakpoint,
+      int columns, String? room, String? label) {
+    if (_draftItems == null || _draftLayouts == null) return;
+    // Blank changes nothing, so it is not an edit — it is the chooser being
+    // dismissed. Pushing an undo entry for it would put a step in the history
+    // that undoes to the state it started from.
+    if (kind == PageStartKind.blank) {
+      setState(() => _dismissedStart = true);
+      return;
+    }
+    final cards = startCards(kind, room: room, label: label);
+    final frame = startFrame(kind);
+    _pushUndo('Start the page');
+
+    // Stacked down the page in the order the start names them, rather than
+    // packed by the engine: a starting point is an arrangement, and letting the
+    // packer decide would make the same choice produce different pages
+    // depending on what happened to fit.
+    final widgets = {...?_draftWidgets};
+    final items = [..._draftItems!];
+    var y = items.fold<int>(0, (m, i) => i.bottom > m ? i.bottom : m);
+    var n = DateTime.now().microsecondsSinceEpoch;
+    for (final card in cards) {
+      final id = 'widget_${n++}';
+      widgets[id] = DashboardWidgetModel(
+        id: id,
+        type: card.type,
+        title: card.title,
+        refreshPolicy: DashboardRefreshPolicy.live,
+        config: card.config,
+      );
+      items.add(GridItem(
+        id: id,
+        x: 0,
+        y: y,
+        w: card.w.clamp(1, columns),
+        h: card.h,
+      ));
+      y += card.h;
+    }
+
+    setState(() {
+      _draftWidgets = widgets;
+      _contentDirty = true;
+      if (frame != null) {
+        _draftLayouts = [
+          for (final l in _draftLayouts!)
+            if (l.breakpoint == breakpoint)
+              l.copyWith(frame: frame, flow: GridFlow.free)
+            else
+              l,
+        ];
+      }
+      final geometry = frame == null
+          ? null
+          : CanvasGeometry(
+              width: frame.width,
+              columns: columns,
+              rowHeight: _draftLayouts!
+                      .where((l) => l.breakpoint == breakpoint)
+                      .map((l) => l.rowHeight)
+                      .firstOrNull ??
+                  _defaultRowHeight,
+              gap: _draftLayouts!
+                      .where((l) => l.breakpoint == breakpoint)
+                      .map((l) => l.gap)
+                      .firstOrNull ??
+                  _defaultGap,
+            );
+      _commit([
+        for (final i in items)
+          if (geometry == null) i else i.copyWith(rect: geometry.rectOfItem(i)),
+      ]);
+    });
+  }
+
+  /// Resize the canvas, or change what its height promises.
+  ///
+  /// **Nothing on the page moves.** Making a canvas bigger does not move what
+  /// is drawn on it — that is what a canvas is. The alternative, scaling every
+  /// rectangle to match, would turn typing in a number field into an edit that
+  /// touched every element on the page, and there is no way to do that *and*
+  /// leave a design somebody nudged into place alone.
+  ///
+  /// The cells are recomputed, because they must be: a cell is a fraction of
+  /// the canvas width, so the same rectangle is a different column once the
+  /// canvas is wider. Leaving them stale would let the snapped fallback drift
+  /// away from the composition it is supposed to approximate — and core
+  /// validates the stale one.
+  void _setFrame(DashboardFrame frame, DashboardBreakpoint breakpoint) {
+    if (_draftItems == null || _draftLayouts == null) return;
+    _pushUndo('Resize the canvas', coalesce: 'frame:${breakpoint.name}');
+    final geometry = CanvasGeometry(
+      width: frame.width,
+      columns: _draftLayouts!
+              .where((l) => l.breakpoint == breakpoint)
+              .map((l) => l.columns)
+              .firstOrNull ??
+          _defaultColumns,
+      rowHeight: _draftLayouts!
+              .where((l) => l.breakpoint == breakpoint)
+              .map((l) => l.rowHeight)
+              .firstOrNull ??
+          _defaultRowHeight,
+      gap: _draftLayouts!
+              .where((l) => l.breakpoint == breakpoint)
+              .map((l) => l.gap)
+              .firstOrNull ??
+          _defaultGap,
+    );
+    setState(() {
+      _draftLayouts = [
+        for (final l in _draftLayouts!)
+          if (l.breakpoint == breakpoint) l.copyWith(frame: frame) else l,
+      ];
+      _commit([
+        for (final i in _draftItems!)
+          if (i.rect case final rect?)
+            geometry
+                .snapToCells(i.id, rect, floating: i.floating, z: i.z)
+                .copyWith(rect: rect)
+          else
+            i,
+      ]);
+    });
+  }
+
+  /// A composed element was put somewhere.
+  ///
+  /// Deliberately not through [_apply]: that runs the packing engine, which is
+  /// exactly what must not happen to something a person placed on a canvas.
+  /// The cells are recomputed alongside so the snapped approximation core
+  /// validates stays true to the rectangle.
+  void _composeCard(String id, DashboardRect rect, int columns) {
+    if (_draftItems == null) return;
+    _pushUndo('Move', coalesce: 'compose:$id');
+    final geometry = _geometry(columns);
+    setState(() {
+      _goFree();
+      _commit([
+        for (final i in _draftItems!)
+          if (i.id == id)
+            geometry
+                .snapToCells(id, rect, floating: i.floating, z: i.z)
+                .copyWith(rect: rect)
+          else
+            i,
+      ]);
+    });
+  }
+
   /// The flow of the layout being edited. Everything that moves a card must
   /// run under it, or a free layout gets repacked by whichever call site
   /// forgot.
@@ -310,41 +773,124 @@ class _PageScreenState extends ConsumerState<PageScreen> {
   /// one kept, because that is the state before you started typing.
   void _pushUndo(String label, {String coalesce = ''}) {
     if (_draftItems == null) return;
+    // A new edit abandons the future. Keeping it would mean redo replaying a
+    // change onto a page that no longer has the thing it changed.
+    _redo.clear();
     if (coalesce.isNotEmpty &&
         _undo.isNotEmpty &&
         _undo.last.coalesce == coalesce) {
       return;
     }
-    _undo.add(_Snapshot(
-      label: label,
-      coalesce: coalesce,
-      items: List<GridItem>.of(_draftItems!),
-      layouts: List<DashboardLayout>.of(_draftLayouts ?? const []),
-      widgets: Map<String, DashboardWidgetModel>.of(_draftWidgets ?? const {}),
-      touched: Set<DashboardBreakpoint>.of(_touched),
-      contentDirty: _contentDirty,
-      selected: _selectedCard,
-      background: _draftBackground,
-    ));
-    if (_undo.length > _undoDepth) _undo.removeAt(0);
+    _undo.add(_snapshotNow(label, coalesce));
+    if (_undo.length > _undoDepth) {
+      _undo.removeAt(0);
+      // The oldest state we hold is no longer the one the page opened in, and
+      // the history panel has to stop claiming it is.
+      _trimmed = true;
+    }
   }
 
-  void _undoLast() {
+  /// The draft exactly as it stands, labelled.
+  _Snapshot _snapshotNow(String label, String coalesce) => _Snapshot(
+        label: label,
+        coalesce: coalesce,
+        items: List<GridItem>.of(_draftItems ?? const []),
+        layouts: List<DashboardLayout>.of(_draftLayouts ?? const []),
+        widgets:
+            Map<String, DashboardWidgetModel>.of(_draftWidgets ?? const {}),
+        touched: Set<DashboardBreakpoint>.of(_touched),
+        contentDirty: _contentDirty,
+        selected: Set<String>.of(_selection),
+        background: _draftBackground,
+      );
+
+  /// Put the draft back to [snap], without a [setState] of its own.
+  ///
+  /// Callers wrap a whole move in one, because jumping several steps along the
+  /// history restores several snapshots and only the last one is worth drawing.
+  void _restore(_Snapshot snap) {
+    _draftItems = snap.items;
+    _draftLayouts = snap.layouts;
+    _draftWidgets = snap.widgets;
+    _touched
+      ..clear()
+      ..addAll(snap.touched);
+    _contentDirty = snap.contentDirty;
+    _draftBackground = snap.background;
+    // Restored too, but only if it survived — a snapshot taken before a card
+    // was added has no such card to select.
+    _selection
+      ..clear()
+      ..addAll(snap.selected.where(snap.widgets.containsKey));
+    // Standing inside a group that the snapshot has no members for is standing
+    // nowhere, and every click would then behave as though it were somewhere.
+    if (_inside case final here?) {
+      if (!snap.widgets.values.any((w) {
+        final path = groupOf(w.config);
+        return path != null && isUnder(path, here);
+      })) {
+        _inside = null;
+      }
+    }
+  }
+
+  /// One step back. The state being left becomes the one redo returns to.
+  void _stepBack() {
     if (_undo.isEmpty) return;
     final snap = _undo.removeLast();
+    // Labelled with the edit it undoes, so redo can name the same thing undo
+    // just named — they are two directions along one move, not two moves.
+    _redo.add(_snapshotNow(snap.label, snap.coalesce));
+    _restore(snap);
+  }
+
+  void _stepForward() {
+    if (_redo.isEmpty) return;
+    final snap = _redo.removeLast();
+    _undo.add(_snapshotNow(snap.label, snap.coalesce));
+    _restore(snap);
+  }
+
+  void _undoLast() => setState(_stepBack);
+  void _redoNext() => setState(_stepForward);
+
+  /// Everything this session has been through, oldest first.
+  ///
+  /// The panel shows *positions*, not edits: row 0 is where the page started
+  /// and every row after it is named for the change that produced it. That is
+  /// why the count is one more than the number of edits — you can stand before
+  /// the first one.
+  List<HistoryEntry> get _historyEntries {
+    if (_draftItems == null) return const [];
+    return [
+      HistoryEntry(
+        // Honest about the cap: once the oldest snapshot has been dropped this
+        // is no longer the state the page opened in, and saying "Opened" would
+        // promise a place you can no longer get back to.
+        label: _trimmed ? 'Earlier changes' : 'Opened',
+        future: false,
+      ),
+      for (var i = 0; i < _undo.length; i++)
+        HistoryEntry(label: _undo[i].label, future: false),
+      for (var i = _redo.length - 1; i >= 0; i--)
+        HistoryEntry(label: _redo[i].label, future: true),
+    ];
+  }
+
+  /// Which row of [_historyEntries] the draft is standing on.
+  int get _historyAt => _undo.length;
+
+  /// Walk to [index] by stepping, so one move and twenty are the same code.
+  void _jumpHistory(int index) {
+    final target = index.clamp(0, _undo.length + _redo.length);
+    if (target == _historyAt) return;
     setState(() {
-      _draftItems = snap.items;
-      _draftLayouts = snap.layouts;
-      _draftWidgets = snap.widgets;
-      _touched
-        ..clear()
-        ..addAll(snap.touched);
-      _contentDirty = snap.contentDirty;
-      _draftBackground = snap.background;
-      // Restored too, but only if it survived — a snapshot taken before a card
-      // was added has no such card to select.
-      _selectedCard =
-          snap.widgets.containsKey(snap.selected) ? snap.selected : null;
+      while (_historyAt > target) {
+        _stepBack();
+      }
+      while (_historyAt < target) {
+        _stepForward();
+      }
     });
   }
 
@@ -397,6 +943,11 @@ class _PageScreenState extends ConsumerState<PageScreen> {
             h: p.h,
             minW: WidgetRegistry.lookup(w.type)?.sizeHint.minW ?? 1,
             minH: WidgetRegistry.lookup(w.type)?.sizeHint.minH ?? 1,
+            // Lifted-ness travels with the element, in its config — see
+            // `free_layer.dart`. Read here, where the widget is in scope, so
+            // the engine never has to know what a config is.
+            floating: isFloating(w.config),
+            z: zOf(w.config),
           ),
     ];
   }
@@ -579,7 +1130,7 @@ class _PageScreenState extends ConsumerState<PageScreen> {
     }
     setState(() {
       _draftWidgets = {...?_draftWidgets}..remove(id);
-      if (_selectedCard == id) _selectedCard = null;
+      _selection.remove(id);
       _commit(engine.remove(_draftItems!, id));
     });
   }
@@ -600,7 +1151,7 @@ class _PageScreenState extends ConsumerState<PageScreen> {
         _draftItems?.where((i) => i.id == id).cast<GridItem?>().firstOrNull;
     if (model == null || item == null) return;
 
-    setState(() => _selectedCard = id);
+    _select(id);
 
     final overlay =
         Overlay.of(context).context.findRenderObject() as RenderBox?;
@@ -612,21 +1163,34 @@ class _PageScreenState extends ConsumerState<PageScreen> {
         at & const Size(1, 1),
         Offset.zero & overlay.size,
       ),
-      items: const [
-        PopupMenuItem(value: 'configure', child: Text('Configure')),
-        PopupMenuItem(value: 'duplicate', child: Text('Duplicate')),
-        PopupMenuDivider(),
-        PopupMenuItem(value: 'half', child: Text('Half width')),
-        PopupMenuItem(value: 'full', child: Text('Full width')),
-        PopupMenuDivider(),
-        PopupMenuItem(value: 'remove', child: Text('Remove')),
+      items: [
+        const PopupMenuItem(value: 'configure', child: Text('Configure')),
+        const PopupMenuItem(value: 'duplicate', child: Text('Duplicate')),
+        const PopupMenuDivider(),
+        const PopupMenuItem(value: 'half', child: Text('Half width')),
+        const PopupMenuItem(value: 'full', child: Text('Full width')),
+        const PopupMenuDivider(),
+        // Named for what happens to the card, not for the mechanism. "Free
+        // layer" is our word; "float above the grid" is what you can see.
+        if (item.floating) ...[
+          const PopupMenuItem(
+              value: 'ground', child: Text('Put back in the grid')),
+          const PopupMenuItem(value: 'front', child: Text('Bring to front')),
+          const PopupMenuItem(value: 'forward', child: Text('Bring forward')),
+          const PopupMenuItem(value: 'backward', child: Text('Send backward')),
+          const PopupMenuItem(value: 'back', child: Text('Send to back')),
+        ] else
+          const PopupMenuItem(
+              value: 'lift', child: Text('Float above the grid')),
+        const PopupMenuDivider(),
+        const PopupMenuItem(value: 'remove', child: Text('Remove')),
       ],
     );
     if (choice == null || !mounted) return;
 
     switch (choice) {
       case 'configure':
-        setState(() => _selectedCard = id);
+        _select(id);
       case 'duplicate':
         _duplicateCard(model, item, columns);
       case 'half':
@@ -635,10 +1199,88 @@ class _PageScreenState extends ConsumerState<PageScreen> {
       case 'full':
         _apply((e, its) => e.resize(its, id, columns, item.h), columns,
             byHand: true);
+      case 'lift':
+        _stack(id, StackMove.lift, columns);
+      case 'ground':
+        _stack(id, StackMove.ground, columns);
+      case 'front':
+        _stack(id, StackMove.front, columns);
+      case 'back':
+        _stack(id, StackMove.back, columns);
+      case 'forward':
+        _stack(id, StackMove.forward, columns);
+      case 'backward':
+        _stack(id, StackMove.backward, columns);
       case 'remove':
         _removeWidget(id, columns);
     }
   }
+
+  /// Lifts a card above the grid, puts it back, or moves it within the stack.
+  ///
+  /// One operation for all six controls, because they are all the same edit:
+  /// change the element's config, then re-derive the item the engine sees from
+  /// it. Doing those separately is how the two halves drift — the document says
+  /// floating and the layout still packs it, or the reverse.
+  ///
+  /// The engine runs afterwards so the grid closes up behind a card that has
+  /// just left it, which is the thing you want to see happen.
+  void _restack(String id, String label, int columns,
+      Map<String, dynamic> Function(Map<String, dynamic> config) change) {
+    final model = _draftWidgets?[id];
+    if (model == null) return;
+    _pushUndo(label);
+
+    final config = change(model.config);
+    setState(() {
+      _draftWidgets = {...?_draftWidgets, id: model.copyWith(config: config)};
+      _contentDirty = true;
+      // Lifting is arranging by hand: a card taken out of the flow has left a
+      // hole somebody chose, and a layout that repacked it on the next save
+      // would undo the whole gesture.
+      _goFree();
+      _commit(_engine(columns).normalize([
+        for (final i in _draftItems!)
+          if (i.id == id)
+            i.copyWith(floating: isFloating(config), z: zOf(config))
+          else
+            i,
+      ]));
+    });
+  }
+
+  /// One stacking request, from wherever it was made.
+  ///
+  /// The card menu and the inspector both go through here, so "forward" cannot
+  /// come to mean two different things depending on which control you reached
+  /// for. The heights in use are known here and nowhere else.
+  void _stack(String id, StackMove move, int columns) {
+    final model = _draftWidgets?[id];
+    if (model == null) return;
+    final label = switch (move) {
+      StackMove.lift => 'Float ${_cardLabel(model)}',
+      StackMove.ground => 'Ground ${_cardLabel(model)}',
+      _ => move.label,
+    };
+    _restack(
+        id,
+        label,
+        columns,
+        (c) => switch (move) {
+              StackMove.lift => lift(c, z: frontZ(_floatingZs)),
+              StackMove.ground => ground(c),
+              StackMove.front => withZ(c, frontZ(_floatingZs)),
+              StackMove.back => withZ(c, backZ(_floatingZs)),
+              StackMove.forward => withZ(c, stepZ(zOf(c), _floatingZs, 1)),
+              StackMove.backward => withZ(c, stepZ(zOf(c), _floatingZs, -1)),
+            });
+  }
+
+  /// The heights currently in use, for the stacking controls.
+  Iterable<int> get _floatingZs => [
+        for (final i in _draftItems ?? const <GridItem>[])
+          if (i.floating) i.z
+      ];
 
   /// A copy of a card, placed directly under the original.
   ///
@@ -665,7 +1307,9 @@ class _PageScreenState extends ConsumerState<PageScreen> {
         item.x,
         item.bottom,
       ));
-      _selectedCard = copy.id;
+      _selection
+        ..clear()
+        ..add(copy.id);
     });
   }
 
@@ -704,7 +1348,9 @@ class _PageScreenState extends ConsumerState<PageScreen> {
           : engine.addAt(_draftItems!, item, atX, atY ?? 0));
       // Select what was just placed: the next thing anyone does to a new card
       // is look at it, and the inspector is where that happens.
-      _selectedCard = created.id;
+      _selection
+        ..clear()
+        ..add(created.id);
     });
   }
 
@@ -768,7 +1414,7 @@ class _PageScreenState extends ConsumerState<PageScreen> {
       _draftLayouts = null;
       _draftItems = null;
       _draftWidgets = null;
-      _selectedCard = null;
+      _selection.clear();
       _editingBreakpoint = null;
       _touched.clear();
       _contentDirty = false;
@@ -809,7 +1455,7 @@ class _PageScreenState extends ConsumerState<PageScreen> {
     for (final w in widgets) {
       final message = WidgetRegistry.lookup(w.type)?.validate?.call(w.config);
       if (message != null) {
-        setState(() => _selectedCard = w.id);
+        _select(w.id);
         ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('${_cardLabel(w)}: $message')));
         return;
@@ -923,10 +1569,42 @@ class _PageScreenState extends ConsumerState<PageScreen> {
             (_draftLayouts ?? const []).any((l) => l.breakpoint == source) &&
             layout.derivedFrom == null;
 
+        // What an empty page offers instead of a board. Hidden the moment the
+        // page has something on it *or* a canvas under it — a wall start puts
+        // nothing on the page, so counting cards alone would leave the offer
+        // covering the canvas it had just made.
+        Widget? emptyStart() => items.isEmpty &&
+                widget.designer &&
+                layout.frame == null &&
+                !_dismissedStart
+            ? _EmptyPage(
+                editing: true,
+                rooms: roomsBySize(
+                  ref
+                          .watch(devicesProvider)
+                          .asData
+                          ?.value
+                          // The same filter the card itself applies, so the
+                          // count promises what the card delivers — see
+                          // `selectDevicesForConfig`.
+                          .where((d) => !d.isSystem && d.deviceType != 'scene')
+                          .map((d) => d.effectiveArea) ??
+                      const [],
+                  name: humanize,
+                ),
+                onStart: (kind, {String? room, String? label}) =>
+                    _startPage(kind, breakpoint, columns, room, label),
+              )
+            : null;
+
         // The canvas, shared by both presentations. In the designer it is the
         // middle pane; in the page it is the whole body.
         Widget canvas() => items.isEmpty && !_editing
             ? const _EmptyPage(editing: false)
+            // An empty page in the designer offers somewhere to start rather
+            // than a grid of nothing — see `page_starts.dart`. Only while
+            // genuinely empty: once there is one card on it, the page is the
+            // page and the starting points would be in the way.
             : _PreviewFrame(
                 width: _editing ? previewWidthFor(breakpoint) : null,
                 child: PageGrid(
@@ -947,7 +1625,7 @@ class _PageScreenState extends ConsumerState<PageScreen> {
                       byHand: true),
                   onRemove: (id) => _removeWidget(id, columns),
                   onConfigure: (id) => hasInspector || widget.designer
-                      ? setState(() => _selectedCard = id)
+                      ? _select(id)
                       : _configureWidget(id),
                   // A card that edits itself in place — the floor plan placing
                   // a marker. Straight into the same writer the inspector
@@ -955,11 +1633,30 @@ class _PageScreenState extends ConsumerState<PageScreen> {
                   // entry per gesture rather than one per pixel.
                   onWidgetConfig: _configureLive,
                   onAddAt: (x, y) => _addWidget(columns, atX: x, atY: y),
+                  onMarquee: (x1, y1, x2, y2, additive) => setState(() {
+                    final caught = _engine(columns)
+                        .itemsIn(_draftItems ?? const [], x1, y1, x2, y2);
+                    // Shift keeps what you had; a plain band starts again, the
+                    // same rule a click follows.
+                    if (!additive) _selection.clear();
+                    // Clipping one member of a group catches the group, the
+                    // same rule a click follows — a band that took three of a
+                    // cluster's four cards would then move three of them.
+                    final paths = _paths;
+                    for (final id in caught) {
+                      _selection.addAll(_clickHolds(id, paths));
+                    }
+                  }),
                   onMenu: (id, at) => _cardMenu(id, at, columns),
                   onSelect: hasInspector || widget.designer
-                      ? (id) => setState(() => _selectedCard = id)
+                      ? (id, additive) => _select(id, additive: additive)
                       : null,
-                  selectedId: _selectedCard,
+                  onEnterGroup: widget.designer ? _enterGroup : null,
+                  groupOutline: widget.designer ? _groupOutline : null,
+                  frame: layout.frame,
+                  onCompose: (id, rect) => _composeCard(id, rect, columns),
+                  snapToGrid: _snapToGrid,
+                  selectedIds: _selection,
                   onDropCard: (payload, x, y) {
                     if (payload is DashboardWidgetModel) {
                       _placeCard(payload, columns, atX: x, atY: y);
@@ -981,7 +1678,8 @@ class _PageScreenState extends ConsumerState<PageScreen> {
             columns: columns,
             saving: _saving,
             dirty: _touched.isNotEmpty || _contentDirty,
-            selectedCount: _selectedCard == null ? 0 : 1,
+            selectedCount: _selection.length,
+            selectedIds: _selection,
             selected: _draftWidgets?[_selectedCard],
             selectedItem: items
                 .where((i) => i.id == _selectedCard)
@@ -993,17 +1691,42 @@ class _PageScreenState extends ConsumerState<PageScreen> {
             onPick: (created) => _placeCard(created, columns),
             onChanged: (config) => _configureLive(_selectedCard!, config),
             onRemoveSelected: () {
-              _removeWidget(_selectedCard!, columns);
-              setState(() => _selectedCard = null);
+              // Everything in hand, not just the one the inspector was showing.
+              for (final id in _selection.toList()) {
+                _removeWidget(id, columns);
+              }
+              _select(null);
             },
-            onDeselect: () => setState(() => _selectedCard = null),
+            // Escape steps out of a group before it lets go of anything: the
+            // way out of something you went into is the first thing it should
+            // mean, and letting go as well would cost you the selection you
+            // stepped out to work on.
+            onDeselect: () {
+              if (_leaveGroup()) return;
+              _select(null);
+            },
+            groupInHand: _groupInHand,
+            inside: _inside,
+            onGroup: _selection.isEmpty ? null : _groupSelection,
+            onUngroup: _groupInHand == null ? null : _ungroupSelection,
+            onRenameGroup: _groupInHand == null ? null : _renameGroup,
+            onEnterGroup: _groupInHand == null
+                ? null
+                : () => _enterGroup(_selection.first),
             onSave: () => _save(dashboard),
             canvas: canvas(),
-            canvasWidth: previewWidthFor(breakpoint),
+            emptyStart: emptyStart(),
+            // The frame *is* the canvas when there is one: composing at the
+            // size you designed for keeps a rectangle's units and the board's
+            // pixels the same thing, so nothing has to be converted on the way
+            // to the screen.
+            canvasWidth: layout.frame?.width ?? previewWidthFor(breakpoint),
             cardCount: items.length,
             items: items,
             widgetsById: widgetsById,
-            onSelectCard: (id) => setState(() => _selectedCard = id),
+            // Directly: the strip is where you address one element, whatever
+            // group it is in. On the canvas a click holds the cluster.
+            onSelectCard: (id) => _select(id, direct: true),
             onRename: (name) => setState(() {
               final id = _selectedCard;
               final current = _draftWidgets?[id];
@@ -1020,16 +1743,56 @@ class _PageScreenState extends ConsumerState<PageScreen> {
             // as dragging there would — an alignment that used a private path
             // could land a card somewhere a drag could never put it.
             onAlign: (align) {
-              final id = _selectedCard;
-              final item = items.where((i) => i.id == id).firstOrNull;
-              if (id == null || item == null) return;
+              if (_selection.isEmpty) return;
+              // Every selected card, through the same engine call a drag makes
+              // — so aligning three cards settles exactly as dragging each of
+              // them there would.
               _apply(
-                  (e, its) =>
-                      e.move(its, id, align.xFor(item.w, columns), item.y),
+                  (e, its) => _selection.fold(
+                        its,
+                        (acc, id) {
+                          final item = acc.where((i) => i.id == id).firstOrNull;
+                          return item == null
+                              ? acc
+                              : e.move(
+                                  acc, id, align.xFor(item.w, columns), item.y);
+                        },
+                      ),
                   columns,
                   byHand: true,
                   label: align.label);
             },
+            onNudge: (dx, dy) => _apply(
+                (e, its) => e.nudge(its, _selection, dx, dy), columns,
+                byHand: true, label: 'Nudge'),
+            onDuplicate: _selection.isEmpty
+                ? null
+                : () {
+                    // Every selected card, each landing under its own original
+                    // — the same rule one card follows, applied to a crowd.
+                    for (final id in _selection.toList()) {
+                      final model = _draftWidgets?[id];
+                      final item =
+                          _draftItems?.where((i) => i.id == id).firstOrNull;
+                      if (model != null && item != null) {
+                        _duplicateCard(model, item, columns);
+                      }
+                    }
+                  },
+            onSelectAll: () => setState(() {
+              _selection
+                ..clear()
+                ..addAll(items.map((i) => i.id));
+            }),
+            onDistribute: (horizontal) => _apply(
+                (e, its) =>
+                    e.distribute(its, _selection, horizontal: horizontal),
+                columns,
+                byHand: true,
+                label: horizontal ? 'Spread across' : 'Spread down'),
+            onStack: _selectedCard == null
+                ? null
+                : (move) => _stack(_selectedCard!, move, columns),
             onBackgroundChanged: (next) {
               _pushUndo('Change the background', coalesce: 'background');
               setState(() {
@@ -1037,6 +1800,12 @@ class _PageScreenState extends ConsumerState<PageScreen> {
                 _contentDirty = true;
               });
             },
+            canRedo: _redo.isNotEmpty,
+            redoLabel: _redo.isEmpty ? null : _redo.last.label,
+            onRedo: _redoNext,
+            history: _historyEntries,
+            historyAt: _historyAt,
+            onJumpHistory: _jumpHistory,
             canUndo: _undo.isNotEmpty,
             undoLabel: _undo.isEmpty ? null : _undo.last.label,
             onUndo: _undoLast,
@@ -1048,6 +1817,10 @@ class _PageScreenState extends ConsumerState<PageScreen> {
               ];
               _touched.add(breakpoint);
             }),
+            onComposeChanged: (on) => _setComposed(on, breakpoint, columns),
+            onFrameChanged: (frame) => _setFrame(frame, breakpoint),
+            snapToGrid: _snapToGrid,
+            onSnapChanged: (on) => setState(() => _snapToGrid = on),
           );
         }
 
@@ -1150,10 +1923,9 @@ class _PageScreenState extends ConsumerState<PageScreen> {
                                     _configureLive(sel.id, config),
                                 onRemove: () {
                                   _removeWidget(sel.id, columns);
-                                  setState(() => _selectedCard = null);
+                                  _select(null);
                                 },
-                                onClose: () =>
-                                    setState(() => _selectedCard = null),
+                                onClose: () => _select(null),
                               ),
                             null => CardLibrary(
                                 onPick: (created) =>
@@ -1249,9 +2021,11 @@ class _PageMenu extends ConsumerWidget {
       tooltip: 'Page options',
       onSelected: (v) => onPageAction(context, ref, dashboard, v),
       itemBuilder: (_) => const [
+        PopupMenuItem(value: 'new', child: Text('New page')),
+        PopupMenuItem(value: 'duplicate', child: Text('Duplicate')),
+        PopupMenuDivider(),
         PopupMenuItem(value: 'rename', child: Text('Rename')),
         PopupMenuItem(value: 'home', child: Text('Set as Home page')),
-        PopupMenuItem(value: 'duplicate', child: Text('Duplicate')),
         PopupMenuItem(value: 'delete', child: Text('Delete')),
       ],
     );
@@ -1400,31 +2174,215 @@ class _PreviewFrame extends StatelessWidget {
   }
 }
 
+/// A page with nothing on it — and, in the designer, somewhere to start.
+///
+/// "Add a widget to get started" was the whole truth while a page could only
+/// ever be a mosaic of cells: there was one shape a template could have, so
+/// offering it would have been offering nothing. With a canvas underneath, the
+/// choice is real — see `page_starts.dart`.
 class _EmptyPage extends StatelessWidget {
-  const _EmptyPage({required this.editing});
+  const _EmptyPage({
+    required this.editing,
+    this.rooms = const [],
+    this.onStart,
+  });
 
   final bool editing;
+
+  /// The rooms this house has, busiest first.
+  final List<StartRoom> rooms;
+
+  /// Null outside the designer, where there is nowhere to put the result.
+  final void Function(PageStartKind kind, {String? room, String? label})?
+      onStart;
 
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
+    final onStart = this.onStart;
+
+    if (onStart == null) {
+      return Padding(
+        padding: EdgeInsets.only(top: t.space.xl * 2),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(HcIcons.dashboards, size: 30, color: t.surface.onBaseMuted),
+              SizedBox(height: t.space.md),
+              Text(
+                editing
+                    ? 'Add a widget to get started.'
+                    : 'This page is empty. Tap the pencil to add widgets.',
+                style: TextStyle(color: t.surface.onBaseMuted),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Padding(
-      padding: EdgeInsets.only(top: t.space.xl * 2),
+      padding: EdgeInsets.symmetric(
+          horizontal: t.space.lg, vertical: t.space.xl * 2),
       child: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(HcIcons.dashboards, size: 30, color: t.surface.onBaseMuted),
-            SizedBox(height: t.space.md),
-            Text(
-              editing
-                  ? 'Add a widget to get started.'
-                  : 'This page is empty. Tap the pencil to add widgets.',
-              style: TextStyle(color: t.surface.onBaseMuted),
-            ),
-          ],
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 620),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('Start this page',
+                  textAlign: TextAlign.center,
+                  style: t.text.titleStyle.copyWith(color: t.surface.onBase)),
+              SizedBox(height: t.space.xs),
+              Text(
+                'Or add cards from the left and arrange them yourself.',
+                textAlign: TextAlign.center,
+                style: t.text.captionStyle
+                    .copyWith(color: t.surface.onBaseMuted, height: 1.4),
+              ),
+              SizedBox(height: t.space.lg),
+              _StartTile(
+                icon: HcIcons.dashboards,
+                title: 'A room',
+                blurb: rooms.isEmpty
+                    ? 'No room on this house has any devices in it yet.'
+                    : 'Everything in one room, on one card. It keeps meaning '
+                        'the room as the room changes.',
+                // A menu rather than a second screen: the choice is one word
+                // long and there is nothing else to decide.
+                trailing: rooms.isEmpty
+                    ? null
+                    : PopupMenuButton<String>(
+                        tooltip: 'Choose a room',
+                        onSelected: (area) => onStart(
+                          PageStartKind.room,
+                          room: area,
+                          label: rooms.firstWhere((r) => r.area == area).label,
+                        ),
+                        itemBuilder: (context) => [
+                          for (final room in rooms)
+                            PopupMenuItem(
+                              // The area as stored is what selects the
+                              // devices; the label is only what you read.
+                              value: room.area,
+                              height: 34,
+                              child: Row(
+                                children: [
+                                  Expanded(child: Text(room.label)),
+                                  SizedBox(width: t.space.sm),
+                                  Text('${room.count}',
+                                      style: t.text.captionStyle.copyWith(
+                                          color: t.surface.onBaseMuted,
+                                          fontFeatures: t.numericFontFeatures)),
+                                ],
+                              ),
+                            ),
+                        ],
+                        child: const _StartAction(label: 'Choose a room'),
+                      ),
+              ),
+              SizedBox(height: t.space.sm),
+              _StartTile(
+                icon: Icons.tv_outlined,
+                title: 'A wall display',
+                blurb: 'A 1920×1080 canvas that never scrolls, to compose on. '
+                    'Change the size in the panel on the right — nothing moves '
+                    'when you do.',
+                trailing: GestureDetector(
+                  onTap: () => onStart(PageStartKind.wall),
+                  child: const _StartAction(label: 'Make one'),
+                ),
+              ),
+              SizedBox(height: t.space.sm),
+              _StartTile(
+                icon: Icons.grid_on_outlined,
+                title: 'Blank',
+                blurb: 'The grid, empty. Cards are whole cells and float up to '
+                    'close gaps.',
+                trailing: GestureDetector(
+                  onTap: () => onStart(PageStartKind.blank),
+                  child: const _StartAction(label: 'Just the grid'),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
+    );
+  }
+}
+
+class _StartTile extends StatelessWidget {
+  const _StartTile({
+    required this.icon,
+    required this.title,
+    required this.blurb,
+    required this.trailing,
+  });
+
+  final IconData icon;
+  final String title;
+  final String blurb;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Container(
+      padding: EdgeInsets.all(t.space.md),
+      decoration: BoxDecoration(
+        color: t.surface.raised,
+        borderRadius: t.radius.mdR,
+        border: Border.all(color: t.stroke.hairline, width: t.stroke.width),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 18, color: t.surface.onBaseMuted),
+          SizedBox(width: t.space.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title,
+                    style: t.text.bodyStyle.copyWith(
+                        color: t.surface.onBase, fontWeight: FontWeight.w600)),
+                SizedBox(height: t.space.xs / 2),
+                Text(blurb,
+                    style: t.text.captionStyle
+                        .copyWith(color: t.surface.onBaseMuted, height: 1.4)),
+              ],
+            ),
+          ),
+          if (trailing case final action?) ...[
+            SizedBox(width: t.space.md),
+            action,
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _StartAction extends StatelessWidget {
+  const _StartAction({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Container(
+      padding:
+          EdgeInsets.symmetric(horizontal: t.space.md, vertical: t.space.xs),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(t.radius.pill),
+        border: Border.all(color: t.accent.active, width: t.stroke.width),
+      ),
+      child: Text(label,
+          style: t.text.captionStyle.copyWith(color: t.surface.onBase)),
     );
   }
 }

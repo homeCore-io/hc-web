@@ -156,7 +156,7 @@ void main() {
     testWidgets('a closed group still says how much is in it', (tester) async {
       await _pump(tester, house);
       expect(find.text('THE HOUSE'), findsOneWidget);
-      expect(find.text('5'), findsWidgets,
+      expect(find.text('6'), findsWidgets,
           reason: 'the count is what makes a closed group honest');
     });
 

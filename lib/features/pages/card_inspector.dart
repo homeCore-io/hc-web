@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/dashboard/card_style.dart';
+import '../../core/dashboard/free_layer.dart';
 import '../../core/dashboard/widget_registry.dart';
 import '../../core/models/dashboard.dart';
 import '../../core/providers/devices_provider.dart';
@@ -29,7 +30,7 @@ import 'widget_config_form.dart';
 /// counted with the same function the card renders from, so the two cannot
 /// disagree. A card about to be empty says `No devices match` here, before it
 /// is ever saved — which is the whole point.
-class CardInspector extends ConsumerWidget {
+class CardInspector extends ConsumerStatefulWidget {
   const CardInspector({
     super.key,
     required this.model,
@@ -37,6 +38,9 @@ class CardInspector extends ConsumerWidget {
     required this.onRemove,
     required this.onClose,
     this.onRename,
+    this.floating = false,
+    this.z = 0,
+    this.onStack,
   });
 
   final DashboardWidgetModel model;
@@ -55,8 +59,36 @@ class CardInspector extends ConsumerWidget {
   /// on the page, or in the layers strip that lists them by name.
   final ValueChanged<String>? onRename;
 
+  /// Where this card sits relative to the grid, and how high in the stack.
+  final bool floating;
+  final int z;
+
+  /// Null outside the designer, where nothing can be restacked.
+  final ValueChanged<StackMove>? onStack;
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<CardInspector> createState() => _CardInspectorState();
+}
+
+class _CardInspectorState extends ConsumerState<CardInspector> {
+  /// Explicit, because an unmanaged scroll view on Flutter web draws no
+  /// scrollbar at all — the same finding the canvas records two files away.
+  /// A card with a long form then had fields below the fold with nothing on
+  /// screen admitting they were there, and the wheel did not reach them.
+  final _scroll = ScrollController();
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final model = widget.model;
+    final onChanged = widget.onChanged;
+    final onRename = widget.onRename;
+    final onStack = widget.onStack;
     final t = HcTokens.of(context);
     final descriptor = WidgetRegistry.lookup(model.type);
 
@@ -68,96 +100,105 @@ class CardInspector extends ConsumerWidget {
         border: Border.all(color: t.stroke.hairline, width: t.stroke.width),
       ),
       padding: EdgeInsets.all(t.space.md),
-      child: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    model.title.trim().isEmpty
-                        ? (descriptor?.title ?? model.type)
-                        : model.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: t.text.subtitleStyle.copyWith(
-                        color: t.surface.onBase, fontWeight: FontWeight.w600),
+      child: Scrollbar(
+        controller: _scroll,
+        thumbVisibility: true,
+        child: SingleChildScrollView(
+          controller: _scroll,
+          padding: EdgeInsets.only(right: t.space.sm),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      model.title.trim().isEmpty
+                          ? (descriptor?.title ?? model.type)
+                          : model.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: t.text.subtitleStyle.copyWith(
+                          color: t.surface.onBase, fontWeight: FontWeight.w600),
+                    ),
                   ),
+                  IconButton(
+                    onPressed: widget.onClose,
+                    icon: const Icon(Icons.close, size: 16),
+                    tooltip: 'Done with this card',
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ],
+              ),
+              if (descriptor != null)
+                Text(descriptor.title,
+                    style: t.text.captionStyle
+                        .copyWith(color: t.surface.onBaseMuted)),
+              SizedBox(height: t.space.md),
+              if (descriptor == null)
+                Text('This card type is not installed.',
+                    style: t.text.bodySmallStyle
+                        .copyWith(color: t.surface.onBaseMuted))
+              else ...[
+                WidgetConfigForm(
+                  // Keyed by card, or moving the selection to another card would
+                  // reuse the previous one's field state — its text controllers
+                  // still holding the last card's values.
+                  key: ValueKey(model.id),
+                  descriptor: descriptor,
+                  initial: model.config,
+                  onChanged: onChanged,
                 ),
-                IconButton(
-                  onPressed: onClose,
-                  icon: const Icon(Icons.close, size: 16),
-                  tooltip: 'Done with this card',
-                  visualDensity: VisualDensity.compact,
-                ),
+                // The card's own validator, inline. There is no Done here to
+                // hang it off, and an unsaveable card must say so where it is
+                // being edited rather than at the page's save.
+                if (descriptor.validate?.call(model.config) case final message?)
+                  Padding(
+                    padding: EdgeInsets.only(bottom: t.space.xs),
+                    child: Text(
+                      message,
+                      style: t.text.bodySmallStyle
+                          .copyWith(color: t.accent.danger),
+                    ),
+                  ),
+                _Preview(config: model.config, descriptor: descriptor),
+                // Which devices, listed and tickable — for the card types whose
+                // contents are a device selection. A room card was a live query
+                // with nothing showing what it held.
+                if (_selects(descriptor.type))
+                  CardMembers(config: model.config, onChanged: onChanged),
               ],
-            ),
-            if (descriptor != null)
-              Text(descriptor.title,
-                  style: t.text.captionStyle
-                      .copyWith(color: t.surface.onBaseMuted)),
-            SizedBox(height: t.space.md),
-            if (descriptor == null)
-              Text('This card type is not installed.',
-                  style: t.text.bodySmallStyle
-                      .copyWith(color: t.surface.onBaseMuted))
-            else ...[
-              WidgetConfigForm(
-                // Keyed by card, or moving the selection to another card would
-                // reuse the previous one's field state — its text controllers
-                // still holding the last card's values.
-                key: ValueKey(model.id),
-                descriptor: descriptor,
-                initial: model.config,
-                onChanged: onChanged,
-              ),
-              // The card's own validator, inline. There is no Done here to
-              // hang it off, and an unsaveable card must say so where it is
-              // being edited rather than at the page's save.
-              if (descriptor.validate?.call(model.config) case final message?)
-                Padding(
-                  padding: EdgeInsets.only(bottom: t.space.xs),
-                  child: Text(
-                    message,
-                    style:
-                        t.text.bodySmallStyle.copyWith(color: t.accent.danger),
-                  ),
+              // Style is offered only where there is a card to un-draw. A
+              // heading, a rule and a spacer have no surface at all, so a
+              // "background" switch on one would be a control with nothing
+              // behind it.
+              if (onRename != null)
+                _NameField(
+                  key: ValueKey('title-${model.id}'),
+                  value: model.title,
+                  hint: descriptor?.title ?? model.type,
+                  onChanged: onRename,
                 ),
-              _Preview(config: model.config, descriptor: descriptor),
-              // Which devices, listed and tickable — for the card types whose
-              // contents are a device selection. A room card was a live query
-              // with nothing showing what it held.
-              if (_selects(descriptor.type))
-                CardMembers(config: model.config, onChanged: onChanged),
+              if (descriptor != null && descriptor.chrome != WidgetChrome.bare)
+                _StyleSection(
+                  cardId: model.id,
+                  style: CardStyle.fromConfig(model.config),
+                  onChanged: (style) => onChanged(style.toConfig(model.config)),
+                ),
+              if (onStack != null)
+                _StackSection(
+                    floating: widget.floating, z: widget.z, onStack: onStack),
+              SizedBox(height: t.space.md),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  onPressed: widget.onRemove,
+                  child: Text('Remove from page',
+                      style: TextStyle(color: t.accent.danger)),
+                ),
+              ),
             ],
-            // Style is offered only where there is a card to un-draw. A
-            // heading, a rule and a spacer have no surface at all, so a
-            // "background" switch on one would be a control with nothing
-            // behind it.
-            if (onRename != null)
-              _NameField(
-                key: ValueKey('title-${model.id}'),
-                value: model.title,
-                hint: descriptor?.title ?? model.type,
-                onChanged: onRename!,
-              ),
-            if (descriptor != null && descriptor.chrome != WidgetChrome.bare)
-              _StyleSection(
-                cardId: model.id,
-                style: CardStyle.fromConfig(model.config),
-                onChanged: (style) => onChanged(style.toConfig(model.config)),
-              ),
-            SizedBox(height: t.space.md),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton(
-                onPressed: onRemove,
-                child: Text('Remove from page',
-                    style: TextStyle(color: t.accent.danger)),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -585,6 +626,146 @@ class _StyleSection extends StatelessWidget {
             ),
         ],
       ),
+    );
+  }
+}
+
+/// Where the card sits relative to the grid — and, once it is above it, where
+/// it sits relative to everything else up there.
+///
+/// The same six moves as the card's own menu, because a right-click is where
+/// you go when you already know a thing exists and a panel is where you find
+/// out that it does. This one also *reports*: a card either competes for its
+/// cells or floats over them, and until now nothing on screen said which
+/// except the status bar, one line high, at the far bottom of the window.
+///
+/// The stacking row is hidden while the card is in the grid rather than
+/// disabled. Grid cards cannot be underneath anything, so "bring forward" is
+/// not a control that happens to be unavailable — it is a question that does
+/// not apply.
+class _StackSection extends StatelessWidget {
+  const _StackSection({
+    required this.floating,
+    required this.z,
+    required this.onStack,
+  });
+
+  final bool floating;
+  final int z;
+  final ValueChanged<StackMove> onStack;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SizedBox(height: t.space.md),
+        Row(
+          children: [
+            Expanded(
+              child: Text('DEPTH',
+                  style: t.text.overlineStyle
+                      .copyWith(color: t.surface.onBaseMuted)),
+            ),
+            if (floating)
+              Text('z$z',
+                  style: t.text.captionStyle.copyWith(
+                      color: t.surface.onBaseMuted,
+                      fontFeatures: t.numericFontFeatures)),
+          ],
+        ),
+        SizedBox(height: t.space.xs),
+        Row(
+          children: [
+            for (final option in const [false, true])
+              Padding(
+                padding: EdgeInsets.only(right: t.space.xs),
+                child: Semantics(
+                  button: true,
+                  selected: option == floating,
+                  child: GestureDetector(
+                    onTap: option == floating
+                        ? null
+                        : () =>
+                            onStack(option ? StackMove.lift : StackMove.ground),
+                    child: Container(
+                      padding: EdgeInsets.symmetric(
+                          horizontal: t.space.sm, vertical: t.space.xs / 2),
+                      decoration: BoxDecoration(
+                        color: option == floating ? t.surface.raised : null,
+                        borderRadius: BorderRadius.circular(t.radius.pill),
+                        border: Border.all(
+                          color: option == floating
+                              ? t.accent.active
+                              : t.stroke.hairline,
+                          width: t.stroke.width,
+                        ),
+                      ),
+                      child: Text(
+                        option ? 'Floating' : 'In the grid',
+                        style: t.text.captionStyle.copyWith(
+                            color: option == floating
+                                ? t.surface.onBase
+                                : t.surface.onBaseMuted),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+        SizedBox(height: t.space.xs),
+        Text(
+          floating
+              ? 'It sits on top of the grid. Nothing pushes it and it pushes '
+                  'nothing.'
+              : 'It takes up its cells, and the cards around it move out of '
+                  'the way.',
+          style: t.text.captionStyle
+              .copyWith(color: t.surface.onBaseMuted, height: 1.4),
+        ),
+        if (floating) ...[
+          SizedBox(height: t.space.sm),
+          Row(
+            children: [
+              for (final move in const [
+                StackMove.back,
+                StackMove.backward,
+                StackMove.forward,
+                StackMove.front,
+              ])
+                Expanded(
+                  child: Padding(
+                    padding: EdgeInsets.only(right: t.space.xs / 2),
+                    child: Tooltip(
+                      message: move.label,
+                      child: OutlinedButton(
+                        onPressed: () => onStack(move),
+                        style: OutlinedButton.styleFrom(
+                          padding: EdgeInsets.symmetric(vertical: t.space.xs),
+                          minimumSize: Size.zero,
+                          side: BorderSide(
+                              color: t.stroke.hairline, width: t.stroke.width),
+                        ),
+                        child: Icon(
+                          switch (move) {
+                            StackMove.back => Icons.vertical_align_bottom,
+                            StackMove.backward => Icons.keyboard_arrow_down,
+                            StackMove.forward => Icons.keyboard_arrow_up,
+                            _ => Icons.vertical_align_top,
+                          },
+                          size: 15,
+                          color: t.surface.onBase,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ],
     );
   }
 }

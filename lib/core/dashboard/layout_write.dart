@@ -96,6 +96,12 @@ DashboardLayout deriveLayout(DashboardLayout l, List<GridItem> source) {
         h: i.h,
         minW: i.minW.clamp(1, columns),
         minH: i.minH,
+        // Carried, or deriving would quietly ground it: the packer would treat
+        // a floating card as competing for cells and shuffle the layout around
+        // something that was never in the way. Lifting is a property of the
+        // element, so it holds at every breakpoint — see `free_layer.dart`.
+        floating: i.floating,
+        z: i.z,
       ),
   ]);
   return l.copyWith(
@@ -103,6 +109,10 @@ DashboardLayout deriveLayout(DashboardLayout l, List<GridItem> source) {
     flow: GridFlow.packed,
     placements: [
       for (final i in packed)
+        // Deliberately without the rectangle. A derived layout is *computed*
+        // from another breakpoint by packing it into cells — there is no
+        // composition to carry, and copying one across would claim the
+        // arrangement was authored for this device when it was not.
         DashboardWidgetPlacement(
             widgetId: i.id, x: i.x, y: i.y, w: i.w, h: i.h),
     ],
@@ -134,8 +144,13 @@ DashboardLayout _write(DashboardLayout l, List<GridItem> items) {
     columns: columns,
     placements: [
       for (final i in packed)
+        // The rectangle rides along, because on the edited breakpoint it is
+        // the arrangement — the cells beside it are the snapped approximation
+        // core validates. Dropping it here is the silent bug this whole design
+        // is shaped to avoid: the page would save, reload as the grid, and
+        // look exactly like an editor that failed to write.
         DashboardWidgetPlacement(
-            widgetId: i.id, x: i.x, y: i.y, w: i.w, h: i.h),
+            widgetId: i.id, x: i.x, y: i.y, w: i.w, h: i.h, rect: i.rect),
     ],
   );
 }
@@ -174,7 +189,7 @@ DashboardLayout reconcileWidgetSet(
   final engine = GridEngine(columns: columns);
   var grid = [
     for (final p in kept)
-      GridItem(id: p.widgetId, x: p.x, y: p.y, w: p.w, h: p.h),
+      GridItem(id: p.widgetId, x: p.x, y: p.y, w: p.w, h: p.h, rect: p.rect),
   ];
   for (final i in missing) {
     grid = engine.add(

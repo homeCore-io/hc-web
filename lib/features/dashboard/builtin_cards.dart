@@ -12,7 +12,6 @@
 library;
 
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
@@ -21,6 +20,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/api/events_history_api.dart';
 import '../../core/api/history_api.dart';
 import '../../core/text/humanize.dart';
+import '../../core/dashboard/gauge_spec.dart';
 import '../../core/dashboard/widget_registry.dart';
 import 'camera_card.dart';
 import '../../core/devices/metrics.dart';
@@ -47,6 +47,9 @@ import '../../core/providers/events_provider.dart';
 import '../../core/providers/modes_provider.dart';
 import '../../core/providers/scenes_provider.dart';
 import '../../core/providers/time_display_provider.dart';
+import 'code_card.dart';
+import 'gauge_card.dart';
+import 'svg_card.dart';
 
 /// Which devices a device-oriented card shows, for a given config.
 ///
@@ -1563,6 +1566,56 @@ void registerBuiltinDashboardWidgets() {
         WidgetConfigField('min', WidgetConfigKind.integer),
         WidgetConfigField('max', WidgetConfigKind.integer),
         WidgetConfigField('unit', WidgetConfigKind.text),
+        // The drawing, as parameters. Every one of these was a constant in the
+        // painter until now — see `gauge_spec.dart` for why the defaults are
+        // exactly what that constant was.
+        WidgetConfigField('shape', WidgetConfigKind.choice,
+            defaultValue: 'radial', options: ['radial', 'bar']),
+        WidgetConfigField('start', WidgetConfigKind.integer,
+            label: 'Start angle',
+            help: 'Degrees clockwise from three o\'clock. 135 is the lower '
+                'left.'),
+        WidgetConfigField('sweep', WidgetConfigKind.integer,
+            label: 'Sweep',
+            help: 'How far it goes. Negative runs the other way, which is how '
+                'you mirror a flank.'),
+        WidgetConfigField('thickness', WidgetConfigKind.integer,
+            help: 'Pixels, or leave it empty to scale with the card.'),
+        WidgetConfigField('cap', WidgetConfigKind.choice,
+            defaultValue: 'round', options: ['round', 'flat']),
+        WidgetConfigField('color', WidgetConfigKind.choice,
+            options: [
+              'accent',
+              'primary',
+              'success',
+              'warn',
+              'danger',
+              'ink',
+              'muted',
+            ],
+            help: 'Empty keeps the reading\'s own colour.'),
+        WidgetConfigField('color_to', WidgetConfigKind.choice,
+            options: [
+              'accent',
+              'primary',
+              'success',
+              'warn',
+              'danger',
+              'ink',
+              'muted',
+            ],
+            label: 'Fade to'),
+        WidgetConfigField('glow', WidgetConfigKind.integer,
+            help: 'Scaled by the skin, so a skin with no bloom stays flat.'),
+        WidgetConfigField('track', WidgetConfigKind.boolean,
+            help: 'The unfilled remainder. Off for a gauge stacked on one that '
+                'already draws it.'),
+        WidgetConfigField('readout', WidgetConfigKind.choice,
+            defaultValue: 'value',
+            options: ['value', 'none'],
+            help: 'Three arcs sharing a centre want one number between them.'),
+        WidgetConfigField('decimals', WidgetConfigKind.integer),
+        WidgetConfigField('label', WidgetConfigKind.text),
       ],
       validate: (c) => (c['device_id'] as String?)?.isNotEmpty == true &&
               (c['attribute'] as String?)?.isNotEmpty == true
@@ -1734,6 +1787,86 @@ void registerBuiltinDashboardWidgets() {
           (c['url'] as String?)?.isNotEmpty == true ? null : 'A URL is needed.',
       builder: (context, a) =>
           _WebEmbedWidget(widgetModel: _modelOf(a, 'web_embed')),
+    ),
+    WidgetDescriptor(
+      type: 'code',
+      title: 'Code',
+      description: 'HTML, SVG and script you write, in a sandbox.',
+      icon: Icons.code,
+      // Big by default. The things people build here — a gauge, an instrument
+      // cluster, an animated readout — are the reason they reached for it, and
+      // a 4×2 rectangle is not where any of those live.
+      sizeHint: const WidgetSizeHint(
+          minW: 2, minH: 1, recommendedW: 6, recommendedH: 4),
+      // It draws to its own edges. A code element in a padded, titled box is a
+      // drawing in a frame, and the whole point is that the author decides what
+      // it looks like.
+      chrome: WidgetChrome.bleed,
+      // The frame offers the way in, as it does for the floor plan: entering
+      // hands the pointer to the sandbox so a control you just wrote can be
+      // pressed without leaving the designer.
+      inPlaceLabel: 'Try it',
+      configFields: const [
+        WidgetConfigField('html', WidgetConfigKind.code, label: 'Code'),
+        // The selection *is* the permission. Named plainly, because "grant" is
+        // our word for it and "which devices can it see" is the question.
+        WidgetConfigField('selection_mode', WidgetConfigKind.choice,
+            label: 'It can see',
+            defaultValue: 'manual',
+            options: ['manual', 'area', 'facet', 'query']),
+        WidgetConfigField('device_ids', WidgetConfigKind.deviceRefs,
+            label: 'Devices'),
+        WidgetConfigField('area_name', WidgetConfigKind.areaName,
+            label: 'Room'),
+        WidgetConfigField('facet', WidgetConfigKind.facet, label: 'Kind'),
+        WidgetConfigField('query', WidgetConfigKind.text, label: 'Search'),
+        WidgetConfigField('allow_network', WidgetConfigKind.boolean,
+            label: 'Allow network',
+            help: 'Off by default, so pasted code cannot call out of your '
+                'house. Turn it on only for code you wrote or trust.'),
+      ],
+      // No validator. An empty code element is not a broken one — it renders
+      // the starter, which says what the API is at the moment you want to know.
+      builder: (context, a) => CodeCard(
+        config: a.config,
+        editing: a.editing,
+        entered: a.entered,
+      ),
+    ),
+    WidgetDescriptor(
+      type: 'svg',
+      title: 'Drawing',
+      description: 'Your own SVG, with the house wired into it.',
+      icon: Icons.brush_outlined,
+      sizeHint: const WidgetSizeHint(
+          minW: 2, minH: 1, recommendedW: 5, recommendedH: 4),
+      // It is the drawing, edge to edge. A picture in a padded, titled box is a
+      // picture in a frame.
+      chrome: WidgetChrome.bleed,
+      inPlaceLabel: 'Try it',
+      configFields: const [
+        WidgetConfigField('svg', WidgetConfigKind.svgSource, label: 'Drawing'),
+        WidgetConfigField('bindings', WidgetConfigKind.svgBindings,
+            label: 'Wiring'),
+        // The same grant as the code element, because it is the same sandbox.
+        WidgetConfigField('selection_mode', WidgetConfigKind.choice,
+            label: 'It can see',
+            defaultValue: 'manual',
+            options: ['manual', 'area', 'facet', 'query']),
+        WidgetConfigField('device_ids', WidgetConfigKind.deviceRefs,
+            label: 'Devices'),
+        WidgetConfigField('area_name', WidgetConfigKind.areaName,
+            label: 'Room'),
+        WidgetConfigField('facet', WidgetConfigKind.facet, label: 'Kind'),
+        WidgetConfigField('query', WidgetConfigKind.text, label: 'Search'),
+      ],
+      // No validator: an empty drawing renders the starter, which has two
+      // bindable ids in it and so answers the first question anyone has.
+      builder: (context, a) => SvgCard(
+        config: a.config,
+        editing: a.editing,
+        entered: a.entered,
+      ),
     ),
     WidgetDescriptor(
       type: 'dashboard_link',
@@ -2315,54 +2448,19 @@ class _GaugeWidget extends ConsumerWidget {
       return const _PlaceholderWidget(message: 'That device is not here.');
     }
 
+    final spec = GaugeSpec.fromConfig(config);
     final min = (config['min'] as num?)?.toDouble() ?? 0;
     final max = (config['max'] as num?)?.toDouble() ?? 100;
     final unit = (config['unit'] as String?) ?? '';
     final value = reading.value;
-    // A range that cannot be drawn is a configuration mistake, not a reason to
-    // render a broken dial.
-    final span = max - min;
-    final fraction = value == null || span <= 0
-        ? null
-        : ((value - min) / span).clamp(0.0, 1.0);
+    final fraction = GaugeSpec.fractionOf(value, min, max);
 
-    return LayoutBuilder(
-      builder: (context, c) {
-        final side = c.biggest.shortestSide.clamp(48.0, 220.0);
-        return Center(
-          child: SizedBox(
-            width: side,
-            height: side,
-            child: CustomPaint(
-              painter: _GaugePainter(
-                fraction: fraction,
-                track: t.accent.inactive,
-                fill: reading.role.color(t),
-                width: side * 0.09,
-              ),
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      value == null ? '—' : _trim(value),
-                      style: t.text.titleStyle.copyWith(
-                        color: t.surface.onBase,
-                        fontFeatures: t.numericFontFeatures,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    if (unit.isNotEmpty)
-                      Text(unit,
-                          style: t.text.captionStyle
-                              .copyWith(color: t.surface.onBaseMuted)),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        );
-      },
+    return GaugeDial(
+      spec: spec,
+      fraction: fraction,
+      fill: reading.role.color(t),
+      text: value == null ? '—' : formatGaugeValue(value, spec.decimals),
+      unit: unit,
     );
   }
 }
@@ -2370,54 +2468,6 @@ class _GaugeWidget extends ConsumerWidget {
 /// 8, not 8.0; 21.4, not 21.400000000000002.
 String _trim(double v) =>
     v == v.roundToDouble() ? v.round().toString() : v.toStringAsFixed(1);
-
-class _GaugePainter extends CustomPainter {
-  const _GaugePainter({
-    required this.fraction,
-    required this.track,
-    required this.fill,
-    required this.width,
-  });
-
-  final double? fraction;
-  final Color track;
-  final Color fill;
-  final double width;
-
-  /// Starts at the lower left and sweeps 270°, so the gap sits at the bottom
-  /// where a scale's ends belong.
-  static const _start = 3 * math.pi / 4;
-  static const _sweep = 3 * math.pi / 2;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final rect = Offset(width / 2, width / 2) &
-        Size(size.width - width, size.height - width);
-    final base = Paint()
-      ..color = track
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = width
-      ..strokeCap = StrokeCap.round;
-    canvas.drawArc(rect, _start, _sweep, false, base);
-
-    if (fraction == null || fraction == 0) return;
-    canvas.drawArc(
-      rect,
-      _start,
-      _sweep * fraction!,
-      false,
-      Paint()
-        ..color = fill
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = width
-        ..strokeCap = StrokeCap.round,
-    );
-  }
-
-  @override
-  bool shouldRepaint(_GaugePainter old) =>
-      old.fraction != fraction || old.fill != fill || old.width != width;
-}
 
 /// One number, as large as the card allows.
 ///

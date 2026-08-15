@@ -15,6 +15,8 @@
 /// and gravity then pulls everything back up into the gaps.
 library;
 
+const Object _unchangedRect = Object();
+
 /// One card's box in grid units.
 class GridItem {
   const GridItem({
@@ -26,6 +28,9 @@ class GridItem {
     this.sectionId,
     this.minW = 1,
     this.minH = 1,
+    this.floating = false,
+    this.z = 0,
+    this.rect,
   });
 
   final String id;
@@ -40,10 +45,51 @@ class GridItem {
   final int minW;
   final int minH;
 
+  /// This element sits *above* the grid rather than in it.
+  ///
+  /// A floating element keeps its cell geometry — it is still x/y/w/h, still
+  /// snapped, still within the column bound core validates — but it does not
+  /// compete for space: nothing pushes it, it pushes nothing, and gravity does
+  /// not pull it. See `free_layer.dart` for why this is a client-only change.
+  final bool floating;
+
+  /// Paint height among the floating. Meaningless for a grid item, which can
+  /// never be underneath anything.
+  final int z;
+
+  /// Where this element really sits, when the layout is composed.
+  ///
+  /// The cells above are then a snapped approximation of it — see
+  /// `frame.dart`. Kept on the item rather than in a map beside it because
+  /// every operation on this canvas already flows through `GridItem`, and two
+  /// representations that have to be kept in step are two representations that
+  /// will not be.
+  final DashboardRect? rect;
+
+  /// Composed elements are placed, not packed.
+  ///
+  /// The same rule [floating] introduced, generalised: a card somebody put at a
+  /// particular point on a canvas is not competing for cells, so nothing
+  /// pushes it, it pushes nothing, and gravity does not pull it. Packing a
+  /// composition would be the layout engine overruling the design.
+  bool get isComposed => rect != null;
+
   int get right => x + w;
   int get bottom => y + h;
 
-  GridItem copyWith({int? x, int? y, int? w, int? h}) => GridItem(
+  /// [rect] takes a sentinel because null is meaningful for it: taking an
+  /// element back to plain cells is a real edit that would otherwise read as
+  /// *unchanged*.
+  GridItem copyWith({
+    int? x,
+    int? y,
+    int? w,
+    int? h,
+    bool? floating,
+    int? z,
+    Object? rect = _unchangedRect,
+  }) =>
+      GridItem(
         id: id,
         x: x ?? this.x,
         y: y ?? this.y,
@@ -52,9 +98,29 @@ class GridItem {
         sectionId: sectionId,
         minW: minW,
         minH: minH,
+        floating: floating ?? this.floating,
+        z: z ?? this.z,
+        rect: identical(rect, _unchangedRect)
+            ? this.rect
+            : rect as DashboardRect?,
       );
 
+  /// Do these two compete for the same cells?
+  ///
+  /// **Overlapping is not the same as competing**, and that distinction is the
+  /// whole of the free layer. Two grid items in one cell is a layout that has
+  /// to be resolved; a floating element over a grid item is a design. So a
+  /// floating element on either side of the question answers *no*, and every
+  /// path in the engine — push, gravity, normalise, legality — inherits that
+  /// from one place.
   bool overlaps(GridItem o) =>
+      !floating &&
+      !o.floating &&
+      // A composed element answers *no* for the same reason a floating one
+      // does: it was put where it is. Packing a composition would be the
+      // layout engine overruling the design.
+      !isComposed &&
+      !o.isComposed &&
       sectionId == o.sectionId &&
       id != o.id &&
       x < o.right &&
@@ -70,14 +136,209 @@ class GridItem {
       other.y == y &&
       other.w == w &&
       other.h == h &&
-      other.sectionId == sectionId;
+      other.sectionId == sectionId &&
+      other.floating == floating &&
+      other.z == z &&
+      // Part of identity, or a drag that moves a composed card without
+      // crossing a cell boundary would compare equal to where it started and
+      // the canvas would not repaint.
+      other.rect == rect;
 
   @override
-  int get hashCode => Object.hash(id, x, y, w, h, sectionId);
+  int get hashCode => Object.hash(id, x, y, w, h, sectionId, floating, z, rect);
 
   @override
-  String toString() => '$id($x,$y ${w}x$h)';
+  String toString() => '$id($x,$y ${w}x$h${floating ? ' floating z$z' : ''}'
+      '${rect == null ? '' : ' $rect'})';
 }
+
+/// A line drawn while a card is held, saying what it is lining up with.
+///
+/// Carries the card it agrees with as well as the position, because a guide
+/// that says *where* without saying *with what* is a line you have to trace
+/// with your eye to make sense of — and the whole point is not having to.
+class GridGuide {
+  const GridGuide.vertical(this.at, this.partner, {this.gap, this.gapFrom = 0})
+      : isVertical = true;
+  const GridGuide.horizontal(this.at, this.partner,
+      {this.gap, this.gapFrom = 0})
+      : isVertical = false;
+
+  /// In cells, and fractional for a centre line.
+  final double at;
+  final bool isVertical;
+  final GridItem partner;
+
+  /// The clear space between the two cards, in cells, on the axis this guide
+  /// does *not* run along — and where that space begins.
+  ///
+  /// Null when they overlap on that axis, because there is then no gap to
+  /// report and a `0` would claim they are touching.
+  ///
+  /// Alignment tells you two edges agree; it does not tell you whether the
+  /// space above this card matches the space below it, which is the question
+  /// you are actually asking when you drag something into a row of others.
+  final double? gap;
+  final double gapFrom;
+
+  /// Identity is the line and who it agrees with. The measurement is a fact
+  /// *about* that line rather than part of which line it is, so it stays out
+  /// of this — two guides that differ only by a gap are not two guides.
+  @override
+  bool operator ==(Object other) =>
+      other is GridGuide &&
+      other.at == at &&
+      other.isVertical == isVertical &&
+      other.partner.id == partner.id;
+
+  @override
+  int get hashCode => Object.hash(at, isVertical, partner.id);
+
+  @override
+  String toString() => '${isVertical ? 'V' : 'H'}$at with ${partner.id}';
+}
+
+/// A rectangle in frame units — see [DashboardFrame].
+///
+/// Not clamped to the frame: bleeding a photograph off the edge of a page is
+/// something people do on purpose.
+class DashboardRect {
+  const DashboardRect({
+    required this.x,
+    required this.y,
+    required this.w,
+    required this.h,
+  });
+
+  final double x;
+  final double y;
+  final double w;
+  final double h;
+
+  double get right => x + w;
+  double get bottom => y + h;
+
+  DashboardRect copyWith({double? x, double? y, double? w, double? h}) =>
+      DashboardRect(
+        x: x ?? this.x,
+        y: y ?? this.y,
+        w: w ?? this.w,
+        h: h ?? this.h,
+      );
+
+  Map<String, dynamic> toJson() => {'x': x, 'y': y, 'w': w, 'h': h};
+
+  /// Null for anything that is not a complete, finite, positive rectangle.
+  ///
+  /// A half-written rect from a hand-edited document is not a position — it is
+  /// a card that lands nowhere — and falling back to the cells beside it is the
+  /// answer that still draws a page.
+  static DashboardRect? fromJson(Object? json) {
+    if (json is! Map) return null;
+    final x = _finite(json['x']);
+    final y = _finite(json['y']);
+    final w = _finite(json['w']);
+    final h = _finite(json['h']);
+    if (x == null || y == null || w == null || h == null) return null;
+    if (w <= 0 || h <= 0) return null;
+    return DashboardRect(x: x, y: y, w: w, h: h);
+  }
+
+  static double? _finite(Object? raw) {
+    if (raw is! num) return null;
+    final value = raw.toDouble();
+    return value.isFinite ? value : null;
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is DashboardRect &&
+      other.x == x &&
+      other.y == y &&
+      other.w == w &&
+      other.h == h;
+
+  @override
+  int get hashCode => Object.hash(x, y, w, h);
+
+  @override
+  String toString() => 'Rect($x, $y, $w × $h)';
+}
+
+/// What the frame's height promises.
+enum DashboardFrameFit {
+  /// The height is a starting point: width sets the scale and the page grows
+  /// downward past the frame. How every dashboard has behaved until now.
+  scroll,
+
+  /// The whole frame is shown at once, scaled, and nothing scrolls. What a wall
+  /// display is.
+  fixed,
+}
+
+/// The canvas a layout is composed on.
+///
+/// Absent means the layout is a grid of cells and nothing else — every
+/// dashboard authored before this. Present, the cells become a snapping aid and
+/// the placement rectangles become the truth.
+class DashboardFrame {
+  const DashboardFrame({
+    required this.width,
+    required this.height,
+    this.fit = DashboardFrameFit.scroll,
+  });
+
+  final double width;
+  final double height;
+  final DashboardFrameFit fit;
+
+  DashboardFrame copyWith({
+    double? width,
+    double? height,
+    DashboardFrameFit? fit,
+  }) =>
+      DashboardFrame(
+        width: width ?? this.width,
+        height: height ?? this.height,
+        fit: fit ?? this.fit,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'width': width,
+        'height': height,
+        'fit': fit.name,
+      };
+
+  /// Null for anything that is not a usable canvas. A frame with no size would
+  /// divide by zero on the way to the screen.
+  static DashboardFrame? fromJson(Object? json) {
+    if (json is! Map) return null;
+    final width = DashboardRect._finite(json['width']);
+    final height = DashboardRect._finite(json['height']);
+    if (width == null || height == null) return null;
+    if (width <= 0 || height <= 0) return null;
+    return DashboardFrame(
+      width: width,
+      height: height,
+      fit: _frameFitFrom(json['fit']),
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is DashboardFrame &&
+      other.width == width &&
+      other.height == height &&
+      other.fit == fit;
+
+  @override
+  int get hashCode => Object.hash(width, height, fit);
+}
+
+/// Absence reads as [DashboardFrameFit.scroll] — the behaviour of every
+/// dashboard authored before frames existed.
+DashboardFrameFit _frameFitFrom(Object? raw) =>
+    raw == 'fixed' ? DashboardFrameFit.fixed : DashboardFrameFit.scroll;
 
 /// What empty space in a layout means. Mirrors core's `DashboardFlow`.
 enum GridFlow {
@@ -184,6 +445,183 @@ class GridEngine {
     return _settle(_resolve([...items, placed], placed), pinned: placed.id);
   }
 
+  /// Which cards a rubber band has caught.
+  ///
+  /// **Touching counts.** A marquee that only took cards it fully enclosed
+  /// would make selecting a wide header mean dragging past both its ends, and
+  /// on a 12-column grid that is most of the page. Every tool that gets this
+  /// right for layout uses intersection; full containment is for vector points.
+  ///
+  /// The band is given in cells and normalised here, so a drag that went up and
+  /// to the left works exactly like one that went down and to the right — which
+  /// is not a nicety, it is half of all drags.
+  Set<String> itemsIn(List<GridItem> items, int x1, int y1, int x2, int y2) {
+    final left = x1 < x2 ? x1 : x2;
+    final right = x1 < x2 ? x2 : x1;
+    final top = y1 < y2 ? y1 : y2;
+    final bottom = y1 < y2 ? y2 : y1;
+    return {
+      for (final i in items)
+        if (i.x < right && i.right > left && i.y < bottom && i.bottom > top)
+          i.id,
+    };
+  }
+
+  /// Where [id] lines up with anything else on the page.
+  ///
+  /// The lines a design tool draws while you drag, and the reason alignment
+  /// stops being something you verify afterwards by squinting. Positions are
+  /// whole cells, so "aligned" is exact equality rather than a tolerance — the
+  /// grid has already done the hard part, and inventing a fuzzy match on top of
+  /// exact numbers would draw guides for things that are not aligned.
+  ///
+  /// Six edges are compared, not two: left, centre and right across, top,
+  /// middle and bottom down. Centre matters most and is the one you cannot
+  /// check by eye, because two cards of different widths share a centre at a
+  /// position neither of them has an edge at.
+  List<GridGuide> guidesFor(List<GridItem> items, String id) {
+    final moving = items.where((i) => i.id == id).firstOrNull;
+    if (moving == null) return const [];
+
+    final guides = <GridGuide>[];
+    // Doubled, so a centre that falls between two cells is still an integer
+    // and two odd-width cards can be found to share one.
+    int centreX(GridItem i) => i.x * 2 + i.w;
+    int middleY(GridItem i) => i.y * 2 + i.h;
+
+    for (final other in items) {
+      if (other.id == id) continue;
+      // Measured once per partner, on each axis: every guide between the same
+      // two cards reports the same distance, because it is a fact about the
+      // pair rather than about which edges happen to line up.
+      final down =
+          _clearBetween(moving.y, moving.bottom, other.y, other.bottom);
+      final across =
+          _clearBetween(moving.x, moving.right, other.x, other.right);
+
+      if (other.x == moving.x) {
+        guides.add(GridGuide.vertical(moving.x.toDouble(), other,
+            gap: down?.$1, gapFrom: down?.$2 ?? 0));
+      }
+      if (other.right == moving.right) {
+        guides.add(GridGuide.vertical(moving.right.toDouble(), other,
+            gap: down?.$1, gapFrom: down?.$2 ?? 0));
+      }
+      if (centreX(other) == centreX(moving)) {
+        guides.add(GridGuide.vertical(moving.x + moving.w / 2, other,
+            gap: down?.$1, gapFrom: down?.$2 ?? 0));
+      }
+      if (other.y == moving.y) {
+        guides.add(GridGuide.horizontal(moving.y.toDouble(), other,
+            gap: across?.$1, gapFrom: across?.$2 ?? 0));
+      }
+      if (other.bottom == moving.bottom) {
+        guides.add(GridGuide.horizontal(moving.bottom.toDouble(), other,
+            gap: across?.$1, gapFrom: across?.$2 ?? 0));
+      }
+      if (middleY(other) == middleY(moving)) {
+        guides.add(GridGuide.horizontal(moving.y + moving.h / 2, other,
+            gap: across?.$1, gapFrom: across?.$2 ?? 0));
+      }
+    }
+    return guides;
+  }
+
+  /// The clear cells between two spans, and where that space begins.
+  ///
+  /// Null when they overlap: a `0` there would claim they are touching, which
+  /// is a different arrangement and one you might well be aiming for.
+  static (double, double)? _clearBetween(
+      int aFrom, int aTo, int bFrom, int bTo) {
+    if (bFrom >= aTo) return ((bFrom - aTo).toDouble(), aTo.toDouble());
+    if (aFrom >= bTo) return ((aFrom - bTo).toDouble(), bTo.toDouble());
+    return null;
+  }
+
+  /// Shifts every card in [ids] by the same step, as one block.
+  ///
+  /// **Not a loop of [move].** Moving a selection one card at a time lets the
+  /// members shove each other: the first card lands on the second, the second
+  /// is pushed down, and a nudge that should have translated three cards a
+  /// column to the right has rearranged them. So the whole selection is
+  /// translated first and only then resolved, with all of it pinned — the
+  /// cards that are not moving are the ones that give way.
+  ///
+  /// Clamped as a block too. If any card would leave the grid the whole step is
+  /// refused, because a nudge that moves two of three cards is worse than one
+  /// that moves none: it silently breaks the arrangement you were adjusting.
+  List<GridItem> nudge(List<GridItem> items, Set<String> ids, int dx, int dy) {
+    if (ids.isEmpty || (dx == 0 && dy == 0)) return items;
+
+    final moving = [
+      for (final i in items)
+        if (ids.contains(i.id)) i,
+    ];
+    if (moving.isEmpty) return items;
+
+    for (final i in moving) {
+      final x = i.x + dx;
+      final y = i.y + dy;
+      if (x < 0 || y < 0 || x + i.w > columns) return items;
+    }
+
+    final shifted = [
+      for (final i in items)
+        if (ids.contains(i.id)) i.copyWith(x: i.x + dx, y: i.y + dy) else i,
+    ];
+    return _settle(_resolveAround(shifted, ids), pinned: ids.first);
+  }
+
+  /// Spreads [ids] evenly between the two that are already furthest apart.
+  ///
+  /// **The outermost two do not move.** Distributing is about the gaps, not
+  /// about where the group sits, and a version that recentred everything would
+  /// be a different command wearing this one's name — you would reach for it to
+  /// tidy three cards and find the whole row had shifted.
+  ///
+  /// Fewer than three is a no-op rather than an error: with two there is one
+  /// gap and it is already even, which is why this control only lights up at
+  /// three. That is also why it could not exist before multi-select — it is the
+  /// one canvas tool with no single-card meaning at all.
+  ///
+  /// Positions are cells, so an even split rarely divides exactly. The rounding
+  /// accumulates from the true fractional position rather than from the last
+  /// placed card, which keeps the total width honest: five cards across eleven
+  /// columns end where they started instead of drifting a column to the right.
+  List<GridItem> distribute(List<GridItem> items, Set<String> ids,
+      {bool horizontal = true}) {
+    final chosen = [
+      for (final i in items)
+        if (ids.contains(i.id)) i,
+    ]..sort((a, b) => horizontal ? a.x.compareTo(b.x) : a.y.compareTo(b.y));
+    if (chosen.length < 3) return items;
+
+    final first = chosen.first;
+    final last = chosen.last;
+    // The space the middle cards have to share: the run between the outer two,
+    // less the room the cards themselves take up.
+    final span = horizontal
+        ? last.x - (first.x + first.w)
+        : last.y - (first.y + first.h);
+    final occupied = chosen
+        .skip(1)
+        .take(chosen.length - 2)
+        .fold<int>(0, (sum, i) => sum + (horizontal ? i.w : i.h));
+    final gap = (span - occupied) / (chosen.length - 1);
+
+    final moved = <String, GridItem>{};
+    var cursor = (horizontal ? first.x + first.w : first.y + first.h) + gap;
+    for (final item in chosen.skip(1).take(chosen.length - 2)) {
+      final at = cursor.round();
+      moved[item.id] = horizontal ? item.copyWith(x: at) : item.copyWith(y: at);
+      cursor += (horizontal ? item.w : item.h) + gap;
+    }
+
+    return _settle([
+      for (final i in items) moved[i.id] ?? i,
+    ]);
+  }
+
   List<GridItem> remove(List<GridItem> items, String id) => _settle([
         for (final i in items)
           if (i.id != id) i
@@ -212,6 +650,13 @@ class GridEngine {
 
     final out = <GridItem>[];
     for (final item in ordered) {
+      // Clamped above like everything else — a floating card still has to be
+      // inside the grid core will accept — but never pushed down: the position
+      // is the design.
+      if (item.floating) {
+        out.add(item);
+        continue;
+      }
       var placed = item;
       while (out.any(placed.overlaps)) {
         placed = placed.copyWith(y: placed.y + 1);
@@ -237,9 +682,13 @@ class GridEngine {
   // -- internals -----------------------------------------------------------
 
   /// Pushes anything overlapping [moved] downward, cascading.
-  List<GridItem> _resolve(List<GridItem> items, GridItem moved) {
+  List<GridItem> _resolve(List<GridItem> items, GridItem moved) =>
+      _resolveAround(items, {moved.id});
+
+  /// The same, for a whole selection held in place at once.
+  List<GridItem> _resolveAround(List<GridItem> items, Set<String> held) {
     var out = [...items];
-    final settled = <String>{moved.id};
+    final settled = <String>{...held};
 
     // Bounded rather than `while (true)`: a cascade can only push each item
     // down, so it must terminate — but a bug here would otherwise hang the tab.
@@ -283,6 +732,13 @@ class GridEngine {
 
     for (final item in ordered) {
       if (item.id == pinned) continue;
+      // A floating element is where it was put. Gravity would pull it to the
+      // top of the page, since nothing below it can block something that
+      // competes with nothing.
+      if (item.floating) {
+        out.add(item);
+        continue;
+      }
 
       var placed = item;
       while (placed.y > 0) {

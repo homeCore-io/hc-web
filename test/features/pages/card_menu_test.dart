@@ -227,8 +227,14 @@ void main() {
       await _openMenu(tester);
       await tester.tap(find.text('Remove'));
       await tester.pumpAndSettle();
-      expect(find.byTooltip('Undo remove lights'), findsOneWidget,
-          reason: '"Undo" alone makes you press it to find out what it does');
+      // Contains, not equals: the tooltip also carries the shortcut now, and
+      // what this test is about is that it names the change.
+      expect(
+        find.byWidgetPredicate((w) =>
+            w is Tooltip && (w.message ?? '').contains('Undo remove lights')),
+        findsOneWidget,
+        reason: '"Undo" alone makes you press it to find out what it does',
+      );
     });
 
     testWidgets('a resize is undoable too, which it was not before',
