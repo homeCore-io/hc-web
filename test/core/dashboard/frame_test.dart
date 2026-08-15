@@ -178,6 +178,88 @@ void main() {
     });
   });
 
+  group('pulling an edge', () {
+    // Deliberately off-grid, so snapping is visible when it is on and the
+    // untouched edge is checkable to the pixel when it is off.
+    const card = DashboardRect(x: 300, y: 200, w: 400, h: 300);
+
+    test('the edge you are not holding does not move', () {
+      // The resize bug everybody ships once: the card changes size and creeps
+      // across the page at the same time, because the anchor was taken to be
+      // the origin rather than the opposite edge.
+      final out = desktop.resizedBy(
+          card, ResizeHandle.left, const Offset(-50, 0),
+          snap: false);
+      expect(out.x, 250);
+      expect(out.right, 700, reason: 'the right edge stayed');
+      expect(out.y, 200);
+      expect(out.h, 300);
+    });
+
+    test('the right edge moves the width and nothing else', () {
+      final out = desktop.resizedBy(
+          card, ResizeHandle.right, const Offset(60, 0),
+          snap: false);
+      expect(out.x, 300);
+      expect(out.w, 460);
+    });
+
+    test('a corner takes both axes', () {
+      final out = desktop.resizedBy(
+          card, ResizeHandle.topLeft, const Offset(-20, -40),
+          snap: false);
+      expect(out.x, 280);
+      expect(out.y, 160);
+      expect(out.right, 700);
+      expect(out.bottom, 500);
+    });
+
+    test('an edge handle leaves the other axis alone', () {
+      final out = desktop.resizedBy(
+          card, ResizeHandle.bottom, const Offset(999, 25),
+          snap: false);
+      expect(out.x, 300,
+          reason: 'a horizontal drag on a bottom handle is not '
+              'a horizontal resize');
+      expect(out.w, 400);
+      expect(out.h, 325);
+    });
+
+    test('cannot be turned inside out', () {
+      // Dragging the left edge past the right one has to stop at the minimum,
+      // not produce a negative width core would reject.
+      final out = desktop.resizedBy(
+          card, ResizeHandle.left, const Offset(9000, 0),
+          snap: false);
+      expect(out.w, minComposedSize);
+      expect(out.right, 700, reason: 'still anchored to the edge held still');
+
+      final other = desktop.resizedBy(
+          card, ResizeHandle.right, const Offset(-9000, 0),
+          snap: false);
+      expect(other.w, minComposedSize);
+      expect(other.x, 300);
+    });
+
+    test('snaps the edge under the pointer, not the width', () {
+      // Snapping a width would put the far edge wherever the near edge's
+      // offset left it — so a card whose left side is off-grid could never
+      // have a right side on it.
+      final out =
+          desktop.resizedBy(card, ResizeHandle.right, const Offset(20, 0));
+      final steps = out.right / desktop.stepX;
+      expect(steps, closeTo(steps.roundToDouble(), 0.001));
+      expect(out.x, 300, reason: 'the off-grid edge it was not holding stayed');
+    });
+
+    test('leaves everything alone when nothing moved', () {
+      expect(
+          desktop.resizedBy(card, ResizeHandle.bottomRight, Offset.zero,
+              snap: false),
+          card);
+    });
+  });
+
   group('which representation wins', () {
     test('the rectangle, when there is one', () {
       const composed = DashboardRect(x: 10, y: 20, w: 30, h: 40);

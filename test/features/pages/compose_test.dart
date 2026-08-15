@@ -114,6 +114,10 @@ PageGrid _grid(WidgetTester tester) =>
 GridItem _item(WidgetTester tester, String id) =>
     _grid(tester).items.firstWhere((i) => i.id == id);
 
+/// Where the card is drawn on screen, for aiming at its handles.
+Rect _cardScreenRect(WidgetTester tester, String id) => tester.getRect(find
+    .descendant(of: find.byType(PageGrid), matching: find.byKey(ValueKey(id))));
+
 /// Where the card is drawn, in the board's own coordinates.
 Rect _box(WidgetTester tester, String id) {
   final board = tester.getRect(find.byType(PageGrid));
@@ -132,6 +136,13 @@ Future<void> _flip(WidgetTester tester, String label) async {
 
 Future<void> _toggleCompose(WidgetTester tester) =>
     _flip(tester, 'Compose freely');
+
+/// Selects a card by clicking it on the canvas.
+Future<void> _tap(WidgetTester tester, String id) async {
+  await tester.tap(find.descendant(
+      of: find.byType(PageGrid), matching: find.byKey(ValueKey(id))));
+  await tester.pumpAndSettle();
+}
 
 Future<void> _dragCard(WidgetTester tester, String id, Offset by) async {
   final card = find.descendant(
@@ -319,6 +330,96 @@ void main() {
       // `_DragBody`.
       expect(_item(tester, 'a').x, greaterThan(0),
           reason: 'dragging a card moves the card');
+    });
+  });
+
+  group('the resize handles', () {
+    /// Drags the handle nearest [corner] of the selected card.
+    Future<void> pull(WidgetTester tester, Offset at, Offset by) async {
+      final gesture = await tester.startGesture(at);
+      await tester.pump(const Duration(milliseconds: 20));
+      await gesture.moveBy(by);
+      await tester.pump(const Duration(milliseconds: 20));
+      await gesture.up();
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('a composed card gets eight, and only when it is held',
+        (tester) async {
+      await _open(tester);
+      await _toggleCompose(tester);
+      expect(find.bySemanticsLabel('Resize card'), findsNothing,
+          reason: 'a board of dots is not a page you can read');
+
+      await _tap(tester, 'a');
+      expect(find.bySemanticsLabel('Resize card'), findsNWidgets(8));
+    });
+
+    testWidgets('a card on the plain grid keeps its one grip', (tester) async {
+      // One each, on every card, selected or not — exactly as before
+      // composition existed. The eight are a composed card's affordance, not a
+      // change to the grid's.
+      await _open(tester);
+      await _tap(tester, 'a');
+      expect(find.bySemanticsLabel('Resize card'), findsNWidgets(2),
+          reason: 'two cards on this page, one grip each');
+    });
+
+    testWidgets('pulling the left edge leaves the right one where it was',
+        (tester) async {
+      // The resize bug everybody ships once: the card changes size and creeps
+      // across the page at the same time.
+      await _open(tester);
+      await _toggleCompose(tester);
+      await _tap(tester, 'a');
+      final before = _item(tester, 'a').rect!;
+
+      final box = _cardScreenRect(tester, 'a');
+      await pull(
+          tester, Offset(box.left + 4, box.center.dy), const Offset(60, 0));
+
+      final after = _item(tester, 'a').rect!;
+      expect(after.x, greaterThan(before.x), reason: 'the held edge moved');
+      expect(after.right, closeTo(before.right, 0.01),
+          reason: 'the other edge did not');
+      expect(after.y, before.y);
+      expect(after.h, before.h);
+    });
+
+    testWidgets('pulling the bottom edge changes only the height',
+        (tester) async {
+      await _open(tester);
+      await _toggleCompose(tester);
+      await _tap(tester, 'a');
+      final before = _item(tester, 'a').rect!;
+
+      final box = _cardScreenRect(tester, 'a');
+      await pull(
+          tester, Offset(box.center.dx, box.bottom - 4), const Offset(0, 60));
+
+      final after = _item(tester, 'a').rect!;
+      expect(after.h, greaterThan(before.h));
+      expect(after.x, before.x);
+      expect(after.w, closeTo(before.w, 0.01));
+    });
+
+    testWidgets('and it still cannot be pulled inside out', (tester) async {
+      // Core rejects a rectangle with no size, and a card resized to nothing
+      // cannot be grabbed again.
+      await _open(tester);
+      await _toggleCompose(tester);
+      await _tap(tester, 'a');
+      final before = _item(tester, 'a').rect!;
+
+      final box = _cardScreenRect(tester, 'a');
+      await pull(
+          tester, Offset(box.left + 4, box.center.dy), const Offset(4000, 0));
+
+      final after = _item(tester, 'a').rect!;
+      expect(after.w, greaterThan(0));
+      expect(after.right, closeTo(before.right, 0.01));
+      expect(_item(tester, 'a').w, greaterThan(0),
+          reason: 'and legal in cells');
     });
   });
 

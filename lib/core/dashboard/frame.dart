@@ -81,6 +81,96 @@ extension FrameGeometry on CanvasGeometry {
       on && stepY > 0 ? (value / stepY).round() * stepY : value;
 }
 
+/// Which part of a card you took hold of to resize it.
+///
+/// Eight, not one. A single bottom-right grip is all a cell grid needs, because
+/// a cell card is anchored at its top-left and only its extent is in question.
+/// A composed card has no privileged corner: pulling its left edge left is a
+/// different edit from pulling its right edge right, and doing the first with a
+/// corner handle means dragging the whole card and then resizing it — two
+/// gestures and an arithmetic problem for something that should be one pull.
+enum ResizeHandle {
+  topLeft(movesLeft: true, movesTop: true),
+  top(movesTop: true),
+  topRight(movesRight: true, movesTop: true),
+  right(movesRight: true),
+  bottomRight(movesRight: true, movesBottom: true),
+  bottom(movesBottom: true),
+  bottomLeft(movesLeft: true, movesBottom: true),
+  left(movesLeft: true);
+
+  // `movesLeft` rather than `left`: a field named the same as one of the values
+  // makes the enum's own type inference circular. The analyzer accepts it and
+  // the compiler does not, so it looks like a hanging test rather than an
+  // error.
+  const ResizeHandle({
+    this.movesLeft = false,
+    this.movesTop = false,
+    this.movesRight = false,
+    this.movesBottom = false,
+  });
+
+  /// Which edges this handle moves. The opposite edge stays put — that is the
+  /// whole definition of a resize as opposed to a move.
+  final bool movesLeft;
+  final bool movesTop;
+  final bool movesRight;
+  final bool movesBottom;
+}
+
+/// The smallest a composed element may be pulled to, in frame units.
+///
+/// Not zero: a card resized to nothing cannot be grabbed again, and core
+/// rejects a rectangle with no size.
+const double minComposedSize = 24;
+
+extension ResizeGeometry on CanvasGeometry {
+  /// [from] after dragging [handle] by [by].
+  ///
+  /// The edge you are *not* holding does not move. Getting this wrong is the
+  /// resize bug everybody ships once: the card changes size and creeps across
+  /// the page at the same time, because the anchor was taken to be the origin
+  /// rather than the opposite edge.
+  ///
+  /// Snapping is applied to the edge under the pointer, never to the width.
+  /// Snapping a width instead would put the far edge wherever the near edge's
+  /// offset happened to leave it — so a card whose left side sits off-grid
+  /// could never have a right side on it.
+  DashboardRect resizedBy(
+    DashboardRect from,
+    ResizeHandle handle,
+    Offset by, {
+    bool snap = true,
+    double min = minComposedSize,
+  }) {
+    var x = from.x;
+    var y = from.y;
+    var w = from.w;
+    var h = from.h;
+
+    if (handle.movesLeft) {
+      final edge = snapX(from.x + by.dx, on: snap);
+      // Never past the edge being held still, or the card turns inside out.
+      x = edge > from.right - min ? from.right - min : edge;
+      w = from.right - x;
+    } else if (handle.movesRight) {
+      final edge = snapX(from.right + by.dx, on: snap);
+      w = edge < from.x + min ? min : edge - from.x;
+    }
+
+    if (handle.movesTop) {
+      final edge = snapY(from.y + by.dy, on: snap);
+      y = edge > from.bottom - min ? from.bottom - min : edge;
+      h = from.bottom - y;
+    } else if (handle.movesBottom) {
+      final edge = snapY(from.bottom + by.dy, on: snap);
+      h = edge < from.y + min ? min : edge - from.y;
+    }
+
+    return DashboardRect(x: x, y: y, w: w, h: h);
+  }
+}
+
 /// How a frame is drawn into the space available for it.
 ///
 /// The one number every composed page needs and no grid page ever did: with

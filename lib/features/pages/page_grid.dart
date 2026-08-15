@@ -225,12 +225,6 @@ class _DragBodyState extends State<_DragBody> {
       );
 }
 
-/// The smallest a composed element may be dragged to, in frame units.
-///
-/// Not zero: a card resized to nothing cannot be grabbed again, and core
-/// rejects a rectangle with no size. Roughly a finger.
-const double _minComposed = 24;
-
 class _PageGridState extends State<PageGrid> {
   /// The cell a dragged-in card is hovering over, in grid units.
   (int, int)? _dropCell;
@@ -268,6 +262,10 @@ class _PageGridState extends State<PageGrid> {
   /// The rectangle a composed gesture started from, so a drag depends only on
   /// how far the pointer has moved and not on the path it took.
   DashboardRect? _gestureRect;
+
+  /// Which edge or corner is being pulled. Always the bottom-right for a cell
+  /// card, which has only one grip.
+  ResizeHandle _handle = ResizeHandle.bottomRight;
 
   /// The card the editor has been *entered* into, or null.
   ///
@@ -496,12 +494,13 @@ class _PageGridState extends State<PageGrid> {
           });
         }
 
-        void startResize(GridItem item) => setState(() {
+        void startResize(GridItem item, ResizeHandle handle) => setState(() {
               _baseline = List<GridItem>.of(widget.items);
               _preview = _baseline;
               _resizeId = item.id;
               _resizeStart = Point(item.w, item.h);
               _gestureRect = item.rect;
+              _handle = handle;
               _resizeAccum = Offset.zero;
             });
 
@@ -510,18 +509,8 @@ class _PageGridState extends State<PageGrid> {
           // every frame and the resize feels dead.
           _resizeAccum += delta;
           if (_gestureRect case final from?) {
-            // Snapped on the *far* edge, which is the one the pointer is
-            // holding. Snapping the width instead would move that edge to
-            // somewhere the near edge's offset put it, and a card whose left
-            // side is off-grid could never have a right side on it.
-            final right = geometry.snapX(from.right + _resizeAccum.dx,
-                on: widget.snapToGrid);
-            final bottom = geometry.snapY(from.bottom + _resizeAccum.dy,
-                on: widget.snapToGrid);
-            final rect = from.copyWith(
-              w: math.max(right - from.x, _minComposed),
-              h: math.max(bottom - from.y, _minComposed),
-            );
+            final rect = geometry.resizedBy(from, _handle, _resizeAccum,
+                snap: widget.snapToGrid);
             setState(() => _preview = composedPreview(_resizeId!, rect));
             return;
           }
@@ -816,7 +805,8 @@ class _PageGridState extends State<PageGrid> {
                       onDragStart: () => startDrag(item),
                       onDragUpdate: updateDrag,
                       onDragEnd: endDrag,
-                      onResizeStart: () => startResize(item),
+                      onResizeStart: (handle) => startResize(item, handle),
+                      composed: item.isComposed,
                       onResizeUpdate: updateResize,
                       onResizeEnd: endResize,
                     ),
@@ -1296,6 +1286,7 @@ class _Cell extends StatelessWidget {
     required this.onDragUpdate,
     required this.onDragEnd,
     required this.onResizeStart,
+    required this.composed,
     required this.onResizeUpdate,
     required this.onResizeEnd,
   });
@@ -1331,7 +1322,12 @@ class _Cell extends StatelessWidget {
   final VoidCallback onDragStart;
   final ValueChanged<Offset> onDragUpdate;
   final VoidCallback onDragEnd;
-  final VoidCallback onResizeStart;
+  final ValueChanged<ResizeHandle> onResizeStart;
+
+  /// Composed cards get all eight handles; a cell card keeps its one grip,
+  /// because a cell card is anchored top-left and only its extent is in
+  /// question.
+  final bool composed;
   final ValueChanged<Offset> onResizeUpdate;
   final VoidCallback onResizeEnd;
 
@@ -1562,35 +1558,149 @@ class _Cell extends StatelessWidget {
               ),
             ),
           ),
-        // Resize from the bottom-right.
-        Positioned(
-          right: 0,
-          bottom: 0,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onPanStart: (_) => onResizeStart(),
-            onPanUpdate: (d) => onResizeUpdate(d.delta),
-            onPanEnd: (_) => onResizeEnd(),
-            child: MouseRegion(
-              cursor: SystemMouseCursors.resizeDownRight,
-              child: Semantics(
-                // A bare corner to drag was invisible to assistive tech and
-                // unnamed to everyone else.
-                label: 'Resize card',
-                child: Container(
-                  width: 22,
-                  height: 22,
-                  alignment: Alignment.center,
-                  child: Icon(HcIcons.grip,
-                      size: 13, color: t.accent.active.withValues(alpha: 0.8)),
+        // Resize. One grip on a cell card, eight on a composed one — see
+        // [ResizeHandle].
+        if (!composed)
+          Positioned(
+            right: 0,
+            bottom: 0,
+            child: _Grip(
+              handle: ResizeHandle.bottomRight,
+              onStart: onResizeStart,
+              onUpdate: onResizeUpdate,
+              onEnd: onResizeEnd,
+              child: Container(
+                width: 22,
+                height: 22,
+                alignment: Alignment.center,
+                child: Icon(HcIcons.grip,
+                    size: 13, color: t.accent.active.withValues(alpha: 0.8)),
+              ),
+            ),
+          )
+        // Only on the card in hand. Eight grips on every card at once is a
+        // board of dots rather than a page you can read.
+        else if (selected)
+          for (final handle in ResizeHandle.values)
+            Positioned(
+              // Inside the card's own bounds, never outside them: a Stack does
+              // not hit-test a child beyond its edges, so a handle hanging off
+              // the corner would be drawn and not grabbable.
+              //
+              // An edge handle spans its whole side *less the corners*, so the
+              // two never fight over the same pixel — the corner is the one
+              // that resizes both axes, and losing it to the edge lying on top
+              // of it would cost the gesture people reach for most.
+              // Pinned to the edges it moves, and stretched across the axis it
+              // does not.
+              left: handle.movesRight ? null : 0,
+              right: handle.movesLeft ? null : 0,
+              top: handle.movesBottom ? null : 0,
+              bottom: handle.movesTop ? null : 0,
+              width: handle.movesLeft || handle.movesRight ? _gripSize : null,
+              height: handle.movesTop || handle.movesBottom ? _gripSize : null,
+              child: Padding(
+                padding: EdgeInsets.symmetric(
+                  horizontal:
+                      handle.movesLeft || handle.movesRight ? 0 : _gripSize,
+                  vertical:
+                      handle.movesTop || handle.movesBottom ? 0 : _gripSize,
+                ),
+                child: _Grip(
+                  handle: handle,
+                  onStart: onResizeStart,
+                  onUpdate: onResizeUpdate,
+                  onEnd: onResizeEnd,
+                  child: Center(
+                    child: Container(
+                      width: 7,
+                      height: 7,
+                      decoration: BoxDecoration(
+                        color: t.surface.base,
+                        border: Border.all(color: t.accent.active),
+                        borderRadius: t.radius.xsR,
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),
-          ),
-        ),
       ],
     );
   }
+}
+
+/// How big a resize handle is to hit.
+///
+/// Sixteen rather than the seven that is drawn: the dot is the affordance, the
+/// box around it is what you actually have to land on, and a handle you have to
+/// aim at is a handle you avoid.
+const double _gripSize = 16;
+
+/// One resize handle. Raw pointers, for the reason [_DragBody] gives: inside
+/// two scroll views a pan recogniser's outcome depends on how the events
+/// arrive.
+class _Grip extends StatefulWidget {
+  const _Grip({
+    required this.handle,
+    required this.onStart,
+    required this.onUpdate,
+    required this.onEnd,
+    required this.child,
+  });
+
+  final ResizeHandle handle;
+  final ValueChanged<ResizeHandle> onStart;
+  final ValueChanged<Offset> onUpdate;
+  final VoidCallback onEnd;
+  final Widget child;
+
+  @override
+  State<_Grip> createState() => _GripState();
+}
+
+class _GripState extends State<_Grip> {
+  bool _pulling = false;
+
+  static const _cursors = {
+    ResizeHandle.topLeft: SystemMouseCursors.resizeUpLeft,
+    ResizeHandle.top: SystemMouseCursors.resizeUp,
+    ResizeHandle.topRight: SystemMouseCursors.resizeUpRight,
+    ResizeHandle.right: SystemMouseCursors.resizeRight,
+    ResizeHandle.bottomRight: SystemMouseCursors.resizeDownRight,
+    ResizeHandle.bottom: SystemMouseCursors.resizeDown,
+    ResizeHandle.bottomLeft: SystemMouseCursors.resizeDownLeft,
+    ResizeHandle.left: SystemMouseCursors.resizeLeft,
+  };
+
+  void _end() {
+    if (_pulling) widget.onEnd();
+    _pulling = false;
+  }
+
+  @override
+  Widget build(BuildContext context) => MouseRegion(
+        cursor: _cursors[widget.handle]!,
+        child: Listener(
+          behavior: HitTestBehavior.opaque,
+          onPointerDown: (event) {
+            if (event.buttons != kPrimaryButton) return;
+            _pulling = true;
+            widget.onStart(widget.handle);
+          },
+          onPointerMove: (event) {
+            if (_pulling) widget.onUpdate(event.localDelta);
+          },
+          onPointerUp: (_) => _end(),
+          onPointerCancel: (_) => _end(),
+          child: Semantics(
+            // A bare corner to drag was invisible to assistive tech and
+            // unnamed to everyone else.
+            label: 'Resize card',
+            child: widget.child,
+          ),
+        ),
+      );
 }
 
 /// The way out of a card you are inside.
