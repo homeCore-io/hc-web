@@ -11,9 +11,11 @@ import '../../core/dashboard/free_layer.dart';
 import '../../core/dashboard/grid_engine.dart';
 import '../../core/dashboard/groups.dart';
 import '../../core/dashboard/layout_write.dart';
+import '../../core/dashboard/page_starts.dart';
 import '../../core/dashboard/widget_registry.dart';
 import '../../core/models/dashboard.dart';
 import '../../core/providers/dashboards_provider.dart';
+import '../../core/providers/devices_provider.dart';
 import '../../design/components/hc_controls.dart';
 import '../../design/hc_icons.dart';
 import '../../design/tokens.dart';
@@ -128,6 +130,14 @@ class _PageScreenState extends ConsumerState<PageScreen> {
   /// and shows the multi-selection summary when it is null but the selection is
   /// not empty.
   String? get _selectedCard => _selection.length == 1 ? _selection.first : null;
+
+  /// The starting points have been dismissed for this session.
+  ///
+  /// View state, and only for the *blank* start: the other two hide the chooser
+  /// by putting something on the page or a canvas under it, which is a fact
+  /// about the document and survives a reload. "Just the grid" changes nothing
+  /// at all, so the only thing it can mean is *stop offering*.
+  bool _dismissedStart = false;
 
   /// Whether a composed drag is pulled to the cell edges.
   ///
@@ -509,6 +519,7 @@ class _PageScreenState extends ConsumerState<PageScreen> {
       _undo.clear();
       _redo.clear();
       _trimmed = false;
+      _dismissedStart = false;
       _inside = null;
       _pendingPlacement.clear();
       _settled.clear();
@@ -582,6 +593,86 @@ class _PageScreenState extends ConsumerState<PageScreen> {
       _commit([
         for (final i in _draftItems!)
           i.copyWith(rect: on ? geometry.rectOfItem(i) : null),
+      ]);
+    });
+  }
+
+  /// Begin a page from one of the starting points — see `page_starts.dart`.
+  ///
+  /// One undo entry for the whole thing, because it is one decision. Undoing a
+  /// start card by card would be undoing something nobody did.
+  void _startPage(PageStartKind kind, DashboardBreakpoint breakpoint,
+      int columns, String? room) {
+    if (_draftItems == null || _draftLayouts == null) return;
+    // Blank changes nothing, so it is not an edit — it is the chooser being
+    // dismissed. Pushing an undo entry for it would put a step in the history
+    // that undoes to the state it started from.
+    if (kind == PageStartKind.blank) {
+      setState(() => _dismissedStart = true);
+      return;
+    }
+    final cards = startCards(kind, room: room);
+    final frame = startFrame(kind);
+    _pushUndo('Start the page');
+
+    // Stacked down the page in the order the start names them, rather than
+    // packed by the engine: a starting point is an arrangement, and letting the
+    // packer decide would make the same choice produce different pages
+    // depending on what happened to fit.
+    final widgets = {...?_draftWidgets};
+    final items = [..._draftItems!];
+    var y = items.fold<int>(0, (m, i) => i.bottom > m ? i.bottom : m);
+    var n = DateTime.now().microsecondsSinceEpoch;
+    for (final card in cards) {
+      final id = 'widget_${n++}';
+      widgets[id] = DashboardWidgetModel(
+        id: id,
+        type: card.type,
+        title: card.title,
+        refreshPolicy: DashboardRefreshPolicy.live,
+        config: card.config,
+      );
+      items.add(GridItem(
+        id: id,
+        x: 0,
+        y: y,
+        w: card.w.clamp(1, columns),
+        h: card.h,
+      ));
+      y += card.h;
+    }
+
+    setState(() {
+      _draftWidgets = widgets;
+      _contentDirty = true;
+      if (frame != null) {
+        _draftLayouts = [
+          for (final l in _draftLayouts!)
+            if (l.breakpoint == breakpoint)
+              l.copyWith(frame: frame, flow: GridFlow.free)
+            else
+              l,
+        ];
+      }
+      final geometry = frame == null
+          ? null
+          : CanvasGeometry(
+              width: frame.width,
+              columns: columns,
+              rowHeight: _draftLayouts!
+                      .where((l) => l.breakpoint == breakpoint)
+                      .map((l) => l.rowHeight)
+                      .firstOrNull ??
+                  _defaultRowHeight,
+              gap: _draftLayouts!
+                      .where((l) => l.breakpoint == breakpoint)
+                      .map((l) => l.gap)
+                      .firstOrNull ??
+                  _defaultGap,
+            );
+      _commit([
+        for (final i in items)
+          if (geometry == null) i else i.copyWith(rect: geometry.rectOfItem(i)),
       ]);
     });
   }
@@ -1481,65 +1572,91 @@ class _PageScreenState extends ConsumerState<PageScreen> {
         // middle pane; in the page it is the whole body.
         Widget canvas() => items.isEmpty && !_editing
             ? const _EmptyPage(editing: false)
-            : _PreviewFrame(
-                width: _editing ? previewWidthFor(breakpoint) : null,
-                child: PageGrid(
-                  items: items,
-                  widgetsById: widgetsById,
-                  columns: columns,
-                  rowHeight: rowHeight,
-                  gap: gap,
-                  editing: _editing,
-                  ghostItems: _editing && _draftLayouts != null
-                      ? _ghostFor(breakpoint, source, _draftLayouts!)
-                      : const [],
-                  onMove: (id, x, y) => _apply(
-                      (e, its) => e.move(its, id, x, y), columns,
-                      byHand: true),
-                  onResize: (id, w, h) => _apply(
-                      (e, its) => e.resize(its, id, w, h), columns,
-                      byHand: true),
-                  onRemove: (id) => _removeWidget(id, columns),
-                  onConfigure: (id) => hasInspector || widget.designer
-                      ? _select(id)
-                      : _configureWidget(id),
-                  // A card that edits itself in place — the floor plan placing
-                  // a marker. Straight into the same writer the inspector
-                  // uses, so it lands in the draft and coalesces into one undo
-                  // entry per gesture rather than one per pixel.
-                  onWidgetConfig: _configureLive,
-                  onAddAt: (x, y) => _addWidget(columns, atX: x, atY: y),
-                  onMarquee: (x1, y1, x2, y2, additive) => setState(() {
-                    final caught = _engine(columns)
-                        .itemsIn(_draftItems ?? const [], x1, y1, x2, y2);
-                    // Shift keeps what you had; a plain band starts again, the
-                    // same rule a click follows.
-                    if (!additive) _selection.clear();
-                    // Clipping one member of a group catches the group, the
-                    // same rule a click follows — a band that took three of a
-                    // cluster's four cards would then move three of them.
-                    final paths = _paths;
-                    for (final id in caught) {
-                      _selection.addAll(_clickHolds(id, paths));
-                    }
-                  }),
-                  onMenu: (id, at) => _cardMenu(id, at, columns),
-                  onSelect: hasInspector || widget.designer
-                      ? (id, additive) => _select(id, additive: additive)
-                      : null,
-                  onEnterGroup: widget.designer ? _enterGroup : null,
-                  groupOutline: widget.designer ? _groupOutline : null,
-                  frame: layout.frame,
-                  onCompose: (id, rect) => _composeCard(id, rect, columns),
-                  snapToGrid: _snapToGrid,
-                  selectedIds: _selection,
-                  onDropCard: (payload, x, y) {
-                    if (payload is DashboardWidgetModel) {
-                      _placeCard(payload, columns, atX: x, atY: y);
-                    }
-                  },
-                ),
-              );
+            // An empty page in the designer offers somewhere to start rather
+            // than a grid of nothing — see `page_starts.dart`. Only while
+            // genuinely empty: once there is one card on it, the page is the
+            // page and the starting points would be in the way.
+            // Hidden the moment the page has something on it *or* a canvas
+            // under it — a wall start puts nothing on the page, so counting
+            // cards alone would leave the chooser covering the canvas it had
+            // just made.
+            : items.isEmpty &&
+                    widget.designer &&
+                    layout.frame == null &&
+                    !_dismissedStart
+                ? _EmptyPage(
+                    editing: true,
+                    rooms: roomsBySize(
+                      ref
+                              .watch(devicesProvider)
+                              .asData
+                              ?.value
+                              .where((d) => !d.isSystem)
+                              .map((d) => d.effectiveArea) ??
+                          const [],
+                    ),
+                    onStart: (kind, {String? room}) =>
+                        _startPage(kind, breakpoint, columns, room),
+                  )
+                : _PreviewFrame(
+                    width: _editing ? previewWidthFor(breakpoint) : null,
+                    child: PageGrid(
+                      items: items,
+                      widgetsById: widgetsById,
+                      columns: columns,
+                      rowHeight: rowHeight,
+                      gap: gap,
+                      editing: _editing,
+                      ghostItems: _editing && _draftLayouts != null
+                          ? _ghostFor(breakpoint, source, _draftLayouts!)
+                          : const [],
+                      onMove: (id, x, y) => _apply(
+                          (e, its) => e.move(its, id, x, y), columns,
+                          byHand: true),
+                      onResize: (id, w, h) => _apply(
+                          (e, its) => e.resize(its, id, w, h), columns,
+                          byHand: true),
+                      onRemove: (id) => _removeWidget(id, columns),
+                      onConfigure: (id) => hasInspector || widget.designer
+                          ? _select(id)
+                          : _configureWidget(id),
+                      // A card that edits itself in place — the floor plan placing
+                      // a marker. Straight into the same writer the inspector
+                      // uses, so it lands in the draft and coalesces into one undo
+                      // entry per gesture rather than one per pixel.
+                      onWidgetConfig: _configureLive,
+                      onAddAt: (x, y) => _addWidget(columns, atX: x, atY: y),
+                      onMarquee: (x1, y1, x2, y2, additive) => setState(() {
+                        final caught = _engine(columns)
+                            .itemsIn(_draftItems ?? const [], x1, y1, x2, y2);
+                        // Shift keeps what you had; a plain band starts again, the
+                        // same rule a click follows.
+                        if (!additive) _selection.clear();
+                        // Clipping one member of a group catches the group, the
+                        // same rule a click follows — a band that took three of a
+                        // cluster's four cards would then move three of them.
+                        final paths = _paths;
+                        for (final id in caught) {
+                          _selection.addAll(_clickHolds(id, paths));
+                        }
+                      }),
+                      onMenu: (id, at) => _cardMenu(id, at, columns),
+                      onSelect: hasInspector || widget.designer
+                          ? (id, additive) => _select(id, additive: additive)
+                          : null,
+                      onEnterGroup: widget.designer ? _enterGroup : null,
+                      groupOutline: widget.designer ? _groupOutline : null,
+                      frame: layout.frame,
+                      onCompose: (id, rect) => _composeCard(id, rect, columns),
+                      snapToGrid: _snapToGrid,
+                      selectedIds: _selection,
+                      onDropCard: (payload, x, y) {
+                        if (payload is DashboardWidgetModel) {
+                          _placeCard(payload, columns, atX: x, atY: y);
+                        }
+                      },
+                    ),
+                  );
 
         if (widget.designer) {
           return DesignerShell(
@@ -2049,31 +2166,209 @@ class _PreviewFrame extends StatelessWidget {
   }
 }
 
+/// A page with nothing on it — and, in the designer, somewhere to start.
+///
+/// "Add a widget to get started" was the whole truth while a page could only
+/// ever be a mosaic of cells: there was one shape a template could have, so
+/// offering it would have been offering nothing. With a canvas underneath, the
+/// choice is real — see `page_starts.dart`.
 class _EmptyPage extends StatelessWidget {
-  const _EmptyPage({required this.editing});
+  const _EmptyPage({
+    required this.editing,
+    this.rooms = const [],
+    this.onStart,
+  });
 
   final bool editing;
+
+  /// The rooms this house has, busiest first.
+  final List<(String, int)> rooms;
+
+  /// Null outside the designer, where there is nowhere to put the result.
+  final void Function(PageStartKind kind, {String? room})? onStart;
 
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
+    final onStart = this.onStart;
+
+    if (onStart == null) {
+      return Padding(
+        padding: EdgeInsets.only(top: t.space.xl * 2),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(HcIcons.dashboards, size: 30, color: t.surface.onBaseMuted),
+              SizedBox(height: t.space.md),
+              Text(
+                editing
+                    ? 'Add a widget to get started.'
+                    : 'This page is empty. Tap the pencil to add widgets.',
+                style: TextStyle(color: t.surface.onBaseMuted),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Padding(
-      padding: EdgeInsets.only(top: t.space.xl * 2),
+      padding: EdgeInsets.symmetric(
+          horizontal: t.space.lg, vertical: t.space.xl * 2),
       child: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(HcIcons.dashboards, size: 30, color: t.surface.onBaseMuted),
-            SizedBox(height: t.space.md),
-            Text(
-              editing
-                  ? 'Add a widget to get started.'
-                  : 'This page is empty. Tap the pencil to add widgets.',
-              style: TextStyle(color: t.surface.onBaseMuted),
-            ),
-          ],
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 620),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('Start this page',
+                  textAlign: TextAlign.center,
+                  style: t.text.titleStyle.copyWith(color: t.surface.onBase)),
+              SizedBox(height: t.space.xs),
+              Text(
+                'Or add cards from the left and arrange them yourself.',
+                textAlign: TextAlign.center,
+                style: t.text.captionStyle
+                    .copyWith(color: t.surface.onBaseMuted, height: 1.4),
+              ),
+              SizedBox(height: t.space.lg),
+              _StartTile(
+                icon: HcIcons.dashboards,
+                title: 'A room',
+                blurb: rooms.isEmpty
+                    ? 'No room on this house has any devices in it yet.'
+                    : 'Everything in one room, on one card. It keeps meaning '
+                        'the room as the room changes.',
+                // A menu rather than a second screen: the choice is one word
+                // long and there is nothing else to decide.
+                trailing: rooms.isEmpty
+                    ? null
+                    : PopupMenuButton<String>(
+                        tooltip: 'Choose a room',
+                        onSelected: (room) =>
+                            onStart(PageStartKind.room, room: room),
+                        itemBuilder: (context) => [
+                          for (final (name, count) in rooms)
+                            PopupMenuItem(
+                              value: name,
+                              height: 34,
+                              child: Row(
+                                children: [
+                                  Expanded(child: Text(name)),
+                                  SizedBox(width: t.space.sm),
+                                  Text('$count',
+                                      style: t.text.captionStyle.copyWith(
+                                          color: t.surface.onBaseMuted,
+                                          fontFeatures: t.numericFontFeatures)),
+                                ],
+                              ),
+                            ),
+                        ],
+                        child: const _StartAction(label: 'Choose a room'),
+                      ),
+              ),
+              SizedBox(height: t.space.sm),
+              _StartTile(
+                icon: Icons.tv_outlined,
+                title: 'A wall display',
+                blurb: 'A 1920×1080 canvas that never scrolls, to compose on. '
+                    'Change the size in the panel on the right — nothing moves '
+                    'when you do.',
+                trailing: GestureDetector(
+                  onTap: () => onStart(PageStartKind.wall),
+                  child: const _StartAction(label: 'Make one'),
+                ),
+              ),
+              SizedBox(height: t.space.sm),
+              _StartTile(
+                icon: Icons.grid_on_outlined,
+                title: 'Blank',
+                blurb: 'The grid, empty. Cards are whole cells and float up to '
+                    'close gaps.',
+                trailing: GestureDetector(
+                  onTap: () => onStart(PageStartKind.blank),
+                  child: const _StartAction(label: 'Just the grid'),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
+    );
+  }
+}
+
+class _StartTile extends StatelessWidget {
+  const _StartTile({
+    required this.icon,
+    required this.title,
+    required this.blurb,
+    required this.trailing,
+  });
+
+  final IconData icon;
+  final String title;
+  final String blurb;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Container(
+      padding: EdgeInsets.all(t.space.md),
+      decoration: BoxDecoration(
+        color: t.surface.raised,
+        borderRadius: t.radius.mdR,
+        border: Border.all(color: t.stroke.hairline, width: t.stroke.width),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 18, color: t.surface.onBaseMuted),
+          SizedBox(width: t.space.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title,
+                    style: t.text.bodyStyle.copyWith(
+                        color: t.surface.onBase, fontWeight: FontWeight.w600)),
+                SizedBox(height: t.space.xs / 2),
+                Text(blurb,
+                    style: t.text.captionStyle
+                        .copyWith(color: t.surface.onBaseMuted, height: 1.4)),
+              ],
+            ),
+          ),
+          if (trailing case final action?) ...[
+            SizedBox(width: t.space.md),
+            action,
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _StartAction extends StatelessWidget {
+  const _StartAction({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Container(
+      padding:
+          EdgeInsets.symmetric(horizontal: t.space.md, vertical: t.space.xs),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(t.radius.pill),
+        border: Border.all(color: t.accent.active, width: t.stroke.width),
+      ),
+      child: Text(label,
+          style: t.text.captionStyle.copyWith(color: t.surface.onBase)),
     );
   }
 }
