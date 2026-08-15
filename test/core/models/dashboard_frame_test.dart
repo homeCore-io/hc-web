@@ -160,4 +160,71 @@ void main() {
       expect(placement.copyWith(x: 5).rect, isNotNull);
     });
   });
+
+  group('group boxes on the wire', () {
+    // The other half of `groups` — `group_frame_test.dart` covers what a box
+    // means, this covers whether the layout carries it. Same silent failure the
+    // frame guards against: styling a group, saving, and finding it plain.
+    DashboardLayout withGroups(List<GroupBox> groups) => DashboardLayout(
+          breakpoint: DashboardBreakpoint.desktop,
+          columns: 12,
+          rowHeight: 120,
+          gap: 12,
+          placements: const [],
+          groups: groups,
+        );
+
+    test('a styled group survives a round trip', () {
+      const box = GroupBox(
+        path: 'Wall/Lights',
+        rect: DashboardRect(x: 10.5, y: 20.25, w: 300, h: 180),
+        padding: 8,
+        radius: 16,
+        clip: true,
+      );
+      final after = DashboardLayout.fromJson(withGroups([box]).toJson());
+      expect(after.groups, [box]);
+      expect(after.groupBox('Wall/Lights'), box);
+      expect(after.groupBox('Wall'), isNull);
+    });
+
+    test('a layout with no styled groups gains no key', () {
+      // A page nobody has styled must not grow `groups` by being saved, or
+      // every stored document's diff stops meaning anything.
+      expect(withGroups(const []).toJson().containsKey('groups'), isFalse);
+      expect(
+        withGroups(const [GroupBox(path: 'Wall')])
+            .toJson()
+            .containsKey('groups'),
+        isFalse,
+        reason: 'a box that says nothing the default would not is not written',
+      );
+    });
+
+    test('a layout that predates group boxes reads as having none', () {
+      final layout = DashboardLayout.fromJson({
+        'breakpoint': 'desktop',
+        'columns': 12,
+        'row_height': 120.0,
+        'gap': 12.0,
+        'placements': <Object>[],
+      });
+      expect(layout.groups, isEmpty);
+    });
+
+    test('a box with no path is dropped rather than poisoning the layout', () {
+      final layout = DashboardLayout.fromJson({
+        'breakpoint': 'desktop',
+        'columns': 12,
+        'row_height': 120.0,
+        'gap': 12.0,
+        'placements': <Object>[],
+        'groups': [
+          {'clip': true},
+          {'path': 'Wall', 'clip': true},
+        ],
+      });
+      expect(layout.groups.map((g) => g.path), ['Wall']);
+    });
+  });
 }

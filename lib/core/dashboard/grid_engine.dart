@@ -340,6 +340,111 @@ class DashboardFrame {
 DashboardFrameFit _frameFitFrom(Object? raw) =>
     raw == 'fixed' ? DashboardFrameFit.fixed : DashboardFrameFit.scroll;
 
+/// A group's body: where its box sits, and what it looks like.
+///
+/// Membership is NOT here. A group is a path written into each widget's own
+/// config (`Wall/Lights`) — see `groups.dart` — and the path *is* the identity,
+/// which is what makes nesting free and an orphaned group impossible. This
+/// carries only what a path cannot say, for the groups somebody has styled.
+///
+/// A group with no box is what every group was before this existed: a named
+/// selection, drawn as nothing. So [rect] null is not missing data, it is
+/// "fit the members" — and that is the useful default, because a group nobody
+/// resized should not need saved geometry to stay right when a member moves.
+class GroupBox {
+  const GroupBox({
+    required this.path,
+    this.rect,
+    this.padding = 0,
+    this.radius,
+    this.clip = false,
+  });
+
+  final String path;
+
+  /// The box in frame units, or null to fit the members.
+  final DashboardRect? rect;
+
+  /// Space between the box's edge and its members' bounding box. Ignored when
+  /// [rect] is set, where the box is stated outright rather than derived.
+  final double padding;
+
+  /// Corner radius in frame units, or null to take the skin's.
+  final double? radius;
+
+  /// Whether members are clipped to the box.
+  ///
+  /// False by default and deliberately: making a group into a container must
+  /// not hide a card that was visible a moment ago.
+  final bool clip;
+
+  /// True when this box says nothing the default would not.
+  ///
+  /// Used to drop it on save rather than write a row that changes nothing —
+  /// a document that grows entries by being read is one whose diffs stop
+  /// meaning anything, the same rule `frame` and `rect` follow.
+  bool get isPlain => rect == null && padding == 0 && radius == null && !clip;
+
+  GroupBox copyWith({
+    String? path,
+    Object? rect = _unchangedRect,
+    double? padding,
+    Object? radius = _unchangedRect,
+    bool? clip,
+  }) =>
+      GroupBox(
+        path: path ?? this.path,
+        // Sentinels for both nullable fields: clearing a box back to "fit the
+        // members", or back to the skin's radius, is a real edit that null
+        // alone cannot express.
+        rect: identical(rect, _unchangedRect)
+            ? this.rect
+            : rect as DashboardRect?,
+        padding: padding ?? this.padding,
+        radius:
+            identical(radius, _unchangedRect) ? this.radius : radius as double?,
+        clip: clip ?? this.clip,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'path': path,
+        if (rect != null) 'rect': rect!.toJson(),
+        if (padding != 0) 'padding': padding,
+        if (radius != null) 'radius': radius,
+        if (clip) 'clip': clip,
+      };
+
+  /// Null when there is no path — a box that names no group styles nothing,
+  /// and core rejects it.
+  static GroupBox? fromJson(Object? json) {
+    if (json is! Map) return null;
+    final path = json['path'];
+    if (path is! String || path.trim().isEmpty) return null;
+    final padding = DashboardRect._finite(json['padding']) ?? 0;
+    final radius = DashboardRect._finite(json['radius']);
+    return GroupBox(
+      path: path,
+      rect: DashboardRect.fromJson(json['rect']),
+      // A negative padding would be a group smaller than the things inside it.
+      padding: padding < 0 ? 0 : padding,
+      radius: radius == null || radius < 0 ? null : radius,
+      clip: json['clip'] == true,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is GroupBox &&
+      other.path == path &&
+      other.rect == rect &&
+      other.padding == padding &&
+      other.radius == radius &&
+      other.clip == clip;
+
+  @override
+  int get hashCode => Object.hash(path, rect, padding, radius, clip);
+}
+
 /// What empty space in a layout means. Mirrors core's `DashboardFlow`.
 enum GridFlow {
   /// Gaps close: a card floats up until something stops it. Every layout

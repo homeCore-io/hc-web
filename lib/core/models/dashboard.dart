@@ -158,6 +158,18 @@ class DashboardLayout {
   /// Whether this layout is composed rather than merely arranged.
   bool get isComposed => frame != null;
 
+  /// Groups that have been given a body, keyed by their path.
+  ///
+  /// Empty on every layout whose groups are just named selections — which is
+  /// all of them before this field. Membership is not here: a group is a path
+  /// in each widget's config, so this styles groups rather than defining them,
+  /// and a box whose path nothing claims is inert rather than broken.
+  final List<GroupBox> groups;
+
+  /// The box for [path], or null when that group has never been styled.
+  GroupBox? groupBox(String path) =>
+      groups.where((g) => g.path == path).firstOrNull;
+
   const DashboardLayout({
     required this.breakpoint,
     required this.columns,
@@ -167,6 +179,7 @@ class DashboardLayout {
     this.derivedFrom,
     this.flow = GridFlow.packed,
     this.frame,
+    this.groups = const [],
   });
 
   /// `derivedFrom` needs an explicit sentinel because null is a meaningful
@@ -182,6 +195,7 @@ class DashboardLayout {
     Object? derivedFrom = _unchanged,
     GridFlow? flow,
     Object? frame = _unchanged,
+    List<GroupBox>? groups,
   }) {
     return DashboardLayout(
       breakpoint: breakpoint ?? this.breakpoint,
@@ -197,6 +211,7 @@ class DashboardLayout {
       // back to a plain grid is a real edit that null alone cannot express.
       frame:
           identical(frame, _unchanged) ? this.frame : frame as DashboardFrame?,
+      groups: groups ?? this.groups,
     );
   }
 
@@ -222,6 +237,15 @@ class DashboardLayout {
         // must not gain a key by being saved — a document that grows keys by
         // being read is one whose diffs stop meaning anything.
         if (frame != null) 'frame': frame!.toJson(),
+        // Omitted when empty, matching core's `skip_serializing_if`. A box that
+        // says nothing the default would not is dropped rather than written:
+        // naming a group must not make every later save carry a row that
+        // changes nothing.
+        if (groups.any((g) => !g.isPlain))
+          'groups': [
+            for (final group in groups)
+              if (!group.isPlain) group.toJson()
+          ],
       };
 
   factory DashboardLayout.fromJson(Map<String, dynamic> json) =>
@@ -253,6 +277,10 @@ class DashboardLayout {
         // in a layout authored expecting them closed.
         flow: json['flow'] == 'free' ? GridFlow.free : GridFlow.packed,
         frame: DashboardFrame.fromJson(json['frame']),
+        groups: ((json['groups'] as List?) ?? const [])
+            .map(GroupBox.fromJson)
+            .whereType<GroupBox>()
+            .toList(),
       );
 }
 
