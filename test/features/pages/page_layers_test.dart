@@ -9,7 +9,7 @@ import 'package:hc_web/core/providers/dashboards_provider.dart';
 import 'package:hc_web/core/providers/devices_provider.dart';
 import 'package:hc_web/design/skins.dart';
 import 'package:hc_web/features/dashboard/builtin_cards.dart';
-import 'package:hc_web/features/pages/page_layers.dart';
+import 'package:hc_web/features/pages/layer_tree_panel.dart';
 import 'package:hc_web/features/pages/page_screen.dart';
 
 /// The layers strip, and the rename it made necessary.
@@ -121,10 +121,10 @@ Future<void> _openDesigner(WidgetTester tester) async {
 /// The chip labels, left to right.
 List<String> _chips(WidgetTester tester) => tester
     .widgetList<Text>(find.descendant(
-        of: find.byType(PageLayers), matching: find.byType(Text)))
+        of: find.byType(LayerTreePanel), matching: find.byType(Text)))
     .map((t) => t.data ?? '')
     // The header — its own label and the count — is not a layer.
-    .where((s) => s != 'On this page' && int.tryParse(s) == null)
+    .where((s) => s != 'Layers' && int.tryParse(s) == null)
     .toList();
 
 void main() {
@@ -145,36 +145,28 @@ void main() {
       await _openDesigner(tester);
       expect(
           find.descendant(
-              of: find.byType(PageLayers), matching: find.text('Spacer')),
+              of: find.byType(LayerTreePanel), matching: find.text('Spacer')),
           findsOneWidget);
     });
 
     testWidgets('selecting from it selects on the canvas', (tester) async {
       await _openDesigner(tester);
       await tester.tap(find.descendant(
-          of: find.byType(PageLayers), matching: find.text('Spacer')));
+          of: find.byType(LayerTreePanel), matching: find.text('Spacer')));
       await tester.pumpAndSettle();
       // The status bar is the shared answer to "what is selected".
       expect(find.text('2×1 at 4,0'), findsOneWidget);
     });
 
-    testWidgets('it can be shut', (tester) async {
-      await _openDesigner(tester);
-      expect(_chips(tester), isNotEmpty);
-      await tester.tap(find.text('On this page'));
-      await tester.pumpAndSettle();
-      expect(_chips(tester), isEmpty);
-      // The header stays, so it can be opened again.
-      expect(find.text('On this page'), findsOneWidget);
-    });
-  });
-
-  group('rename', () {
+    // `it can be shut` lived here. The strip could be collapsed away
+    // entirely, which a tab cannot be and should not be — the rail replaces
+    // "hide the whole list" with "fold up a group", which is a better answer
+    // and is tested with the tree.
     testWidgets('changes the name on the card and in the strip',
         (tester) async {
       await _openDesigner(tester);
       await tester.tap(find.descendant(
-          of: find.byType(PageLayers), matching: find.text('Downstairs')));
+          of: find.byType(LayerTreePanel), matching: find.text('Downstairs')));
       await tester.pumpAndSettle();
 
       await tester.enterText(
@@ -194,7 +186,7 @@ void main() {
       expect(find.text('Saved'), findsOneWidget);
 
       await tester.tap(find.descendant(
-          of: find.byType(PageLayers), matching: find.text('Upstairs')));
+          of: find.byType(LayerTreePanel), matching: find.text('Upstairs')));
       await tester.pumpAndSettle();
       await tester.enterText(
           find.byKey(const ValueKey('title-upper')), 'Landing');
@@ -210,7 +202,7 @@ void main() {
       // means "arranged by hand", and renaming a card arranges nothing.
       await _openDesigner(tester);
       await tester.tap(find.descendant(
-          of: find.byType(PageLayers), matching: find.text('Upstairs')));
+          of: find.byType(LayerTreePanel), matching: find.text('Upstairs')));
       await tester.pumpAndSettle();
       await tester.enterText(
           find.byKey(const ValueKey('title-upper')), 'Landing');

@@ -16,9 +16,9 @@ import 'canvas_rulers.dart';
 import 'card_inspector.dart';
 import 'card_library.dart';
 import 'inspector_controls.dart';
+import 'layer_tree_panel.dart';
 import 'page_inspector.dart';
 import 'page_background.dart';
-import 'page_layers.dart';
 import 'scaled_canvas.dart';
 
 /// The design surface: a tool, not a page.
@@ -84,6 +84,8 @@ class DesignerShell extends StatefulWidget {
     this.onEnterGroup,
     this.groupBox,
     this.onGroupBox,
+    this.onSelectMany,
+    this.onEnterGroupId,
     required this.groupInHand,
     required this.inside,
     required this.items,
@@ -116,6 +118,13 @@ class DesignerShell extends StatefulWidget {
   /// selection needs to know *which*, because the rectangle it scrolls to is
   /// the box around those cards and nothing else.
   final Set<String> selectedIds;
+
+  /// Replace the selection outright. The layers tree selects a whole group in
+  /// one click, which no per-card callback can express.
+  final ValueChanged<Set<String>>? onSelectMany;
+
+  /// Step inside the group that [id] belongs to.
+  final ValueChanged<String>? onEnterGroupId;
   final DashboardWidgetModel? selected;
   final GridItem? selectedItem;
   final String? consequence;
@@ -248,7 +257,6 @@ class _DesignerShellState extends State<DesignerShell> {
   /// The layers strip starts open. It is one row tall and it is the only thing
   /// that names the elements which draw nothing — closing it by default would
   /// hide the answer to a question you do not know you have yet.
-  bool _layersOpen = true;
 
   /// Space is down, so the canvas is a thing you drag rather than a thing you
   /// arrange. Held here rather than read from [HardwareKeyboard] on each event
@@ -509,7 +517,14 @@ class _DesignerShellState extends State<DesignerShell> {
                       border: Border(
                           right: BorderSide(
                               color: t.stroke.hairline, width: t.stroke.width)),
-                      child: CardLibrary(onPick: widget.onPick),
+                      child: _LeftRail(
+                        items: widget.items,
+                        widgetsById: widget.widgetsById,
+                        selectedIds: widget.selectedIds,
+                        onSelectMany: widget.onSelectMany,
+                        onEnterGroupId: widget.onEnterGroupId,
+                        onPick: widget.onPick,
+                      ),
                     ),
                     // The canvas is the only thing allowed to be large. It
                     // scrolls inside itself; the frame around it never moves.
@@ -662,14 +677,15 @@ class _DesignerShellState extends State<DesignerShell> {
                   ],
                 ),
               ),
-              PageLayers(
-                items: widget.items,
-                widgetsById: widget.widgetsById,
-                selectedId: widget.selected?.id,
-                onSelect: widget.onSelectCard,
-                open: _layersOpen,
-                onToggle: () => setState(() => _layersOpen = !_layersOpen),
-              ),
+              // The bottom strip that used to be here is **deleted**, not
+              // moved: the rail's Layers tab says the same names and more, with
+              // the grouping shown and a row you can actually hit. Two lists of
+              // one page is one list too many, and the strip was the one to
+              // give — it cost a band of height off the canvas to say less.
+              //
+              // `PageLayers` had no other caller, so it went with it. The tests
+              // that pinned its behaviour now point at the tree, because the
+              // behaviour is the same and only its home changed.
               _StatusBar(
                 selectedCount: widget.selectedCount,
                 item: widget.selectedItem,
@@ -1242,6 +1258,115 @@ class _ManySelected extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// The left rail: what is on the page, and what you can add to it.
+///
+/// **Layers is the default tab, and that is the point of the change.** The rail
+/// used to be the card library and nothing else — Rooms, Kinds, a search box —
+/// so the permanent furniture of a design tool was a catalogue of things you
+/// have not put on the page yet. Adding is something you do in bursts;
+/// selecting, grouping and finding are what you do continuously.
+///
+/// Two tabs, not four. The mock has Assets and Styles beside these, and both
+/// are real destinations — but a tab that opens an empty panel is a worse
+/// answer than a tab that is not there yet, so they arrive when they have
+/// something behind them.
+class _LeftRail extends StatefulWidget {
+  const _LeftRail({
+    required this.items,
+    required this.widgetsById,
+    required this.selectedIds,
+    required this.onPick,
+    this.onSelectMany,
+    this.onEnterGroupId,
+  });
+
+  final List<GridItem> items;
+  final Map<String, DashboardWidgetModel> widgetsById;
+  final Set<String> selectedIds;
+  final ValueChanged<DashboardWidgetModel> onPick;
+  final ValueChanged<Set<String>>? onSelectMany;
+  final ValueChanged<String>? onEnterGroupId;
+
+  @override
+  State<_LeftRail> createState() => _LeftRailState();
+}
+
+class _LeftRailState extends State<_LeftRail> {
+  bool _layers = true;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            _RailTab(
+              label: 'Layers',
+              on: _layers,
+              onTap: () => setState(() => _layers = true),
+            ),
+            _RailTab(
+              label: 'Add',
+              on: !_layers,
+              onTap: () => setState(() => _layers = false),
+            ),
+          ],
+        ),
+        Divider(height: t.stroke.width, color: t.stroke.hairline),
+        Expanded(
+          child: _layers
+              ? LayerTreePanel(
+                  items: widget.items,
+                  widgetsById: widget.widgetsById,
+                  selectedIds: widget.selectedIds,
+                  onSelect: (ids) => widget.onSelectMany?.call(ids),
+                  onEnterGroup: widget.onEnterGroupId,
+                )
+              : CardLibrary(onPick: widget.onPick),
+        ),
+      ],
+    );
+  }
+}
+
+class _RailTab extends StatelessWidget {
+  const _RailTab({required this.label, required this.on, required this.onTap});
+
+  final String label;
+  final bool on;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          padding: EdgeInsets.symmetric(vertical: t.space.sm),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(
+                color: on ? t.accent.active : Colors.transparent,
+                width: 2,
+              ),
+            ),
+          ),
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            style: t.text.overlineStyle.copyWith(
+              color: on ? t.surface.onBase : t.surface.onBaseMuted,
+            ),
+          ),
+        ),
       ),
     );
   }

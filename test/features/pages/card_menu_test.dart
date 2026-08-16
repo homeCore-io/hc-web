@@ -101,7 +101,9 @@ Future<void> _open(WidgetTester tester) async {
 
 /// Right-clicks the first card and waits for the menu.
 Future<void> _openMenu(WidgetTester tester) async {
-  final card = find.text('Lights').first;
+  // Scoped to the canvas. The left rail's layers tree lists the same names, so
+  // an unscoped `.first` right-clicks a list row and no card menu opens.
+  final card = _onCanvas(tester, 'Lights').first;
   final gesture =
       await tester.startGesture(tester.getCenter(card), buttons: 0x02);
   await gesture.up();
