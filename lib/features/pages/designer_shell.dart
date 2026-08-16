@@ -75,6 +75,8 @@ class DesignerShell extends StatefulWidget {
     this.onDistribute,
     this.onNudge,
     this.onDuplicate,
+    this.onCopy,
+    this.onPaste,
     this.onSelectAll,
     this.onGroup,
     this.onUngroup,
@@ -165,6 +167,12 @@ class DesignerShell extends StatefulWidget {
 
   /// Everything on this layout.
   final VoidCallback? onSelectAll;
+
+  /// Put what is in hand on the system clipboard, and take whatever is there
+  /// and land it on this page. Null when there is nothing to copy, but paste
+  /// stays live with an empty selection — that is the whole point of it.
+  final VoidCallback? onCopy;
+  final VoidCallback? onPaste;
 
   /// Hold the selection as one thing, or stop.
   final VoidCallback? onGroup;
@@ -509,6 +517,8 @@ class _DesignerShellState extends State<DesignerShell> {
                       child: _CanvasKeys(
                         onNudge: widget.onNudge,
                         onDuplicate: widget.onDuplicate,
+                        onCopy: widget.onCopy,
+                        onPaste: widget.onPaste,
                         onSelectAll: widget.onSelectAll,
                         onRemove: widget.selectedCount == 0
                             ? null
@@ -1252,6 +1262,8 @@ class _CanvasKeys extends StatelessWidget {
   const _CanvasKeys({
     required this.onNudge,
     required this.onDuplicate,
+    required this.onCopy,
+    required this.onPaste,
     required this.onSelectAll,
     required this.onRemove,
     required this.onDeselect,
@@ -1268,6 +1280,8 @@ class _CanvasKeys extends StatelessWidget {
   final void Function(int dx, int dy)? onNudge;
   final VoidCallback? onDuplicate;
   final VoidCallback? onSelectAll;
+  final VoidCallback? onCopy;
+  final VoidCallback? onPaste;
   final VoidCallback? onRemove;
   final VoidCallback onDeselect;
   final VoidCallback onFit;
@@ -1303,6 +1317,17 @@ class _CanvasKeys extends StatelessWidget {
             onDuplicate?.call(),
         const SingleActivator(LogicalKeyboardKey.keyD, control: true): () =>
             onDuplicate?.call(),
+        // Copy and paste, which duplicate is not: ⌘D repeats a card on the
+        // page it is already on, and the usual way anybody builds a second
+        // page is out of parts of the first.
+        const SingleActivator(LogicalKeyboardKey.keyC, meta: true): () =>
+            onCopy?.call(),
+        const SingleActivator(LogicalKeyboardKey.keyC, control: true): () =>
+            onCopy?.call(),
+        const SingleActivator(LogicalKeyboardKey.keyV, meta: true): () =>
+            onPaste?.call(),
+        const SingleActivator(LogicalKeyboardKey.keyV, control: true): () =>
+            onPaste?.call(),
         const SingleActivator(LogicalKeyboardKey.keyA, meta: true): () =>
             onSelectAll?.call(),
         const SingleActivator(LogicalKeyboardKey.keyA, control: true): () =>
