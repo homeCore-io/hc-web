@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart' show kSecondaryButton;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -201,5 +202,55 @@ void main() {
     await _chord(tester, LogicalKeyboardKey.keyZ);
     expect(_card('A'), findsOneWidget,
         reason: 'undo takes back the whole paste, because it was one decision');
+  });
+
+  group('finding it without knowing the shortcut', () {
+    // Keyboard-only is the same as non-existent for most people. These pin
+    // that the card menu offers the three operations and names their keys.
+    Future<void> menu(WidgetTester tester, String title) async {
+      final card = _card(title);
+      await tester.tapAt(tester.getCenter(card), buttons: kSecondaryButton);
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('the card menu offers copy, cut and paste', (tester) async {
+      await _open(tester);
+      await menu(tester, 'A');
+      expect(find.text('Copy'), findsOneWidget);
+      expect(find.text('Cut'), findsOneWidget);
+      expect(find.text('Paste'), findsOneWidget);
+    });
+
+    testWidgets('and says which keys do the same thing', (tester) async {
+      await _open(tester);
+      await menu(tester, 'A');
+      // Whatever the platform calls them — the label is derived, so asserting
+      // on one spelling would pin the test to the machine it ran on.
+      expect(find.textContaining('C'), findsWidgets);
+      expect(find.textContaining('V'), findsWidgets);
+    });
+
+    testWidgets('copy from the menu reaches the clipboard', (tester) async {
+      await _open(tester);
+      await menu(tester, 'A');
+      await tester.tap(find.text('Copy'));
+      await tester.pumpAndSettle();
+      expect(decodeCards(clipboardText)!.cards.single.widget.id, 'a');
+    });
+
+    testWidgets('cut takes the card and leaves it on the clipboard',
+        (tester) async {
+      await _open(tester);
+      await menu(tester, 'A');
+      await tester.tap(find.text('Cut'));
+      await tester.pumpAndSettle();
+
+      expect(_card('A'), findsNothing, reason: 'cut removes it');
+      expect(decodeCards(clipboardText), isNotNull,
+          reason: 'a cut whose copy failed is a delete');
+
+      await _chord(tester, LogicalKeyboardKey.keyV);
+      expect(_card('A'), findsOneWidget, reason: 'and it can be put back');
+    });
   });
 }

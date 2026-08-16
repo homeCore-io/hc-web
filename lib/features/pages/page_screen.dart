@@ -1,4 +1,5 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart'
+    show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'
     show BrowserContextMenu, Clipboard, ClipboardData;
@@ -1230,6 +1231,14 @@ class _PageScreenState extends ConsumerState<PageScreen> {
   /// The size presets are the one thing here that is genuinely faster than the
   /// alternative: dragging a card to exactly half the grid means counting
   /// columns, and "Half width" is what you actually meant.
+  /// `⌘C` on a Mac, `Ctrl+C` everywhere else — the label only, for a menu.
+  ///
+  /// Read from the platform rather than from the pointer, because the keyboard
+  /// is what it describes: a Mac keyboard has a Command key whatever is
+  /// plugged into the mouse port.
+  static String _shortcut(String key) =>
+      defaultTargetPlatform == TargetPlatform.macOS ? '⌘$key' : 'Ctrl+$key';
+
   Future<void> _cardMenu(String id, Offset at, int columns) async {
     final model = _draftWidgets?[id];
     final item =
@@ -1251,6 +1260,15 @@ class _PageScreenState extends ConsumerState<PageScreen> {
       items: [
         const PopupMenuItem(value: 'configure', child: Text('Configure')),
         const PopupMenuItem(value: 'duplicate', child: Text('Duplicate')),
+        const PopupMenuDivider(),
+        // Copy, cut and paste were keyboard-only when they landed, which for
+        // most people is the same as not existing. The shortcut is shown
+        // beside each one so the menu teaches the keyboard rather than
+        // replacing it — the way you find out ⌘C works here is by looking for
+        // Copy and reading what is next to it.
+        _MenuRow.item('copy', 'Copy', _shortcut('C')),
+        _MenuRow.item('cut', 'Cut', _shortcut('X')),
+        _MenuRow.item('paste', 'Paste', _shortcut('V')),
         const PopupMenuDivider(),
         const PopupMenuItem(value: 'half', child: Text('Half width')),
         const PopupMenuItem(value: 'full', child: Text('Full width')),
@@ -1278,6 +1296,23 @@ class _PageScreenState extends ConsumerState<PageScreen> {
         _select(id);
       case 'duplicate':
         _duplicateCard(model, item, columns);
+      case 'copy':
+        await _copySelection();
+      case 'cut':
+        // Copy first and only remove if it landed. A cut whose copy silently
+        // failed is a delete, and the card is gone with nothing to paste.
+        if (await _copySelection()) {
+          if (mounted) _removeWidget(id, columns);
+        }
+      case 'paste':
+        await _paste(
+          columns,
+          _draftLayouts
+                  ?.where((l) => l.breakpoint == _editingBreakpoint)
+                  .firstOrNull
+                  ?.isComposed ??
+              false,
+        );
       case 'half':
         _apply((e, its) => e.resize(its, id, columns ~/ 2, item.h), columns,
             byHand: true);
@@ -1377,7 +1412,7 @@ class _PageScreenState extends ConsumerState<PageScreen> {
   /// The whole selection as one payload, not a card at a time: two cards copied
   /// side by side have to arrive side by side, and that only works if their
   /// arrangement travels with them — see `clipboard.dart`.
-  Future<void> _copySelection() async {
+  Future<bool> _copySelection() async {
     final text = encodeCards(
       ids: _selection,
       widgets: _draftWidgets ?? const {},
@@ -1389,13 +1424,14 @@ class _PageScreenState extends ConsumerState<PageScreen> {
               ?.isComposed ??
           false,
     );
-    if (text == null) return;
+    if (text == null) return false;
     await Clipboard.setData(ClipboardData(text: text));
-    if (!mounted) return;
+    if (!mounted) return true;
     final n = _selection.length;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(n == 1 ? 'Card copied' : '$n cards copied'),
     ));
+    return true;
   }
 
   /// Land whatever is on the clipboard on this page.
@@ -2386,6 +2422,38 @@ class _PreviewFrame extends StatelessWidget {
 /// Says which page, says why, and offers the one useful action. The failure it
 /// reports is almost never about this page in particular — the list is the
 /// whole house's — so it names the page rather than blaming it.
+/// A menu row that names its keyboard shortcut.
+///
+/// The point is teaching, not decoration. A tool whose copy and paste are
+/// keyboard-only has them for the people who already guessed; putting the
+/// shortcut beside the label is how everyone else finds out it is there — and
+/// stops needing the menu.
+class _MenuRow extends StatelessWidget {
+  const _MenuRow(this.label, this.keys);
+
+  final String label;
+  final String keys;
+
+  /// The whole row as a menu entry, since every caller wants exactly this.
+  static PopupMenuItem<String> item(String value, String label, String keys) =>
+      PopupMenuItem(value: value, child: _MenuRow(label, keys));
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Row(
+      children: [
+        Expanded(child: Text(label)),
+        SizedBox(width: t.space.md),
+        Text(
+          keys,
+          style: t.text.captionStyle.copyWith(color: t.surface.onBaseMuted),
+        ),
+      ],
+    );
+  }
+}
+
 class _PageLoadFailed extends StatelessWidget {
   const _PageLoadFailed({required this.error, required this.onRetry});
 
