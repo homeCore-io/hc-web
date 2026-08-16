@@ -1,11 +1,13 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show BrowserContextMenu;
+import 'package:flutter/services.dart'
+    show BrowserContextMenu, Clipboard, ClipboardData;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/dashboard/breakpoints.dart';
 import '../../core/dashboard/canvas_view.dart';
+import '../../core/dashboard/clipboard.dart';
 import '../../core/dashboard/frame.dart';
 import '../../core/dashboard/free_layer.dart';
 import '../../core/dashboard/grid_engine.dart';
@@ -95,6 +97,38 @@ class _PageScreenState extends ConsumerState<PageScreen> {
     // ordinary page the browser menu is useful — copying a device name out of
     // one is a reasonable thing to want.
     if (kIsWeb && widget.designer) BrowserContextMenu.disableContextMenu();
+  }
+
+  /// A different page arrived in the same screen.
+  ///
+  /// **This is a data-loss guard, not housekeeping.** Going from one design
+  /// route straight to another — `/pages/a/design` to `/pages/b/design` —
+  /// reuses this State, because go_router sees the same widget in the same
+  /// place. Every draft field survived that: the canvas showed page A's cards
+  /// under page B's name, and pressing Save wrote A's widgets and layouts onto
+  /// B. Nothing warned, and the only tell was the title.
+  ///
+  /// It is the same failure `layout_write.dart` exists to prevent, one level
+  /// up: an editor that writes back something it never read. There it was the
+  /// other breakpoints; here it is the other *page*.
+  @override
+  void didUpdateWidget(PageScreen old) {
+    super.didUpdateWidget(old);
+    if (old.dashboardId == widget.dashboardId) return;
+    // Everything below belongs to the page that just left. The designer
+    // re-enters editing on the next build, so dropping the draft is enough —
+    // it does not have to be rebuilt here.
+    _exitEditing();
+    setState(() {
+      _draftBackground = null;
+      _undo.clear();
+      _redo.clear();
+      _inside = null;
+      _dismissedStart = false;
+    });
+    // `_editing` is derived from the draft, so clearing the draft above has
+    // already ended the edit — there is no flag to reset and no way for the two
+    // to disagree.
   }
 
   @override
@@ -1338,6 +1372,86 @@ class _PageScreenState extends ConsumerState<PageScreen> {
   /// Under rather than beside: a card is often as wide as the space it had, so
   /// there is rarely room next to it, and a duplicate that lands at first fit
   /// appears somewhere you are not looking.
+  /// Put what is in hand on the system clipboard.
+  ///
+  /// The whole selection as one payload, not a card at a time: two cards copied
+  /// side by side have to arrive side by side, and that only works if their
+  /// arrangement travels with them — see `clipboard.dart`.
+  Future<void> _copySelection() async {
+    final text = encodeCards(
+      ids: _selection,
+      widgets: _draftWidgets ?? const {},
+      items: _draftItems ?? const [],
+      paths: _paths,
+      composed: _draftLayouts
+              ?.where((l) => l.breakpoint == _editingBreakpoint)
+              .firstOrNull
+              ?.isComposed ??
+          false,
+    );
+    if (text == null) return;
+    await Clipboard.setData(ClipboardData(text: text));
+    if (!mounted) return;
+    final n = _selection.length;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(n == 1 ? 'Card copied' : '$n cards copied'),
+    ));
+  }
+
+  /// Land whatever is on the clipboard on this page.
+  ///
+  /// Live even with nothing selected — pasting is how a card gets *onto* a
+  /// page, so requiring a selection first would be requiring the thing you are
+  /// trying to create.
+  ///
+  /// Silent when the clipboard holds something that is not ours. A person
+  /// pressing ⌘V having copied a URL has not made a mistake worth a message,
+  /// and a page that announced every foreign clipboard would be shouting at
+  /// ordinary use.
+  Future<void> _paste(int columns, bool composedTarget) async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    final cards = decodeCards(data?.text);
+    if (cards == null || !mounted) return;
+    if (_draftItems == null || _draftWidgets == null) return;
+
+    // Below everything already on the page. Pasting on top of the existing
+    // arrangement would hide what you have and what you just added at the same
+    // time; the engine then packs it up into whatever room there is.
+    var below = 0;
+    for (final i in _draftItems!) {
+      if (i.bottom > below) below = i.bottom;
+    }
+    final stamped = DateTime.now().microsecondsSinceEpoch;
+    final pasted = pasteInto(
+      cards: cards,
+      columns: columns,
+      atX: 0,
+      atY: below,
+      stamp: (i) => 'widget_${stamped}_$i',
+      composedTarget: composedTarget,
+      taken: _paths.values.whereType<String>().toSet(),
+    );
+
+    _pushUndo('Paste');
+    setState(() {
+      _draftWidgets = {...?_draftWidgets, ...pasted.widgets};
+      var next = _draftItems!;
+      for (final item in pasted.items) {
+        next = _engine(columns).addAt(next, item, item.x, item.y);
+      }
+      _commit(next);
+      _contentDirty = true;
+      _selection
+        ..clear()
+        ..addAll(pasted.widgets.keys);
+    });
+    if (!mounted) return;
+    final n = pasted.items.length;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(n == 1 ? 'Card pasted' : '$n cards pasted'),
+    ));
+  }
+
   void _duplicateCard(DashboardWidgetModel model, GridItem item, int columns) {
     final copy = model.copyWith(
       id: 'widget_${DateTime.now().microsecondsSinceEpoch}',
@@ -1870,6 +1984,8 @@ class _PageScreenState extends ConsumerState<PageScreen> {
                       }
                     }
                   },
+            onCopy: _selection.isEmpty ? null : _copySelection,
+            onPaste: () => _paste(columns, layout.isComposed),
             onSelectAll: () => setState(() {
               _selection
                 ..clear()
