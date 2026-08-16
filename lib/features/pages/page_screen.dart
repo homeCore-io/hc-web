@@ -1,11 +1,14 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart'
+    show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show BrowserContextMenu;
+import 'package:flutter/services.dart'
+    show BrowserContextMenu, Clipboard, ClipboardData;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/dashboard/breakpoints.dart';
 import '../../core/dashboard/canvas_view.dart';
+import '../../core/dashboard/clipboard.dart';
 import '../../core/dashboard/frame.dart';
 import '../../core/dashboard/free_layer.dart';
 import '../../core/dashboard/grid_engine.dart';
@@ -95,6 +98,38 @@ class _PageScreenState extends ConsumerState<PageScreen> {
     // ordinary page the browser menu is useful — copying a device name out of
     // one is a reasonable thing to want.
     if (kIsWeb && widget.designer) BrowserContextMenu.disableContextMenu();
+  }
+
+  /// A different page arrived in the same screen.
+  ///
+  /// **This is a data-loss guard, not housekeeping.** Going from one design
+  /// route straight to another — `/pages/a/design` to `/pages/b/design` —
+  /// reuses this State, because go_router sees the same widget in the same
+  /// place. Every draft field survived that: the canvas showed page A's cards
+  /// under page B's name, and pressing Save wrote A's widgets and layouts onto
+  /// B. Nothing warned, and the only tell was the title.
+  ///
+  /// It is the same failure `layout_write.dart` exists to prevent, one level
+  /// up: an editor that writes back something it never read. There it was the
+  /// other breakpoints; here it is the other *page*.
+  @override
+  void didUpdateWidget(PageScreen old) {
+    super.didUpdateWidget(old);
+    if (old.dashboardId == widget.dashboardId) return;
+    // Everything below belongs to the page that just left. The designer
+    // re-enters editing on the next build, so dropping the draft is enough —
+    // it does not have to be rebuilt here.
+    _exitEditing();
+    setState(() {
+      _draftBackground = null;
+      _undo.clear();
+      _redo.clear();
+      _inside = null;
+      _dismissedStart = false;
+    });
+    // `_editing` is derived from the draft, so clearing the draft above has
+    // already ended the edit — there is no flag to reset and no way for the two
+    // to disagree.
   }
 
   @override
@@ -1196,6 +1231,14 @@ class _PageScreenState extends ConsumerState<PageScreen> {
   /// The size presets are the one thing here that is genuinely faster than the
   /// alternative: dragging a card to exactly half the grid means counting
   /// columns, and "Half width" is what you actually meant.
+  /// `⌘C` on a Mac, `Ctrl+C` everywhere else — the label only, for a menu.
+  ///
+  /// Read from the platform rather than from the pointer, because the keyboard
+  /// is what it describes: a Mac keyboard has a Command key whatever is
+  /// plugged into the mouse port.
+  static String _shortcut(String key) =>
+      defaultTargetPlatform == TargetPlatform.macOS ? '⌘$key' : 'Ctrl+$key';
+
   Future<void> _cardMenu(String id, Offset at, int columns) async {
     final model = _draftWidgets?[id];
     final item =
@@ -1217,6 +1260,15 @@ class _PageScreenState extends ConsumerState<PageScreen> {
       items: [
         const PopupMenuItem(value: 'configure', child: Text('Configure')),
         const PopupMenuItem(value: 'duplicate', child: Text('Duplicate')),
+        const PopupMenuDivider(),
+        // Copy, cut and paste were keyboard-only when they landed, which for
+        // most people is the same as not existing. The shortcut is shown
+        // beside each one so the menu teaches the keyboard rather than
+        // replacing it — the way you find out ⌘C works here is by looking for
+        // Copy and reading what is next to it.
+        _MenuRow.item('copy', 'Copy', _shortcut('C')),
+        _MenuRow.item('cut', 'Cut', _shortcut('X')),
+        _MenuRow.item('paste', 'Paste', _shortcut('V')),
         const PopupMenuDivider(),
         const PopupMenuItem(value: 'half', child: Text('Half width')),
         const PopupMenuItem(value: 'full', child: Text('Full width')),
@@ -1244,6 +1296,23 @@ class _PageScreenState extends ConsumerState<PageScreen> {
         _select(id);
       case 'duplicate':
         _duplicateCard(model, item, columns);
+      case 'copy':
+        await _copySelection();
+      case 'cut':
+        // Copy first and only remove if it landed. A cut whose copy silently
+        // failed is a delete, and the card is gone with nothing to paste.
+        if (await _copySelection()) {
+          if (mounted) _removeWidget(id, columns);
+        }
+      case 'paste':
+        await _paste(
+          columns,
+          _draftLayouts
+                  ?.where((l) => l.breakpoint == _editingBreakpoint)
+                  .firstOrNull
+                  ?.isComposed ??
+              false,
+        );
       case 'half':
         _apply((e, its) => e.resize(its, id, columns ~/ 2, item.h), columns,
             byHand: true);
@@ -1338,6 +1407,87 @@ class _PageScreenState extends ConsumerState<PageScreen> {
   /// Under rather than beside: a card is often as wide as the space it had, so
   /// there is rarely room next to it, and a duplicate that lands at first fit
   /// appears somewhere you are not looking.
+  /// Put what is in hand on the system clipboard.
+  ///
+  /// The whole selection as one payload, not a card at a time: two cards copied
+  /// side by side have to arrive side by side, and that only works if their
+  /// arrangement travels with them — see `clipboard.dart`.
+  Future<bool> _copySelection() async {
+    final text = encodeCards(
+      ids: _selection,
+      widgets: _draftWidgets ?? const {},
+      items: _draftItems ?? const [],
+      paths: _paths,
+      composed: _draftLayouts
+              ?.where((l) => l.breakpoint == _editingBreakpoint)
+              .firstOrNull
+              ?.isComposed ??
+          false,
+    );
+    if (text == null) return false;
+    await Clipboard.setData(ClipboardData(text: text));
+    if (!mounted) return true;
+    final n = _selection.length;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(n == 1 ? 'Card copied' : '$n cards copied'),
+    ));
+    return true;
+  }
+
+  /// Land whatever is on the clipboard on this page.
+  ///
+  /// Live even with nothing selected — pasting is how a card gets *onto* a
+  /// page, so requiring a selection first would be requiring the thing you are
+  /// trying to create.
+  ///
+  /// Silent when the clipboard holds something that is not ours. A person
+  /// pressing ⌘V having copied a URL has not made a mistake worth a message,
+  /// and a page that announced every foreign clipboard would be shouting at
+  /// ordinary use.
+  Future<void> _paste(int columns, bool composedTarget) async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    final cards = decodeCards(data?.text);
+    if (cards == null || !mounted) return;
+    if (_draftItems == null || _draftWidgets == null) return;
+
+    // Below everything already on the page. Pasting on top of the existing
+    // arrangement would hide what you have and what you just added at the same
+    // time; the engine then packs it up into whatever room there is.
+    var below = 0;
+    for (final i in _draftItems!) {
+      if (i.bottom > below) below = i.bottom;
+    }
+    final stamped = DateTime.now().microsecondsSinceEpoch;
+    final pasted = pasteInto(
+      cards: cards,
+      columns: columns,
+      atX: 0,
+      atY: below,
+      stamp: (i) => 'widget_${stamped}_$i',
+      composedTarget: composedTarget,
+      taken: _paths.values.whereType<String>().toSet(),
+    );
+
+    _pushUndo('Paste');
+    setState(() {
+      _draftWidgets = {...?_draftWidgets, ...pasted.widgets};
+      var next = _draftItems!;
+      for (final item in pasted.items) {
+        next = _engine(columns).addAt(next, item, item.x, item.y);
+      }
+      _commit(next);
+      _contentDirty = true;
+      _selection
+        ..clear()
+        ..addAll(pasted.widgets.keys);
+    });
+    if (!mounted) return;
+    final n = pasted.items.length;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(n == 1 ? 'Card pasted' : '$n cards pasted'),
+    ));
+  }
+
   void _duplicateCard(DashboardWidgetModel model, GridItem item, int columns) {
     final copy = model.copyWith(
       id: 'widget_${DateTime.now().microsecondsSinceEpoch}',
@@ -1870,6 +2020,8 @@ class _PageScreenState extends ConsumerState<PageScreen> {
                       }
                     }
                   },
+            onCopy: _selection.isEmpty ? null : _copySelection,
+            onPaste: () => _paste(columns, layout.isComposed),
             onSelectAll: () => setState(() {
               _selection
                 ..clear()
@@ -2270,6 +2422,38 @@ class _PreviewFrame extends StatelessWidget {
 /// Says which page, says why, and offers the one useful action. The failure it
 /// reports is almost never about this page in particular — the list is the
 /// whole house's — so it names the page rather than blaming it.
+/// A menu row that names its keyboard shortcut.
+///
+/// The point is teaching, not decoration. A tool whose copy and paste are
+/// keyboard-only has them for the people who already guessed; putting the
+/// shortcut beside the label is how everyone else finds out it is there — and
+/// stops needing the menu.
+class _MenuRow extends StatelessWidget {
+  const _MenuRow(this.label, this.keys);
+
+  final String label;
+  final String keys;
+
+  /// The whole row as a menu entry, since every caller wants exactly this.
+  static PopupMenuItem<String> item(String value, String label, String keys) =>
+      PopupMenuItem(value: value, child: _MenuRow(label, keys));
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Row(
+      children: [
+        Expanded(child: Text(label)),
+        SizedBox(width: t.space.md),
+        Text(
+          keys,
+          style: t.text.captionStyle.copyWith(color: t.surface.onBaseMuted),
+        ),
+      ],
+    );
+  }
+}
+
 class _PageLoadFailed extends StatelessWidget {
   const _PageLoadFailed({required this.error, required this.onRetry});
 
