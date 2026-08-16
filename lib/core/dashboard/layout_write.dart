@@ -56,21 +56,30 @@ List<DashboardLayout> writeArrangement({
   required List<GridItem> items,
   required DashboardBreakpoint edited,
   Set<String> placeEverywhere = const {},
-}) =>
-    [
-      for (final l in layouts)
-        if (l.breakpoint == edited)
-          // Editing a derived layout is how a person takes it over. Nothing
-          // else flips it — not opening it, not looking at it, not a resize of
-          // the window. Only a save that carries their arrangement.
-          _write(l, items).copyWith(derivedFrom: null)
-        else if (l.derivedFrom == edited)
-          // A following layout gets everything: it has no arrangement of its
-          // own to protect, so there is nothing to hide and nothing to disturb.
-          deriveLayout(l, items)
-        else
-          reconcileWidgetSet(l, items, placeEverywhere: placeEverywhere),
-    ];
+}) {
+  // The containers on the layout being edited. Read once, before the loop
+  // rewrites anything, because the followers derive from what was just
+  // arranged rather than from whatever order this list happens to be in.
+  final sourceGroups = layouts
+          .where((l) => l.breakpoint == edited)
+          .map((l) => l.groups)
+          .firstOrNull ??
+      const <GroupBox>[];
+  return [
+    for (final l in layouts)
+      if (l.breakpoint == edited)
+        // Editing a derived layout is how a person takes it over. Nothing
+        // else flips it — not opening it, not looking at it, not a resize of
+        // the window. Only a save that carries their arrangement.
+        _write(l, items).copyWith(derivedFrom: null)
+      else if (l.derivedFrom == edited)
+        // A following layout gets everything: it has no arrangement of its
+        // own to protect, so there is nothing to hide and nothing to disturb.
+        deriveLayout(l, items, sourceGroups: sourceGroups)
+      else
+        reconcileWidgetSet(l, items, placeEverywhere: placeEverywhere),
+  ];
+}
 
 /// Recomputes a derived layout from the source arrangement, packed for its own
 /// column count.
@@ -78,7 +87,15 @@ List<DashboardLayout> writeArrangement({
 /// Deriving is a pure function of the source items and the column count, which
 /// is what makes "revert to derived" able to reproduce it exactly and what
 /// makes it safe to run on every save.
-DashboardLayout deriveLayout(DashboardLayout l, List<GridItem> source) {
+///
+/// [sourceGroups] are the source layout's group containers. A derived layout
+/// gets their *styling* and not their geometry, for the same reason it gets the
+/// packed cells and not the composed rectangles — see below.
+DashboardLayout deriveLayout(
+  DashboardLayout l,
+  List<GridItem> source, {
+  List<GroupBox> sourceGroups = const [],
+}) {
   final columns = l.columns <= 0 ? kDefaultColumns : l.columns;
   // Always packed, whatever the source was. Deriving one breakpoint from
   // another IS repacking: a phone layout that preserved a desktop's whitespace
@@ -116,6 +133,21 @@ DashboardLayout deriveLayout(DashboardLayout l, List<GridItem> source) {
         DashboardWidgetPlacement(
             widgetId: i.id, x: i.x, y: i.y, w: i.w, h: i.h),
     ],
+    // The containers follow too — a derived layout has no opinions of its own,
+    // and a group given a body on the desktop appearing as a bare group on the
+    // phone is the layout disagreeing with the one it is supposed to be
+    // following.
+    //
+    // Styling only. The **rect is dropped** for exactly the reason the
+    // placements' rectangles are: it is stated in the source's frame units, and
+    // a box positioned for a 1600-wide canvas means nothing on a four-column
+    // phone. Without it every derived container falls back to fitting its own
+    // members, which is the right answer here — the members have just been
+    // repacked, so the box should be around wherever they landed.
+    groups: [
+      for (final g in sourceGroups)
+        if (!g.isPlain) g.copyWith(rect: null),
+    ],
   );
 }
 
@@ -127,9 +159,11 @@ DashboardLayout deriveLayout(DashboardLayout l, List<GridItem> source) {
 DashboardLayout revertToDerived(
   DashboardLayout l,
   DashboardBreakpoint source,
-  List<GridItem> sourceItems,
-) =>
-    deriveLayout(l.copyWith(derivedFrom: source), sourceItems);
+  List<GridItem> sourceItems, {
+  List<GroupBox> sourceGroups = const [],
+}) =>
+    deriveLayout(l.copyWith(derivedFrom: source), sourceItems,
+        sourceGroups: sourceGroups);
 
 /// The edited breakpoint: its arrangement becomes exactly what was on screen,
 /// normalised so the client cannot author something core would 400 on.

@@ -1056,7 +1056,12 @@ class _PageScreenState extends ConsumerState<PageScreen> {
       _draftLayouts = [
         for (final l in _draftLayouts!)
           if (l.breakpoint == selected)
-            revertToDerived(l, source, sourceItems)
+            // The containers come back too. Reverting means "follow that
+            // layout again", and a revert that restored the arrangement but
+            // left this breakpoint's own containers behind would leave the
+            // page half-reverted.
+            revertToDerived(l, source, sourceItems,
+                sourceGroups: sourceLayout.groups)
           else
             l,
       ];
