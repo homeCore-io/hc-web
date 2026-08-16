@@ -11,6 +11,7 @@
 /// can too.
 library;
 
+import 'rooms_card.dart';
 import 'dart:async';
 
 import 'package:fl_chart/fl_chart.dart';
@@ -1480,6 +1481,50 @@ void registerBuiltinDashboardWidgets() {
         widgetModel: _modelOf(a, 'device_grid'),
         compact: a.isCompact,
         veryCompact: a.isVeryCompact,
+      ),
+    ),
+    // The one element that draws MANY sections. Everything else on this list
+    // is placed; this one is asked — see `rooms_card.dart` for why that is the
+    // difference between a designed page and the house's own home page.
+    WidgetDescriptor(
+      type: 'rooms',
+      title: 'Rooms',
+      description: 'A section per room, filled from the house. New rooms and '
+          'new devices appear by themselves.',
+      icon: Icons.dashboard_outlined,
+      sizeHint: const WidgetSizeHint(
+          minW: 4, minH: 3, recommendedW: 12, recommendedH: 6),
+      configFields: const [
+        WidgetConfigField('rooms_mode', WidgetConfigKind.choice,
+            label: 'Rooms',
+            defaultValue: 'all',
+            options: ['all', 'named'],
+            help: 'All keeps up with the house on its own. Named is for a page '
+                'about part of it.'),
+        WidgetConfigField('rooms', WidgetConfigKind.stringList, label: 'Which'),
+        WidgetConfigField('room_order', WidgetConfigKind.stringList,
+            label: 'First',
+            help: 'Rooms to put at the top, in this order. The rest follow '
+                'alphabetically, so the page does not reshuffle itself as '
+                'devices come and go.'),
+        // The same four the other device elements take, applied INSIDE every
+        // room at once — which is what makes "every light, by room" one
+        // element rather than one per room.
+        WidgetConfigField('selection_mode', WidgetConfigKind.choice,
+            label: 'Include',
+            options: ['facet', 'query'],
+            help: 'Everything in the room unless you narrow it.'),
+        WidgetConfigField('facet', WidgetConfigKind.facet, label: 'Kind'),
+        WidgetConfigField('query', WidgetConfigKind.text, label: 'Search'),
+        WidgetConfigField('hide_empty', WidgetConfigKind.boolean,
+            label: 'Hide empty rooms', defaultValue: true),
+      ],
+      // No validator. A Rooms element with nothing configured is the useful
+      // one — it is the whole house, by room, which is what most people want
+      // and what the home page does.
+      builder: (context, a) => RoomsCard(
+        widgetModel: _modelOf(a, 'rooms'),
+        compact: a.isCompact,
       ),
     ),
     WidgetDescriptor(
