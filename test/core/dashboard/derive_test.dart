@@ -24,6 +24,7 @@ DashboardLayout _layout(
   int columns,
   List<DashboardWidgetPlacement> placements, {
   DashboardBreakpoint? derivedFrom,
+  List<GroupBox> groups = const [],
 }) =>
     DashboardLayout(
       breakpoint: b,
@@ -32,6 +33,7 @@ DashboardLayout _layout(
       gap: 12,
       placements: placements,
       derivedFrom: derivedFrom,
+      groups: groups,
     );
 
 List<String> _shape(DashboardLayout l) =>
@@ -391,6 +393,98 @@ void main() {
       expect(derived.copyWith(derivedFrom: null).derivedFrom, isNull);
       expect(derived.copyWith(columns: 8).derivedFrom,
           DashboardBreakpoint.desktop);
+    });
+  });
+
+  group('containers on a derived layout', () {
+    // A derived layout has no opinions of its own. It was already true of the
+    // arrangement; it has to be true of the containers too, or a group given a
+    // body on the desktop shows up as a bare group on the phone that is
+    // explicitly following the desktop.
+    const styled = GroupBox(
+      path: 'Wall',
+      rect: DashboardRect(x: 100, y: 40, w: 600, h: 300),
+      padding: 16,
+      radius: 18,
+      clip: true,
+    );
+
+    test('a following layout takes the source containers', () {
+      final out = writeArrangement(
+        layouts: [
+          _layout(DashboardBreakpoint.desktop, 12, [_p('a', 0, 0, 4, 2)],
+              groups: const [styled]),
+          _layout(DashboardBreakpoint.mobile, 4, const [],
+              derivedFrom: DashboardBreakpoint.desktop),
+        ],
+        items: [const GridItem(id: 'a', x: 0, y: 0, w: 4, h: 2)],
+        edited: DashboardBreakpoint.desktop,
+      );
+      final mobile =
+          out.firstWhere((l) => l.breakpoint == DashboardBreakpoint.mobile);
+      expect(mobile.groups.map((g) => g.path), ['Wall']);
+      expect(mobile.groupBox('Wall')!.padding, 16);
+      expect(mobile.groupBox('Wall')!.clip, isTrue);
+    });
+
+    test('but NOT the box the source drew', () {
+      // The rect is in the source's frame units. A box positioned for a
+      // 1600-wide canvas means nothing on a four-column phone, and carrying it
+      // would put the container somewhere its members are not — the same
+      // reason the placements' rectangles are dropped.
+      final out = writeArrangement(
+        layouts: [
+          _layout(DashboardBreakpoint.desktop, 12, [_p('a', 0, 0, 4, 2)],
+              groups: const [styled]),
+          _layout(DashboardBreakpoint.mobile, 4, const [],
+              derivedFrom: DashboardBreakpoint.desktop),
+        ],
+        items: [const GridItem(id: 'a', x: 0, y: 0, w: 4, h: 2)],
+        edited: DashboardBreakpoint.desktop,
+      );
+      final mobile =
+          out.firstWhere((l) => l.breakpoint == DashboardBreakpoint.mobile);
+      expect(mobile.groupBox('Wall')!.rect, isNull,
+          reason: 'a derived container fits its own members');
+    });
+
+    test('an authored layout keeps its own containers', () {
+      // The whole rule this file exists for, applied to containers: an editor
+      // writes back only the region it read. Styling a group on the desktop
+      // must not reach into a phone layout somebody arranged by hand.
+      final out = writeArrangement(
+        layouts: [
+          _layout(DashboardBreakpoint.desktop, 12, [_p('a', 0, 0, 4, 2)],
+              groups: const [styled]),
+          _layout(DashboardBreakpoint.mobile, 4, [_p('a', 0, 0, 4, 2)],
+              groups: const [GroupBox(path: 'Wall', padding: 4)]),
+        ],
+        items: [const GridItem(id: 'a', x: 0, y: 0, w: 4, h: 2)],
+        edited: DashboardBreakpoint.desktop,
+      );
+      final mobile =
+          out.firstWhere((l) => l.breakpoint == DashboardBreakpoint.mobile);
+      expect(mobile.groupBox('Wall')!.padding, 4);
+    });
+
+    test('a group with no body is not carried across as a row', () {
+      // Same rule the save path follows: naming a group must not make every
+      // layout carry an entry that changes nothing.
+      final out = writeArrangement(
+        layouts: [
+          _layout(DashboardBreakpoint.desktop, 12, [_p('a', 0, 0, 4, 2)],
+              groups: const [GroupBox(path: 'Wall')]),
+          _layout(DashboardBreakpoint.mobile, 4, const [],
+              derivedFrom: DashboardBreakpoint.desktop),
+        ],
+        items: [const GridItem(id: 'a', x: 0, y: 0, w: 4, h: 2)],
+        edited: DashboardBreakpoint.desktop,
+      );
+      expect(
+          out
+              .firstWhere((l) => l.breakpoint == DashboardBreakpoint.mobile)
+              .groups,
+          isEmpty);
     });
   });
 }

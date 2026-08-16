@@ -31,12 +31,20 @@ class PageInspector extends StatefulWidget {
     required this.onFrameChanged,
     required this.snapToGrid,
     required this.onSnapChanged,
+    this.sourceComposed = false,
     this.onBackgroundChanged,
   });
 
   final DashboardDefinition dashboard;
   final DashboardBreakpoint breakpoint;
   final DashboardLayout? layout;
+
+  /// Whether the layout this one follows is itself a composition.
+  ///
+  /// Passed in rather than read off [dashboard], because the answer has to
+  /// come from the *draft*: turning composition on for the desktop and then
+  /// looking at the phone must say so before anything is saved.
+  final bool sourceComposed;
   final int cardCount;
   final ValueChanged<GridFlow>? onFlowChanged;
 
@@ -81,6 +89,10 @@ class _PageInspectorState extends State<PageInspector> {
     final t = HcTokens.of(context);
     final flow = layout?.flow ?? GridFlow.packed;
     final derived = layout?.derivedFrom;
+    // Whether the layout this one follows is itself a composition. Following
+    // an ordinary layout loses nothing; following a composed one loses the
+    // free positions, and that is worth saying out loud.
+    final sourceComposed = derived != null && widget.sourceComposed;
 
     return Scrollbar(
       controller: _scroll,
@@ -150,8 +162,17 @@ class _PageInspectorState extends State<PageInspector> {
               ),
               Text(
                 derived != null
-                    ? 'This layout follows another one, so it has no canvas of '
-                        'its own to compose on.'
+                    ? sourceComposed
+                        // The one case where following costs something
+                        // visible. Saying it here, where there is room, is
+                        // what stops the phone reading as lost work.
+                        ? 'This layout follows a composed one, so it has no '
+                            'canvas of its own. That composition is packed '
+                            'into these cells — the same cards in the same '
+                            'order, at whatever size fits this grid. Arrange '
+                            'it by hand to give it a canvas of its own.'
+                        : 'This layout follows another one, so it has no '
+                            'canvas of its own to compose on.'
                     : layout?.isComposed ?? false
                         ? 'Cards sit anywhere on the canvas at any size. The '
                             'grid is still here as something to line up with, '
