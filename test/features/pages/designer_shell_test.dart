@@ -10,6 +10,7 @@ import 'package:hc_web/design/skins.dart';
 import 'package:hc_web/features/dashboard/builtin_cards.dart';
 import 'package:hc_web/features/pages/card_inspector.dart';
 import 'package:hc_web/features/pages/card_library.dart';
+import 'package:hc_web/features/pages/layer_tree_panel.dart';
 import 'package:hc_web/features/pages/page_grid.dart';
 import 'package:hc_web/features/pages/page_screen.dart';
 
@@ -120,7 +121,10 @@ void main() {
       // adding a card hid the thing you were about to configure. A tool keeps
       // its tools out.
       await _openDesigner(tester);
-      expect(find.byType(CardLibrary), findsOneWidget);
+      // The rail opens on Layers now, with the catalogue behind its own tab —
+      // so the left pane being *present* is what this asserts, not which tab
+      // happens to be showing.
+      expect(find.byType(LayerTreePanel), findsOneWidget);
       // The right pane has a subject even with nothing selected: the page.
       // It used to be a sentence and 340px of nothing, which teaches you to
       // stop looking at it.

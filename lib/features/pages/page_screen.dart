@@ -1940,6 +1940,14 @@ class _PageScreenState extends ConsumerState<PageScreen> {
               if (_leaveGroup()) return;
               _select(null);
             },
+            // The tree selects a whole group in one click, which no per-card
+            // callback can express.
+            onSelectMany: (ids) => setState(() {
+              _selection
+                ..clear()
+                ..addAll(ids);
+            }),
+            onEnterGroupId: _enterGroup,
             groupInHand: _groupInHand,
             inside: _inside,
             onGroup: _selection.isEmpty ? null : _groupSelection,

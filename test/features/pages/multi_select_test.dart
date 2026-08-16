@@ -109,7 +109,14 @@ Future<void> _tapCard(WidgetTester tester, String title,
   if (shift) {
     await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
   }
-  await tester.tap(find.text(title).first, warnIfMissed: false);
+  // Scoped to the canvas: the left rail's layers tree carries the same names,
+  // and an unscoped `.first` clicks a list row instead of the card.
+  await tester.tap(
+    find
+        .descendant(of: find.byType(PageGrid), matching: find.text(title))
+        .first,
+    warnIfMissed: false,
+  );
   await tester.pumpAndSettle();
   if (shift) {
     await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);

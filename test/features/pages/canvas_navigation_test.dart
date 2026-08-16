@@ -15,7 +15,7 @@ import 'package:hc_web/features/dashboard/builtin_cards.dart';
 import 'package:hc_web/features/pages/canvas_rulers.dart';
 import 'package:hc_web/features/pages/page_background.dart';
 import 'package:hc_web/features/pages/page_grid.dart';
-import 'package:hc_web/features/pages/page_layers.dart';
+import 'package:hc_web/features/pages/layer_tree_panel.dart';
 import 'package:hc_web/features/pages/page_screen.dart';
 
 /// Getting around a canvas bigger than the window.
@@ -175,11 +175,12 @@ Future<void> _tapCard(WidgetTester tester, String title) async {
   await tester.pumpAndSettle();
 }
 
-/// Select through the elements strip, which is the only way to get hold of
+/// Select through the rail's layers tree, which is the only way to get hold of
 /// something you cannot see — and the reason framing exists at all.
 Future<void> _tapLayer(WidgetTester tester, String title) async {
   await tester.tap(
-      find.descendant(of: find.byType(PageLayers), matching: find.text(title)),
+      find.descendant(
+          of: find.byType(LayerTreePanel), matching: find.text(title)),
       warnIfMissed: false);
   await tester.pumpAndSettle();
 }
