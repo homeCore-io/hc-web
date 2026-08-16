@@ -366,6 +366,23 @@ class _DesignerShellState extends State<DesignerShell> {
     return _minZoom;
   }
 
+  /// Does the layout on screen follow one that is a composition?
+  ///
+  /// Read from the draft rather than the saved document, so turning
+  /// composition on for the desktop and stepping straight to the phone says so
+  /// before anything is saved.
+  bool get _followsAComposition {
+    final layouts = widget.layouts;
+    if (layouts == null) return false;
+    final from = layouts
+        .where((l) => l.breakpoint == widget.breakpoint)
+        .firstOrNull
+        ?.derivedFrom;
+    if (from == null) return false;
+    return layouts.where((l) => l.breakpoint == from).firstOrNull?.isComposed ??
+        false;
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
@@ -616,6 +633,7 @@ class _DesignerShellState extends State<DesignerShell> {
                                   onFrameChanged: widget.onFrameChanged,
                                   snapToGrid: widget.snapToGrid,
                                   onSnapChanged: widget.onSnapChanged,
+                                  sourceComposed: _followsAComposition,
                                   onBackgroundChanged:
                                       widget.onBackgroundChanged,
                                 )

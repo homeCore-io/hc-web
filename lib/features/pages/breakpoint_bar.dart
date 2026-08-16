@@ -46,6 +46,26 @@ class BreakpointBar extends StatelessWidget {
   /// the source itself, or a layout already following.
   final VoidCallback? onRevert;
 
+  /// The breakpoint the selected layout follows, when that layout is composed.
+  ///
+  /// Null in every other case, which is most of them. Following a *composed*
+  /// layout is the one relationship the bar could not previously express: the
+  /// arrangement is inherited, but the composition is not — it is repacked
+  /// into this breakpoint's cells, because a rectangle stated in a 1600-wide
+  /// canvas means nothing on a four-column phone.
+  ///
+  /// That is the right behaviour and it is also invisible, which is the whole
+  /// problem. Somebody who has just spent an hour placing things exactly will
+  /// open the phone, find a plain grid, and reasonably conclude the editor
+  /// threw the work away. It did not — it declined to pretend.
+  DashboardBreakpoint? get _composedSource {
+    final layout = layouts.where((l) => l.breakpoint == selected).firstOrNull;
+    final from = layout?.derivedFrom;
+    if (from == null) return null;
+    final origin = layouts.where((l) => l.breakpoint == from).firstOrNull;
+    return (origin?.isComposed ?? false) ? from : null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
@@ -74,6 +94,10 @@ class BreakpointBar extends StatelessWidget {
             ],
           ),
         ),
+        if (_composedSource case final from?) ...[
+          SizedBox(height: t.space.xs),
+          _PackedNote(from: from),
+        ],
         if (onRevert != null) ...[
           SizedBox(height: t.space.xs),
           _RevertRow(source: source, onRevert: onRevert!),
@@ -159,6 +183,34 @@ class _Segment extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Says what a layout following a composition actually inherited.
+///
+/// Deliberately a statement and not a warning: nothing is wrong, and a caution
+/// icon here would suggest the page needs fixing. It needs explaining.
+class _PackedNote extends StatelessWidget {
+  const _PackedNote({required this.from});
+
+  final DashboardBreakpoint from;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    final name = breakpointLabel(from);
+    // Short on purpose. This sits in the designer's top chrome beside the
+    // title and the tool buttons, which is a row with no room to wrap — the
+    // first version was a full sentence and the bar simply cut it in half.
+    // What belongs here is the *fact*; the inspector's CANVAS section has room
+    // for the explanation and already talks about following another layout.
+    return Text(
+      '$name is composed — this is packed from it.',
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: t.text.captionStyle
+          .copyWith(color: t.surface.onBaseMuted, height: 1.4),
     );
   }
 }
