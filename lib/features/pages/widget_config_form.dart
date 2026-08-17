@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/dashboard/card_style.dart' show inkColours, resolveInk;
 import '../../core/dashboard/widget_registry.dart';
 import '../../core/devices/presentation.dart';
 import '../../core/models/device_state.dart';
@@ -15,6 +16,7 @@ import '../dashboard/home_plan_field.dart';
 import '../../core/dashboard/svg_bindings.dart';
 import '../dashboard/svg_card.dart';
 import 'code_editor_sheet.dart';
+import 'inspector_fields.dart';
 import 'svg_bindings_field.dart';
 
 /// A widget's settings, built from the card's own [WidgetDescriptor.configFields].
@@ -192,18 +194,34 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
       return Text('This widget has no options.',
           style: t.text.bodySmallStyle.copyWith(color: t.surface.onBaseMuted));
     }
+
+    // Grouped, in the order the card declared them. A `Map` keyed by the group
+    // name preserves insertion order in Dart, so the panel's sections come out
+    // in the order the card thought of them rather than alphabetically — which
+    // is the difference between "shape, fill, stroke, transform" and "fill,
+    // shape, stroke, transform".
+    final groups = <String?, List<WidgetConfigField>>{};
+    for (final f in fields) {
+      (groups[f.group] ??= []).add(f);
+    }
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (final f in fields)
-          Padding(
-            padding: EdgeInsets.only(bottom: t.space.md),
-            child: _field(f),
-          ),
+        for (final entry in groups.entries)
+          if (entry.key case final title?)
+            InspectorSection(
+              title: title,
+              children: [for (final f in entry.value) _field(f)],
+            )
+          else ...[for (final f in entry.value) _field(f)],
         if (_error != null)
-          Text(_error!,
-              style: t.text.bodySmallStyle.copyWith(color: t.accent.danger)),
+          Padding(
+            padding: EdgeInsets.only(top: t.space.xs),
+            child: Text(_error!,
+                style: t.text.bodySmallStyle.copyWith(color: t.accent.danger)),
+          ),
       ],
     );
   }
@@ -216,7 +234,7 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
   Widget _field(WidgetConfigField f) => switch (f.kind) {
         WidgetConfigKind.boolean => _boolean(f),
         WidgetConfigKind.choice => _choice(f),
-        WidgetConfigKind.integer => _text(f, number: true),
+        WidgetConfigKind.integer => _number(f),
         WidgetConfigKind.markdown => _text(f, lines: 5),
         WidgetConfigKind.code => _code(f),
         WidgetConfigKind.svgSource => _svgSource(f),
@@ -230,7 +248,168 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
         WidgetConfigKind.deviceRef => _deviceRef(f),
         WidgetConfigKind.deviceRefs => _deviceRefs(f),
         WidgetConfigKind.attribute => _attribute(f),
+        WidgetConfigKind.ink => _ink(f),
       };
+
+  /// A colour, shown as the colour it is.
+  ///
+  /// A dropdown reading "Accent" tells you nothing about what the page will
+  /// look like — the whole point of choosing a colour is seeing it. So the
+  /// named colours are swatches drawn in the live skin, and the hex field
+  /// behind them is for the one colour that has to match something outside the
+  /// skin. Naming is offered first because a named colour *follows the skin*
+  /// and a literal does not, which is the only consequential difference here.
+  /// A colour: the colour itself on one line, its palette one click away.
+  ///
+  /// The grid of eleven swatches was the last control in the panel that was
+  /// still shaped like a form — three rows for one setting, in a panel where
+  /// every other setting is one line. A chip showing the colour *is* the state,
+  /// which is what an inspector owes you; the palette is a choice, which is
+  /// what a popover is for.
+  Widget _ink(WidgetConfigField f) {
+    final t = HcTokens.of(context);
+    final value = _config[f.name] as String? ?? f.defaultValue as String?;
+    final colour = resolveInk(t, value);
+    final named = inkColours.where((i) => i.key == value).firstOrNull;
+    return InspectorField(
+      // A row called "Colour" under a heading called COLOUR is the panel
+      // talking to itself. The heading has already said it.
+      label: f.label == f.group ? '' : _title(f),
+      help: f.help,
+      child: _InkButton(
+        colour: colour,
+        label: named?.label ??
+            (value == null
+                ? 'None'
+                : value.startsWith('#')
+                    ? value.toUpperCase()
+                    : humanize(value)),
+        onPick: (at) => _pickInk(f, value, at),
+      ),
+    );
+  }
+
+  /// The palette, at the chip.
+  ///
+  /// Opened from the button's own context rather than the form's: `showMenu`
+  /// takes a `RelativeRect` measured from the *overlay's edges*, so absolute
+  /// coordinates passed to `fromLTRB` describe a rectangle that is not where
+  /// the button is — which renders as a menu of the wrong size in the wrong
+  /// place. `RelativeRect.fromRect` against the overlay does the arithmetic
+  /// correctly and needs the button.
+  Future<void> _pickInk(
+      WidgetConfigField f, String? current, BuildContext at) async {
+    final t = HcTokens.of(context);
+    final button = at.findRenderObject() as RenderBox?;
+    final overlay = Overlay.of(at).context.findRenderObject() as RenderBox?;
+    if (button == null || overlay == null) return;
+
+    final picked = await showMenu<String?>(
+      context: at,
+      color: t.surface.overlay,
+      position: RelativeRect.fromRect(
+        Rect.fromPoints(
+          button.localToGlobal(Offset.zero, ancestor: overlay),
+          button.localToGlobal(button.size.bottomRight(Offset.zero),
+              ancestor: overlay),
+        ),
+        Offset.zero & overlay.size,
+      ),
+      items: [
+        PopupMenuItem<String?>(
+          // Height stated, because a `PopupMenuItem` sizes to one row of text
+          // by default and this one holds a grid.
+          height: 0,
+          padding: EdgeInsets.symmetric(
+              horizontal: t.space.sm, vertical: t.space.sm),
+          child: SizedBox(
+            width: 196,
+            child: Wrap(
+              spacing: t.space.xs,
+              runSpacing: t.space.xs,
+              children: [
+                // "None" first, because unset is a real answer for every one of
+                // these — an unfilled shape, a line with no second colour, text
+                // in the page's own ink — and it is not the same as any colour.
+                _swatch(
+                  key: null,
+                  label: 'None',
+                  colour: null,
+                  on: current == null,
+                ),
+                for (final ink in inkColours)
+                  _swatch(
+                    key: ink.key,
+                    label: ink.label,
+                    colour: resolveInk(t, ink.key),
+                    on: current == ink.key,
+                  ),
+                _swatch(
+                  key: current != null && current.startsWith('#')
+                      ? current
+                      : '#4488ff',
+                  label: 'Custom',
+                  colour: current != null && current.startsWith('#')
+                      ? resolveInk(t, current)
+                      : null,
+                  on: current != null && current.startsWith('#'),
+                  custom: true,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+    if (!mounted) return;
+    // `showMenu` cannot tell "dismissed" from "picked None" through its own
+    // return value, so the swatches pop the route themselves with a sentinel
+    // and null here means the menu was dismissed.
+    if (picked == null) return;
+    _set(f.name, picked == _clearInk ? null : picked);
+  }
+
+  /// One colour in the palette. Pops the menu with its own value.
+  Widget _swatch({
+    required String? key,
+    required String label,
+    required Color? colour,
+    required bool on,
+    bool custom = false,
+  }) {
+    final t = HcTokens.of(context);
+    return Tooltip(
+      message: label,
+      child: InkWell(
+        onTap: () => Navigator.of(context).pop(key ?? _clearInk),
+        borderRadius: BorderRadius.circular(t.radius.sm),
+        child: Container(
+          width: 28,
+          height: 28,
+          decoration: BoxDecoration(
+            color: colour ?? t.surface.sunken,
+            borderRadius: BorderRadius.circular(t.radius.sm),
+            border: Border.all(
+              color: on ? t.accent.active : t.stroke.hairline,
+              // The chosen swatch is ringed, not ticked: a tick drawn over the
+              // colour has to be legible on every colour, and there is no ink
+              // that is.
+              width: on ? 2 : t.stroke.width,
+            ),
+          ),
+          child: colour == null
+              ? Center(
+                  child: Icon(
+                    custom ? Icons.colorize_outlined : Icons.block_outlined,
+                    size: 14,
+                    color: t.surface.onBaseMuted,
+                  ),
+                )
+              : null,
+        ),
+      ),
+    );
+  }
 
   Widget _label(WidgetConfigField f) {
     final t = HcTokens.of(context);
@@ -399,41 +578,77 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
     );
   }
 
-  Widget _boolean(WidgetConfigField f) {
-    final t = HcTokens.of(context);
-    return Row(
-      children: [
-        Expanded(
-            child: Text(_title(f),
-                style: t.text.bodyStyle.copyWith(color: t.surface.onBase))),
-        Switch(
-          value: _config[f.name] == true,
-          onChanged: (v) => _set(f.name, v),
-        ),
-      ],
+  /// A number, on one line, with its name draggable.
+  ///
+  /// The single biggest difference between this panel and the form it replaces.
+  /// A number used to be a heading, a bordered box the width of the panel and a
+  /// line of help — three lines for a value between 0 and 360, which you could
+  /// only change by selecting the text and typing another one. Now it is one
+  /// line you can pull.
+  Widget _number(WidgetConfigField f) {
+    final raw = _config[f.name] ?? f.defaultValue;
+    final value = raw is num ? raw : num.tryParse('${raw ?? ''}');
+    return InspectorField(
+      label: _title(f),
+      help: f.help,
+      // Scrubbing starts from the default when nothing is set, so pulling the
+      // label of an unset rotation starts at 0 rather than doing nothing.
+      onScrub: (steps) {
+        final from =
+            value ?? (f.defaultValue is num ? f.defaultValue as num : 0);
+        var next = from + steps;
+        if (f.min case final low?) next = next < low ? low : next;
+        if (f.max case final high?) next = next > high ? high : next;
+        _set(f.name, next);
+      },
+      child: InspectorNumber(
+        value: value,
+        unit: f.unit,
+        min: f.min,
+        max: f.max,
+        // What the card does with nothing, said in the field rather than in a
+        // paragraph under it.
+        hint: f.defaultValue == null ? 'auto' : '${f.defaultValue}',
+        onChanged: (v) => _set(f.name, v),
+      ),
     );
   }
 
+  Widget _boolean(WidgetConfigField f) => InspectorField(
+        label: _title(f),
+        help: f.help,
+        child: InspectorSwitch(
+          value: _config[f.name] == true,
+          semanticLabel: _title(f),
+          onChanged: (v) => _set(f.name, v),
+        ),
+      );
+
+  /// A choice: every option at once when they fit, a menu when they do not.
+  ///
+  /// Alignment and Shape and Ends are three, four and two options with short
+  /// names — showing them is strictly better than hiding them, because the
+  /// panel then says which one is on without being touched.
   Widget _choice(WidgetConfigField f) {
     final options = f.options ?? const [];
     final value = _config[f.name] as String? ?? f.defaultValue as String?;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _label(f),
-        DropdownButtonFormField<String>(
-          initialValue: options.contains(value) ? value : null,
-          isExpanded: true,
-          decoration: const InputDecoration(
-              isDense: true, border: OutlineInputBorder()),
-          items: [
-            for (final o in options)
-              DropdownMenuItem(value: o, child: Text(humanize(o))),
-          ],
-          onChanged: (v) => _set(f.name, v),
-        ),
-        _help(f),
-      ],
+    return InspectorField(
+      label: _title(f),
+      help: f.help,
+      child: InspectorChoice.segmented(options, humanize)
+          ? InspectorSegments(
+              options: options,
+              value: value,
+              labelFor: humanize,
+              onChanged: (v) => _set(f.name, v),
+            )
+          : InspectorMenu(
+              options: options,
+              value: value,
+              labelFor: humanize,
+              hint: 'Choose',
+              onChanged: (v) => _set(f.name, v),
+            ),
     );
   }
 
@@ -778,6 +993,74 @@ class _DevicePickerState extends State<_DevicePicker> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// What a swatch pops with when it means *no colour*.
+///
+/// `showMenu` returns null for a dismissal, so "unset" needs a value of its
+/// own — otherwise choosing None and pressing Escape would be the same event.
+const _clearInk = '__none__';
+
+/// The current colour, as a chip you can read and click.
+class _InkButton extends StatelessWidget {
+  const _InkButton({
+    required this.colour,
+    required this.label,
+    required this.onPick,
+  });
+
+  final Color? colour;
+  final String label;
+
+  /// Handed the button's own `BuildContext`, which is what the menu needs to
+  /// know where it is.
+  final ValueChanged<BuildContext> onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return InkWell(
+      onTap: () => onPick(context),
+      borderRadius: BorderRadius.circular(t.radius.xs),
+      child: Container(
+        height: t.density.controlHeight,
+        padding: EdgeInsets.symmetric(horizontal: t.space.xs),
+        decoration: BoxDecoration(
+          color: t.surface.sunken,
+          borderRadius: BorderRadius.circular(t.radius.xs),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 18,
+              height: 18,
+              decoration: BoxDecoration(
+                color: colour ?? t.surface.base,
+                borderRadius: BorderRadius.circular(t.radius.xs),
+                border:
+                    Border.all(color: t.stroke.hairline, width: t.stroke.width),
+              ),
+              // An unset colour is not a colour, so it is drawn as absence
+              // rather than as a black square that looks like a choice.
+              child: colour == null
+                  ? Icon(Icons.block_outlined,
+                      size: 12, color: t.surface.onBaseMuted)
+                  : null,
+            ),
+            SizedBox(width: t.space.xs),
+            Expanded(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: t.text.bodySmallStyle.copyWith(color: t.surface.onBase),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

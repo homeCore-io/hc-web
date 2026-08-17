@@ -245,6 +245,48 @@ Color? resolveCardTint(HcTokens t, String? tint) => switch (tint) {
       _ => _literal(tint),
     };
 
+/// The colours a *mark* can be: text, a shape's fill, a rule.
+///
+/// Deliberately a different list from [cardTints], and at a different strength.
+/// A tint is a surface a card sits on, so an accent tint is 16% over the card —
+/// an accent-coloured panel at full strength is a warning, not a surface. A
+/// mark is the opposite: a shape IS the accent when you make it one, and
+/// drawing it at 16% would produce a shape you cannot see.
+///
+/// Both lists say `followsSkin`, and both mean it: change the skin and every
+/// mark that named a colour follows, while every literal hex stays put. That is
+/// the whole reason a name is offered before a swatch.
+const inkColours = <({String key, String label, bool followsSkin})>[
+  (key: 'foreground', label: 'Text', followsSkin: true),
+  (key: 'muted', label: 'Muted', followsSkin: true),
+  (key: 'accent', label: 'Accent', followsSkin: true),
+  (key: 'success', label: 'Good', followsSkin: true),
+  (key: 'warning', label: 'Warning', followsSkin: true),
+  (key: 'danger', label: 'Alert', followsSkin: true),
+  (key: 'hairline', label: 'Hairline', followsSkin: true),
+  (key: 'surface', label: 'Card', followsSkin: true),
+  (key: 'page', label: 'Page', followsSkin: true),
+];
+
+/// [ink] as a colour, at full strength, or null when it names nothing.
+///
+/// Null rather than a fallback so the caller decides what "unset" means — a
+/// heading with no colour is the page's own text, a shape with no fill is
+/// unfilled, and those are different answers.
+Color? resolveInk(HcTokens t, String? ink) => switch (ink) {
+      null || '' => null,
+      'foreground' => t.surface.onBase,
+      'muted' => t.surface.onBaseMuted,
+      'accent' => t.accent.active,
+      'success' => t.accent.success,
+      'warning' => t.accent.warn,
+      'danger' => t.accent.danger,
+      'hairline' => t.stroke.hairline,
+      'surface' => t.surface.raised,
+      'page' => t.surface.base,
+      _ => _literal(ink),
+    };
+
 /// `#RRGGBB` / `#AARRGGBB`, or null when it is not one.
 Color? _literal(String value) {
   var hex = value.trim();

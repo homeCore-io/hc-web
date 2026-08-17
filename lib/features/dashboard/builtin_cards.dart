@@ -12,6 +12,7 @@
 library;
 
 import 'rooms_card.dart';
+import 'primitive_cards.dart';
 import 'dart:async';
 
 import 'package:fl_chart/fl_chart.dart';
@@ -1988,6 +1989,167 @@ void registerBuiltinDashboardWidgets() {
       sizeHint: const WidgetSizeHint(
           minW: 1, minH: 1, recommendedW: 4, recommendedH: 1),
       builder: (context, a) => _SpacerWidget(editing: a.editing),
+    ),
+    // ----- the primitives ----------------------------------------------
+    // Text, shape, line. Not cards, and not chosen from this catalogue in
+    // normal use — they are *drawn*, by picking a tool and dragging on the
+    // canvas, which is what `DesignTool` is for. They register here anyway
+    // because the registry is what gives an element a name, an icon, a size
+    // hint and a form; an element the toolbar could create but the inspector
+    // could not configure would be half an element.
+    //
+    // The layout family above stays exactly as it is. `heading` is two steps
+    // of the ramp and `divider` has no options at all, and both restraints are
+    // right for what they are. These three are the other thing: marks you
+    // control completely.
+    WidgetDescriptor(
+      type: 'text',
+      title: 'Text',
+      description: 'Words, at a size and weight you choose.',
+      icon: Icons.text_fields_outlined,
+      chrome: WidgetChrome.bare,
+      sizeHint: const WidgetSizeHint(
+          minW: 1, minH: 1, recommendedW: 4, recommendedH: 1),
+      configFields: const [
+        WidgetConfigField('text', WidgetConfigKind.text,
+            required: true, label: 'Text'),
+        WidgetConfigField('size', WidgetConfigKind.choice,
+            group: 'Type',
+            label: 'Step',
+            defaultValue: 'body',
+            options: ['overline', 'caption', 'body', 'title', 'display']),
+        // A percentage of the step rather than a pixel size. The base stays a
+        // token, so a skin that scales its type carries this with it — and
+        // 240% of `display` still reaches the sizes a designed page wants.
+        WidgetConfigField('scale', WidgetConfigKind.integer,
+            group: 'Type',
+            label: 'Size',
+            unit: '%',
+            defaultValue: 100,
+            min: 10,
+            max: 2000),
+        WidgetConfigField('weight', WidgetConfigKind.choice,
+            group: 'Type',
+            label: 'Weight',
+            defaultValue: 'medium',
+            options: ['regular', 'medium', 'bold', 'black']),
+        WidgetConfigField('tracking', WidgetConfigKind.integer,
+            group: 'Type',
+            label: 'Tracking',
+            unit: '%',
+            defaultValue: 0,
+            min: -20,
+            max: 100),
+        WidgetConfigField('face', WidgetConfigKind.choice,
+            group: 'Type',
+            label: 'Face',
+            defaultValue: 'text',
+            options: ['text', 'mono']),
+        WidgetConfigField('ink', WidgetConfigKind.ink,
+            group: 'Colour', label: 'Colour'),
+        WidgetConfigField('align', WidgetConfigKind.choice,
+            group: 'Position',
+            label: 'Align',
+            defaultValue: 'start',
+            options: ['start', 'center', 'end']),
+        WidgetConfigField('vertical', WidgetConfigKind.choice,
+            group: 'Position',
+            label: 'Vertical',
+            defaultValue: 'middle',
+            options: ['top', 'middle', 'bottom']),
+      ],
+      // Deliberately no `validate`: unlike `heading`, an empty text element is
+      // visible in the editor and says so, so it cannot be lost — and blocking
+      // the save on it would mean you could not draw one out and fill it in
+      // later.
+      builder: (context, a) =>
+          TextPrimitiveCard(config: a.config, editing: a.editing),
+    ),
+    WidgetDescriptor(
+      type: 'shape',
+      title: 'Shape',
+      description: 'A rectangle, circle, pill, octagon — or your own path.',
+      icon: Icons.pentagon_outlined,
+      chrome: WidgetChrome.bare,
+      sizeHint: const WidgetSizeHint(
+          minW: 1, minH: 1, recommendedW: 3, recommendedH: 2),
+      configFields: const [
+        WidgetConfigField('shape', WidgetConfigKind.choice,
+            label: 'Shape',
+            defaultValue: 'rectangle',
+            options: ['rectangle', 'circle', 'pill', 'octagon', 'path']),
+        WidgetConfigField('fill', WidgetConfigKind.ink,
+            group: 'Fill', label: 'Colour'),
+        WidgetConfigField('opacity', WidgetConfigKind.integer,
+            group: 'Fill',
+            label: 'Opacity',
+            unit: '%',
+            defaultValue: 100,
+            min: 0,
+            max: 100),
+        WidgetConfigField('stroke', WidgetConfigKind.ink,
+            group: 'Stroke', label: 'Colour'),
+        WidgetConfigField('stroke_width', WidgetConfigKind.integer,
+            group: 'Stroke', label: 'Width', unit: 'px', min: 0, max: 40),
+        WidgetConfigField('corner', WidgetConfigKind.choice,
+            group: 'Geometry',
+            label: 'Corner',
+            options: ['xs', 'sm', 'md', 'lg', 'pill'],
+            help: 'Rectangles only — the other shapes have no corners to '
+                'round.'),
+        WidgetConfigField('rotation', WidgetConfigKind.integer,
+            group: 'Geometry',
+            label: 'Rotation',
+            unit: '°',
+            defaultValue: 0,
+            min: -360,
+            max: 360),
+        WidgetConfigField('path', WidgetConfigKind.text,
+            group: 'Geometry',
+            label: 'Path',
+            help: 'An SVG path, scaled into the element. Only read when the '
+                'shape is “path”.'),
+      ],
+      builder: (context, a) => ShapePrimitiveCard(config: a.config),
+    ),
+    WidgetDescriptor(
+      type: 'line',
+      title: 'Line',
+      description: 'A rule at any angle, in one colour or a fade.',
+      icon: Icons.show_chart_outlined,
+      chrome: WidgetChrome.bare,
+      sizeHint: const WidgetSizeHint(
+          minW: 1, minH: 1, recommendedW: 4, recommendedH: 1),
+      configFields: const [
+        WidgetConfigField('ink', WidgetConfigKind.ink,
+            group: 'Colour', label: 'Colour'),
+        WidgetConfigField('ink_end', WidgetConfigKind.ink,
+            group: 'Colour',
+            label: 'Fades to',
+            help: 'Leave unset for a flat line.'),
+        WidgetConfigField('thickness', WidgetConfigKind.integer,
+            group: 'Stroke', label: 'Thickness', unit: 'px', min: 0, max: 80),
+        WidgetConfigField('angle', WidgetConfigKind.integer,
+            group: 'Stroke',
+            label: 'Angle',
+            unit: '°',
+            defaultValue: 0,
+            min: -360,
+            max: 360),
+        WidgetConfigField('dash', WidgetConfigKind.integer,
+            group: 'Stroke',
+            label: 'Dash',
+            unit: 'px',
+            defaultValue: 0,
+            min: 0,
+            max: 60),
+        WidgetConfigField('cap', WidgetConfigKind.choice,
+            group: 'Stroke',
+            label: 'Ends',
+            defaultValue: 'flat',
+            options: ['flat', 'round']),
+      ],
+      builder: (context, a) => LinePrimitiveCard(config: a.config),
     ),
   ]);
 }

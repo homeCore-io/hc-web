@@ -119,8 +119,9 @@ void main() {
             .where((d) => d.chrome == WidgetChrome.bare)
             .map((d) => d.type)
             .toSet(),
-        {'heading', 'divider', 'spacer'},
-        reason: 'only the layout family goes frameless',
+        {'heading', 'divider', 'spacer', 'text', 'shape', 'line'},
+        reason: 'only the layout family and the primitives go frameless — a '
+            'shape inside a card is a card with a shape in it',
       );
     });
   });

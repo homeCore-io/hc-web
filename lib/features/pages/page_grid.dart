@@ -39,6 +39,7 @@ class PageGrid extends StatefulWidget {
     this.onWidgetConfig,
     this.onAddAt,
     this.onMarquee,
+    this.onDraw,
     this.selectedIds = const {},
     this.onDropCard,
     this.onMenu,
@@ -76,16 +77,39 @@ class PageGrid extends StatefulWidget {
   /// A card rewriting its own config — see [WidgetRenderArgs.onConfigChanged].
   final void Function(String id, Map<String, dynamic> config)? onWidgetConfig;
 
-  /// A tap on empty canvas, in grid cells.
+  /// A tap on empty canvas, in canvas pixels.
   ///
   /// The canvas used to be inert: cards appended at the engine's first fit and
   /// you dragged them where you meant. Pointing at the place you want something
   /// is the difference between arranging a page and correcting one.
-  final void Function(int x, int y)? onAddAt;
+  ///
+  /// Pixels rather than cells, for the same reason [onDraw] takes them: a tap
+  /// with a text tool in hand should put the words where the pointer was, and
+  /// the caller can always ask the geometry which cell that is.
+  final void Function(Offset at)? onAddAt;
 
   /// A rubber band was pulled from one cell to another. [additive] is shift:
   /// add the catch to what is already in hand.
   final void Function(int x1, int y1, int x2, int y2, bool additive)? onMarquee;
+
+  /// A drag was made **with a drawing tool in hand**, in canvas pixels.
+  ///
+  /// The same gesture as [onMarquee] and deliberately so: one band, and what it
+  /// means is what you are holding. That is how every design application
+  /// works, and it is the interaction the designer was missing — an element
+  /// arriving at the size and place you drew it, rather than at the engine's
+  /// first fit with two corrections to follow.
+  ///
+  /// **Pixels, not cells.** A selection band asks which cells it swept, and
+  /// cells are the answer. Drawing asks what rectangle this is, and a cell is
+  /// about 130 by 120 on a desktop layout — so answering in cells turns a rule
+  /// into a two-by-four block and a caption into a word floating in a box four
+  /// times its height. The document has expressed rectangles since the
+  /// composition arc; drawing uses them.
+  ///
+  /// Non-null is also the signal that a tool is in hand: the band changes
+  /// colour, the cursor becomes a crosshair, and nothing gets selected.
+  final void Function(Offset from, Offset to)? onDraw;
 
   /// The card the rail is showing. Marked on the canvas, because a panel that
   /// names a card while nothing on the board says which one is a panel about
@@ -346,6 +370,24 @@ class _PageGridState extends State<PageGrid> {
   /// selecting means. Neither has to be modal and neither steals the other.
   (int, int)? _bandFrom;
   (int, int)? _bandTo;
+
+  /// The same drag, in canvas pixels, while a **drawing** tool is in hand.
+  ///
+  /// Two representations because the two gestures want different truths. A
+  /// selection band asks "which cells did this sweep over", and cells are the
+  /// answer. Drawing asks "what rectangle is this", and cells are the wrong
+  /// answer by a factor of a hundred: a cell is about 130 by 120 on a desktop
+  /// layout, so a rule drawn in cells is a two-by-four block. The band you see
+  /// while drawing is the element you are about to get, to the pixel.
+  Offset? _drawFrom;
+  Offset? _drawTo;
+
+  /// How far the pointer must travel before a press counts as a drawn drag.
+  ///
+  /// Without it every click with a tool in hand would make a four-pixel
+  /// element from the hand-shake — and a click is supposed to make one at a
+  /// sensible size instead.
+  static const double _drawSlop = 6;
 
   List<GridItem>? _preview;
 
@@ -670,68 +712,126 @@ class _PageGridState extends State<PageGrid> {
                   // scroll it with the wheel or with the bars this shell draws
                   // permanently. So the band takes the pointer directly rather
                   // than negotiating for it.
-                  child: Listener(
-                    onPointerDown: widget.onMarquee == null
-                        ? null
-                        : (e) => setState(() {
-                              _bandFrom = _cellOf(
-                                  e.localPosition, stepX, stepY, columns);
-                              _bandTo = _bandFrom;
-                            }),
-                    onPointerMove: widget.onMarquee == null
-                        ? null
-                        : (e) {
-                            if (_bandFrom == null) return;
-                            setState(() => _bandTo = _cellOf(
-                                e.localPosition, stepX, stepY, columns));
-                          },
-                    onPointerUp: widget.onMarquee == null
-                        ? null
-                        : (_) {
-                            final from = _bandFrom;
-                            final to = _bandTo;
-                            setState(() {
-                              _bandFrom = null;
-                              _bandTo = null;
-                            });
-                            // Never left its cell: a tap that wobbled, and
-                            // placing a card is what a tap here is for.
-                            if (from == null || to == null || from == to) {
-                              return;
-                            }
-                            widget.onMarquee!(
-                              from.$1,
-                              from.$2,
-                              to.$1,
-                              to.$2,
-                              HardwareKeyboard.instance.isShiftPressed,
-                            );
-                          },
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTapUp: widget.onAddAt == null
+                  child: MouseRegion(
+                    // A crosshair is the whole feedback that a tool is in
+                    // hand: the pointer says what the next drag will do before
+                    // it does it, which is the difference between a tool you
+                    // are holding and a mode you are in.
+                    cursor: widget.onDraw != null
+                        ? SystemMouseCursors.precise
+                        : MouseCursor.defer,
+                    child: Listener(
+                      onPointerDown:
+                          widget.onMarquee == null && widget.onDraw == null
+                              ? null
+                              : (e) => setState(() {
+                                    _bandFrom = _cellOf(
+                                        e.localPosition, stepX, stepY, columns);
+                                    _bandTo = _bandFrom;
+                                    _drawFrom = e.localPosition;
+                                    _drawTo = e.localPosition;
+                                  }),
+                      onPointerMove:
+                          widget.onMarquee == null && widget.onDraw == null
+                              ? null
+                              : (e) {
+                                  if (_bandFrom == null) return;
+                                  setState(() {
+                                    _bandTo = _cellOf(
+                                        e.localPosition, stepX, stepY, columns);
+                                    _drawTo = e.localPosition;
+                                  });
+                                },
+                      onPointerUp: widget.onMarquee == null &&
+                              widget.onDraw == null
                           ? null
-                          : (details) {
-                              final p = details.localPosition;
-                              final x =
-                                  (p.dx / stepX).floor().clamp(0, columns - 1);
-                              final y = (p.dy / stepY).floor();
-                              widget.onAddAt!(x, y < 0 ? 0 : y);
+                          : (_) {
+                              final from = _bandFrom;
+                              final to = _bandTo;
+                              final drawn = (_drawFrom, _drawTo);
+                              setState(() {
+                                _bandFrom = null;
+                                _bandTo = null;
+                                _drawFrom = null;
+                                _drawTo = null;
+                              });
+                              // One band, and what it means is what you are
+                              // holding. Drawing is checked first and in
+                              // *pixels*, so a rule pulled across half a cell
+                              // is still a rule — the cell test below would
+                              // have thrown it away as a wobbled tap.
+                              if (widget.onDraw case final draw?) {
+                                if (drawn.$1 case final a?) {
+                                  if (drawn.$2 case final b?) {
+                                    if ((a - b).distance >= _drawSlop) {
+                                      draw(a, b);
+                                      return;
+                                    }
+                                  }
+                                }
+                                // Too short to be a drag: the tap handler
+                                // below draws one at its own size.
+                                return;
+                              }
+                              // Never left its cell: a tap that wobbled, and
+                              // placing a card is what a tap here is for.
+                              if (from == null || to == null || from == to) {
+                                return;
+                              }
+                              widget.onMarquee!(
+                                from.$1,
+                                from.$2,
+                                to.$1,
+                                to.$2,
+                                HardwareKeyboard.instance.isShiftPressed,
+                              );
                             },
-                      child: CustomPaint(
-                        painter: _ColumnGuides(
-                          columns: columns,
-                          cellW: cellW,
-                          gap: widget.gap,
-                          color: t.stroke.hairline,
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTapUp: widget.onAddAt == null
+                            ? null
+                            : (details) =>
+                                widget.onAddAt!(details.localPosition),
+                        child: CustomPaint(
+                          painter: _ColumnGuides(
+                            columns: columns,
+                            cellW: cellW,
+                            gap: widget.gap,
+                            color: t.stroke.hairline,
+                          ),
                         ),
                       ),
                     ),
                   ),
                 ),
 
-              // The rubber band, while one is being pulled.
-              if (_bandFrom case final from?)
+              // The band, while one is being pulled — a catch, or a thing about
+              // to exist.
+              //
+              // The two read differently on purpose. A selection band is a net
+              // you throw over what is already there, so it is faint. A draw
+              // band *is* the element you are making, at the size it will be,
+              // so it is filled and solid-edged: what you let go of is what you
+              // see, which is the promise the gesture makes.
+              //
+              // And the draw band is in *pixels* while the selection band is in
+              // cells, for the same reason the callback is: a preview that
+              // snapped to cells would promise a two-by-four block and then
+              // hand over the thin rule you actually drew.
+              if (widget.onDraw != null && _drawFrom != null && _drawTo != null)
+                Positioned.fromRect(
+                  rect: Rect.fromPoints(_drawFrom!, _drawTo!),
+                  child: IgnorePointer(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: t.accent.active.withValues(alpha: 0.14),
+                        border: Border.all(
+                            color: t.accent.active, width: t.stroke.width * 2),
+                      ),
+                    ),
+                  ),
+                )
+              else if (_bandFrom case final from?)
                 if (_bandTo case final to?)
                   Positioned(
                     left: (from.$1 < to.$1 ? from.$1 : to.$1) * stepX,
