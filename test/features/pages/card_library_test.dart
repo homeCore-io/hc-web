@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hc_web/core/models/dashboard.dart';
 import 'package:hc_web/core/models/device_state.dart';
+import 'package:hc_web/core/api/assets_api.dart';
+import 'package:hc_web/core/providers/assets_provider.dart';
 import 'package:hc_web/core/providers/devices_provider.dart';
 import 'package:hc_web/design/skins.dart';
 import 'package:hc_web/features/dashboard/builtin_cards.dart';
@@ -34,14 +38,18 @@ DeviceState _d(String id, String area, {bool on = false, String? type}) =>
 
 Future<List<DashboardWidgetModel>> _pump(
   WidgetTester tester,
-  List<DeviceState> devices,
-) async {
+  List<DeviceState> devices, {
+  List<AssetRef>? assets,
+}) async {
   registerBuiltinDashboardWidgets();
   final picked = <DashboardWidgetModel>[];
   await tester.binding.setSurfaceSize(const Size(420, 1600));
   addTearDown(() => tester.binding.setSurfaceSize(null));
   await tester.pumpWidget(ProviderScope(
-    overrides: [devicesProvider.overrideWith(() => _StubDevices(devices))],
+    overrides: [
+      devicesProvider.overrideWith(() => _StubDevices(devices)),
+      assetListProvider.overrideWith((ref) async => assets ?? const []),
+    ],
     child: MaterialApp(
       theme: hcTheme(HcSkin.midnight, reduceMotion: true),
       home: Scaffold(body: CardLibrary(onPick: picked.add)),
@@ -62,10 +70,13 @@ void main() {
 
   group('it shows this house', () {
     testWidgets('rooms, with how many and how many are on', (tester) async {
+      // Both numbers survive the move from a row to a tile: the total is on
+      // the tile's face, and the live count is on the tooltip. A room is a
+      // real thing rather than a label because of the two of them.
       await _pump(tester, house);
       expect(find.text('Living Room'), findsOneWidget);
       expect(find.text('Office'), findsOneWidget);
-      expect(find.text('2 on'), findsOneWidget,
+      expect(find.byTooltip('Living Room — 3 devices, 2 on'), findsOneWidget,
           reason: 'two of the living room devices are on');
     });
 
@@ -143,30 +154,127 @@ void main() {
     });
   });
 
-  group('groups', () {
-    testWidgets('rooms are open and the rest are closed', (tester) async {
-      // Fifteen rooms are fifteen rows: on a real house the last group started
-      // two-thirds of the way down the panel, so everything that was not a
-      // room read as an afterthought.
-      await _pump(tester, house);
-      expect(find.text('Living Room'), findsOneWidget);
-      expect(find.text('Activity'), findsNothing);
+  group('pictures', () {
+    // They had no way into a page at all: uploading worked, four config fields
+    // could pick one, and placing a picture still meant making an image element
+    // and then finding the address to type into it.
+
+    testWidgets('the ones this house has, as things you can place',
+        (tester) async {
+      await _pump(tester, house, assets: [
+        const AssetRef(
+            id: 'a1', contentType: 'image/png', size: 10, name: 'hallway.png'),
+        const AssetRef(
+            id: 'a2', contentType: 'image/jpeg', size: 20, name: 'porch.jpg'),
+      ]);
+      expect(find.text('PICTURES'), findsOneWidget);
+      expect(find.byTooltip('hallway.png'), findsOneWidget);
+      expect(find.byTooltip('porch.jpg'), findsOneWidget);
     });
 
-    testWidgets('a closed group still says how much is in it', (tester) async {
+    testWidgets('clicking one places an image already pointing at it',
+        (tester) async {
+      final picked = await _pump(tester, house, assets: [
+        const AssetRef(
+            id: 'a1', contentType: 'image/png', size: 10, name: 'hallway.png'),
+      ]);
+      await tester.tap(find.byTooltip('hallway.png'));
+      await tester.pumpAndSettle();
+      expect(picked.single.type, 'image');
+      expect(picked.single.config['url'], contains('a1'));
+      // Named for the file, so the layer tree says which picture rather than
+      // "Image" four times.
+      expect(picked.single.title, 'hallway.png');
+    });
+
+    testWidgets('only pictures — a font is not something you place',
+        (tester) async {
+      await _pump(tester, house, assets: [
+        const AssetRef(
+            id: 'f1', contentType: 'font/ttf', size: 10, name: 'Inter.ttf'),
+      ]);
+      expect(find.byTooltip('Inter.ttf'), findsNothing);
+    });
+
+    testWidgets('an empty store says how to fill it', (tester) async {
+      await _pump(tester, house, assets: const []);
+      expect(find.textContaining('Nothing uploaded yet'), findsOneWidget);
+    });
+
+    testWidgets('says it is looking, rather than claiming there is nothing',
+        (tester) async {
+      // "Nothing uploaded yet" is a claim about the house and it is false
+      // while the question is in flight — but rendering *nothing* instead made
+      // the section appear not to exist, which is how it went missing on the
+      // live house with no way to tell why. The header stays; only the claim
+      // waits.
+      registerBuiltinDashboardWidgets();
+      await tester.binding.setSurfaceSize(const Size(420, 1600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          devicesProvider.overrideWith(() => _StubDevices(house)),
+          assetListProvider
+              .overrideWith((ref) => Completer<List<AssetRef>>().future),
+        ],
+        child: MaterialApp(
+          theme: hcTheme(HcSkin.midnight, reduceMotion: true),
+          home: Scaffold(body: CardLibrary(onPick: (_) {})),
+        ),
+      ));
+      await tester.pump();
+      expect(find.textContaining('Nothing uploaded yet'), findsNothing);
+      expect(find.text('PICTURES'), findsOneWidget);
+      expect(find.text('Looking…'), findsOneWidget);
+    });
+
+    testWidgets('a listing that fails says so, rather than vanishing',
+        (tester) async {
+      registerBuiltinDashboardWidgets();
+      await tester.binding.setSurfaceSize(const Size(420, 1600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          devicesProvider.overrideWith(() => _StubDevices(house)),
+          assetListProvider
+              .overrideWith((ref) async => throw Exception('no route')),
+        ],
+        child: MaterialApp(
+          theme: hcTheme(HcSkin.midnight, reduceMotion: true),
+          home: Scaffold(body: CardLibrary(onPick: (_) {})),
+        ),
+      ));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Could not list your files'), findsOneWidget);
+    });
+  });
+
+  group('groups', () {
+    testWidgets('nothing is hidden behind a caret', (tester) async {
+      // The accordion was the honest answer while every entry was a full-width
+      // row: fifteen rooms pushed everything else into the bottom third of the
+      // panel, so anything that was not a room read as an afterthought. Tiles
+      // are three to a row, so the whole catalogue fits — and a palette whose
+      // contents are behind carets is a browser rather than a palette.
+      await _pump(tester, house);
+      expect(find.text('Living Room'), findsOneWidget);
+      expect(find.text('Activity'), findsOneWidget);
+      expect(find.text('Gauge'), findsOneWidget);
+    });
+
+    testWidgets('a section still says how much is in it', (tester) async {
       await _pump(tester, house);
       expect(find.text('THE HOUSE'), findsOneWidget);
       expect(find.text('6'), findsWidgets,
-          reason: 'the count is what makes a closed group honest');
+          reason: 'the count is what tells you a section is complete');
     });
 
-    testWidgets('a search opens every group', (tester) async {
-      // A hit hidden inside a closed group is a search that appears to have
-      // found nothing.
+    testWidgets('search still narrows to a hit', (tester) async {
       await _pump(tester, house);
       await tester.enterText(find.byType(TextField), 'activ');
       await tester.pumpAndSettle();
       expect(find.text('Activity'), findsOneWidget);
+      expect(find.text('Gauge'), findsNothing);
     });
   });
 
@@ -236,9 +344,9 @@ void main() {
       // from the card itself, so the number beside the name is the number you
       // get. Four devices; the scene is not one of them.
       await _pump(tester, house);
-      final row =
-          find.ancestor(of: find.text('Lights'), matching: find.byType(Row));
-      expect(find.descendant(of: row.first, matching: find.text('4')),
+      final tile = find.ancestor(
+          of: find.text('Lights'), matching: find.byType(Tooltip));
+      expect(find.descendant(of: tile.first, matching: find.text('4')),
           findsWidgets,
           reason: 'four lights, not five — the scene is not a light');
     });
