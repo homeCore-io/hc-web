@@ -181,6 +181,10 @@ class WidgetConfigField {
     this.required = false,
     this.options,
     this.defaultValue,
+    this.group,
+    this.unit,
+    this.min,
+    this.max,
   });
 
   final String name;
@@ -190,6 +194,29 @@ class WidgetConfigField {
   final bool required;
   final List<String>? options;
   final Object? defaultValue;
+
+  /// The heading this setting belongs under, or null for the top of the panel.
+  ///
+  /// An inspector is read down, so a run of twelve unrelated settings is twelve
+  /// decisions in no order. Grouping is what lets the eye skip to *fill* or to
+  /// *transform* — and it is the card's own knowledge, not the panel's, because
+  /// only the card knows which of its settings are one idea.
+  final String? group;
+
+  /// `px`, `°`, `%` — shown after the value, never folded into the label.
+  ///
+  /// "Rotation" and "°" are two different things: one names the setting and one
+  /// names what the number means. Putting the unit in the label ("Rotation°")
+  /// reads as a typo and cannot be aligned down the panel.
+  final String? unit;
+
+  /// The range a number is held to, for the field and for scrubbing alike.
+  ///
+  /// Clamping here rather than in the card means a value typed out of range is
+  /// corrected where it is typed — the card never has to defend itself against
+  /// an opacity of 4000.
+  final num? min;
+  final num? max;
 }
 
 enum WidgetConfigKind {
@@ -208,6 +235,15 @@ enum WidgetConfigKind {
   facet,
   markdown,
   url,
+
+  /// A colour for a *mark* — text, a shape's fill, a rule.
+  ///
+  /// Distinct from [choice] over the same names because the answer is a
+  /// colour: a dropdown listing the word "Accent" tells you nothing about what
+  /// the page will look like, and the whole point of picking a colour is
+  /// seeing it. Rendered as swatches, with a hex field behind them for the one
+  /// that has to match something outside the skin.
+  ink,
 
   /// An address that may also be uploaded — a picture stored by core.
   ///

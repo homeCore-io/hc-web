@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/dashboard/breakpoints.dart';
 import '../../core/dashboard/canvas_view.dart';
 import '../../core/dashboard/clipboard.dart';
+import '../../core/dashboard/design_tools.dart';
 import '../../core/dashboard/frame.dart';
 import '../../core/dashboard/free_layer.dart';
 import '../../core/dashboard/grid_engine.dart';
@@ -176,6 +177,13 @@ class _PageScreenState extends ConsumerState<PageScreen> {
   /// about the document and survives a reload. "Just the grid" changes nothing
   /// at all, so the only thing it can mean is *stop offering*.
   bool _dismissedStart = false;
+
+  /// What is in hand at the toolbar.
+  ///
+  /// View state like the zoom, and deliberately **not** sticky across a
+  /// session: a designer that opened with the shape tool still held from
+  /// yesterday would make a rectangle out of the first click of the day.
+  DesignTool _tool = DesignTool.select;
 
   /// Whether a composed drag is pulled to the cell edges.
   ///
@@ -1555,6 +1563,135 @@ class _PageScreenState extends ConsumerState<PageScreen> {
     });
   }
 
+  /// Draws the element the held tool makes, at the rectangle just dragged.
+  ///
+  /// **The size is the drag, not the size hint.** That is the whole point of
+  /// the gesture: with a catalogue you choose a thing and then correct where it
+  /// went and how big it is, and with a tool the element arrives finished. A
+  /// drawn element that then snapped to its recommended size would be a
+  /// catalogue wearing a tool's clothes.
+  ///
+  /// Returns to Select afterwards, the way a drawing application does: one
+  /// shape per press of the tool. Drawing five rectangles in a row is rarer
+  /// than drawing one and immediately wanting to move it, and the tool that
+  /// stays down is the one that has you making shapes by accident.
+  Future<void> _drawWith(
+    DesignTool tool,
+    Offset from,
+    Offset to,
+    CanvasGeometry geometry,
+    double lineHeight,
+  ) async {
+    final drawing = toolDrawing(tool, from, to, lineHeight: lineHeight);
+
+    // The catalogue tools have to ask before they can make anything — what a
+    // device grid *shows* is the choice, and no drag can express it. The
+    // rectangle is not wasted: it becomes the card's placement, so choosing
+    // from a list still lands where you drew.
+    if (tool.picks) {
+      final created = await showWidgetPalette(context);
+      if (created == null || !mounted) return;
+      _placeDrawn(created, drawing.rect, geometry);
+      setState(() => _tool = DesignTool.select);
+      return;
+    }
+    final type = tool.type;
+    if (type == null) return;
+    final descriptor = WidgetRegistry.lookup(type);
+    if (descriptor == null) return;
+
+    _placeDrawn(
+      DashboardWidgetModel(
+        // The same id shape the library and the palette make. There is no
+        // registry of ids to collide with — the document is the only place one
+        // lives — and two elements cannot be created in the same microsecond by
+        // one pair of hands.
+        id: 'widget_${DateTime.now().microsecondsSinceEpoch}',
+        type: type,
+        title: descriptor.title,
+        refreshPolicy: DashboardRefreshPolicy.live,
+        config: {...drawing.config},
+      ),
+      drawing.rect,
+      geometry,
+    );
+    setState(() => _tool = DesignTool.select);
+  }
+
+  /// A click with a tool in hand.
+  ///
+  /// A click is a drag of no length, and a tool that made nothing from one
+  /// would read as broken — so the drawing tools make their element at the
+  /// floor size the tool itself declares, and the catalogue opens as it always
+  /// has.
+  void _clickWith(
+    DesignTool tool,
+    Offset at,
+    int columns,
+    CanvasGeometry geometry,
+    double lineHeight,
+  ) {
+    if (!tool.draws || tool.picks) {
+      final x = (at.dx / geometry.stepX).floor().clamp(0, columns - 1);
+      final y = (at.dy / geometry.stepY).floor();
+      _addWidget(columns, atX: x, atY: y < 0 ? 0 : y);
+      return;
+    }
+    _drawWith(tool, at, at, geometry, lineHeight);
+  }
+
+  /// Puts [created] on the page at exactly [rect], in canvas pixels.
+  ///
+  /// **Composed and floating, both deliberately.** Composed, because the
+  /// rectangle is the truth and the cells beside it are only the approximation
+  /// core validates — that is what lets a rule be three pixels tall instead of
+  /// a whole row. Floating, because gravity in a packed layout would pull the
+  /// element straight up to the top of the page the moment it landed, and an
+  /// element that jumps out of your hand as you let go of it is not something
+  /// anybody can design with.
+  void _placeDrawn(
+    DashboardWidgetModel created,
+    DashboardRect rect,
+    CanvasGeometry geometry,
+  ) {
+    final descriptor = WidgetRegistry.lookup(created.type);
+    final title = (descriptor?.title ?? 'element').toLowerCase();
+    // The cells, kept in step with the rectangle by the one function that does
+    // that — and guaranteed legal for core, which validates the cells and knows
+    // nothing about rectangles.
+    final snapped =
+        geometry.snapToCells(created.id, rect, floating: true, z: 1);
+    final item = GridItem(
+      id: created.id,
+      x: snapped.x,
+      y: snapped.y,
+      w: snapped.w,
+      h: snapped.h,
+      minW: descriptor?.sizeHint.minW ?? 1,
+      minH: descriptor?.sizeHint.minH ?? 1,
+      floating: true,
+      z: 1,
+      rect: rect,
+    );
+    _pushUndo('Draw $title');
+    setState(() {
+      // The lift is on the element, not on the placement — see
+      // `free_layer.dart`. Writing it here keeps a drawn element floating at
+      // every breakpoint, which is what "I put this here" means.
+      _draftWidgets = {
+        ...?_draftWidgets,
+        created.id: created.copyWith(config: lift(created.config)),
+      };
+      _pendingPlacement.add(created.id);
+      _commit([...?_draftItems, item]);
+      // Select what was just drawn: the next thing anyone does to a new
+      // element is give it words or a colour, and that is the inspector.
+      _selection
+        ..clear()
+        ..add(created.id);
+    });
+  }
+
   /// Applies a config edit to the draft as it is made.
   ///
   /// No commit step: the page's own Cancel and Done already govern the draft,
@@ -1825,6 +1962,16 @@ class _PageScreenState extends ConsumerState<PageScreen> {
               )
             : null;
 
+        // The units a drawn element lands in. The same geometry the composed
+        // drags use, so a rectangle drawn and a rectangle dragged mean the same
+        // thing.
+        final geometry = _geometry(columns);
+        // One line of the type a new text element starts at, so a text box is
+        // as tall as its words rather than as tall as a grid row. Read from the
+        // skin here because the skin is what scales the ramp — a number in
+        // `design_tools.dart` would be a second type system.
+        final lineHeight = t.text.titleStyle.fontSize! * t.text.title.height;
+
         // The canvas, shared by both presentations. In the designer it is the
         // middle pane; in the page it is the whole body.
         Widget canvas() => items.isEmpty && !_editing
@@ -1860,7 +2007,18 @@ class _PageScreenState extends ConsumerState<PageScreen> {
                   // uses, so it lands in the draft and coalesces into one undo
                   // entry per gesture rather than one per pixel.
                   onWidgetConfig: _configureLive,
-                  onAddAt: (x, y) => _addWidget(columns, atX: x, atY: y),
+                  // A click, with whatever is in hand. A drawing tool makes its
+                  // element at its own recommended size — a click is a drag of
+                  // no length, and refusing to make anything would read as the
+                  // tool being broken. The catalogue tools still ask.
+                  onAddAt: (at) =>
+                      _clickWith(_tool, at, columns, geometry, lineHeight),
+                  // The band draws when a tool is held and selects when it is
+                  // not — one gesture, and what it means is what you picked.
+                  onDraw: !_tool.draws
+                      ? null
+                      : (from, to) =>
+                          _drawWith(_tool, from, to, geometry, lineHeight),
                   onMarquee: (x1, y1, x2, y2, additive) => setState(() {
                     final caught = _engine(columns)
                         .itemsIn(_draftItems ?? const [], x1, y1, x2, y2);
@@ -1921,6 +2079,8 @@ class _PageScreenState extends ConsumerState<PageScreen> {
                 .cast<GridItem?>()
                 .firstOrNull,
             consequence: _editConsequence(breakpoint),
+            tool: _tool,
+            onTool: (t) => setState(() => _tool = t),
             onSelectBreakpoint: _selectBreakpoint,
             onRevert: canRevert ? () => _revertSelected(source) : null,
             onPick: (created) => _placeCard(created, columns),

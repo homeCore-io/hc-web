@@ -238,10 +238,16 @@ void main() {
     });
 
     testWidgets('stepping off Fit lands on a round stop', (tester) async {
-      // A 1600px desktop canvas in this pane fits at ~53%. Stepping must give
-      // the next stop, not Fit ± an increment — 78% is not a number anyone
-      // asked for.
+      // A 1600px desktop canvas in this pane fits just under 50% — it was 53%
+      // before the tool strip took its 44 pixels, which is exactly why this
+      // asserts *stops* rather than the two numbers that used to fall out of
+      // the arithmetic. Stepping must give the next stop, not Fit ± an
+      // increment: 78% is not a number anyone asked for.
       await _openDesigner(tester);
+      await tester.tap(find.byTooltip('Zoom in'));
+      await tester.pumpAndSettle();
+      expect(find.text('50%'), findsOneWidget);
+
       await tester.tap(find.byTooltip('Zoom in'));
       await tester.pumpAndSettle();
       expect(find.text('75%'), findsOneWidget);

@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/dashboard/canvas_view.dart';
+import '../../core/dashboard/design_tools.dart';
 import '../../core/dashboard/frame.dart';
 import '../../core/dashboard/free_layer.dart';
 import '../../core/dashboard/grid_engine.dart';
@@ -20,6 +21,7 @@ import 'layer_tree_panel.dart';
 import 'page_inspector.dart';
 import 'page_background.dart';
 import 'scaled_canvas.dart';
+import 'tool_palette.dart';
 
 /// The design surface: a tool, not a page.
 ///
@@ -102,6 +104,8 @@ class DesignerShell extends StatefulWidget {
     required this.historyAt,
     required this.onJumpHistory,
     required this.onBackgroundChanged,
+    required this.tool,
+    required this.onTool,
     this.onStack,
   });
 
@@ -125,6 +129,15 @@ class DesignerShell extends StatefulWidget {
 
   /// Step inside the group that [id] belongs to.
   final ValueChanged<String>? onEnterGroupId;
+
+  /// What is in hand, in the toolbar sense.
+  ///
+  /// Held by the screen rather than by the strip, because it changes what the
+  /// canvas does with a drag and what a bare letter key means. A tool that only
+  /// the toolbar knew about would be a toolbar that highlights buttons.
+  final DesignTool tool;
+  final ValueChanged<DesignTool> onTool;
+
   final DashboardWidgetModel? selected;
   final GridItem? selectedItem;
   final String? consequence;
@@ -414,6 +427,9 @@ class _DesignerShellState extends State<DesignerShell> {
           final available = frame.maxWidth -
               DesignerShell._libraryWidth -
               DesignerShell._inspectorWidth -
+              // Nor is the tool strip. Left out, Fit would pick a scale a strip
+              // too wide — the same mistake the ruler taught, one pane later.
+              ToolPalette.width -
               // The ruler down the left-hand edge is not canvas. Left out of
               // this, Fit would pick a scale twenty pixels too wide and quietly
               // stop meaning what it says.
@@ -451,7 +467,14 @@ class _DesignerShellState extends State<DesignerShell> {
             // still has a scale rather than vanishing.
             fit = frameScale(composed, Size(available, tall)).clamp(0.02, 1.0);
           } else {
-            fit = (available / width).clamp(_minZoom, 1.0);
+            // Not clamped to the zoom floor either, for the reason the fixed
+            // branch above gives: Fit is a promise about what you can see, and
+            // the floor exists so the *stops* stay usable. Adding the tool
+            // strip is what made this matter — it took the desktop preview in
+            // a 1500-pixel window from 52% to 49%, and the clamp turned "the
+            // whole width" into "the whole width, minus twelve pixels you can
+            // scroll to but are not told about".
+            fit = (available / width).clamp(0.02, 1.0);
           }
           final scale = _zoom ?? fit;
           // The canvas in pixels, at 1:1. Framing works in these units and
@@ -526,6 +549,8 @@ class _DesignerShellState extends State<DesignerShell> {
                         onPick: widget.onPick,
                       ),
                     ),
+                    // The tools, against the canvas they act on.
+                    ToolPalette(tool: widget.tool, onTool: widget.onTool),
                     // The canvas is the only thing allowed to be large. It
                     // scrolls inside itself; the frame around it never moves.
                     Expanded(
@@ -550,6 +575,7 @@ class _DesignerShellState extends State<DesignerShell> {
                         onUngroup: widget.onUngroup,
                         onUndo: widget.canUndo ? widget.onUndo : null,
                         onRedo: widget.canRedo ? widget.onRedo : null,
+                        onTool: widget.onTool,
                         child: _Ruled(
                           geometry: geometry,
                           scale: scale,
@@ -1399,6 +1425,7 @@ class _CanvasKeys extends StatelessWidget {
     required this.onUngroup,
     required this.onUndo,
     required this.onRedo,
+    required this.onTool,
     required this.child,
   });
 
@@ -1418,6 +1445,10 @@ class _CanvasKeys extends StatelessWidget {
   final VoidCallback? onUngroup;
   final VoidCallback? onUndo;
   final VoidCallback? onRedo;
+
+  /// A bare letter picked a tool.
+  final ValueChanged<DesignTool> onTool;
+
   final Widget child;
 
   void _step(int dx, int dy) => onNudge?.call(dx, dy);
@@ -1461,7 +1492,13 @@ class _CanvasKeys extends StatelessWidget {
             onRemove?.call(),
         const SingleActivator(LogicalKeyboardKey.backspace): () =>
             onRemove?.call(),
-        const SingleActivator(LogicalKeyboardKey.escape): onDeselect,
+        const SingleActivator(LogicalKeyboardKey.escape): () {
+          // Escape means "put it down", and a tool in hand is the thing most
+          // in the way — a canvas where clicking keeps making rectangles and
+          // Escape only clears the selection is a canvas you feel trapped in.
+          onTool(DesignTool.select);
+          onDeselect();
+        },
         // Bound to the *character*, not to shift-plus-a-digit. On this
         // keyboard those are the same thing; on a layout where the digit row
         // is shifted the other way round they are not, and a shortcut that
@@ -1494,6 +1531,13 @@ class _CanvasKeys extends StatelessWidget {
         // The other spelling of redo, which half the world's editors use.
         const SingleActivator(LogicalKeyboardKey.keyY, control: true): () =>
             onRedo?.call(),
+        // The tools, on bare letters — V, T, R, L and the rest, exactly where
+        // every design application puts them. Bare letters are safe here for
+        // the reason at the top of this class: these bindings are around the
+        // canvas, so a focused text field takes its own keys first and typing
+        // a card's name still types letters.
+        for (final tool in DesignTool.values)
+          CharacterActivator(tool.shortcut.toLowerCase()): () => onTool(tool),
       },
       // Autofocus, because the canvas is what you are working in the moment the
       // designer opens — a tool whose keyboard needs a click first is a tool
@@ -1767,7 +1811,15 @@ class _StatusBar extends StatelessWidget {
       // Where you are standing — the one piece of state with no mark of its own
       // on the canvas, and the one that changes what every click does.
       if (inside case final path?) 'inside $path',
-      if (item != null) '${item!.w}×${item!.h} at ${item!.x},${item!.y}',
+      // Cells for a grid card, **pixels for a composed one**. Reporting "4×1
+      // at 4,1" for an element whose truth is a rectangle is reporting the
+      // approximation and calling it the measurement — and it is exactly what
+      // made a drawn rule look like it had been forced into a two-by-four
+      // block. The unit says which kind of element you are holding.
+      if (item?.rect case final r?)
+        '${r.w.round()}×${r.h.round()} px at ${r.x.round()},${r.y.round()}'
+      else if (item != null)
+        '${item!.w}×${item!.h} at ${item!.x},${item!.y}',
       // Only when it is true. A card in the grid has no height to report and a
       // status bar that says "grid" on every card is a word you stop reading.
       if (item?.floating == true) 'floating · z${item!.z}',
