@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/dashboard/widget_registry.dart';
 import '../../core/models/dashboard.dart';
 import '../../core/models/device_state.dart';
+import '../../core/api/assets_api.dart';
+import '../../core/providers/assets_provider.dart';
 import '../../core/providers/devices_provider.dart';
 import '../../core/devices/presentation.dart';
 import '../../core/text/humanize.dart';
@@ -56,11 +58,11 @@ class _CardLibraryState extends ConsumerState<CardLibrary> {
     super.dispose();
   }
 
-  /// Which groups are open. Rooms and devices start open because they are the
-  /// answer most of the time; the rest start closed so fifteen rooms do not
-  /// push everything else into the bottom third of the panel, which is what
-  /// happened on a real house.
-  final _open = <String>{'Rooms', 'Kinds', 'Devices'};
+  // The accordion is gone. Groups that opened and closed were the honest
+  // answer while every entry was a full-width row and fifteen rooms pushed
+  // everything else into the bottom third of the panel — but a palette whose
+  // contents are behind carets is a browser, not a palette. Tiles are three to
+  // a row, so the whole catalogue fits without anything being hidden.
 
   /// Rooms with something in them, most-populated first.
   ///
@@ -178,11 +180,6 @@ class _CardLibraryState extends ConsumerState<CardLibrary> {
     'style': {'filled': false, 'bordered': false, 'titled': false},
   };
 
-  /// Searching opens every group: a hit hidden inside a closed one is a search
-  /// that appears to have found nothing.
-  void _toggle(String label) =>
-      _open.contains(label) ? _open.remove(label) : _open.add(label);
-
   bool _matches(String label) =>
       _query.isEmpty || label.toLowerCase().contains(_query.toLowerCase());
 
@@ -242,11 +239,6 @@ class _CardLibraryState extends ConsumerState<CardLibrary> {
                   color: t.surface.onBase, fontWeight: FontWeight.w600)),
           SizedBox(height: t.space.sm),
           _Search(onChanged: (v) => setState(() => _query = v)),
-          SizedBox(height: t.space.xs),
-          Text(
-            'Type to find a device',
-            style: t.text.captionStyle.copyWith(color: t.surface.onBaseMuted),
-          ),
           SizedBox(height: t.space.md),
           Expanded(
             child: Scrollbar(
@@ -261,22 +253,27 @@ class _CardLibraryState extends ConsumerState<CardLibrary> {
                         style: t.text.captionStyle
                             .copyWith(color: t.surface.onBaseMuted))
                   else ...[
-                    if (shownRooms.isNotEmpty) ...[
-                      _Heading(
+                    if (shownRooms.isNotEmpty)
+                      _Section(
                         label: 'Rooms',
                         count: shownRooms.length,
-                        open: _open.contains('Rooms'),
-                        onTap: () => setState(() => _toggle('Rooms')),
-                      ),
-                      if (_open.contains('Rooms'))
-                        for (final room in shownRooms)
-                          _RoomRow(
-                            room: room,
-                            onTap: () => _placeRoom(room),
-                            payload: () => _roomCard(room),
-                          ),
-                      SizedBox(height: t.space.sm),
-                    ] else if (_query.isEmpty && rooms.isEmpty)
+                        children: [
+                          for (final room in shownRooms)
+                            _Tile(
+                              label: room.label,
+                              badge: '${room.total}',
+                              // The live count comes with it. A room is a real
+                              // thing rather than a label because of these two
+                              // numbers, and a tile 88 pixels wide can only
+                              // carry one of them on its face.
+                              hint: '${room.total} devices, ${room.on} on',
+                              icon: HcIcons.home,
+                              onTap: () => _placeRoom(room),
+                              payload: () => _roomCard(room),
+                            ),
+                        ],
+                      )
+                    else if (_query.isEmpty && rooms.isEmpty)
                       Padding(
                         padding: EdgeInsets.only(bottom: t.space.md),
                         child: Text(
@@ -289,31 +286,30 @@ class _CardLibraryState extends ConsumerState<CardLibrary> {
                     // Kinds sit under rooms because the room is the answer more
                     // often: "the kitchen" before "every light". Both are one
                     // drag, and neither asks anyone to meet the word "facet".
-                    if (shownKinds.isNotEmpty) ...[
-                      _Heading(
+                    if (shownKinds.isNotEmpty)
+                      _Section(
                         label: 'Kinds',
                         count: shownKinds.length,
-                        open: _open.contains('Kinds') || _query.isNotEmpty,
-                        onTap: () => setState(() => _toggle('Kinds')),
+                        children: [
+                          for (final kind in shownKinds)
+                            _Tile(
+                              label: kind.group.label,
+                              badge: '${kind.total}',
+                              icon: kind.icon,
+                              onTap: () => widget.onPick(_kindCard(kind)),
+                              payload: () => _kindCard(kind),
+                            ),
+                        ],
                       ),
-                      if (_open.contains('Kinds') || _query.isNotEmpty)
-                        for (final kind in shownKinds)
-                          _KindRow(
-                            kind: kind,
-                            onTap: () => widget.onPick(_kindCard(kind)),
-                            payload: () => _kindCard(kind),
-                          ),
-                      SizedBox(height: t.space.sm),
-                    ],
                   ],
-                  if (devices != null && _query.isNotEmpty) ...[
+                  // Devices stay rows, not tiles: a device's name is long and
+                  // means little without its room, and neither survives a
+                  // label two lines deep in an 88-pixel tile.
+                  if (devices != null && _query.isNotEmpty)
                     if (_matchingDevices(devices).isNotEmpty) ...[
-                      _Heading(
-                        label: 'Devices found',
-                        count: _matchingDevices(devices).length,
-                        open: true,
-                        onTap: () {},
-                      ),
+                      _SectionHead(
+                          label: 'Devices found',
+                          count: _matchingDevices(devices).length),
                       for (final d in _matchingDevices(devices).take(12))
                         _PlainRow(
                           label: d.displayName,
@@ -324,29 +320,31 @@ class _CardLibraryState extends ConsumerState<CardLibrary> {
                         ),
                       SizedBox(height: t.space.md),
                     ],
-                  ],
                   for (final group in _groups)
-                    if (group.entries.any((e) => _matches(e.label))) ...[
-                      _Heading(
+                    if (group.entries.any((e) => _matches(e.label)))
+                      _Section(
                         label: group.label,
                         count: group.entries
                             .where((e) => _matches(e.label))
                             .length,
-                        open: _open.contains(group.label) || _query.isNotEmpty,
-                        onTap: () => setState(() => _toggle(group.label)),
+                        children: [
+                          for (final entry in group.entries)
+                            if (_matches(entry.label))
+                              _Tile(
+                                label: entry.label,
+                                hint: entry.hint,
+                                icon: WidgetRegistry.lookup(entry.type)?.icon ??
+                                    Icons.widgets_outlined,
+                                onTap: () => widget.onPick(_entryCard(entry)),
+                                payload: () => _entryCard(entry),
+                              ),
+                        ],
                       ),
-                      if (_open.contains(group.label) || _query.isNotEmpty)
-                        for (final entry in group.entries)
-                          if (_matches(entry.label))
-                            _PlainRow(
-                              label: entry.label,
-                              hint: entry.hint,
-                              type: entry.type,
-                              onTap: () => widget.onPick(_entryCard(entry)),
-                              payload: () => _entryCard(entry),
-                            ),
-                      SizedBox(height: t.space.sm),
-                    ],
+                  // Your own pictures, which had no way in at all: placing one
+                  // meant making an image element and then typing an address
+                  // into it. They are assets of this house, so they belong
+                  // beside the rooms rather than behind a field.
+                  _AssetSection(query: _query, onPick: widget.onPick),
                 ],
               ),
             ),
@@ -547,155 +545,152 @@ class _Search extends StatelessWidget {
   }
 }
 
-/// A group header that opens and closes, and says how much is inside.
+/// A section of the palette: a quiet heading, then its tiles.
 ///
-/// Fifteen rooms are wonderful and they are also fifteen rows: on a real house
-/// the last group started two-thirds of the way down the panel, so everything
-/// that was not a room read as an afterthought. The count on the header is what
-/// makes a closed group honest — you can tell there are six things in Other
-/// without opening it.
-class _Heading extends StatelessWidget {
-  const _Heading({
+/// The count stays, because it is what tells you a section is complete without
+/// counting the tiles yourself — the same reason the old closed headers carried
+/// one.
+class _Section extends StatelessWidget {
+  const _Section({
     required this.label,
     required this.count,
-    required this.open,
-    required this.onTap,
+    required this.children,
   });
 
   final String label;
   final int count;
-  final bool open;
-  final VoidCallback onTap;
+  final List<Widget> children;
 
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
-    return Semantics(
-      button: true,
-      expanded: open,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(t.radius.sm),
-        child: Padding(
-          padding: EdgeInsets.symmetric(
-              vertical: t.space.xs, horizontal: t.space.xs),
-          child: Row(
-            children: [
-              Icon(open ? HcIcons.caretDown : HcIcons.caretRight,
-                  size: 11, color: t.surface.onBaseMuted),
-              SizedBox(width: t.space.xs),
-              Expanded(
-                child: Text(label.toUpperCase(),
-                    style: t.text.overlineStyle
-                        .copyWith(color: t.surface.onBaseMuted)),
-              ),
-              Text('$count',
-                  style: t.text.captionStyle.copyWith(
-                      color: t.surface.onBaseMuted,
-                      fontFeatures: t.numericFontFeatures)),
-            ],
-          ),
+    if (children.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _SectionHead(label: label, count: count),
+        Wrap(
+          spacing: t.space.xs,
+          runSpacing: t.space.xs,
+          children: children,
         ),
+        SizedBox(height: t.space.md),
+      ],
+    );
+  }
+}
+
+class _SectionHead extends StatelessWidget {
+  const _SectionHead({required this.label, required this.count});
+
+  final String label;
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Padding(
+      padding: EdgeInsets.only(bottom: t.space.xs, top: t.space.xs),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(label.toUpperCase(),
+                style: t.text.overlineStyle
+                    .copyWith(color: t.surface.onBaseMuted)),
+          ),
+          Text('$count',
+              style: t.text.captionStyle.copyWith(
+                  color: t.surface.onBaseMuted,
+                  fontFeatures: t.numericFontFeatures)),
+        ],
       ),
     );
   }
 }
 
-/// A room, with the two numbers that make it a real thing rather than a label.
-/// A kind, with the count the card will actually show.
+/// One thing you can put on the page.
 ///
-/// No "n on" column, unlike a room: "Lights 22 · 6 on" reads as a status line
-/// for a thing you are about to place, and what you are placing is the 22.
-class _KindRow extends StatelessWidget {
-  const _KindRow(
-      {required this.kind, required this.onTap, required this.payload});
-  final _Kind kind;
+/// A tile rather than a row, and that is the whole change John asked for: a
+/// full-width row with a name and a sentence of explanation is a catalogue
+/// entry in a content browser, and forty of them are a list you read. Three to
+/// a row with the icon carrying the meaning is a palette you scan — the
+/// explanation moves to the tooltip, where it is available and not in the way.
+class _Tile extends StatelessWidget {
+  const _Tile({
+    required this.label,
+    required this.icon,
+    required this.onTap,
+    required this.payload,
+    this.hint,
+    this.badge,
+  });
+
+  final String label;
+  final IconData icon;
   final VoidCallback onTap;
   final DashboardWidgetModel Function() payload;
+  final String? hint;
+
+  /// A count — how many devices a room holds, how many a kind matches. The
+  /// number the card will show, so the tile is a promise rather than a label.
+  final String? badge;
+
+  static const double width = 88;
 
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
-    return _DragRow(
-      payload: payload,
-      label: kind.group.label,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(t.radius.sm),
-        child: Padding(
-          padding: EdgeInsets.symmetric(
-              vertical: t.space.xs, horizontal: t.space.xs),
-          child: Row(
-            children: [
-              Icon(kind.icon, size: 15, color: t.surface.onBaseMuted),
-              SizedBox(width: t.space.sm),
-              Expanded(
-                child: Text(kind.group.label,
-                    style: t.text.bodySmallStyle
-                        .copyWith(color: t.surface.onBase)),
-              ),
-              Text(
-                '${kind.total}',
-                style: t.text.bodySmallStyle.copyWith(
-                    color: t.surface.onBaseMuted,
-                    fontFeatures: t.numericFontFeatures),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _RoomRow extends StatelessWidget {
-  const _RoomRow(
-      {required this.room, required this.onTap, required this.payload});
-  final _Room room;
-  final VoidCallback onTap;
-  final DashboardWidgetModel Function() payload;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = HcTokens.of(context);
-    return _DragRow(
-      payload: payload,
-      label: room.label,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(t.radius.sm),
-        child: Padding(
-          padding: EdgeInsets.symmetric(
-              vertical: t.space.xs, horizontal: t.space.xs),
-          child: Row(
-            children: [
-              Icon(Icons.meeting_room_outlined,
-                  size: 15, color: t.surface.onBaseMuted),
-              SizedBox(width: t.space.sm),
-              Expanded(
-                child: Text(room.label,
-                    style: t.text.bodySmallStyle
-                        .copyWith(color: t.surface.onBase)),
-              ),
-              Text(
-                '${room.total}',
-                style: t.text.bodySmallStyle.copyWith(
-                    color: t.surface.onBaseMuted,
-                    fontFeatures: t.numericFontFeatures),
-              ),
-              SizedBox(width: t.space.sm),
-              SizedBox(
-                width: 44,
-                child: Text(
-                  room.on > 0 ? '${room.on} on' : '',
-                  textAlign: TextAlign.right,
-                  style: t.text.captionStyle.copyWith(
-                      color:
-                          room.on > 0 ? t.accent.active : t.surface.onBaseMuted,
-                      fontFeatures: t.numericFontFeatures),
+    return Tooltip(
+      // The explanation the old rows carried under every name. Available on
+      // the tile you are pointing at, rather than repeated forty times down a
+      // panel nobody can scan.
+      message: hint == null ? label : '$label — $hint',
+      waitDuration: const Duration(milliseconds: 500),
+      child: _DragRow(
+        payload: payload,
+        label: label,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(t.radius.sm),
+          child: Container(
+            width: width,
+            height: 72,
+            padding: EdgeInsets.all(t.space.xs),
+            decoration: BoxDecoration(
+              color: t.surface.sunken,
+              borderRadius: BorderRadius.circular(t.radius.sm),
+              border:
+                  Border.all(color: t.stroke.hairline, width: t.stroke.width),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Icon(icon, size: 18, color: t.surface.onBaseMuted),
+                    if (badge case final n?)
+                      Positioned(
+                        right: -14,
+                        top: -2,
+                        child: Text(n,
+                            style: t.text.captionStyle.copyWith(
+                              color: t.surface.onBaseMuted,
+                              fontFeatures: t.numericFontFeatures,
+                            )),
+                      ),
+                  ],
                 ),
-              ),
-            ],
+                SizedBox(height: t.space.xs),
+                Text(
+                  label,
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: t.text.captionStyle.copyWith(color: t.surface.onBase),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -703,12 +698,6 @@ class _RoomRow extends StatelessWidget {
   }
 }
 
-/// Makes a library row draggable onto the canvas.
-///
-/// Click still places — dragging is the addition, not the replacement, because
-/// pointing at where a thing goes is the difference between arranging a page
-/// and correcting one afterwards. The payload is built on drag start so every
-/// drop is a distinct card.
 class _DragRow extends StatelessWidget {
   const _DragRow(
       {required this.payload, required this.label, required this.child});
@@ -826,6 +815,139 @@ class _PlainRow extends StatelessWidget {
                           fontFeatures: t.numericFontFeatures)),
                 ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The pictures this house has, as things you can place.
+///
+/// **They had no way into a page at all.** Uploading worked, and four config
+/// fields could pick one, but placing a picture meant making an image element
+/// first and then finding the address to put in it — the file existed and the
+/// designer could not show you it. A page is designed *around* its pictures at
+/// least as often as the other way round.
+///
+/// Clicking one places an image element already pointing at it. The listing is
+/// authenticated, which is why it is only asked for here rather than kept warm
+/// somewhere: an asset id is unguessable on purpose, and enumerating them is
+/// the one call that would undo that.
+class _AssetSection extends ConsumerWidget {
+  const _AssetSection({required this.query, required this.onPick});
+
+  final String query;
+  final ValueChanged<DashboardWidgetModel> onPick;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = HcTokens.of(context);
+    final async = ref.watch(assetListProvider);
+
+    final pictures = [
+      for (final a in async.value ?? const <AssetRef>[])
+        if (a.contentType.startsWith('image/') &&
+            (query.isEmpty ||
+                a.name.toLowerCase().contains(query.toLowerCase())))
+          a,
+    ];
+
+    // **The section is always here.** Returning nothing while the listing was
+    // in flight — and, as written first, while it had *failed* — made the whole
+    // section appear not to exist, and there is no way to tell "still asking"
+    // from "not built yet" by looking at an empty stretch of panel. Which is
+    // exactly what happened: it went missing on the live house and the panel
+    // had nothing to say about why.
+    //
+    // A search that matches no picture is the one case that hides it, because
+    // then the empty section is just noise beside the other sections the search
+    // has already emptied.
+    if (query.isNotEmpty && pictures.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _SectionHead(label: 'Pictures', count: pictures.length),
+        if (async.hasError)
+          Text(
+            'Could not list your files: ${async.error}',
+            style: t.text.captionStyle
+                .copyWith(color: t.accent.danger, height: 1.4),
+          )
+        else if (async.isLoading)
+          Text('Looking…',
+              style: t.text.captionStyle.copyWith(color: t.surface.onBaseMuted))
+        else if (pictures.isEmpty)
+          Text(
+            'Nothing uploaded yet. Files you add in Manage → Files land here, '
+            'ready to place.',
+            style: t.text.captionStyle
+                .copyWith(color: t.surface.onBaseMuted, height: 1.4),
+          )
+        else
+          Wrap(
+            spacing: t.space.xs,
+            runSpacing: t.space.xs,
+            children: [
+              for (final asset in pictures)
+                _AssetTile(asset: asset, onPick: onPick),
+            ],
+          ),
+        SizedBox(height: t.space.md),
+      ],
+    );
+  }
+}
+
+class _AssetTile extends StatelessWidget {
+  const _AssetTile({required this.asset, required this.onPick});
+
+  final AssetRef asset;
+  final ValueChanged<DashboardWidgetModel> onPick;
+
+  DashboardWidgetModel _card() => DashboardWidgetModel(
+        id: 'widget_${DateTime.now().microsecondsSinceEpoch}',
+        // Named for the file, so the layer tree says which picture rather than
+        // "Image" four times.
+        title: asset.name,
+        type: 'image',
+        refreshPolicy: DashboardRefreshPolicy.passive,
+        config: {'url': asset.url, 'fit': 'cover'},
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Tooltip(
+      message: asset.name,
+      waitDuration: const Duration(milliseconds: 500),
+      child: _DragRow(
+        payload: _card,
+        label: asset.name,
+        child: InkWell(
+          onTap: () => onPick(_card()),
+          borderRadius: BorderRadius.circular(t.radius.sm),
+          child: Container(
+            width: _Tile.width,
+            height: 72,
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              color: t.surface.sunken,
+              borderRadius: BorderRadius.circular(t.radius.sm),
+              border:
+                  Border.all(color: t.stroke.hairline, width: t.stroke.width),
+            ),
+            // The picture itself is the label. A filename under a thumbnail
+            // would halve the thumbnail to repeat what the tooltip says.
+            child: Image.network(
+              asset.url,
+              fit: BoxFit.cover,
+              errorBuilder: (context, _, __) => Center(
+                child: Icon(Icons.broken_image_outlined,
+                    size: 18, color: t.surface.onBaseMuted),
+              ),
+            ),
           ),
         ),
       ),
