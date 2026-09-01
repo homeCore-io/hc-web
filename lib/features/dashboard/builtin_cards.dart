@@ -13,6 +13,7 @@ library;
 
 import 'rooms_card.dart';
 import 'primitive_cards.dart';
+import 'plugin_render_view.dart';
 import 'dart:async';
 
 import 'package:fl_chart/fl_chart.dart';
@@ -23,6 +24,7 @@ import '../../core/api/events_history_api.dart';
 import '../../core/api/history_api.dart';
 import '../../core/text/humanize.dart';
 import '../../core/dashboard/gauge_spec.dart';
+import '../../core/providers/dashboard_vocabulary_provider.dart';
 import '../../core/dashboard/widget_registry.dart';
 import 'camera_card.dart';
 import '../../core/devices/metrics.dart';
@@ -891,28 +893,36 @@ class _MediaPlayerDashboardWidget extends ConsumerWidget {
   }
 }
 
-/// A card a plugin contributed, before this client can draw one.
+/// A card a plugin contributed.
 ///
-/// `plugin_widget` has been a legal type on the wire for a while, and until now
-/// nothing in this app was registered for it — so a dashboard carrying one fell
-/// through to the unknown-type path and drew nothing at all. That is the worst
-/// available answer: the card is not broken, it is *not implemented here*, and
-/// those look identical to somebody staring at an empty rectangle.
+/// `plugin_widget` was a legal type on the wire long before anything here was
+/// registered for it, so a dashboard carrying one fell through to the
+/// unknown-type path and drew nothing at all. That is the worst available
+/// answer: a card that is *not implemented here* and a card that is broken look
+/// identical as an empty rectangle.
 ///
-/// So this names what is missing and who provides it. Core now serves the
-/// declaration behind `{plugin_id, widget_id}` — its title, its bindings and a
-/// portable `render` — at `GET /dashboards/vocabulary`. When the render path
-/// lands, this widget is where it goes, and the placeholder becomes the
-/// fallback for a card whose plugin is offline rather than the whole story.
-class _PluginWidget extends StatelessWidget {
+/// Now core serves the declaration behind `{plugin_id, widget_id}` — its title,
+/// its bindings and a portable `render` — and [PluginRenderView] draws it. The
+/// placeholder below is what remains for the cases that are genuinely not
+/// drawable: an older core that cannot be asked, a plugin that has stopped
+/// publishing, a card nobody finished configuring. Each of those is somebody's
+/// answer to give, and none of them is a blank box.
+class _PluginWidget extends ConsumerWidget {
   final DashboardWidgetModel widgetModel;
   const _PluginWidget({required this.widgetModel});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final t = HcTokens.of(context);
     final plugin = (widgetModel.config['plugin_id'] as String? ?? '').trim();
     final widget = (widgetModel.config['widget_id'] as String? ?? '').trim();
+
+    if (plugin.isNotEmpty && widget.isNotEmpty) {
+      final spec = pluginWidgetSpec(ref, plugin, widget);
+      if (spec?.render != null) {
+        return PluginRenderView(spec: spec!, config: widgetModel.config);
+      }
+    }
 
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,

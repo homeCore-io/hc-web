@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hc_web/core/dashboard/plugin_render.dart';
 import 'package:hc_web/core/dashboard/widget_registry.dart';
 import 'package:hc_web/features/dashboard/builtin_cards.dart';
 
@@ -77,24 +78,18 @@ void main() {
     );
   });
 
-  /// A tripwire rather than a capability claim.
+  /// A capability claim, checked against core.
   ///
-  /// hc-web does not render a plugin widget's `render` tree yet, so this cannot
-  /// honestly assert "we can draw all of these". What it can do is fail the
-  /// moment core advertises a kind nobody here has considered — which is the
-  /// decision that must not be made by nobody. When the portable render path
-  /// lands, this list becomes the set it implements and the reason changes.
-  test('core advertises no element kind this app has not considered', () {
-    const considered = {
-      'gauge',
-      'shape',
-      'text',
-      'icon',
-      'row',
-      'column',
-      'stack',
-    };
-
+  /// When this test was written hc-web could not draw a `render` tree at all,
+  /// and this was a tripwire that only asked whether somebody had *considered*
+  /// each kind. `PluginRenderView` draws them now, so the list is
+  /// [kDrawableElementKinds] and the claim is real.
+  ///
+  /// Both directions matter. A kind core advertises and this app cannot draw is
+  /// a plugin card rendering as an empty rectangle; a kind this app claims and
+  /// core does not advertise is a capability nothing will ever ask for, which
+  /// is usually a typo.
+  test('this app draws exactly the element kinds core advertises', () {
     final advertised = {
       for (final e in (vocabulary['elements'] as List? ?? const [])
           .cast<Map<String, dynamic>>())
@@ -102,17 +97,17 @@ void main() {
     };
 
     expect(
-      advertised.difference(considered),
+      advertised.difference(kDrawableElementKinds),
       isEmpty,
-      reason: 'core advertises an element kind this client has never weighed. '
-          'A plugin widget may use it, and every client that cannot draw it '
-          'renders that card as nothing. Decide, then add it here.',
+      reason: 'core advertises an element kind this client cannot draw. A '
+          'plugin widget may use it, and the card renders as nothing. Teach '
+          'PluginRenderView to draw it, then add it to kDrawableElementKinds.',
     );
     expect(
-      considered.difference(advertised),
+      kDrawableElementKinds.difference(advertised),
       isEmpty,
-      reason: 'this list names an element kind core no longer advertises, so '
-          'it is either a typo or a capability nothing will ever ask for.',
+      reason: 'this app claims an element kind core does not advertise, so it '
+          'is either a typo or a capability nothing will ever ask for.',
     );
   });
 }
