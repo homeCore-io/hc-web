@@ -4,10 +4,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/dashboard/card_style.dart' show inkColours, resolveInk;
 import '../../core/dashboard/widget_registry.dart';
 import '../../core/providers/dashboard_vocabulary_provider.dart';
+import '../../core/devices/scene_state.dart';
 import '../../core/devices/presentation.dart';
 import '../../core/models/device_state.dart';
 import '../../core/schema/device_schema.dart';
+import '../../core/models/scene.dart';
 import '../../core/providers/areas_provider.dart';
+import '../../core/providers/scenes_provider.dart';
 import '../../core/providers/devices_provider.dart';
 import '../../core/text/humanize.dart';
 import '../../design/tokens.dart';
@@ -252,6 +255,7 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
         WidgetConfigKind.attribute => _attribute(f),
         WidgetConfigKind.writableAttribute => _writableAttribute(f),
         WidgetConfigKind.writableNumber => _writableNumber(f),
+        WidgetConfigKind.sceneRef => _scene(f),
         WidgetConfigKind.ink => _ink(f),
         WidgetConfigKind.pluginId => _pluginId(f),
         WidgetConfigKind.pluginWidgetId => _pluginWidgetId(f),
@@ -953,6 +957,68 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
             ),
           ),
         ),
+      ],
+    );
+  }
+
+  /// The scenes this house has.
+  ///
+  /// A plain list, because a scene either exists or it does not — there is no
+  /// writability question here the way there is for a device attribute.
+  /// Both kinds of scene, in one list.
+  ///
+  /// Native scenes come from `/scenes`; plugin scenes arrive as devices with
+  /// `device_type == 'scene'`. To whoever is drawing the page they are the same
+  /// thing — a named thing you can run — and only the code that sends knows the
+  /// difference, so a picker that offered one and not the other would hide half
+  /// the house's scenes for no reason the author could see.
+  Widget _scene(WidgetConfigField f) {
+    final native = ref.watch(scenesProvider).value ?? const <SceneModel>[];
+    final devices = ref.watch(devicesProvider).value ?? const <DeviceState>[];
+
+    final choices = <({String id, String name})>[
+      for (final s in native) (id: s.id, name: s.name),
+      for (final d in devices)
+        if (isSceneDevice(d)) (id: d.id, name: d.displayName),
+    ]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+
+    final value = _config[f.name] as String?;
+    final known = choices.any((c) => c.id == value);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _label(f),
+        if (choices.isEmpty)
+          _hint('This house has no scenes yet.')
+        else
+          DropdownButtonFormField<String>(
+            initialValue: known ? value : null,
+            isExpanded: true,
+            decoration: const InputDecoration(
+              isDense: true,
+              border: OutlineInputBorder(),
+            ),
+            items: [
+              for (final c in choices)
+                DropdownMenuItem(value: c.id, child: Text(c.name)),
+            ],
+            onChanged: (v) => _set(f.name, v),
+          ),
+        // A scene that was deleted after the page was made. Said rather than
+        // silently blanked, because the button is still on somebody's wall.
+        if (value != null && value.isNotEmpty && !known && choices.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              'The scene this button used is gone.',
+              style: HcTokens.of(context)
+                  .text
+                  .captionStyle
+                  .copyWith(color: HcTokens.of(context).accent.warn),
+            ),
+          ),
+        _help(f),
       ],
     );
   }

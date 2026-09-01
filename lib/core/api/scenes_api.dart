@@ -1,8 +1,12 @@
 import 'homecore_client.dart';
 
 class ScenesApi {
-  final HomecoreClient client;
+  late final HomecoreClient client;
   ScenesApi(this.client);
+
+  /// For fakes that override the methods they need and never reach the wire —
+  /// the same arrangement, and the same reasoning, as [DevicesApi.fake].
+  ScenesApi.fake();
 
   Future<List<Map<String, dynamic>>> listScenes() async {
     final response = await client.dio.get('/scenes');

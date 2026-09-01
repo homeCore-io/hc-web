@@ -57,6 +57,7 @@ import '../../core/providers/scenes_provider.dart';
 import '../../core/providers/time_display_provider.dart';
 import 'code_card.dart';
 import 'gauge_card.dart';
+import 'scene_button_element.dart';
 import 'svg_card.dart';
 
 /// Which devices a device-oriented card shows, for a given config.
@@ -2233,6 +2234,43 @@ void registerBuiltinDashboardWidgets() {
         return null;
       },
       builder: (context, a) => SliderElement(config: a.config),
+    ),
+    // A scene button.
+    //
+    // Unlike the switch and the slider it needs no writability check: a scene
+    // is not an attribute somebody might have registered, it is a thing core
+    // or a bridge already exposes as runnable. Activating one is a direct call
+    // — no rule stands between the button and the house.
+    //
+    // The picker offers both kinds together (`sceneRef`) because to whoever is
+    // drawing the page they are the same thing; only the code that sends knows
+    // the difference. See `core/devices/scene_state.dart`.
+    WidgetDescriptor(
+      type: 'scene_button',
+      title: 'Scene button',
+      description: 'Runs one scene. Shows whether it is on, where that is '
+          'knowable.',
+      icon: Icons.play_circle_outline,
+      chrome: WidgetChrome.bare,
+      sizeHint: const WidgetSizeHint(
+          minW: 2, minH: 1, recommendedW: 3, recommendedH: 1),
+      configFields: const [
+        WidgetConfigField('scene_id', WidgetConfigKind.sceneRef,
+            label: 'Scene', required: true),
+        WidgetConfigField('label', WidgetConfigKind.text,
+            label: 'Label',
+            help: 'Left empty, the scene names itself — and keeps up when it '
+                'is renamed.'),
+        WidgetConfigField('ink', WidgetConfigKind.ink,
+            group: 'Colour', label: 'When on'),
+      ],
+      validate: (c) {
+        if ((c['scene_id'] as String? ?? '').trim().isEmpty) {
+          return 'Which scene does this run?';
+        }
+        return null;
+      },
+      builder: (context, a) => SceneButtonElement(config: a.config),
     ),
     // An icon, bound to a device.
     //

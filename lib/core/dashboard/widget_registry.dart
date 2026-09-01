@@ -258,6 +258,13 @@ enum WidgetConfigKind {
   /// asked the wrong one would offer a switch for a temperature.
   writableNumber,
 
+  /// One of the scenes this house has.
+  ///
+  /// Scenes activate directly, like a device — a POST to `/scenes/id/activate`
+  /// — so a button for one is a peer of the switch and the slider rather than
+  /// anything to do with the rule engine.
+  sceneRef,
+
   /// A kind of device — lights, locks, sensors — picked from the kinds this
   /// house actually has. Distinct from [choice] because the options are the
   /// live device map, not a fixed list in a descriptor.
