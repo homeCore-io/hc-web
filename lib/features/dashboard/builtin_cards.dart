@@ -13,6 +13,7 @@ library;
 
 import 'rooms_card.dart';
 import 'primitive_cards.dart';
+import 'icon_element.dart';
 import 'plugin_render_view.dart';
 import 'dart:async';
 
@@ -2149,6 +2150,58 @@ void registerBuiltinDashboardWidgets() {
       // later.
       builder: (context, a) =>
           TextPrimitiveCard(config: a.config, editing: a.editing),
+    ),
+    // An icon, bound to a device.
+    //
+    // The vocabulary is the FACET names, the same list `status_icon` already
+    // uses, because every one of them has artwork a skin can answer for. A free
+    // icon-name field would have been a second vocabulary and a licence to name
+    // a glyph nobody has drawn.
+    //
+    // Bound to a device it needs no facet at all: the device says what it is and
+    // whether it is on, and Phosphor's weight axis turns the second into the
+    // icon's own form rather than only its colour.
+    WidgetDescriptor(
+      type: 'icon',
+      title: 'Icon',
+      description: 'One device, as its own symbol. Fills in when it is on.',
+      icon: Icons.lightbulb_outline,
+      chrome: WidgetChrome.bare,
+      sizeHint: const WidgetSizeHint(
+          minW: 1, minH: 1, recommendedW: 2, recommendedH: 2),
+      // Not const: the facet list is derived from the enum so it cannot drift
+      // from the artwork, and a derived list is worth more than a const one.
+      configFields: [
+        const WidgetConfigField('device_id', WidgetConfigKind.deviceRef,
+            label: 'Device',
+            help: 'The icon follows what this device is, and fills in when it '
+                'is on.'),
+        WidgetConfigField('facet', WidgetConfigKind.choice,
+            group: 'Symbol',
+            label: 'Show as',
+            options: kIconFacets,
+            help: 'Overrides the device’s own kind. Leave it be and the '
+                'device decides.'),
+        const WidgetConfigField('ink', WidgetConfigKind.ink,
+            group: 'Symbol', label: 'Colour'),
+        const WidgetConfigField('backing', WidgetConfigKind.boolean,
+            group: 'Symbol',
+            label: 'Disc behind it',
+            defaultValue: false,
+            help: 'A tinted circle, for an icon that has to read against a '
+                'photograph.'),
+      ],
+      validate: (c) {
+        final device = (c['device_id'] as String? ?? '').trim();
+        final facet = (c['facet'] as String? ?? '').trim();
+        // One or the other. With neither there is nothing to draw, and a blank
+        // square is the failure this whole element exists to avoid.
+        if (device.isEmpty && facet.isEmpty) {
+          return 'Pick a device, or a symbol to show.';
+        }
+        return null;
+      },
+      builder: (context, a) => IconElement(config: a.config),
     ),
     WidgetDescriptor(
       type: 'shape',
