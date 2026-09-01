@@ -1843,8 +1843,10 @@ void registerBuiltinDashboardWidgets() {
       sizeHint: const WidgetSizeHint(
           minW: 2, minH: 1, recommendedW: 4, recommendedH: 2),
       configFields: const [
-        WidgetConfigField('plugin_id', WidgetConfigKind.text, required: true),
-        WidgetConfigField('widget_id', WidgetConfigKind.text, required: true),
+        WidgetConfigField('plugin_id', WidgetConfigKind.pluginId,
+            label: 'Plugin', required: true),
+        WidgetConfigField('widget_id', WidgetConfigKind.pluginWidgetId,
+            label: 'Card', required: true),
       ],
       validate: (c) {
         final plugin = (c['plugin_id'] as String? ?? '').trim();
