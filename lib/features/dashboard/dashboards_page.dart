@@ -11,6 +11,7 @@ import '../../design/components/hc_surface.dart';
 import '../../design/hc_icons.dart';
 import '../../design/tokens.dart';
 import '../pages/page_actions.dart';
+import 'dashboard_drift_notice.dart';
 
 /// Every page in the house, and the three things only this surface can do:
 /// reload from disk, import, and start from a template.
@@ -48,6 +49,10 @@ class DashboardsPage extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _Header(ref: ref),
+            // Silent unless this app and the core in front of it actually
+            // disagree about what a dashboard may contain. See
+            // DashboardDriftNotice.
+            const DashboardDriftNotice(),
             Expanded(
               child: dashboardsAsync.when(
                 loading: () => const Center(child: CircularProgressIndicator()),

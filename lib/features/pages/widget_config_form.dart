@@ -782,7 +782,7 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
   /// house, and offering an empty dropdown for either would say neither.
   Widget _pluginId(WidgetConfigField f) {
     final async = ref.watch(dashboardVocabularyProvider);
-    final all = async.value;
+    final all = async.value?.pluginWidgets;
     final value = _config[f.name] as String?;
 
     if (async.isLoading) return _pickerShell(f, _hint('Asking core…'));
@@ -821,7 +821,7 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
   /// what core validates against.
   Widget _pluginWidgetId(WidgetConfigField f) {
     final async = ref.watch(dashboardVocabularyProvider);
-    final all = async.value;
+    final all = async.value?.pluginWidgets;
     final plugin = (_config['plugin_id'] as String? ?? '').trim();
     final value = _config[f.name] as String?;
 

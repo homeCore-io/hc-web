@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hc_web/core/dashboard/plugin_render.dart';
+import 'package:hc_web/core/dashboard/vocabulary.dart';
 import 'package:hc_web/core/dashboard/widget_registry.dart';
 import 'package:hc_web/core/providers/dashboard_vocabulary_provider.dart';
 import 'package:hc_web/design/skins.dart';
@@ -35,7 +36,9 @@ Future<Map<String, dynamic>> _pump(
 
   await tester.pumpWidget(ProviderScope(
     overrides: [
-      dashboardVocabularyProvider.overrideWith((ref) async => vocabulary),
+      dashboardVocabularyProvider.overrideWith((ref) async => vocabulary == null
+          ? null
+          : DashboardVocabularyDoc(pluginWidgets: vocabulary)),
     ],
     child: MaterialApp(
       theme: hcTheme(HcSkin.midnight, reduceMotion: true),
