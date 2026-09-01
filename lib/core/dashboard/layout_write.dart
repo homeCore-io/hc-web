@@ -155,9 +155,14 @@ DashboardLayout deriveLayout(
     // phone. Without it every derived container falls back to fitting its own
     // members, which is the right answer here — the members have just been
     // repacked, so the box should be around wherever they landed.
+    //
+    // The **rotation goes with it**, and the fade stays, which is the same cut
+    // the placements make: an angle is stated against a canvas, and a cluster
+    // turned eight degrees across a wide page is a mistake once its members
+    // have been repacked into a phone's single column. A fade is not geometry.
     groups: [
       for (final g in sourceGroups)
-        if (!g.isPlain) g.copyWith(rect: null),
+        if (!g.isPlain) g.copyWith(rect: null, rotation: null),
     ],
   );
 }

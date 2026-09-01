@@ -422,6 +422,43 @@ class _PageGridState extends State<PageGrid> {
   /// Returns the child untouched when there is nothing to clip to, so a page
   /// with no clipping group pays for none of this: no extra layer, no extra
   /// render object, and the widget tree its tests walk is the one it was.
+  /// The transform a card inherits from the groups it is in.
+  ///
+  /// [m] is in **board** coordinates, because a group turns its members about
+  /// the group's centre and that point is nowhere near the card. The card's own
+  /// box is at ([left], [top]), so the matrix has to be conjugated into the
+  /// card's local space to mean the same thing: shift the card's origin to the
+  /// board's, turn, shift back.
+  ///
+  /// The group's fade multiplies the card's rather than replacing it, and this
+  /// is where the document's one inexactness lands: two members that overlap
+  /// each fade separately, so the overlap paints twice and reads darker than
+  /// fading the group as a single layer would. That is stated in
+  /// `docs/dashboard-layout.md` — the alternative costs a saved layer per group
+  /// on every frame, and members that overlap are rare.
+  static Widget _inherited(
+    Matrix4? m,
+    double? opacity,
+    double left,
+    double top,
+    Widget child,
+  ) {
+    var out = child;
+    if (opacity != null && opacity < 1) {
+      out = Opacity(opacity: opacity, child: out);
+    }
+    if (m != null) {
+      out = Transform(
+        transform: Matrix4.identity()
+          ..translateByDouble(-left, -top, 0, 1)
+          ..multiply(m)
+          ..translateByDouble(left, top, 0, 1),
+        child: out,
+      );
+    }
+    return out;
+  }
+
   /// The card's own transform: turned about its centre, and faded.
   ///
   /// Paint only. The box `AnimatedPositioned` gives the card is untouched, so a
@@ -535,6 +572,37 @@ class _PageGridState extends State<PageGrid> {
           }
         }
 
+
+        // What each card inherits from the groups it sits in.
+        //
+        // A group's rotation turns its members about the **group's** centre,
+        // which is the thing a card's own rotation cannot express, so this is a
+        // matrix in board coordinates rather than an angle. Nested groups
+        // compose — `resolveGroups` hands them back outermost first, so
+        // multiplying in order leaves the outer transform applied last, which
+        // is what a child inside a turned parent means.
+        final inheritedTransform = <String, Matrix4>{};
+        final inheritedOpacity = <String, double>{};
+        for (final container in containers) {
+          final angle = container.box.rotation;
+          final fade = container.box.opacity;
+          if ((angle == null || angle == 0) && fade == null) continue;
+          for (final id in membersOf(widget.groupPaths, container.path)) {
+            if (angle != null && angle != 0) {
+              final cx = container.rect.x + container.rect.w / 2;
+              final cy = container.rect.y + container.rect.h / 2;
+              inheritedTransform[id] =
+                  (inheritedTransform[id] ?? Matrix4.identity())
+                    ..translateByDouble(cx, cy, 0, 1)
+                    ..rotateZ(angle * math.pi / 180)
+                    ..translateByDouble(-cx, -cy, 0, 1);
+            }
+            if (fade != null) {
+              inheritedOpacity[id] =
+                  (inheritedOpacity[id] ?? 1) * fade.clamp(0.0, 1.0);
+            }
+          }
+        }
         double leftOf(GridItem i) => boxOf(i).x;
         double topOf(GridItem i) => boxOf(i).y;
         double widthOf(GridItem i) => boxOf(i).w;
@@ -1042,9 +1110,14 @@ class _PageGridState extends State<PageGrid> {
                     clipTo[item.id],
                     _dragId == item.id ? draggedLeft(item) : leftOf(item),
                     _dragId == item.id ? draggedTop(item) : topOf(item),
-                    _transformed(
-                      item,
-                      RepaintBoundary(
+                    _inherited(
+                      inheritedTransform[item.id],
+                      inheritedOpacity[item.id],
+                      leftOf(item),
+                      topOf(item),
+                      _transformed(
+                        item,
+                        RepaintBoundary(
                         child: _Cell(
                         onConfigChanged: widget.onWidgetConfig == null
                             ? null
@@ -1082,9 +1155,10 @@ class _PageGridState extends State<PageGrid> {
                         onDragUpdate: updateDrag,
                         onDragEnd: endDrag,
                         onResizeStart: (handle) => startResize(item, handle),
-                          composed: item.isComposed,
-                          onResizeUpdate: updateResize,
-                          onResizeEnd: endResize,
+                            composed: item.isComposed,
+                            onResizeUpdate: updateResize,
+                            onResizeEnd: endResize,
+                          ),
                         ),
                       ),
                     ),
