@@ -251,6 +251,7 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
         WidgetConfigKind.deviceRefs => _deviceRefs(f),
         WidgetConfigKind.attribute => _attribute(f),
         WidgetConfigKind.writableAttribute => _writableAttribute(f),
+        WidgetConfigKind.writableNumber => _writableNumber(f),
         WidgetConfigKind.ink => _ink(f),
         WidgetConfigKind.pluginId => _pluginId(f),
         WidgetConfigKind.pluginWidgetId => _pluginWidgetId(f),
@@ -955,6 +956,75 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
       ],
     );
   }
+
+  /// The numbers this device has promised it accepts a write of.
+  ///
+  /// The same rule as [_writableAttribute] and for the same reason — only a
+  /// registered schema counts — with the kinds narrowed to those a slider can
+  /// actually drive. It also shows the plugin's own range, because that range
+  /// is the thing the slider will use and an author should see it before
+  /// wondering why the handle stops.
+  Widget _writableNumber(WidgetConfigField f) {
+    final t = HcTokens.of(context);
+    final devices = ref.watch(devicesProvider).value ?? const [];
+    final deviceId = _config['device_id'] as String?;
+    final device = devices.where((d) => d.id == deviceId).firstOrNull;
+
+    final specs = <String, AttributeSchema>{
+      for (final e in (device?.schema?.writable ?? const {}).entries)
+        if (e.value.kind.isNumeric) e.key: e.value,
+    };
+    final offered = specs.keys.toList()..sort();
+    final value = _config[f.name] as String?;
+    final chosen = specs[value];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _label(f),
+        if (device == null)
+          _hint('Pick a device first.')
+        else if (device.schema == null)
+          _hint('${device.displayName} has never told core what it accepts, '
+              'so nothing here can promise a slider will work.')
+        else if (offered.isEmpty)
+          _hint('${device.displayName} accepts no numbers.')
+        else
+          DropdownButtonFormField<String>(
+            initialValue: offered.contains(value) ? value : null,
+            isExpanded: true,
+            decoration: const InputDecoration(
+              isDense: true,
+              border: OutlineInputBorder(),
+            ),
+            items: [
+              for (final a in offered)
+                DropdownMenuItem(value: a, child: Text(humanize(a))),
+            ],
+            onChanged: (v) => _set(f.name, v),
+          ),
+        _help(f),
+        if (chosen != null)
+          Padding(
+            padding: EdgeInsets.only(top: t.space.xs),
+            child: Text(
+              chosen.hasRange
+                  ? 'The plugin says ${_trimNum(chosen.min!)} to '
+                      '${_trimNum(chosen.max!)}'
+                      '${chosen.unit == null ? '' : ' ${chosen.unit}'}.'
+                  : 'The plugin gave no range, so this slider needs one below.',
+              style: t.text.captionStyle.copyWith(
+                color: chosen.hasRange ? t.accent.success : t.accent.warn,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  /// 100, not 100.0 — a range read by a person.
+  static String _trimNum(double v) =>
+      v == v.roundToDouble() ? v.round().toString() : v.toString();
 
   /// The attributes this device has *promised* it accepts a write of.
   ///

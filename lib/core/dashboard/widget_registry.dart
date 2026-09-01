@@ -251,6 +251,13 @@ enum WidgetConfigKind {
   /// control built on a guess fails silently.
   writableAttribute,
 
+  /// A NUMBER this device has promised it accepts a write of.
+  ///
+  /// Separate from [writableAttribute] rather than one kind filtered by the
+  /// caller, because the two answer different questions and an element that
+  /// asked the wrong one would offer a switch for a temperature.
+  writableNumber,
+
   /// A kind of device — lights, locks, sensors — picked from the kinds this
   /// house actually has. Distinct from [choice] because the options are the
   /// live device map, not a fixed list in a descriptor.

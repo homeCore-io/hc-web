@@ -15,6 +15,7 @@ import 'rooms_card.dart';
 import 'primitive_cards.dart';
 import 'bound_element.dart';
 import 'icon_element.dart';
+import 'slider_element.dart';
 import 'toggle_element.dart';
 import 'plugin_render_view.dart';
 import 'dart:async';
@@ -2195,6 +2196,43 @@ void registerBuiltinDashboardWidgets() {
         return null;
       },
       builder: (context, a) => ToggleElement(config: a.config),
+    ),
+    WidgetDescriptor(
+      type: 'slider',
+      title: 'Slider',
+      description: 'A number you can set — brightness, volume, a setpoint.',
+      icon: Icons.tune_outlined,
+      chrome: WidgetChrome.bare,
+      sizeHint: const WidgetSizeHint(
+          minW: 3, minH: 1, recommendedW: 4, recommendedH: 1),
+      configFields: const [
+        WidgetConfigField('device_id', WidgetConfigKind.deviceRef,
+            label: 'Device', required: true),
+        WidgetConfigField('attribute', WidgetConfigKind.writableNumber,
+            label: 'Sets',
+            help: 'Only numbers the plugin registered as writable.'),
+        WidgetConfigField('label', WidgetConfigKind.text, label: 'Label'),
+        WidgetConfigField('min', WidgetConfigKind.integer,
+            group: 'Range',
+            label: 'From',
+            help: 'Only used when the plugin gave no range of its own — its '
+                'own is always better, because it survives the bulb being '
+                'replaced.'),
+        WidgetConfigField('max', WidgetConfigKind.integer,
+            group: 'Range', label: 'To'),
+        WidgetConfigField('ink', WidgetConfigKind.ink,
+            group: 'Colour', label: 'Track'),
+      ],
+      validate: (c) {
+        if ((c['device_id'] as String? ?? '').trim().isEmpty) {
+          return 'Which device does this set?';
+        }
+        if ((c['attribute'] as String? ?? '').trim().isEmpty) {
+          return 'Which of its numbers?';
+        }
+        return null;
+      },
+      builder: (context, a) => SliderElement(config: a.config),
     ),
     // An icon, bound to a device.
     //
