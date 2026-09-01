@@ -20,6 +20,7 @@ import '../../core/dashboard/page_starts.dart';
 import '../../core/text/humanize.dart';
 import '../../core/dashboard/widget_registry.dart';
 import '../../core/models/dashboard.dart';
+import '../../core/models/device_state.dart';
 import '../../core/providers/dashboards_provider.dart';
 import '../../core/providers/devices_provider.dart';
 import '../../design/components/hc_controls.dart';
@@ -2036,6 +2037,19 @@ class _PageScreenState extends ConsumerState<PageScreen> {
             : _PreviewFrame(
                 width: _editing ? previewWidthFor(breakpoint) : null,
                 child: PageGrid(
+                  // A card with a style variant asks about a device by id, so
+                  // this is a map rather than a scan: a page of forty cards
+                  // each asking about one device would otherwise walk the whole
+                  // house forty times on every rebuild.
+                  deviceLookup: () {
+                    final byId = {
+                      for (final d
+                          in ref.watch(devicesProvider).value ??
+                              const <DeviceState>[])
+                        d.id: d,
+                    };
+                    return (id) => byId[id];
+                  }(),
                   items: items,
                   widgetsById: widgetsById,
                   columns: columns,

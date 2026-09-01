@@ -1,4 +1,6 @@
 import 'package:flutter/widgets.dart';
+import '../models/device_state.dart';
+import 'card_condition.dart';
 
 import '../../design/tokens.dart';
 
@@ -29,6 +31,7 @@ class CardStyle {
     this.image,
     this.imageFit,
     this.imageOpacity = 1,
+    this.variants = const [],
   });
 
   /// The card's own background, and the elevation that goes with it.
@@ -92,7 +95,22 @@ class CardStyle {
   /// accumulated, and a style pane offering free pixels would be the 133rd.
   final String? corner;
 
+  /// How this card looks when the house says so.
+  ///
+  /// Each variant is a **patch**, not a whole style: a variant that says
+  /// `tint: danger` turns the card red and leaves its corners, its picture and
+  /// its border exactly as the base style set them. A variant carrying a
+  /// complete style would silently reset every property the author had not
+  /// thought to restate, which is how a card ends up losing its picture the
+  /// moment a door opens.
+  ///
+  /// **The first match wins.** Order is the author's, and a small ordered list
+  /// is something a person can read top to bottom and predict; last-match-wins
+  /// would mean scanning to the end to know what a card does.
+  final List<StyleVariant> variants;
+
   bool get isDefault =>
+      variants.isEmpty &&
       filled &&
       bordered &&
       titled &&
@@ -126,7 +144,35 @@ class CardStyle {
       imageOpacity: raw['image_opacity'] is num
           ? (raw['image_opacity'] as num).toDouble().clamp(0.0, 1.0)
           : 1,
+      variants: [
+        for (final v in (raw['variants'] as List? ?? const []))
+          if (StyleVariant.fromJson(v) case final variant?) variant,
+      ],
     );
+  }
+
+  /// This style as the house currently makes it.
+  ///
+  /// The base style with the first matching variant's patch laid over it, or
+  /// the base style when nothing matches — which is every card on every page
+  /// until somebody writes a variant.
+  CardStyle resolve(DeviceState? Function(String id) lookup) {
+    for (final variant in variants) {
+      if (!variant.when.holds(lookup)) continue;
+      // Rebuilt from the merged map rather than patched field by field, so a
+      // variant key means exactly what the same key means in a base style —
+      // including the clamping. One reader, one set of rules.
+      return CardStyle.fromConfig({
+        key: {..._raw(), ...variant.style},
+      });
+    }
+    return this;
+  }
+
+  /// This style as its own config map, for merging a patch into.
+  Map<String, dynamic> _raw() {
+    final written = toConfig(const {})[key];
+    return written is Map<String, dynamic> ? written : <String, dynamic>{};
   }
 
   /// [config] with this style applied.
@@ -151,6 +197,8 @@ class CardStyle {
         if (image != null) 'image': image,
         if (imageFit != null) 'image_fit': imageFit,
         if (imageOpacity != 1) 'image_opacity': imageOpacity,
+        if (variants.isNotEmpty)
+          'variants': [for (final v in variants) v.toJson()],
       };
     }
     return next;
@@ -166,6 +214,7 @@ class CardStyle {
     Object? image = _keep,
     Object? imageFit = _keep,
     double? imageOpacity,
+    List<StyleVariant>? variants,
   }) =>
       CardStyle(
         filled: filled ?? this.filled,
@@ -180,6 +229,7 @@ class CardStyle {
         imageFit:
             identical(imageFit, _keep) ? this.imageFit : imageFit as String?,
         imageOpacity: imageOpacity ?? this.imageOpacity,
+        variants: variants ?? this.variants,
       );
 
   @override
@@ -193,11 +243,24 @@ class CardStyle {
       other.corner == corner &&
       other.image == image &&
       other.imageFit == imageFit &&
-      other.imageOpacity == imageOpacity;
+      other.imageOpacity == imageOpacity &&
+      // Part of identity: a card whose variants changed looks the same right
+      // now and does not look the same when the door opens.
+      _sameVariants(other.variants, variants);
 
   @override
   int get hashCode => Object.hash(filled, bordered, titled, tint, blur, corner,
-      image, imageFit, imageOpacity);
+      image, imageFit, imageOpacity, Object.hashAll(variants));
+
+  /// Order matters — the first matching variant wins — so this compares as a
+  /// list rather than as a set.
+  static bool _sameVariants(List<StyleVariant> a, List<StyleVariant> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
 }
 
 /// Distinguishes "leave it alone" from "set it back to null" in `copyWith`.
@@ -326,4 +389,49 @@ DecorationImage? cardDecorationImage(CardStyle style) {
     },
     opacity: style.imageOpacity.clamp(0.0, 1.0),
   );
+}
+
+/// One "when this, look like that".
+///
+/// The style side is a **patch** — only the keys it changes — for the reason
+/// [CardStyle.variants] gives: a whole style would reset every property the
+/// author had not thought to restate.
+class StyleVariant {
+  const StyleVariant({required this.when, required this.style});
+
+  final CardCondition when;
+
+  /// Style keys, in the same spelling a base style uses: `tint`, `blur`,
+  /// `corner`, `filled`, `bordered`, `titled`, `image`, `image_fit`,
+  /// `image_opacity`. Not a second vocabulary.
+  final Map<String, dynamic> style;
+
+  static StyleVariant? fromJson(Object? json) {
+    if (json is! Map) return null;
+    final when = CardCondition.fromJson(json['when']);
+    if (when == null) return null;
+    final style = json['style'];
+    // A variant with no condition is not a variant, and one with no style is a
+    // condition somebody started and did not finish. Neither is worth keeping —
+    // the second would draw nothing and read as a bug in the renderer.
+    if (style is! Map || style.isEmpty) return null;
+    return StyleVariant(
+      when: when,
+      style: {
+        for (final entry in style.entries)
+          if (entry.key is String) entry.key as String: entry.value,
+      },
+    );
+  }
+
+  Map<String, dynamic> toJson() => {'when': when.toJson(), 'style': style};
+
+  @override
+  bool operator ==(Object other) =>
+      other is StyleVariant &&
+      other.when.toJson().toString() == when.toJson().toString() &&
+      other.style.toString() == style.toString();
+
+  @override
+  int get hashCode => Object.hash(when.toJson().toString(), style.toString());
 }

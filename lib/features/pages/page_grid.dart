@@ -8,6 +8,7 @@ import '../../core/dashboard/canvas_view.dart';
 import '../../core/dashboard/card_style.dart';
 import '../../core/dashboard/frame.dart';
 import '../../core/dashboard/grid_engine.dart';
+import '../../core/models/device_state.dart';
 import '../../core/dashboard/group_frame.dart';
 import '../../core/dashboard/groups.dart';
 import '../../core/dashboard/widget_registry.dart';
@@ -47,6 +48,7 @@ class PageGrid extends StatefulWidget {
     this.onEnterGroup,
     this.groupOutline,
     this.groupStyles = const [],
+    this.deviceLookup,
     this.groupPaths = const {},
     this.frame,
     this.snapToGrid = true,
@@ -164,6 +166,18 @@ class PageGrid extends StatefulWidget {
   /// container that only existed while you were editing would not be a
   /// container.
   final List<GroupBox> groupStyles;
+
+  /// How a card finds a device it has an opinion about, for conditional style.
+  ///
+  /// Passed in rather than watched here so this widget stays usable without a
+  ///  — several tests pump it bare, and a grid that could only
+  /// be drawn inside a provider tree would make every one of them a fixture
+  /// about Riverpod instead of about layout.
+  ///
+  /// Null answers null for every id, which makes every device condition false
+  /// and every card draw in its base style. That is the right reading offline
+  /// as well: a house we cannot see is not a house whose doors are open.
+  final DeviceState? Function(String id)? deviceLookup;
 
   /// Which group each element is in — see `groups.dart`.
   final Map<String, String?> groupPaths;
@@ -1119,9 +1133,10 @@ class _PageGridState extends State<PageGrid> {
                         item,
                         RepaintBoundary(
                         child: _Cell(
-                        onConfigChanged: widget.onWidgetConfig == null
-                            ? null
-                            : (next) => widget.onWidgetConfig!(item.id, next),
+                          onConfigChanged: widget.onWidgetConfig == null
+                              ? null
+                              : (next) => widget.onWidgetConfig!(item.id, next),
+                          deviceLookup: widget.deviceLookup,
                         item: item,
                         model: widget.widgetsById[item.id],
                         editing: widget.editing,
@@ -1631,6 +1646,7 @@ class Point {
 
 class _Cell extends StatelessWidget {
   const _Cell({
+    this.deviceLookup,
     required this.item,
     required this.model,
     required this.editing,
@@ -1680,6 +1696,9 @@ class _Cell extends StatelessWidget {
   /// How this card writes its own config back. Null when nothing is listening,
   /// which is also how a card knows it may not edit itself.
   final ValueChanged<Map<String, dynamic>>? onConfigChanged;
+
+  /// See [PageGrid.deviceLookup].
+  final DeviceState? Function(String id)? deviceLookup;
   final void Function(Offset globalPosition) onMenu;
 
   /// Null outside the surfaces that have somewhere to show a selection.
@@ -1741,7 +1760,11 @@ class _Cell extends StatelessWidget {
 
     // Only meaningful where there is a surface to style. A bare element has no
     // background to remove.
-    final style = CardStyle.fromConfig(model?.config ?? const {});
+    // Resolved against the house, so a card can go amber when its battery is
+    // low. Falls back to the base style whenever nothing matches, which is
+    // every card on every page until somebody writes a variant.
+    final style = CardStyle.fromConfig(model?.config ?? const {})
+        .resolve(deviceLookup ?? (_) => null);
     final tint = resolveCardTint(t, style.tint);
     final corner = resolveCardCorner(t, style.corner);
     final radius = corner == null ? null : BorderRadius.circular(corner);
