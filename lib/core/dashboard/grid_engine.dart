@@ -31,6 +31,8 @@ class GridItem {
     this.floating = false,
     this.z = 0,
     this.rect,
+    this.rotation,
+    this.opacity,
   });
 
   final String id;
@@ -66,6 +68,18 @@ class GridItem {
   /// will not be.
   final DashboardRect? rect;
 
+  /// Degrees clockwise about the card's own centre, and 0–1 paint opacity.
+  ///
+  /// Carried by every operation on this canvas and read by **none** of them.
+  /// A turned card still occupies its cells: packing against a rotated
+  /// bounding box would make a page's legality depend on trigonometry, and two
+  /// clients rounding differently would disagree about whether it could be
+  /// saved. A card at zero opacity still takes its space, because invisible is
+  /// not absent — reflowing around a faded card would make hiding something a
+  /// destructive edit. See `docs/dashboard-layout.md`.
+  final double? rotation;
+  final double? opacity;
+
   /// Composed elements are placed, not packed.
   ///
   /// The same rule [floating] introduced, generalised: a card somebody put at a
@@ -88,6 +102,8 @@ class GridItem {
     bool? floating,
     int? z,
     Object? rect = _unchangedRect,
+    Object? rotation = _unchangedRect,
+    Object? opacity = _unchangedRect,
   }) =>
       GridItem(
         id: id,
@@ -103,6 +119,14 @@ class GridItem {
         rect: identical(rect, _unchangedRect)
             ? this.rect
             : rect as DashboardRect?,
+        // The same sentinel, for the same reason: clearing a rotation back to
+        // none is a real edit that `rotation: null` could not express.
+        rotation: identical(rotation, _unchangedRect)
+            ? this.rotation
+            : rotation as double?,
+        opacity: identical(opacity, _unchangedRect)
+            ? this.opacity
+            : opacity as double?,
       );
 
   /// Do these two compete for the same cells?

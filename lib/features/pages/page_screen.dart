@@ -554,6 +554,12 @@ class _PageScreenState extends ConsumerState<PageScreen> {
             // the engine never has to know what a config is.
             floating: isFloating(w.config),
             z: zOf(w.config),
+            // The composition, the angle and the fade travel on the
+            // *placement*, and every one of them has to be read back or the
+            // next save writes over it with what the cells alone imply.
+            rect: p.rect,
+            rotation: p.rotation,
+            opacity: p.opacity,
           ),
     ];
   }
@@ -1037,6 +1043,12 @@ class _PageScreenState extends ConsumerState<PageScreen> {
             // the engine never has to know what a config is.
             floating: isFloating(w.config),
             z: zOf(w.config),
+            // The composition, the angle and the fade travel on the
+            // *placement*, and every one of them has to be read back or the
+            // next save writes over it with what the cells alone imply.
+            rect: p.rect,
+            rotation: p.rotation,
+            opacity: p.opacity,
           ),
     ];
   }

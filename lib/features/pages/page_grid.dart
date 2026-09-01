@@ -422,6 +422,30 @@ class _PageGridState extends State<PageGrid> {
   /// Returns the child untouched when there is nothing to clip to, so a page
   /// with no clipping group pays for none of this: no extra layer, no extra
   /// render object, and the widget tree its tests walk is the one it was.
+  /// The card's own transform: turned about its centre, and faded.
+  ///
+  /// Paint only. The box `AnimatedPositioned` gives the card is untouched, so a
+  /// turned card still occupies exactly the cells it did — which is the promise
+  /// `docs/dashboard-layout.md` makes and the reason neither value enters the
+  /// layout engine. A rotated card may therefore overflow its cells and paint
+  /// over a neighbour, which is what turning something on a canvas *means*.
+  ///
+  /// Neither wrapper is added when there is nothing to apply. An `Opacity` of
+  /// 1.0 still costs a saved layer on every card, on a canvas that can hold
+  /// dozens.
+  static Widget _transformed(GridItem item, Widget child) {
+    var out = child;
+    final opacity = item.opacity;
+    if (opacity != null && opacity < 1) {
+      out = Opacity(opacity: opacity.clamp(0.0, 1.0), child: out);
+    }
+    final rotation = item.rotation;
+    if (rotation != null && rotation != 0) {
+      out = Transform.rotate(angle: rotation * math.pi / 180, child: out);
+    }
+    return out;
+  }
+
   static Widget _clipped(
     String id,
     DashboardRect? box,
@@ -1018,8 +1042,10 @@ class _PageGridState extends State<PageGrid> {
                     clipTo[item.id],
                     _dragId == item.id ? draggedLeft(item) : leftOf(item),
                     _dragId == item.id ? draggedTop(item) : topOf(item),
-                    RepaintBoundary(
-                      child: _Cell(
+                    _transformed(
+                      item,
+                      RepaintBoundary(
+                        child: _Cell(
                         onConfigChanged: widget.onWidgetConfig == null
                             ? null
                             : (next) => widget.onWidgetConfig!(item.id, next),
@@ -1056,9 +1082,10 @@ class _PageGridState extends State<PageGrid> {
                         onDragUpdate: updateDrag,
                         onDragEnd: endDrag,
                         onResizeStart: (handle) => startResize(item, handle),
-                        composed: item.isComposed,
-                        onResizeUpdate: updateResize,
-                        onResizeEnd: endResize,
+                          composed: item.isComposed,
+                          onResizeUpdate: updateResize,
+                          onResizeEnd: endResize,
+                        ),
                       ),
                     ),
                   ),
