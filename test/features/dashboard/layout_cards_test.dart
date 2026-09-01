@@ -135,6 +135,9 @@ void main() {
           'toggle',
           'slider',
           'scene_button',
+          'colour_wheel',
+          'warmth',
+          'stepper',
         },
         reason: 'only the layout family and the primitives go frameless — a '
             'shape inside a card is a card with a shape in it',

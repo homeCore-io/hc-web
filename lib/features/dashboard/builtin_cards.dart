@@ -57,7 +57,10 @@ import '../../core/providers/scenes_provider.dart';
 import '../../core/providers/time_display_provider.dart';
 import 'code_card.dart';
 import 'gauge_card.dart';
+import 'colour_wheel_element.dart';
 import 'scene_button_element.dart';
+import 'stepper_element.dart';
+import 'warmth_element.dart';
 import 'svg_card.dart';
 
 /// Which devices a device-oriented card shows, for a given config.
@@ -2271,6 +2274,111 @@ void registerBuiltinDashboardWidgets() {
         return null;
       },
       builder: (context, a) => SceneButtonElement(config: a.config),
+    ),
+    // The rest of the control row: colour, warmth, a stepper.
+    //
+    // The wheel and the bar are the DEVICE PANEL'S controls, imported rather
+    // than reimplemented — see `design/components/colour_controls.dart`. A
+    // second wheel with its own idea of where hue starts would mean the same
+    // bulb picked a different colour depending on which surface you touched.
+    WidgetDescriptor(
+      type: 'colour_wheel',
+      title: 'Colour wheel',
+      description: 'Pick a colour for a bulb, by hue and saturation.',
+      icon: Icons.palette_outlined,
+      chrome: WidgetChrome.bare,
+      sizeHint: const WidgetSizeHint(
+          minW: 2, minH: 2, recommendedW: 3, recommendedH: 3),
+      configFields: const [
+        WidgetConfigField('device_id', WidgetConfigKind.deviceRef,
+            label: 'Device', required: true),
+        WidgetConfigField('attribute', WidgetConfigKind.writableColour,
+            label: 'Sets',
+            defaultValue: 'color_xy',
+            help: 'A colour the plugin registered — the wheel sends whichever '
+                'shape that attribute is, xy or rgb.'),
+        WidgetConfigField('label', WidgetConfigKind.text, label: 'Label'),
+      ],
+      validate: (c) {
+        if ((c['device_id'] as String? ?? '').trim().isEmpty) {
+          return 'Which bulb does this colour?';
+        }
+        if ((c['attribute'] as String? ?? '').trim().isEmpty) {
+          return 'Which of its colour settings?';
+        }
+        return null;
+      },
+      builder: (context, a) => ColourWheelElement(config: a.config),
+    ),
+    WidgetDescriptor(
+      type: 'warmth',
+      title: 'Warmth',
+      description: 'Warm to cool, for a tunable-white bulb.',
+      icon: Icons.wb_incandescent_outlined,
+      chrome: WidgetChrome.bare,
+      sizeHint: const WidgetSizeHint(
+          minW: 1, minH: 2, recommendedW: 1, recommendedH: 3),
+      configFields: const [
+        WidgetConfigField('device_id', WidgetConfigKind.deviceRef,
+            label: 'Device', required: true),
+        WidgetConfigField('attribute', WidgetConfigKind.writableColourTemp,
+            label: 'Sets',
+            defaultValue: 'color_temp',
+            help: 'Only colour temperature. A slider would take any number; '
+                'this one paints the scale, so it has to BE that scale.'),
+        WidgetConfigField('label', WidgetConfigKind.text, label: 'Label'),
+        WidgetConfigField('axis', WidgetConfigKind.choice,
+            label: 'Runs',
+            defaultValue: 'vertical',
+            options: ['vertical', 'horizontal'],
+            help: 'A bar across a wide box wants to run left to right; one in '
+                'a tall box down the page. Cool is always the start.'),
+      ],
+      validate: (c) {
+        if ((c['device_id'] as String? ?? '').trim().isEmpty) {
+          return 'Which bulb does this warm?';
+        }
+        return null;
+      },
+      builder: (context, a) => WarmthElement(config: a.config),
+    ),
+    // The control for a number with no range — where a slider cannot go, since
+    // its ends are its whole vocabulary. Also the right control for a setpoint,
+    // which people nudge rather than aim.
+    WidgetDescriptor(
+      type: 'stepper',
+      title: 'Stepper',
+      description: 'Up a bit, down a bit — a setpoint, a volume.',
+      icon: Icons.exposure_outlined,
+      chrome: WidgetChrome.bare,
+      sizeHint: const WidgetSizeHint(
+          minW: 2, minH: 1, recommendedW: 3, recommendedH: 1),
+      configFields: const [
+        WidgetConfigField('device_id', WidgetConfigKind.deviceRef,
+            label: 'Device', required: true),
+        WidgetConfigField('attribute', WidgetConfigKind.writableNumber,
+            label: 'Sets',
+            help: 'Only numbers the plugin registered as writable. Unlike the '
+                'slider, this one does not need a range.'),
+        WidgetConfigField('label', WidgetConfigKind.text, label: 'Label'),
+        WidgetConfigField('step', WidgetConfigKind.integer,
+            label: 'By',
+            help: 'Only used when the plugin named no step of its own — its '
+                'own is what the device actually quantises to, and a decimal '
+                'step can only come from there.'),
+        WidgetConfigField('ink', WidgetConfigKind.ink,
+            group: 'Colour', label: 'Keys'),
+      ],
+      validate: (c) {
+        if ((c['device_id'] as String? ?? '').trim().isEmpty) {
+          return 'Which device does this step?';
+        }
+        if ((c['attribute'] as String? ?? '').trim().isEmpty) {
+          return 'Which of its numbers?';
+        }
+        return null;
+      },
+      builder: (context, a) => StepperElement(config: a.config),
     ),
     // An icon, bound to a device.
     //

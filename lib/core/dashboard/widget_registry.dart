@@ -258,6 +258,23 @@ enum WidgetConfigKind {
   /// asked the wrong one would offer a switch for a temperature.
   writableNumber,
 
+  /// A COLOUR this device has promised it accepts a write of — a `color_xy` or
+  /// a `color_rgb`.
+  ///
+  /// Its own kind for the same reason [writableNumber] is: the wheel sends a
+  /// pair of coordinates, not a scalar, and a picker that offered it a
+  /// brightness would produce a control that cannot send anything at all.
+  writableColour,
+
+  /// A COLOUR TEMPERATURE this device has promised it accepts a write of.
+  ///
+  /// Numeric, so [writableNumber] would list it — and a slider pointed at
+  /// Kelvin does work. This kind exists so the warmth bar can offer *only*
+  /// Kelvin, because unlike the slider it paints the scale it is on: a
+  /// blue-to-amber gradient over a volume control would be a lie about what the
+  /// numbers mean.
+  writableColourTemp,
+
   /// One of the scenes this house has.
   ///
   /// Scenes activate directly, like a device — a POST to `/scenes/id/activate`

@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -7,6 +5,7 @@ import '../../core/devices/presentation.dart';
 import '../../core/models/device_state.dart';
 import '../../core/providers/devices_provider.dart';
 import '../../core/devices/color_space.dart' show rgbToXy;
+import '../../design/components/colour_controls.dart';
 import '../../design/tokens.dart';
 
 /// The real control for a colour / tunable-white bulb: a colour wheel, a
@@ -27,7 +26,9 @@ class ColorLightControls extends ConsumerStatefulWidget {
 }
 
 // Tunable-white range, Kelvin. Warm end first.
-const _kWarm = 2000.0, _kCool = 6500.0;
+// Named in colour_controls.dart now, so the panel and any drawn warmth control
+// agree on where warm and cool are.
+const _kWarm = kWarmKelvin, _kCool = kCoolKelvin;
 
 class _ColorLightControlsState extends ConsumerState<ColorLightControls> {
   bool _dragging = false;
@@ -72,7 +73,7 @@ class _ColorLightControlsState extends ConsumerState<ColorLightControls> {
   DevicesNotifier get _notifier => ref.read(devicesProvider.notifier);
 
   Color get _color => _white
-      ? _whiteColor(_temp)
+      ? whiteColour(_temp)
       : HSVColor.fromAHSV(1, _hue, _sat, 1).toColor();
 
   void _commitColour() {
@@ -120,7 +121,7 @@ class _ColorLightControlsState extends ConsumerState<ColorLightControls> {
                 width: 128,
                 height: 128,
                 child: _white
-                    ? _TempBar(
+                    ? WarmthBar(
                         temp: _temp,
                         onChanged: (v) => setState(() {
                           _dragging = true;
@@ -131,7 +132,7 @@ class _ColorLightControlsState extends ConsumerState<ColorLightControls> {
                           _commitTemp();
                         },
                       )
-                    : _ColorWheel(
+                    : ColourWheel(
                         hue: _hue,
                         sat: _sat,
                         onChanged: (h, s) => setState(() {
@@ -203,15 +204,6 @@ class _ColorLightControlsState extends ConsumerState<ColorLightControls> {
   }
 }
 
-Color _whiteColor(double temp) {
-  const cool = Color(0xFFBCD4FF),
-      neutral = Color(0xFFFFF5EA),
-      warm = Color(0xFFFFB26E);
-  return temp < 50
-      ? Color.lerp(cool, neutral, temp / 50)!
-      : Color.lerp(neutral, warm, (temp - 50) / 50)!;
-}
-
 class _Segmented extends StatelessWidget {
   const _Segmented({required this.white, required this.onChanged});
   final bool white;
@@ -251,141 +243,6 @@ class _Segmented extends StatelessWidget {
 }
 
 /// The HSV wheel: hue around, saturation out from a white centre.
-class _ColorWheel extends StatelessWidget {
-  const _ColorWheel({
-    required this.hue,
-    required this.sat,
-    required this.onChanged,
-    required this.onEnd,
-  });
-
-  final double hue, sat;
-  final void Function(double hue, double sat) onChanged;
-  final VoidCallback onEnd;
-
-  void _handle(Offset local, Size size) {
-    final r = size.width / 2;
-    final dx = local.dx - r, dy = local.dy - r;
-    final h = (math.atan2(dy, dx) * 180 / math.pi + 360) % 360;
-    final s = (math.sqrt(dx * dx + dy * dy) / r).clamp(0.0, 1.0);
-    onChanged(h, s);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(builder: (context, c) {
-      final size = Size(c.maxWidth, c.maxWidth);
-      final r = size.width / 2;
-      final rad = hue * math.pi / 180;
-      final hx = r + r * sat * math.cos(rad);
-      final hy = r + r * sat * math.sin(rad);
-      return GestureDetector(
-        onPanDown: (d) => _handle(d.localPosition, size),
-        onPanUpdate: (d) => _handle(d.localPosition, size),
-        onPanEnd: (_) => onEnd(),
-        child: CustomPaint(
-          painter: _WheelPainter(),
-          child: Stack(children: [
-            Positioned(
-              left: hx - 9,
-              top: hy - 9,
-              child: Container(
-                width: 18,
-                height: 18,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: HSVColor.fromAHSV(1, hue, sat, 1).toColor(),
-                  border: Border.all(color: Colors.white, width: 3),
-                  boxShadow: const [
-                    BoxShadow(color: Colors.black54, blurRadius: 3)
-                  ],
-                ),
-              ),
-            ),
-          ]),
-        ),
-      );
-    });
-  }
-}
-
-class _WheelPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final r = size.width / 2;
-    final center = Offset(r, r);
-    final rect = Rect.fromCircle(center: center, radius: r);
-    final hue = Paint()
-      ..shader = SweepGradient(
-        colors: [
-          for (var i = 0; i <= 360; i += 30)
-            HSVColor.fromAHSV(1, (i % 360).toDouble(), 1, 1).toColor()
-        ],
-      ).createShader(rect);
-    canvas.drawCircle(center, r, hue);
-    final sat = Paint()
-      ..shader = RadialGradient(
-        colors: [Colors.white, Colors.white.withValues(alpha: 0)],
-        stops: const [0, 0.9],
-      ).createShader(rect);
-    canvas.drawCircle(center, r, sat);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter old) => false;
-}
-
-/// The warm↔cool bar for white mode.
-class _TempBar extends StatelessWidget {
-  const _TempBar(
-      {required this.temp, required this.onChanged, required this.onEnd});
-  final double temp; // 0 cool .. 100 warm
-  final ValueChanged<double> onChanged;
-  final VoidCallback onEnd;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = HcTokens.of(context);
-    return LayoutBuilder(builder: (context, c) {
-      void set(Offset p) =>
-          onChanged((p.dy / c.maxHeight).clamp(0.0, 1.0) * 100);
-      return GestureDetector(
-        onPanDown: (d) => set(d.localPosition),
-        onPanUpdate: (d) => set(d.localPosition),
-        onPanEnd: (_) => onEnd(),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: t.radius.lgR,
-            gradient: const LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [Color(0xFFBCD4FF), Color(0xFFFFF5EA), Color(0xFFFFB26E)],
-            ),
-          ),
-          child: Stack(children: [
-            Positioned(
-              top: temp / 100 * c.maxHeight - 13,
-              left: c.maxWidth / 2 - 13,
-              child: Container(
-                width: 26,
-                height: 26,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: _whiteColor(temp),
-                  border: Border.all(color: Colors.white, width: 3),
-                  boxShadow: const [
-                    BoxShadow(color: Colors.black45, blurRadius: 4)
-                  ],
-                ),
-              ),
-            ),
-          ]),
-        ),
-      );
-    });
-  }
-}
-
 class _Slider extends StatelessWidget {
   const _Slider({
     required this.value,
@@ -482,7 +339,7 @@ class _Presets extends StatelessWidget {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: p.white != null
-                    ? _whiteColor(p.white!)
+                    ? whiteColour(p.white!)
                     : HSVColor.fromAHSV(1, p.hue!, p.sat!, 1).toColor(),
                 border: Border.all(color: t.stroke.hairline),
               ),

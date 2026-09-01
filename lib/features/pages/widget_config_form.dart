@@ -253,8 +253,34 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
         WidgetConfigKind.deviceRef => _deviceRef(f),
         WidgetConfigKind.deviceRefs => _deviceRefs(f),
         WidgetConfigKind.attribute => _attribute(f),
-        WidgetConfigKind.writableAttribute => _writableAttribute(f),
-        WidgetConfigKind.writableNumber => _writableNumber(f),
+        WidgetConfigKind.writableAttribute => _writable(
+            f,
+            accepts: (s) => s.kind == AttributeKind.bool_,
+            control: 'switch',
+            nothing: 'accepts no on/off writes',
+          ),
+        WidgetConfigKind.writableNumber => _writable(
+            f,
+            accepts: (s) => s.kind.isNumeric,
+            control: 'slider',
+            nothing: 'accepts no numbers',
+            showRange: true,
+          ),
+        WidgetConfigKind.writableColour => _writable(
+            f,
+            accepts: (s) =>
+                s.kind == AttributeKind.colorXy ||
+                s.kind == AttributeKind.colorRgb,
+            control: 'colour wheel',
+            nothing: 'accepts no colour',
+          ),
+        WidgetConfigKind.writableColourTemp => _writable(
+            f,
+            accepts: (s) => s.kind == AttributeKind.colorTemp,
+            control: 'warmth bar',
+            nothing: 'has no tunable white',
+            showRange: true,
+          ),
         WidgetConfigKind.sceneRef => _scene(f),
         WidgetConfigKind.ink => _ink(f),
         WidgetConfigKind.pluginId => _pluginId(f),
@@ -1023,14 +1049,29 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
     );
   }
 
-  /// The numbers this device has promised it accepts a write of.
+  /// The things this device has **promised** it accepts a write of.
   ///
-  /// The same rule as [_writableAttribute] and for the same reason — only a
-  /// registered schema counts — with the kinds narrowed to those a slider can
-  /// actually drive. It also shows the plugin's own range, because that range
-  /// is the thing the slider will use and an author should see it before
-  /// wondering why the handle stops.
-  Widget _writableNumber(WidgetConfigField f) {
+  /// Only a registered schema counts. `attribute_policy.dart` is explicit about
+  /// why: an inferred `writable` is this app's opinion, and attribute-style
+  /// writes are not universal — `hc-sonos::execute_command` dispatches on an
+  /// `action` and rejects `{"muted": true}` outright. A control built on the
+  /// guess would look right, send, and change nothing.
+  ///
+  /// A device that registered nothing therefore offers nothing here, and says
+  /// so. An empty dropdown would read as "this app is broken" rather than "that
+  /// plugin never said".
+  ///
+  /// One method for all four writable kinds. They differ only in which specs
+  /// they accept and what to call them when there are none — four copies of
+  /// this list would be four places for the promise rule to drift out of step,
+  /// which is exactly the failure it exists to prevent.
+  Widget _writable(
+    WidgetConfigField f, {
+    required bool Function(AttributeSchema) accepts,
+    required String control,
+    required String nothing,
+    bool showRange = false,
+  }) {
     final t = HcTokens.of(context);
     final devices = ref.watch(devicesProvider).value ?? const [];
     final deviceId = _config['device_id'] as String?;
@@ -1038,7 +1079,7 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
 
     final specs = <String, AttributeSchema>{
       for (final e in (device?.schema?.writable ?? const {}).entries)
-        if (e.value.kind.isNumeric) e.key: e.value,
+        if (accepts(e.value)) e.key: e.value,
     };
     final offered = specs.keys.toList()..sort();
     final value = _config[f.name] as String?;
@@ -1052,9 +1093,9 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
           _hint('Pick a device first.')
         else if (device.schema == null)
           _hint('${device.displayName} has never told core what it accepts, '
-              'so nothing here can promise a slider will work.')
+              'so nothing here can promise a $control will work.')
         else if (offered.isEmpty)
-          _hint('${device.displayName} accepts no numbers.')
+          _hint('${device.displayName} $nothing.')
         else
           DropdownButtonFormField<String>(
             initialValue: offered.contains(value) ? value : null,
@@ -1070,7 +1111,9 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
             onChanged: (v) => _set(f.name, v),
           ),
         _help(f),
-        if (chosen != null)
+        // The plugin's own range, where the control will actually use it — an
+        // author should see it before wondering why the handle stops.
+        if (showRange && chosen != null)
           Padding(
             padding: EdgeInsets.only(top: t.space.xs),
             child: Text(
@@ -1078,71 +1121,14 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
                   ? 'The plugin says ${_trimNum(chosen.min!)} to '
                       '${_trimNum(chosen.max!)}'
                       '${chosen.unit == null ? '' : ' ${chosen.unit}'}.'
-                  : 'The plugin gave no range, so this slider needs one below.',
+                  : 'The plugin gave no range, so this $control needs one '
+                      'below.',
               style: t.text.captionStyle.copyWith(
                 color: chosen.hasRange ? t.accent.success : t.accent.warn,
               ),
             ),
-          ),
-      ],
-    );
-  }
-
-  /// 100, not 100.0 — a range read by a person.
-  static String _trimNum(double v) =>
-      v == v.roundToDouble() ? v.round().toString() : v.toString();
-
-  /// The attributes this device has *promised* it accepts a write of.
-  ///
-  /// Only a registered schema counts. `attribute_policy.dart` is explicit about
-  /// why: an inferred `writable` is this app's opinion, and attribute-style
-  /// writes are not universal — `hc-sonos::execute_command` dispatches on an
-  /// `action` and rejects `{"muted": true}` outright. A control built on the
-  /// guess would look right, send, and change nothing.
-  ///
-  /// A device that registered nothing therefore offers nothing here, and says
-  /// so. An empty dropdown would read as "this app is broken" rather than "that
-  /// plugin never said".
-  Widget _writableAttribute(WidgetConfigField f) {
-    final t = HcTokens.of(context);
-    final devices = ref.watch(devicesProvider).value ?? const [];
-    final deviceId = _config['device_id'] as String?;
-    final device = devices.where((d) => d.id == deviceId).firstOrNull;
-
-    final offered = <String>[
-      for (final e in (device?.schema?.writable ?? const {}).entries)
-        if (e.value.kind == AttributeKind.bool_) e.key,
-    ]..sort();
-
-    final value = _config[f.name] as String?;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _label(f),
-        if (device == null)
-          _hint('Pick a device first.')
-        else if (device.schema == null)
-          _hint('${device.displayName} has never told core what it accepts, '
-              'so nothing here can promise a switch will work.')
-        else if (offered.isEmpty)
-          _hint('${device.displayName} accepts no on/off writes.')
-        else
-          DropdownButtonFormField<String>(
-            initialValue: offered.contains(value) ? value : null,
-            isExpanded: true,
-            decoration: const InputDecoration(
-              isDense: true,
-              border: OutlineInputBorder(),
-            ),
-            items: [
-              for (final a in offered)
-                DropdownMenuItem(value: a, child: Text(humanize(a))),
-            ],
-            onChanged: (v) => _set(f.name, v),
-          ),
-        _help(f),
-        if (device?.schema != null && offered.isNotEmpty)
+          )
+        else if (!showRange && device?.schema != null && offered.isNotEmpty)
           Padding(
             padding: EdgeInsets.only(top: t.space.xs),
             child: Text(
@@ -1153,6 +1139,10 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
       ],
     );
   }
+
+  /// 100, not 100.0 — a range read by a person.
+  static String _trimNum(double v) =>
+      v == v.roundToDouble() ? v.round().toString() : v.toString();
 
   Widget _attribute(WidgetConfigField f) {
     // Attributes come from whichever device this widget points at.
