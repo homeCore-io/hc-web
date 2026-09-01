@@ -891,6 +891,58 @@ class _MediaPlayerDashboardWidget extends ConsumerWidget {
   }
 }
 
+/// A card a plugin contributed, before this client can draw one.
+///
+/// `plugin_widget` has been a legal type on the wire for a while, and until now
+/// nothing in this app was registered for it — so a dashboard carrying one fell
+/// through to the unknown-type path and drew nothing at all. That is the worst
+/// available answer: the card is not broken, it is *not implemented here*, and
+/// those look identical to somebody staring at an empty rectangle.
+///
+/// So this names what is missing and who provides it. Core now serves the
+/// declaration behind `{plugin_id, widget_id}` — its title, its bindings and a
+/// portable `render` — at `GET /dashboards/vocabulary`. When the render path
+/// lands, this widget is where it goes, and the placeholder becomes the
+/// fallback for a card whose plugin is offline rather than the whole story.
+class _PluginWidget extends StatelessWidget {
+  final DashboardWidgetModel widgetModel;
+  const _PluginWidget({required this.widgetModel});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    final plugin = (widgetModel.config['plugin_id'] as String? ?? '').trim();
+    final widget = (widgetModel.config['widget_id'] as String? ?? '').trim();
+
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.extension_outlined,
+                size: 16, color: t.surface.onBaseMuted),
+            SizedBox(width: t.space.xs),
+            Expanded(
+              child: Text(
+                widget.isEmpty ? 'No card chosen' : widget,
+                style: t.text.subtitleStyle.copyWith(color: t.surface.onBase),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+        SizedBox(height: t.space.xs),
+        Text(
+          plugin.isEmpty ? 'No plugin chosen' : 'Provided by $plugin',
+          style: TextStyle(color: t.surface.onBaseMuted),
+          overflow: TextOverflow.ellipsis,
+        ),
+      ],
+    );
+  }
+}
+
 class _MarkdownWidget extends StatelessWidget {
   final DashboardWidgetModel widgetModel;
   const _MarkdownWidget({required this.widgetModel});
@@ -1772,6 +1824,27 @@ void registerBuiltinDashboardWidgets() {
         entered: a.entered,
         onConfigChanged: a.onConfigChanged,
       ),
+    ),
+    WidgetDescriptor(
+      type: pluginWidgetType,
+      title: 'Plugin card',
+      description: 'A card contributed by a plugin.',
+      icon: Icons.extension_outlined,
+      sizeHint: const WidgetSizeHint(
+          minW: 2, minH: 1, recommendedW: 4, recommendedH: 2),
+      configFields: const [
+        WidgetConfigField('plugin_id', WidgetConfigKind.text, required: true),
+        WidgetConfigField('widget_id', WidgetConfigKind.text, required: true),
+      ],
+      validate: (c) {
+        final plugin = (c['plugin_id'] as String? ?? '').trim();
+        final widget = (c['widget_id'] as String? ?? '').trim();
+        if (plugin.isEmpty) return 'Which plugin provides this card?';
+        if (widget.isEmpty) return 'Which of its cards?';
+        return null;
+      },
+      builder: (context, a) =>
+          _PluginWidget(widgetModel: _modelOf(a, pluginWidgetType)),
     ),
     WidgetDescriptor(
       type: 'markdown',
