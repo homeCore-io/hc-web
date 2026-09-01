@@ -6,6 +6,7 @@ import '../../core/dashboard/widget_registry.dart';
 import '../../core/providers/dashboard_vocabulary_provider.dart';
 import '../../core/devices/presentation.dart';
 import '../../core/models/device_state.dart';
+import '../../core/schema/device_schema.dart';
 import '../../core/providers/areas_provider.dart';
 import '../../core/providers/devices_provider.dart';
 import '../../core/text/humanize.dart';
@@ -249,6 +250,7 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
         WidgetConfigKind.deviceRef => _deviceRef(f),
         WidgetConfigKind.deviceRefs => _deviceRefs(f),
         WidgetConfigKind.attribute => _attribute(f),
+        WidgetConfigKind.writableAttribute => _writableAttribute(f),
         WidgetConfigKind.ink => _ink(f),
         WidgetConfigKind.pluginId => _pluginId(f),
         WidgetConfigKind.pluginWidgetId => _pluginWidgetId(f),
@@ -950,6 +952,68 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
             ),
           ),
         ),
+      ],
+    );
+  }
+
+  /// The attributes this device has *promised* it accepts a write of.
+  ///
+  /// Only a registered schema counts. `attribute_policy.dart` is explicit about
+  /// why: an inferred `writable` is this app's opinion, and attribute-style
+  /// writes are not universal — `hc-sonos::execute_command` dispatches on an
+  /// `action` and rejects `{"muted": true}` outright. A control built on the
+  /// guess would look right, send, and change nothing.
+  ///
+  /// A device that registered nothing therefore offers nothing here, and says
+  /// so. An empty dropdown would read as "this app is broken" rather than "that
+  /// plugin never said".
+  Widget _writableAttribute(WidgetConfigField f) {
+    final t = HcTokens.of(context);
+    final devices = ref.watch(devicesProvider).value ?? const [];
+    final deviceId = _config['device_id'] as String?;
+    final device = devices.where((d) => d.id == deviceId).firstOrNull;
+
+    final offered = <String>[
+      for (final e in (device?.schema?.writable ?? const {}).entries)
+        if (e.value.kind == AttributeKind.bool_) e.key,
+    ]..sort();
+
+    final value = _config[f.name] as String?;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _label(f),
+        if (device == null)
+          _hint('Pick a device first.')
+        else if (device.schema == null)
+          _hint('${device.displayName} has never told core what it accepts, '
+              'so nothing here can promise a switch will work.')
+        else if (offered.isEmpty)
+          _hint('${device.displayName} accepts no on/off writes.')
+        else
+          DropdownButtonFormField<String>(
+            initialValue: offered.contains(value) ? value : null,
+            isExpanded: true,
+            decoration: const InputDecoration(
+              isDense: true,
+              border: OutlineInputBorder(),
+            ),
+            items: [
+              for (final a in offered)
+                DropdownMenuItem(value: a, child: Text(humanize(a))),
+            ],
+            onChanged: (v) => _set(f.name, v),
+          ),
+        _help(f),
+        if (device?.schema != null && offered.isNotEmpty)
+          Padding(
+            padding: EdgeInsets.only(top: t.space.xs),
+            child: Text(
+              'Registered by the plugin, not guessed.',
+              style: t.text.captionStyle.copyWith(color: t.accent.success),
+            ),
+          ),
       ],
     );
   }

@@ -15,6 +15,7 @@ import 'rooms_card.dart';
 import 'primitive_cards.dart';
 import 'bound_element.dart';
 import 'icon_element.dart';
+import 'toggle_element.dart';
 import 'plugin_render_view.dart';
 import 'dart:async';
 
@@ -2160,6 +2161,40 @@ void registerBuiltinDashboardWidgets() {
         config: a.config,
         builder: (c) => TextPrimitiveCard(config: c, editing: a.editing),
       ),
+    ),
+    // The first element that WRITES. Everything above shows the house; this
+    // changes it, which is why its attribute picker offers only what a plugin
+    // registered rather than everything a device reports.
+    WidgetDescriptor(
+      type: 'toggle',
+      title: 'Switch',
+      description: 'A switch for one device, drawn where you want it.',
+      icon: Icons.toggle_on_outlined,
+      chrome: WidgetChrome.bare,
+      sizeHint: const WidgetSizeHint(
+          minW: 2, minH: 1, recommendedW: 3, recommendedH: 1),
+      configFields: const [
+        WidgetConfigField('device_id', WidgetConfigKind.deviceRef,
+            label: 'Device', required: true),
+        WidgetConfigField('attribute', WidgetConfigKind.writableAttribute,
+            label: 'Sets',
+            defaultValue: 'on',
+            help: 'Only what the plugin registered as writable — a guess here '
+                'would send a command the device never advertised.'),
+        WidgetConfigField('label', WidgetConfigKind.text, label: 'Label'),
+        WidgetConfigField('ink', WidgetConfigKind.ink,
+            group: 'Colour', label: 'When on'),
+      ],
+      validate: (c) {
+        if ((c['device_id'] as String? ?? '').trim().isEmpty) {
+          return 'Which device does this switch?';
+        }
+        if ((c['attribute'] as String? ?? '').trim().isEmpty) {
+          return 'Which of its settings?';
+        }
+        return null;
+      },
+      builder: (context, a) => ToggleElement(config: a.config),
     ),
     // An icon, bound to a device.
     //

@@ -241,6 +241,16 @@ enum WidgetConfigKind {
   attribute,
   areaName,
 
+  /// An attribute this device has PROMISED it accepts a write of.
+  ///
+  /// Deliberately not [attribute], which lists everything a device reports so a
+  /// chart or a gauge can point at any reading. A control that writes must
+  /// offer only what the plugin registered as writable: `attribute_policy.dart`
+  /// spells out why — an inferred write is this app's opinion, and
+  /// `hc-sonos::execute_command` rejects attribute-style writes outright, so a
+  /// control built on a guess fails silently.
+  writableAttribute,
+
   /// A kind of device — lights, locks, sensors — picked from the kinds this
   /// house actually has. Distinct from [choice] because the options are the
   /// live device map, not a fixed list in a descriptor.
