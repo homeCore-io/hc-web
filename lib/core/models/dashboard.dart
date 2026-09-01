@@ -325,7 +325,13 @@ DashboardLayout normalizeDashboardLayout(
       ),
   ];
 
-  final engine = GridEngine(columns: layout.columns);
+  // Under the layout's OWN flow. Built without it this defaulted to packed and
+  // ran gravity over whatever it was handed — closing the gaps a free layout
+  // exists to keep, and rising a composed element to y = 0, since a composed
+  // item competes with nothing and so is blocked by nothing. The engine is the
+  // one place the two flows differ, so a caller that does not say which flow it
+  // is in has already asked for the wrong one.
+  final engine = GridEngine(columns: layout.columns, flow: layout.flow);
   final packed = engine.normalize(items);
 
   // Preserve the incoming order so a save does not reshuffle the JSON for no
