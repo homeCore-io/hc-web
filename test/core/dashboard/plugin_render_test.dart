@@ -113,7 +113,8 @@ void main() {
         device: 'boiler_{{config.device_id}}',
         key: 'flow_lpm',
       );
-      expect(odd.resolveDevice({'device_id': '1'}), 'boiler_{{config.device_id}}');
+      expect(
+          odd.resolveDevice({'device_id': '1'}), 'boiler_{{config.device_id}}');
     });
   });
 

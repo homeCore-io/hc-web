@@ -224,9 +224,7 @@ class PluginRenderView extends ConsumerWidget {
     final out = <Widget>[];
     for (var i = 0; i < children.length; i++) {
       if (i > 0) {
-        out.add(horizontal
-            ? SizedBox(width: gap)
-            : SizedBox(height: gap));
+        out.add(horizontal ? SizedBox(width: gap) : SizedBox(height: gap));
       }
       out.add(children[i]);
     }

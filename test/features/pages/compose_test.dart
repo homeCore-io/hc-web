@@ -170,7 +170,6 @@ Future<void> _typeSize(WidgetTester tester, String label, String value) async {
 
 DashboardFrame _frame(WidgetTester tester) => _grid(tester).frame!;
 
-
 void main() {
   _reopening();
   group('turning it on', () {

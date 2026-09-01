@@ -137,12 +137,7 @@ DashboardLayout deriveLayout(
         // composition to carry, and copying one across would claim the
         // arrangement was authored for this device when it was not.
         DashboardWidgetPlacement(
-            widgetId: i.id,
-            x: i.x,
-            y: i.y,
-            w: i.w,
-            h: i.h,
-            opacity: i.opacity),
+            widgetId: i.id, x: i.x, y: i.y, w: i.w, h: i.h, opacity: i.opacity),
     ],
     // The containers follow too — a derived layout has no opinions of its own,
     // and a group given a body on the desktop appearing as a bare group on the

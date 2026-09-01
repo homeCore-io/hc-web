@@ -30,7 +30,11 @@ void main() {
     test('answers what the house says', () {
       expect(
         _when(const {
-          'DeviceState': {'device_id': 'door', 'attribute': 'open', 'value': true}
+          'DeviceState': {
+            'device_id': 'door',
+            'attribute': 'open',
+            'value': true
+          }
         }).holds(house),
         isTrue,
       );
@@ -96,7 +100,11 @@ void main() {
     test('a device the house does not have is false, not a crash', () {
       expect(
         _when(const {
-          'DeviceState': {'device_id': 'ghost', 'attribute': 'open', 'value': true}
+          'DeviceState': {
+            'device_id': 'ghost',
+            'attribute': 'open',
+            'value': true
+          }
         }).holds(house),
         isFalse,
       );
@@ -112,15 +120,37 @@ void main() {
     };
 
     test('not, and, or', () {
-      expect(_when({'Not': {'conditions': [lampOn]}}).holds(house), isTrue);
-      expect(_when({'And': {'conditions': [open, lampOn]}}).holds(house), isFalse);
-      expect(_when({'Or': {'conditions': [open, lampOn]}}).holds(house), isTrue);
+      expect(
+          _when({
+            'Not': {
+              'conditions': [lampOn]
+            }
+          }).holds(house),
+          isTrue);
+      expect(
+          _when({
+            'And': {
+              'conditions': [open, lampOn]
+            }
+          }).holds(house),
+          isFalse);
+      expect(
+          _when({
+            'Or': {
+              'conditions': [open, lampOn]
+            }
+          }).holds(house),
+          isTrue);
     });
 
     test('an empty And is false, not vacuously true', () {
       // A half-written condition must not repaint the card while somebody is
       // still building it.
-      expect(_when(const {'And': {'conditions': []}}).holds(house), isFalse);
+      expect(
+          _when(const {
+            'And': {'conditions': []}
+          }).holds(house),
+          isFalse);
     });
 
     test('a tag this build has never heard of is false', () {
@@ -128,8 +158,9 @@ void main() {
       // alternative is a card that refuses to render because it could not
       // evaluate a preference about its own colour.
       expect(
-        _when(const {'TimeWindow': {'start': '22:00', 'end': '06:00'}})
-            .holds(house),
+        _when(const {
+          'TimeWindow': {'start': '22:00', 'end': '06:00'}
+        }).holds(house),
         isFalse,
       );
     });
@@ -244,7 +275,8 @@ void main() {
       expect(back, withVariants);
       expect(back.variants.single.style, {'tint': 'danger'});
 
-      expect(const CardStyle().toConfig(const {}).containsKey('style'), isFalse);
+      expect(
+          const CardStyle().toConfig(const {}).containsKey('style'), isFalse);
     });
 
     test('a variant with no style is dropped rather than drawn', () {

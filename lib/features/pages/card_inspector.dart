@@ -202,7 +202,8 @@ class _CardInspectorState extends ConsumerState<CardInspector> {
                   hint: descriptor?.title ?? model.type,
                   onChanged: onRename,
                 ),
-              if (descriptor != null && descriptor.chrome != WidgetChrome.bare) ...[
+              if (descriptor != null &&
+                  descriptor.chrome != WidgetChrome.bare) ...[
                 _StyleSection(
                   cardId: model.id,
                   style: CardStyle.fromConfig(model.config),
@@ -554,7 +555,6 @@ class _NameFieldState extends State<_NameField> {
 /// preset would be a name to learn for a combination you can already read off
 /// the switches — and the interesting one, a card with a border and no fill, is
 
-
 /// "When the house says this, look like that."
 ///
 /// A deliberately smaller control than the rules' `DeviceConditionPicker`, and
@@ -687,7 +687,8 @@ class _VariantRow extends StatelessWidget {
             op: op ?? when.op,
             value: value ?? when.value,
           ),
-          style: tint == null ? variant.style : {...variant.style, 'tint': tint},
+          style:
+              tint == null ? variant.style : {...variant.style, 'tint': tint},
         ));
 
     return Padding(
@@ -714,8 +715,7 @@ class _VariantRow extends StatelessWidget {
             label: 'Device',
             value: when.deviceId ?? '',
             options: [
-              for (final d in devices)
-                (key: d.id, label: d.name ?? d.id),
+              for (final d in devices) (key: d.id, label: d.name ?? d.id),
             ],
             // Changing the device clears the attribute: the attribute belonged
             // to the device that was chosen, and keeping it would name one the
@@ -804,6 +804,7 @@ class _RowChoice extends StatelessWidget {
         ),
       );
 }
+
 /// The card's transform: how far it is turned, and how far it has faded.
 ///
 /// Separate from STYLE because the two are stored in different places and that

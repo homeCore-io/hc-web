@@ -110,8 +110,8 @@ class CardCondition {
         // Vacuous truth is the wrong answer for a *style* variant: an `And`
         // with nothing in it is a half-written condition, and answering true
         // would repaint the card while somebody was still building it.
-        'And' => conditions.isNotEmpty &&
-            conditions.every((c) => c.holds(lookup)),
+        'And' =>
+          conditions.isNotEmpty && conditions.every((c) => c.holds(lookup)),
         'Or' => conditions.any((c) => c.holds(lookup)),
         _ => false,
       };
@@ -152,8 +152,7 @@ class CardCondition {
     if (actual is bool || expected is bool) {
       return _asBool(actual) != null && _asBool(actual) == _asBool(expected);
     }
-    return actual.toString().toLowerCase() ==
-        expected.toString().toLowerCase();
+    return actual.toString().toLowerCase() == expected.toString().toLowerCase();
   }
 
   static bool? _asBool(Object? raw) => switch (raw) {

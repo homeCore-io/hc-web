@@ -22,8 +22,8 @@ DashboardLayout _layout(List<DashboardWidgetPlacement> placements) =>
 void main() {
   group('the codec', () {
     test('a page nobody has turned does not gain two keys by being saved', () {
-      const plain = DashboardWidgetPlacement(
-          widgetId: 'a', x: 0, y: 0, w: 2, h: 2);
+      const plain =
+          DashboardWidgetPlacement(widgetId: 'a', x: 0, y: 0, w: 2, h: 2);
       final json = plain.toJson();
       expect(json.containsKey('rotation'), isFalse);
       expect(json.containsKey('opacity'), isFalse);

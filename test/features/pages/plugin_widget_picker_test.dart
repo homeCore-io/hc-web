@@ -132,7 +132,8 @@ void main() {
     expect(config.containsKey('widget_id'), isFalse);
   });
 
-  testWidgets('with no plugin chosen, the card list says so rather than being '
+  testWidgets(
+      'with no plugin chosen, the card list says so rather than being '
       'an empty menu', (tester) async {
     await _pump(tester, vocabulary: catalogue);
     expect(find.text('Choose a plugin first.'), findsOneWidget);

@@ -84,8 +84,8 @@ void main() {
 
   testWidgets('the pane shows the transform the card already has',
       (tester) async {
-    final sliders =
-        await _pump(tester, rotation: -8, opacity: 0.4, onRotate: (_) {}, onFade: (_) {});
+    final sliders = await _pump(tester,
+        rotation: -8, opacity: 0.4, onRotate: (_) {}, onFade: (_) {});
 
     // Blur, then Turn, then Fade — the style pane's slider comes first.
     expect(find.text('TRANSFORM'), findsOneWidget);

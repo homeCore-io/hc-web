@@ -772,7 +772,6 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
     );
   }
 
-
   /// Which plugin provides this card.
   ///
   /// The list is what this installation actually has, not what this build knows

@@ -2043,9 +2043,8 @@ class _PageScreenState extends ConsumerState<PageScreen> {
                   // house forty times on every rebuild.
                   deviceLookup: () {
                     final byId = {
-                      for (final d
-                          in ref.watch(devicesProvider).value ??
-                              const <DeviceState>[])
+                      for (final d in ref.watch(devicesProvider).value ??
+                          const <DeviceState>[])
                         d.id: d,
                     };
                     return (id) => byId[id];

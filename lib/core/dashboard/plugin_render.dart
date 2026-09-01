@@ -34,8 +34,7 @@ class RenderNode {
   /// The instrument's own fields, flattened beside `kind` on the wire.
   final Map<String, dynamic> fields;
 
-  bool get isContainer =>
-      kind == 'row' || kind == 'column' || kind == 'stack';
+  bool get isContainer => kind == 'row' || kind == 'column' || kind == 'stack';
 
   static RenderNode? fromJson(Object? json) {
     if (json is! Map) return null;
@@ -113,7 +112,8 @@ class PluginBinding {
       inTo: _finite(json['in_to']),
       outFrom: _finite(json['out_from']),
       outTo: _finite(json['out_to']),
-      decimals: json['decimals'] is num ? (json['decimals'] as num).toInt() : null,
+      decimals:
+          json['decimals'] is num ? (json['decimals'] as num).toInt() : null,
     );
   }
 

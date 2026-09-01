@@ -350,8 +350,8 @@ void _inheritance() {
 
     // The group's centre is the fixed point, so the midpoint between the two
     // members is where it was.
-    final midBefore = Offset((beforeA.dx + beforeB.dx) / 2,
-        (beforeA.dy + beforeB.dy) / 2);
+    final midBefore =
+        Offset((beforeA.dx + beforeB.dx) / 2, (beforeA.dy + beforeB.dy) / 2);
     final midAfter =
         Offset((afterA.dx + afterB.dx) / 2, (afterA.dy + afterB.dy) / 2);
     expect((midAfter - midBefore).distance, lessThan(1),

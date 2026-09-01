@@ -586,7 +586,6 @@ class _PageGridState extends State<PageGrid> {
           }
         }
 
-
         // What each card inherits from the groups it sits in.
         //
         // A group's rotation turns its members about the **group's** centre,
@@ -1132,44 +1131,49 @@ class _PageGridState extends State<PageGrid> {
                       _transformed(
                         item,
                         RepaintBoundary(
-                        child: _Cell(
-                          onConfigChanged: widget.onWidgetConfig == null
-                              ? null
-                              : (next) => widget.onWidgetConfig!(item.id, next),
-                          deviceLookup: widget.deviceLookup,
-                        item: item,
-                        model: widget.widgetsById[item.id],
-                        editing: widget.editing,
-                        simplified: gesturing,
-                        dragging: _dragId == item.id || _resizeId == item.id,
-                        selected: widget.selectedIds.contains(item.id),
-                        entered: _entered == item.id,
-                        enteredFocus: _enteredFocus,
-                        onEnter: () => _enter(item.id),
-                        onLeave: _leave,
-                        // Only while resizing. During a move the position is
-                        // already legible from where the card is; during a
-                        // resize the number of cells is exactly what you are
-                        // aiming at and the only thing you cannot read off the
-                        // screen.
-                        sizeLabel:
-                            _resizeId == item.id ? '${item.w}×${item.h}' : null,
-                        onRemove: () => widget.onRemove?.call(item.id),
-                        onConfigure: () => widget.onConfigure?.call(item.id),
-                        onMenu: (pos) => widget.onMenu?.call(item.id, pos),
-                        onSelect: widget.onSelect == null
-                            ? null
-                            // Shift is read at the moment of the tap rather than
-                            // tracked as state: a modifier held while the pointer
-                            // was elsewhere is not a modifier held for this click.
-                            : () => _tapped(
-                                  item.id,
-                                  HardwareKeyboard.instance.isShiftPressed,
-                                ),
-                        onDragStart: () => startDrag(item),
-                        onDragUpdate: updateDrag,
-                        onDragEnd: endDrag,
-                        onResizeStart: (handle) => startResize(item, handle),
+                          child: _Cell(
+                            onConfigChanged: widget.onWidgetConfig == null
+                                ? null
+                                : (next) =>
+                                    widget.onWidgetConfig!(item.id, next),
+                            deviceLookup: widget.deviceLookup,
+                            item: item,
+                            model: widget.widgetsById[item.id],
+                            editing: widget.editing,
+                            simplified: gesturing,
+                            dragging:
+                                _dragId == item.id || _resizeId == item.id,
+                            selected: widget.selectedIds.contains(item.id),
+                            entered: _entered == item.id,
+                            enteredFocus: _enteredFocus,
+                            onEnter: () => _enter(item.id),
+                            onLeave: _leave,
+                            // Only while resizing. During a move the position is
+                            // already legible from where the card is; during a
+                            // resize the number of cells is exactly what you are
+                            // aiming at and the only thing you cannot read off the
+                            // screen.
+                            sizeLabel: _resizeId == item.id
+                                ? '${item.w}×${item.h}'
+                                : null,
+                            onRemove: () => widget.onRemove?.call(item.id),
+                            onConfigure: () =>
+                                widget.onConfigure?.call(item.id),
+                            onMenu: (pos) => widget.onMenu?.call(item.id, pos),
+                            onSelect: widget.onSelect == null
+                                ? null
+                                // Shift is read at the moment of the tap rather than
+                                // tracked as state: a modifier held while the pointer
+                                // was elsewhere is not a modifier held for this click.
+                                : () => _tapped(
+                                      item.id,
+                                      HardwareKeyboard.instance.isShiftPressed,
+                                    ),
+                            onDragStart: () => startDrag(item),
+                            onDragUpdate: updateDrag,
+                            onDragEnd: endDrag,
+                            onResizeStart: (handle) =>
+                                startResize(item, handle),
                             composed: item.isComposed,
                             onResizeUpdate: updateResize,
                             onResizeEnd: endResize,
