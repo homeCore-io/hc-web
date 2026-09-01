@@ -31,6 +31,8 @@ class GridItem {
     this.floating = false,
     this.z = 0,
     this.rect,
+    this.rotation,
+    this.opacity,
   });
 
   final String id;
@@ -66,6 +68,18 @@ class GridItem {
   /// will not be.
   final DashboardRect? rect;
 
+  /// Degrees clockwise about the card's own centre, and 0–1 paint opacity.
+  ///
+  /// Carried by every operation on this canvas and read by **none** of them.
+  /// A turned card still occupies its cells: packing against a rotated
+  /// bounding box would make a page's legality depend on trigonometry, and two
+  /// clients rounding differently would disagree about whether it could be
+  /// saved. A card at zero opacity still takes its space, because invisible is
+  /// not absent — reflowing around a faded card would make hiding something a
+  /// destructive edit. See `docs/dashboard-layout.md`.
+  final double? rotation;
+  final double? opacity;
+
   /// Composed elements are placed, not packed.
   ///
   /// The same rule [floating] introduced, generalised: a card somebody put at a
@@ -88,6 +102,8 @@ class GridItem {
     bool? floating,
     int? z,
     Object? rect = _unchangedRect,
+    Object? rotation = _unchangedRect,
+    Object? opacity = _unchangedRect,
   }) =>
       GridItem(
         id: id,
@@ -103,6 +119,14 @@ class GridItem {
         rect: identical(rect, _unchangedRect)
             ? this.rect
             : rect as DashboardRect?,
+        // The same sentinel, for the same reason: clearing a rotation back to
+        // none is a real edit that `rotation: null` could not express.
+        rotation: identical(rotation, _unchangedRect)
+            ? this.rotation
+            : rotation as double?,
+        opacity: identical(opacity, _unchangedRect)
+            ? this.opacity
+            : opacity as double?,
       );
 
   /// Do these two compete for the same cells?
@@ -141,11 +165,15 @@ class GridItem {
       other.z == z &&
       // Part of identity, or a drag that moves a composed card without
       // crossing a cell boundary would compare equal to where it started and
-      // the canvas would not repaint.
-      other.rect == rect;
+      // the canvas would not repaint. The transform is here for exactly the
+      // same reason: turning a card changes no cell.
+      other.rect == rect &&
+      other.rotation == rotation &&
+      other.opacity == opacity;
 
   @override
-  int get hashCode => Object.hash(id, x, y, w, h, sectionId, floating, z, rect);
+  int get hashCode => Object.hash(
+      id, x, y, w, h, sectionId, floating, z, rect, rotation, opacity);
 
   @override
   String toString() => '$id($x,$y ${w}x$h${floating ? ' floating z$z' : ''}'
@@ -358,6 +386,8 @@ class GroupBox {
     this.padding = 0,
     this.radius,
     this.clip = false,
+    this.rotation,
+    this.opacity,
   });
 
   final String path;
@@ -378,12 +408,29 @@ class GroupBox {
   /// not hide a card that was visible a moment ago.
   final bool clip;
 
+  /// The transform every member inherits.
+  ///
+  /// Composed with each member's own rather than replacing it: a card turned
+  /// four degrees inside a group turned eight is turned twelve. And the turn
+  /// is about the **group's** centre, which is the whole reason this is not
+  /// just the same field written on each member.
+  final double? rotation;
+
+  /// 0–1, multiplied with each member's own.
+  final double? opacity;
+
   /// True when this box says nothing the default would not.
   ///
   /// Used to drop it on save rather than write a row that changes nothing —
   /// a document that grows entries by being read is one whose diffs stop
   /// meaning anything, the same rule `frame` and `rect` follow.
-  bool get isPlain => rect == null && padding == 0 && radius == null && !clip;
+  bool get isPlain =>
+      rect == null &&
+      padding == 0 &&
+      radius == null &&
+      !clip &&
+      rotation == null &&
+      opacity == null;
 
   GroupBox copyWith({
     String? path,
@@ -391,6 +438,8 @@ class GroupBox {
     double? padding,
     Object? radius = _unchangedRect,
     bool? clip,
+    Object? rotation = _unchangedRect,
+    Object? opacity = _unchangedRect,
   }) =>
       GroupBox(
         path: path ?? this.path,
@@ -404,6 +453,12 @@ class GroupBox {
         radius:
             identical(radius, _unchangedRect) ? this.radius : radius as double?,
         clip: clip ?? this.clip,
+        rotation: identical(rotation, _unchangedRect)
+            ? this.rotation
+            : rotation as double?,
+        opacity: identical(opacity, _unchangedRect)
+            ? this.opacity
+            : opacity as double?,
       );
 
   Map<String, dynamic> toJson() => {
@@ -412,6 +467,8 @@ class GroupBox {
         if (padding != 0) 'padding': padding,
         if (radius != null) 'radius': radius,
         if (clip) 'clip': clip,
+        if (rotation != null) 'rotation': rotation,
+        if (opacity != null) 'opacity': opacity,
       };
 
   /// Null when there is no path — a box that names no group styles nothing,
@@ -429,6 +486,8 @@ class GroupBox {
       padding: padding < 0 ? 0 : padding,
       radius: radius == null || radius < 0 ? null : radius,
       clip: json['clip'] == true,
+      rotation: DashboardRect._finite(json['rotation']),
+      opacity: DashboardRect._finite(json['opacity']),
     );
   }
 
@@ -439,10 +498,13 @@ class GroupBox {
       other.rect == rect &&
       other.padding == padding &&
       other.radius == radius &&
-      other.clip == clip;
+      other.clip == clip &&
+      other.rotation == rotation &&
+      other.opacity == opacity;
 
   @override
-  int get hashCode => Object.hash(path, rect, padding, radius, clip);
+  int get hashCode =>
+      Object.hash(path, rect, padding, radius, clip, rotation, opacity);
 }
 
 /// What empty space in a layout means. Mirrors core's `DashboardFlow`.

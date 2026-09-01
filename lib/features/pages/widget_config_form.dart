@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/dashboard/card_style.dart' show inkColours, resolveInk;
 import '../../core/dashboard/widget_registry.dart';
+import '../../core/providers/dashboard_vocabulary_provider.dart';
 import '../../core/devices/presentation.dart';
 import '../../core/models/device_state.dart';
 import '../../core/providers/areas_provider.dart';
@@ -249,6 +250,8 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
         WidgetConfigKind.deviceRefs => _deviceRefs(f),
         WidgetConfigKind.attribute => _attribute(f),
         WidgetConfigKind.ink => _ink(f),
+        WidgetConfigKind.pluginId => _pluginId(f),
+        WidgetConfigKind.pluginWidgetId => _pluginWidgetId(f),
       };
 
   /// A colour, shown as the colour it is.
@@ -768,6 +771,111 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
       ],
     );
   }
+
+  /// Which plugin provides this card.
+  ///
+  /// The list is what this installation actually has, not what this build knows
+  /// about — a plugin card is unknowable at compile time by construction. A
+  /// core too old to be asked and a core with no plugin cards are told apart on
+  /// purpose: the first is our ignorance and the second is a fact about the
+  /// house, and offering an empty dropdown for either would say neither.
+  Widget _pluginId(WidgetConfigField f) {
+    final async = ref.watch(dashboardVocabularyProvider);
+    final all = async.value?.pluginWidgets;
+    final value = _config[f.name] as String?;
+
+    if (async.isLoading) return _pickerShell(f, _hint('Asking core…'));
+    if (all == null) return _manualFallback(f);
+    if (all.isEmpty) {
+      return _pickerShell(
+        f,
+        _hint('No plugin here contributes a card yet.'),
+      );
+    }
+
+    final plugins = {for (final s in all) s.pluginId}.toList()..sort();
+    return _pickerShell(
+      f,
+      DropdownButtonFormField<String>(
+        initialValue: plugins.contains(value) ? value : null,
+        isExpanded: true,
+        decoration:
+            const InputDecoration(isDense: true, border: OutlineInputBorder()),
+        items: [
+          for (final id in plugins)
+            DropdownMenuItem(value: id, child: Text(id)),
+        ],
+        // Changing the plugin clears the card: the card that was chosen belongs
+        // to the plugin that was chosen, and leaving it behind would name a
+        // card the new plugin does not have.
+        onChanged: (v) => _patch({f.name: v, 'widget_id': null}),
+      ),
+    );
+  }
+
+  /// Which of that plugin's cards.
+  ///
+  /// Titles, not ids: `boiler_flow` is what the plugin author typed and "Boiler
+  /// flow" is what they meant. The id is still what gets stored, because it is
+  /// what core validates against.
+  Widget _pluginWidgetId(WidgetConfigField f) {
+    final async = ref.watch(dashboardVocabularyProvider);
+    final all = async.value?.pluginWidgets;
+    final plugin = (_config['plugin_id'] as String? ?? '').trim();
+    final value = _config[f.name] as String?;
+
+    if (async.isLoading) return _pickerShell(f, _hint('Asking core…'));
+    if (all == null) return _manualFallback(f);
+    if (plugin.isEmpty) {
+      return _pickerShell(f, _hint('Choose a plugin first.'));
+    }
+
+    final cards = all.where((s) => s.pluginId == plugin).toList()
+      ..sort((a, b) => a.title.compareTo(b.title));
+    if (cards.isEmpty) {
+      return _pickerShell(
+        f,
+        // The plugin is chosen and gone, or chosen and contributing nothing.
+        // Either way the card list is empty for a reason worth saying.
+        _hint('$plugin contributes no cards right now.'),
+      );
+    }
+
+    return _pickerShell(
+      f,
+      DropdownButtonFormField<String>(
+        initialValue: cards.any((c) => c.widgetId == value) ? value : null,
+        isExpanded: true,
+        decoration:
+            const InputDecoration(isDense: true, border: OutlineInputBorder()),
+        items: [
+          for (final c in cards)
+            DropdownMenuItem(value: c.widgetId, child: Text(c.title)),
+        ],
+        onChanged: (v) => _set(f.name, v),
+      ),
+    );
+  }
+
+  /// Label, control, help.
+  Widget _pickerShell(WidgetConfigField f, Widget control) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [_label(f), control, _help(f)],
+      );
+
+  /// The plain text field the picker replaced, for a core that cannot be asked.
+  ///
+  /// Keeping it for that one case matters: a card pointed at a plugin has to
+  /// stay editable against a core too old to list them, or upgrading core
+  /// becomes a prerequisite for fixing a typo. The text field draws its own label
+  /// and help, so the picker shell is deliberately not used here.
+  Widget _manualFallback(WidgetConfigField f) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _hint('This core cannot list plugin cards, so type the id by hand.'),
+          _text(f),
+        ],
+      );
 
   // A quiet inline note where a control would be, for the empty/loading states
   // that an unselectable dropdown used to hide.

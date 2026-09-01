@@ -8,6 +8,7 @@ import '../../core/dashboard/design_tools.dart';
 import '../../core/dashboard/frame.dart';
 import '../../core/dashboard/free_layer.dart';
 import '../../core/dashboard/grid_engine.dart';
+import '../../core/dashboard/transform.dart';
 import '../../core/dashboard/groups.dart';
 import '../../core/models/dashboard.dart';
 import '../../design/hc_icons.dart';
@@ -107,6 +108,8 @@ class DesignerShell extends StatefulWidget {
     required this.tool,
     required this.onTool,
     this.onStack,
+    this.onRotate,
+    this.onFade,
   });
 
   final DashboardDefinition dashboard;
@@ -247,6 +250,10 @@ class DesignerShell extends StatefulWidget {
   /// Lift the selection above the grid, put it back, or move it within the
   /// stack. The page owns the arithmetic; this only forwards the request.
   final ValueChanged<StackMove>? onStack;
+
+  /// Turn or fade the selected card. Null outside the designer.
+  final ValueChanged<double?>? onRotate;
+  final ValueChanged<double?>? onFade;
 
   /// Fixed, because the frame is fixed. Panes that resized themselves would
   /// make the canvas scale jump while you worked in it.
@@ -698,6 +705,10 @@ class _DesignerShellState extends State<DesignerShell> {
                                       widget.selectedItem?.floating ?? false,
                                   z: widget.selectedItem?.z ?? 0,
                                   onStack: widget.onStack,
+                                  rotation: widget.selectedItem?.rotation,
+                                  opacity: widget.selectedItem?.opacity,
+                                  onRotate: widget.onRotate,
+                                  onFade: widget.onFade,
                                 ),
                     ),
                   ],
@@ -1117,6 +1128,41 @@ class _GroupSectionState extends State<_GroupSection> {
               label: 'Clip what sticks out',
               value: styled.clip,
               onChanged: (v) => write(styled.copyWith(clip: v)),
+            ),
+            SizedBox(height: t.space.xs),
+            // The parent transform, and the reason it is *here* rather than in
+            // a section of its own: in this document a group having an entry at
+            // all is what makes it a container, so a group cannot be turned
+            // without being one. Turning a cluster of cards that has no
+            // container would need a box that draws nothing, and every entry
+            // draws — see `page_grid.dart`.
+            InspectorSlider(
+              label: 'Turn',
+              value: styled.rotation ?? 0,
+              min: -180,
+              max: 180,
+              suffix: '°',
+              // Back to none rather than to zero: a group at exactly 0° and a
+              // group nobody turned are the same picture, and only one of them
+              // adds a key to the document.
+              onChanged: (v) =>
+                  write(styled.copyWith(rotation: rotationFromControl(v))),
+            ),
+            InspectorSlider(
+              label: 'Fade',
+              // Shown as a percentage and stored as a fraction, as everywhere
+              // else: every renderer takes a fraction.
+              value: opacityToControl(styled.opacity),
+              max: 100,
+              suffix: '%',
+              onChanged: (v) =>
+                  write(styled.copyWith(opacity: opacityFromControl(v))),
+            ),
+            SizedBox(height: t.space.xs),
+            Text(
+              'Members turn about the group, and fade with it.',
+              style: t.text.captionStyle
+                  .copyWith(color: t.surface.onBaseMuted, height: 1.4),
             ),
             SizedBox(height: t.space.xs),
             Text(

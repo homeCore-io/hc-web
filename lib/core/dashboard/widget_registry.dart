@@ -276,6 +276,21 @@ enum WidgetConfigKind {
   /// whole reason the app can draw the home in the skin's own palette instead
   /// of showing a photograph of one.
   homePlan,
+
+  /// Which plugin provides a card, and which of its cards.
+  ///
+  /// Two kinds rather than one, because they are two config keys core
+  /// validates separately and a control writing both from one dropdown would
+  /// be inventing a shape the wire does not have. The second depends on the
+  /// first: a card list means nothing until a plugin is chosen.
+  ///
+  /// Both are fed by `GET /dashboards/vocabulary` rather than by a fixed list,
+  /// for the reason [facet] is: what exists is a property of this
+  /// installation, not of this build. A plugin card cannot be compiled in —
+  /// that is the entire point of it — so a static list here could only ever be
+  /// wrong.
+  pluginId,
+  pluginWidgetId,
 }
 
 /// The type string core uses for a plugin-contributed card.

@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/dashboard/card_condition.dart';
 import '../../core/dashboard/card_style.dart';
 import '../../core/dashboard/free_layer.dart';
+import '../../core/dashboard/transform.dart';
 import '../../core/dashboard/widget_registry.dart';
+import '../../core/models/device_state.dart';
 import '../../core/models/dashboard.dart';
 import '../../core/providers/devices_provider.dart';
 import '../../design/tokens.dart';
@@ -41,6 +44,10 @@ class CardInspector extends ConsumerStatefulWidget {
     this.floating = false,
     this.z = 0,
     this.onStack,
+    this.rotation,
+    this.opacity,
+    this.onRotate,
+    this.onFade,
   });
 
   final DashboardWidgetModel model;
@@ -65,6 +72,22 @@ class CardInspector extends ConsumerStatefulWidget {
 
   /// Null outside the designer, where nothing can be restacked.
   final ValueChanged<StackMove>? onStack;
+
+  /// The card's own transform, from its *placement* rather than its config.
+  ///
+  /// Null outside the designer, where nothing can be turned. Both values live
+  /// on the placement because an angle is a property of an arrangement — see
+  /// `docs/dashboard-layout.md`.
+  final double? rotation;
+  final double? opacity;
+
+  /// Turn the card, or fade it. Null means the pair is not offered.
+  ///
+  /// Two callbacks rather than one taking both, because `null` is a real value
+  /// here — clearing a rotation back to none is an edit — and a single call
+  /// carrying two nullables could not say which of the two it meant.
+  final ValueChanged<double?>? onRotate;
+  final ValueChanged<double?>? onFade;
 
   @override
   ConsumerState<CardInspector> createState() => _CardInspectorState();
@@ -179,11 +202,24 @@ class _CardInspectorState extends ConsumerState<CardInspector> {
                   hint: descriptor?.title ?? model.type,
                   onChanged: onRename,
                 ),
-              if (descriptor != null && descriptor.chrome != WidgetChrome.bare)
+              if (descriptor != null &&
+                  descriptor.chrome != WidgetChrome.bare) ...[
                 _StyleSection(
                   cardId: model.id,
                   style: CardStyle.fromConfig(model.config),
                   onChanged: (style) => onChanged(style.toConfig(model.config)),
+                ),
+                _VariantsSection(
+                  style: CardStyle.fromConfig(model.config),
+                  onChanged: (style) => onChanged(style.toConfig(model.config)),
+                ),
+              ],
+              if (widget.onRotate case final onRotate?)
+                _TransformSection(
+                  rotation: widget.rotation,
+                  opacity: widget.opacity,
+                  onRotate: onRotate,
+                  onFade: widget.onFade ?? (_) {},
                 ),
               if (onStack != null)
                 _StackSection(
@@ -383,11 +419,23 @@ class _StyleSlider extends StatelessWidget {
     required this.value,
     required this.max,
     required this.onChanged,
+    this.min = 0,
+    this.suffix = '',
   });
 
   final String label;
   final double value;
   final double max;
+
+  /// Sliders here have started at zero until now. A turn goes both ways, and a
+  /// control that could only turn one way would make the other direction a
+  /// journey through 359 degrees.
+  final double min;
+
+  /// A unit on the readout. Without it a slider reading 40 says nothing about
+  /// whether that is degrees, percent, or pixels.
+  final String suffix;
+
   final ValueChanged<double> onChanged;
 
   @override
@@ -402,16 +450,17 @@ class _StyleSlider extends StatelessWidget {
         ),
         Expanded(
           child: Slider(
-            value: value.clamp(0, max),
+            value: value.clamp(min, max),
+            min: min,
             max: max,
-            divisions: max.round(),
-            label: '${value.round()}',
+            divisions: (max - min).round(),
+            label: '${value.round()}$suffix',
             onChanged: onChanged,
           ),
         ),
         SizedBox(
-          width: 24,
-          child: Text('${value.round()}',
+          width: 32,
+          child: Text('${value.round()}$suffix',
               textAlign: TextAlign.right,
               style: t.text.captionStyle.copyWith(
                   color: t.surface.onBaseMuted,
@@ -505,7 +554,325 @@ class _NameFieldState extends State<_NameField> {
 /// properties are independent and each maps to one thing you can see, so a
 /// preset would be a name to learn for a combination you can already read off
 /// the switches — and the interesting one, a card with a border and no fill, is
-/// the combination a three-item list would leave out.
+
+/// "When the house says this, look like that."
+///
+/// A deliberately smaller control than the rules' `DeviceConditionPicker`, and
+/// not a reuse of it. That picker covers the whole condition vocabulary — time
+/// windows, hub variables, Rhai — and a card answers **false** to every one of
+/// those, so offering them here would be a menu of things that quietly do
+/// nothing. This offers exactly what `card_condition.dart` can evaluate: a
+/// device, one of its attributes, a comparison, and a value.
+///
+/// The style side is a tint and nothing else, for now. It is what the two
+/// motivating cases need — *"when this door is open, this card is red"* and
+/// *"when it is unavailable, dim it"* — and a variant is a patch, so widening
+/// it later adds keys rather than changing what the existing ones mean.
+class _VariantsSection extends ConsumerWidget {
+  const _VariantsSection({required this.style, required this.onChanged});
+
+  final CardStyle style;
+  final ValueChanged<CardStyle> onChanged;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = HcTokens.of(context);
+    final devices = ref.watch(devicesProvider).value ?? const <DeviceState>[];
+
+    return Padding(
+      padding: EdgeInsets.only(top: t.space.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('WHEN',
+              style:
+                  t.text.overlineStyle.copyWith(color: t.surface.onBaseMuted)),
+          SizedBox(height: t.space.xs),
+          if (style.variants.isEmpty)
+            Text(
+              'This card looks the same whatever the house is doing.',
+              style: t.text.captionStyle
+                  .copyWith(color: t.surface.onBaseMuted, height: 1.4),
+            ),
+          for (var i = 0; i < style.variants.length; i++)
+            _VariantRow(
+              key: ValueKey('variant-$i'),
+              variant: style.variants[i],
+              devices: devices,
+              // The order is the author's and the first match wins, so the
+              // position of a row is a decision rather than a detail — which is
+              // why one is numbered rather than merely listed.
+              index: i,
+              onChanged: (next) => onChanged(style.copyWith(variants: [
+                for (var j = 0; j < style.variants.length; j++)
+                  if (j == i) next else style.variants[j],
+              ])),
+              onRemove: () => onChanged(style.copyWith(variants: [
+                for (var j = 0; j < style.variants.length; j++)
+                  if (j != i) style.variants[j],
+              ])),
+            ),
+          SizedBox(height: t.space.xs),
+          OutlinedButton(
+            onPressed: devices.isEmpty
+                ? null
+                : () => onChanged(style.copyWith(variants: [
+                      ...style.variants,
+                      StyleVariant(
+                        when: CardCondition(
+                          tag: 'DeviceState',
+                          deviceId: devices.first.id,
+                          attribute: _attributesOf(devices.first).firstOrNull,
+                          value: true,
+                        ),
+                        // Alert rather than the card's own colour: a variant
+                        // that changed nothing would look like the button had
+                        // not worked.
+                        style: const {'tint': 'danger'},
+                      ),
+                    ])),
+            child: const Text('Add a state'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The attributes of a device worth offering, most useful first.
+///
+/// Straight from what the device is actually reporting rather than from its
+/// schema: a card is styled against what arrives, and an attribute a device has
+/// never sent is one a condition could only ever answer false about.
+List<String> _attributesOf(DeviceState device) =>
+    device.state.keys.toList()..sort();
+
+class _VariantRow extends StatelessWidget {
+  const _VariantRow({
+    super.key,
+    required this.variant,
+    required this.devices,
+    required this.index,
+    required this.onChanged,
+    required this.onRemove,
+  });
+
+  final StyleVariant variant;
+  final List<DeviceState> devices;
+  final int index;
+  final ValueChanged<StyleVariant> onChanged;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    final when = variant.when;
+    final device = devices
+        .where((d) => d.id == when.deviceId)
+        .cast<DeviceState?>()
+        .firstOrNull;
+
+    void write({
+      String? deviceId,
+      String? attribute,
+      String? op,
+      Object? value,
+      String? tint,
+    }) =>
+        onChanged(StyleVariant(
+          when: CardCondition(
+            tag: 'DeviceState',
+            deviceId: deviceId ?? when.deviceId,
+            attribute: attribute ?? when.attribute,
+            op: op ?? when.op,
+            value: value ?? when.value,
+          ),
+          style:
+              tint == null ? variant.style : {...variant.style, 'tint': tint},
+        ));
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: t.space.sm),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text('${index + 1}.',
+                    style: t.text.captionStyle
+                        .copyWith(color: t.surface.onBaseMuted)),
+              ),
+              IconButton(
+                onPressed: onRemove,
+                icon: const Icon(Icons.close, size: 14),
+                tooltip: 'Remove this state',
+                visualDensity: VisualDensity.compact,
+              ),
+            ],
+          ),
+          _RowChoice(
+            label: 'Device',
+            value: when.deviceId ?? '',
+            options: [
+              for (final d in devices) (key: d.id, label: d.name ?? d.id),
+            ],
+            // Changing the device clears the attribute: the attribute belonged
+            // to the device that was chosen, and keeping it would name one the
+            // new device does not report.
+            onChanged: (v) => write(
+              deviceId: v,
+              attribute: _attributesOf(
+                    devices.firstWhere((d) => d.id == v),
+                  ).firstOrNull ??
+                  '',
+            ),
+          ),
+          if (device != null)
+            _RowChoice(
+              label: 'Is',
+              value: when.attribute ?? '',
+              options: [
+                for (final a in _attributesOf(device)) (key: a, label: a),
+              ],
+              onChanged: (v) => write(attribute: v),
+            ),
+          _RowChoice(
+            label: 'Which',
+            value: when.op,
+            options: const [
+              (key: 'Eq', label: 'is'),
+              (key: 'Ne', label: 'is not'),
+              (key: 'Gt', label: 'is above'),
+              (key: 'Lt', label: 'is below'),
+            ],
+            onChanged: (v) => write(op: v),
+          ),
+          Padding(
+            padding: EdgeInsets.symmetric(vertical: t.space.xs),
+            child: TextFormField(
+              key: ValueKey('variant-value-$index-${when.deviceId}'),
+              initialValue: '${when.value ?? ''}',
+              decoration: const InputDecoration(
+                isDense: true,
+                border: OutlineInputBorder(),
+                labelText: 'Value',
+              ),
+              // Kept as typed. `true`, `21.5` and `open` are all legitimate
+              // answers, and the condition itself already knows how to compare
+              // a word against a bool and a number written as a string — so
+              // guessing a type here would be a second, worse copy of that.
+              onChanged: (v) => write(value: v),
+            ),
+          ),
+          _RowChoice(
+            label: 'Then',
+            value: variant.style['tint'] as String? ?? 'danger',
+            options: [
+              for (final tint in cardTints) (key: tint.key, label: tint.label)
+            ],
+            onChanged: (v) => write(tint: v),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A compact label-over-chips row, the same shape [_StyleChoice] uses.
+class _RowChoice extends StatelessWidget {
+  const _RowChoice({
+    required this.label,
+    required this.value,
+    required this.options,
+    required this.onChanged,
+  });
+
+  final String label;
+  final String value;
+  final List<({String key, String label})> options;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(bottom: 4),
+        child: _StyleChoice(
+          label: label,
+          value: value,
+          options: options,
+          onChanged: onChanged,
+        ),
+      );
+}
+
+/// The card's transform: how far it is turned, and how far it has faded.
+///
+/// Separate from STYLE because the two are stored in different places and that
+/// difference is real rather than incidental. Style is the *element* — it moves
+/// with the card to every breakpoint, in its config. A transform is the
+/// *arrangement* — it lives on the placement, so a card turned on the desktop
+/// is not turned on the phone, which is the only reading that could be right:
+/// eight degrees on a wide canvas is a composition, and the same card
+/// full-width on a phone is a mistake.
+///
+/// Both are paint. Neither moves the card out of the cells it occupies, so
+/// turning something never reflows the page around it — see
+/// `docs/dashboard-layout.md`.
+class _TransformSection extends StatelessWidget {
+  const _TransformSection({
+    required this.rotation,
+    required this.opacity,
+    required this.onRotate,
+    required this.onFade,
+  });
+
+  final double? rotation;
+  final double? opacity;
+  final ValueChanged<double?> onRotate;
+  final ValueChanged<double?> onFade;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Padding(
+      padding: EdgeInsets.only(top: t.space.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('TRANSFORM',
+              style:
+                  t.text.overlineStyle.copyWith(color: t.surface.onBaseMuted)),
+          SizedBox(height: t.space.xs),
+          _StyleSlider(
+            label: 'Turn',
+            value: rotation ?? 0,
+            // Half a turn either way reaches every angle. Core allows a whole
+            // one, which a slider would spend half its length repeating.
+            min: -180,
+            max: 180,
+            suffix: '°',
+            // Back to none rather than to zero: a card at exactly 0° and a card
+            // nobody turned are the same picture, and only one of them adds a
+            // key to the document.
+            onChanged: (v) => onRotate(v == 0 ? null : v),
+          ),
+          SizedBox(height: t.space.xs),
+          _StyleSlider(
+            label: 'Fade',
+            // Shown as a percentage and stored as a fraction: every renderer
+            // takes a fraction, and a document storing 40 while every client
+            // divided by 100 would be describing the division.
+            value: opacityToControl(opacity),
+            max: 100,
+            suffix: '%',
+            onChanged: (v) => onFade(opacityFromControl(v)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _StyleSection extends StatelessWidget {
   const _StyleSection({
     required this.style,

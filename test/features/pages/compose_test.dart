@@ -171,6 +171,7 @@ Future<void> _typeSize(WidgetTester tester, String label, String value) async {
 DashboardFrame _frame(WidgetTester tester) => _grid(tester).frame!;
 
 void main() {
+  _reopening();
   group('turning it on', () {
     testWidgets('moves nothing', (tester) async {
       // The whole requirement. A page that rearranges itself the moment you
@@ -558,5 +559,119 @@ void main() {
       await tester.pumpAndSettle();
       expect(_frame(tester).width, 1600);
     });
+  });
+}
+
+/// Opening a page somebody already composed.
+///
+/// Every test above composes *in* the editor, so the rectangles it checks were
+/// made in the same session that read them. The case nobody covered is the one
+/// that matters most: a document that arrives with rectangles already in it.
+void _reopening() {
+  testWidgets('a stored rectangle survives being opened', (tester) async {
+    final stored = DashboardDefinition(
+      id: 'kitchen',
+      name: 'Kitchen',
+      description: null,
+      ownerUserId: 'u',
+      visibility: DashboardVisibility.private,
+      tags: const [],
+      icon: 'grid',
+      isDefault: false,
+      createdAt: DateTime.utc(2026),
+      updatedAt: DateTime.utc(2026),
+      widgets: [_w('a'), _w('b')],
+      layouts: [
+        const DashboardLayout(
+          breakpoint: DashboardBreakpoint.desktop,
+          columns: 12,
+          rowHeight: 120,
+          gap: 12,
+          flow: GridFlow.free,
+          frame: DashboardFrame(width: 1600, height: 900),
+          placements: [
+            DashboardWidgetPlacement(
+              widgetId: 'a',
+              x: 0,
+              y: 0,
+              w: 2,
+              h: 2,
+              rect: DashboardRect(x: 37, y: 211, w: 260, h: 264),
+            ),
+            DashboardWidgetPlacement(widgetId: 'b', x: 4, y: 3, w: 2, h: 2),
+          ],
+        ),
+      ],
+    );
+
+    await _open(tester, page: stored);
+
+    final rect = _item(tester, 'a').rect;
+    expect(
+      rect,
+      isNotNull,
+      reason: 'the composition was authored, stored, and read back as cells — '
+          'the next save would write the snapped approximation over it',
+    );
+    expect(rect!.x, 37);
+    expect(rect.y, 211);
+  });
+
+  testWidgets('a stored transform is drawn', (tester) async {
+    final stored = DashboardDefinition(
+      id: 'kitchen',
+      name: 'Kitchen',
+      description: null,
+      ownerUserId: 'u',
+      visibility: DashboardVisibility.private,
+      tags: const [],
+      icon: 'grid',
+      isDefault: false,
+      createdAt: DateTime.utc(2026),
+      updatedAt: DateTime.utc(2026),
+      widgets: [_w('a'), _w('b')],
+      layouts: [
+        const DashboardLayout(
+          breakpoint: DashboardBreakpoint.desktop,
+          columns: 12,
+          rowHeight: 120,
+          gap: 12,
+          flow: GridFlow.free,
+          placements: [
+            DashboardWidgetPlacement(
+                widgetId: 'a',
+                x: 0,
+                y: 0,
+                w: 2,
+                h: 2,
+                rotation: -8,
+                opacity: 0.4),
+            DashboardWidgetPlacement(widgetId: 'b', x: 4, y: 3, w: 2, h: 2),
+          ],
+        ),
+      ],
+    );
+
+    await _open(tester, page: stored);
+
+    expect(_item(tester, 'a').rotation, -8);
+    expect(_item(tester, 'a').opacity, 0.4);
+
+    // Paint only: the card still sits in the box its cells describe, which is
+    // what lets the layout engine keep ignoring both values.
+    final turned = find.byKey(const ValueKey('a'));
+    expect(
+      find.descendant(of: turned, matching: find.byType(Opacity)),
+      findsWidgets,
+    );
+    expect(
+      find.descendant(of: turned, matching: find.byType(Transform)),
+      findsWidgets,
+    );
+
+    // The untouched card gets neither wrapper: an Opacity of 1.0 still costs a
+    // saved layer on every card, on a canvas that can hold dozens.
+    expect(_item(tester, 'b').rotation, isNull);
+    expect(_item(tester, 'b').opacity, isNull);
   });
 }

@@ -13,6 +13,7 @@ library;
 
 import 'rooms_card.dart';
 import 'primitive_cards.dart';
+import 'plugin_render_view.dart';
 import 'dart:async';
 
 import 'package:fl_chart/fl_chart.dart';
@@ -23,6 +24,7 @@ import '../../core/api/events_history_api.dart';
 import '../../core/api/history_api.dart';
 import '../../core/text/humanize.dart';
 import '../../core/dashboard/gauge_spec.dart';
+import '../../core/providers/dashboard_vocabulary_provider.dart';
 import '../../core/dashboard/widget_registry.dart';
 import 'camera_card.dart';
 import '../../core/devices/metrics.dart';
@@ -886,6 +888,66 @@ class _MediaPlayerDashboardWidget extends ConsumerWidget {
           if (i > 0) SizedBox(height: t.space.md),
           HomeMediaCard(device: shown[i]),
         ],
+      ],
+    );
+  }
+}
+
+/// A card a plugin contributed.
+///
+/// `plugin_widget` was a legal type on the wire long before anything here was
+/// registered for it, so a dashboard carrying one fell through to the
+/// unknown-type path and drew nothing at all. That is the worst available
+/// answer: a card that is *not implemented here* and a card that is broken look
+/// identical as an empty rectangle.
+///
+/// Now core serves the declaration behind `{plugin_id, widget_id}` — its title,
+/// its bindings and a portable `render` — and [PluginRenderView] draws it. The
+/// placeholder below is what remains for the cases that are genuinely not
+/// drawable: an older core that cannot be asked, a plugin that has stopped
+/// publishing, a card nobody finished configuring. Each of those is somebody's
+/// answer to give, and none of them is a blank box.
+class _PluginWidget extends ConsumerWidget {
+  final DashboardWidgetModel widgetModel;
+  const _PluginWidget({required this.widgetModel});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = HcTokens.of(context);
+    final plugin = (widgetModel.config['plugin_id'] as String? ?? '').trim();
+    final widget = (widgetModel.config['widget_id'] as String? ?? '').trim();
+
+    if (plugin.isNotEmpty && widget.isNotEmpty) {
+      final spec = pluginWidgetSpec(ref, plugin, widget);
+      if (spec?.render != null) {
+        return PluginRenderView(spec: spec!, config: widgetModel.config);
+      }
+    }
+
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.extension_outlined,
+                size: 16, color: t.surface.onBaseMuted),
+            SizedBox(width: t.space.xs),
+            Expanded(
+              child: Text(
+                widget.isEmpty ? 'No card chosen' : widget,
+                style: t.text.subtitleStyle.copyWith(color: t.surface.onBase),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+        SizedBox(height: t.space.xs),
+        Text(
+          plugin.isEmpty ? 'No plugin chosen' : 'Provided by $plugin',
+          style: TextStyle(color: t.surface.onBaseMuted),
+          overflow: TextOverflow.ellipsis,
+        ),
       ],
     );
   }
@@ -1772,6 +1834,29 @@ void registerBuiltinDashboardWidgets() {
         entered: a.entered,
         onConfigChanged: a.onConfigChanged,
       ),
+    ),
+    WidgetDescriptor(
+      type: pluginWidgetType,
+      title: 'Plugin card',
+      description: 'A card contributed by a plugin.',
+      icon: Icons.extension_outlined,
+      sizeHint: const WidgetSizeHint(
+          minW: 2, minH: 1, recommendedW: 4, recommendedH: 2),
+      configFields: const [
+        WidgetConfigField('plugin_id', WidgetConfigKind.pluginId,
+            label: 'Plugin', required: true),
+        WidgetConfigField('widget_id', WidgetConfigKind.pluginWidgetId,
+            label: 'Card', required: true),
+      ],
+      validate: (c) {
+        final plugin = (c['plugin_id'] as String? ?? '').trim();
+        final widget = (c['widget_id'] as String? ?? '').trim();
+        if (plugin.isEmpty) return 'Which plugin provides this card?';
+        if (widget.isEmpty) return 'Which of its cards?';
+        return null;
+      },
+      builder: (context, a) =>
+          _PluginWidget(widgetModel: _modelOf(a, pluginWidgetType)),
     ),
     WidgetDescriptor(
       type: 'markdown',

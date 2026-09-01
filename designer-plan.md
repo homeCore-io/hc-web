@@ -494,3 +494,191 @@ core goes out first or alongside.
   removed that axis deliberately and the reasoning has not changed.
 - **It does not replace the viewer.** `/pages/:id` stays exactly what it is:
   the house, not a tool.
+
+---
+
+## 8. Review Update — 2026-08-31
+
+Implementation review against the plan shows the tool is partially complete and
+has drifted from the design intent. The gap is not effort — most phases shipped.
+It is model and scoping. Three findings:
+
+### 8.1 Rooms and Kinds are opaque, not selectable
+
+**Finding:** Dragging "Living Room" into the canvas creates a card showing **all**
+devices in that room. Same for "Kinds" (device types). No dialog, no filtering.
+Card contents cannot be edited after creation.
+
+**Plan reference:** §3.2 — *"Devices — searchable, individual. Drag a device
+onto the canvas and get a tile for that one device… a design tool lets you drag
+Ceiling."* And **Rooms** — *"live, from the device map"* — were meant as a
+shortcut picker, not an automatic container.
+
+**Map to dashboard-craft-plan.md:**
+- Item 4 (High): "A card's contents cannot be edited. A room card is opaque."
+- Item 5 (High): "Room and kind read as *card types* rather than as *ways of
+  choosing devices*."
+
+**The model problem:** A room card stores `selection_mode: area`, which is a
+*live query*. That is a genuinely good default (new lamp → automatically shown).
+But it is presented as if it were a fixed list and cannot be adjusted. You
+cannot say "the living room **except** the TV".
+
+**Solution path:**
+1. Selection becomes an object: a rule **and** exceptions.
+   ```
+   selection: {
+     mode: area | kind | manual | query,
+     area_name?: string,
+     kind?: string,
+     device_ids?: string[],
+     query?: string,
+     exclude_ids?: string[],       // NEW — exceptions
+   }
+   ```
+2. The inspector gains an **editor** for the selection itself — not just
+   read-only counts. Open a device picker, toggle devices in/out.
+3. Rooms/Kinds in the elements panel become **shortcuts that open a picker**
+   (via a small modal or a sheet), not drag-to-place shortcuts. User selects
+   which devices from that room/kind, then card appears.
+
+**Acceptance:** User can:
+- Drag "Living Room" → picker opens → uncheck TV → card shows 17 of 18
+- Edit an existing room card's selection without deleting and re-adding
+- See what devices a room card actually contains
+
+### 8.2 Widget palette is thirteen generic pills
+
+**Finding:** The palette shows 13 bare nouns:
+```
+house_status_hero, device_grid, device_list, device_tile, media_player,
+mode_chips, scene_row, event_feed, history_chart, camera_video,
+web_embed, markdown, stat_summary
+```
+
+No visual hierarchy, no grouping. Three variants of "show devices" look unrelated.
+No indication of what each does.
+
+**Plan reference:** §3.2 — *"Elements — four families. Grouped by what you want,
+never by which widget class draws it."* The plan names **Rooms, Devices, Data,
+Layout** — not 13 random widget types.
+
+**Map to dashboard-authoring-plan.md** §1.2:
+> *"Twelve are a bare noun, one has a description… The sheet is byte-identical
+> on a homeCore with zero devices: no rooms, no counts, no previews."*
+
+**The scoping problem:** The palette is currently `_WidgetPalette` in
+`widget_palette.dart`, a hardcoded list of 13 addable types. This is a *widget
+picker*, not an *elements library*. It has:
+- No grouping by family
+- No live counts from the house
+- No icons, only text
+- No "create from data" workflow (e.g., pick a room → create card)
+
+**Solution path:**
+1. Split **Add widget** (a catalogue of what you can draw: text, shape, line, image)
+   from **Add element** (a choice from what the house has: this room, these devices,
+   a chart for this device).
+2. Replace `widget_palette.dart` with a proper library:
+   - **Rooms** — list from device map, with device counts, searchable
+   - **Devices** — searchable individual devices (keyed to the picker in §8.1)
+   - **Data** — gauges, charts, numbers (keyed to a device or metric)
+   - **Layout** — group, heading, spacer, divider
+   - **Tools** — text, shape, line, image (separate from elements)
+3. Each entry carries:
+   - Human label (not a config key)
+   - Icon
+   - Live count or status (e.g., "Living room · 18 · 6 on")
+   - Drag behavior (opens a picker, or creates directly)
+
+**Acceptance:** User sees:
+- A grouped palette where rooms show device counts
+- No config keys in any label
+- Different interaction for "drag a room" (picker) vs. "drag a shape" (direct creation)
+- Palette reflects what the house actually contains
+
+### 8.3 Tool scope has drifted from "designer" to "grid editor"
+
+**Finding:** The implementation is a **grid-based card editor**, not a designer.
+Missing from the plan:
+
+| Feature | Plan | Built | Gap |
+|---------|------|-------|-----|
+| Free-form layout (gaps between cards) | §1 | ❌ | Gravity enforced, no `flow` property |
+| Title band as a property | §2.1 | ❌ | All cards show title band |
+| Visual design elements (text, shapes, lines, gauges) | §3.2, §6 | ⚠️  | Design tools exist (design_tools.dart) but not wired to palette or canvas |
+| Right-click context menu | §2 | ❌ | Only options button on card |
+| Undo (for removal) | §2, §5.1 | ❌ | Snackbar at bottom, timeout-based |
+| Free placement | §3.1 | ✅ (implied in drag) | But blocked by gravity |
+| Zoom | §3.1 | ✅ | ScaledCanvas wired |
+| Rulers in cells | §3.1 | ⚠️  | Grid drawn, but no visual rulers |
+| Layers panel | §3.4, §5.4 | ✅ | Wired in designer_shell.dart |
+| Style pane (transparent, border) | §3.3, §5.5 | ✅ | Partial — only on/off, no color/image/blur |
+| Inspector (Shows, Layout, Style) | §3.3 | ✅ | Shipped |
+| Card selection | §5.3 | ✅ | Click to select wired |
+| Live canvas | §3.1 | ✅ | Real house, real cards |
+
+**The blocker (§1):** `DashboardLayout.flow` was identified as the critical gate,
+and it is still not shipped. Without it:
+- Cannot leave a gap between cards
+- Designer cannot do the thing it was asked to do
+- Layouts are packed by default, no user choice
+- Gravity-as-a-law makes a canvas with whitespace impossible
+
+**This blocks both §3 (the surface) and all user interaction that depends on free
+placement.** It is one field in core, one serde default, and the derive logic
+already exists.
+
+**Solution path:**
+1. **Ship `DashboardLayout.flow` in core** — one commit, no parser changes.
+   - Default: `packed` (today's behavior, preserves mobile)
+   - Set to `free` when user designs on desktop
+   - Derive re-packs `free` → `packed` for mobile/tablet
+2. **Wire the canvas tools** (§3.1):
+   - Snap guides on drag (visual line showing where card will land)
+   - Resize feedback (show cells while dragging border)
+   - Right-click menu (Configure, Duplicate, presets, Remove)
+3. **Add visual elements** (§3.2, §6):
+   - Text tool wired to canvas (not design_tools, but callable)
+   - Shape tool wired to canvas
+   - Gauge tool opens picker for device + range
+   - Chart tool opens picker for device + timeframe
+4. **Undo for removal**:
+   - Toast with "Undo" button, not a history stack
+   - Dismissible by action, not timeout
+
+**Acceptance:** User can:
+- Leave space between cards, and it persists across save/reload
+- Right-click a card to remove it, then undo
+- Drag a shape or text onto the page
+- Drag a gauge or chart and pick the device
+- Resize a card and see the cell count while dragging
+
+### 8.4 Why this matters: product vs. tool
+
+The brief was explicit (§3): *"A designer should be full page, with elements to
+choose from such as devices or room or containers for multiple devices, it
+should be a living canvas with design tools… Be creative and full featured."*
+
+What shipped is **not creative or full featured**. It is a **grid configuration
+tool** — useful, but it trades flexibility for simplicity. A tool is something
+you trust with your vision; a form is something you fill out by guessing.
+
+The difference is most visible in how rooms behave. Right now:
+- Drag room → automatic card with all devices (no choice)
+- Edit room → read-only count (no change possible)
+- Remove room → have to drag another one back in (no undo)
+
+What the plan asks for:
+- Drag room → picker opens (user chooses which devices)
+- Edit room → device list with +/- buttons (user adjusts)
+- Remove room → "Undo" button appears (user reconsiders)
+
+The second is a designer. The first is a template-filling tool.
+
+**The fix is not a panel.** It is three model changes:
+1. Selection model (§8.1): rule + exceptions
+2. Palette model (§8.2): library grouped by family, not flat list
+3. Layout model (§8.3): `flow` property, not gravity-as-law
+
+All three were in the original plan. None of them are implemented yet.

@@ -119,6 +119,12 @@ DashboardLayout deriveLayout(
         // element, so it holds at every breakpoint — see `free_layer.dart`.
         floating: i.floating,
         z: i.z,
+        // Opacity is carried and rotation is dropped, and the split is the same
+        // one the rectangle answers: an angle is stated against a canvas, so a
+        // card turned eight degrees on the desktop is a mistake full-width on
+        // a phone. A fade is not geometry — it is how much the card matters,
+        // and that survives being repacked.
+        opacity: i.opacity,
       ),
   ]);
   return l.copyWith(
@@ -131,7 +137,7 @@ DashboardLayout deriveLayout(
         // composition to carry, and copying one across would claim the
         // arrangement was authored for this device when it was not.
         DashboardWidgetPlacement(
-            widgetId: i.id, x: i.x, y: i.y, w: i.w, h: i.h),
+            widgetId: i.id, x: i.x, y: i.y, w: i.w, h: i.h, opacity: i.opacity),
     ],
     // The containers follow too — a derived layout has no opinions of its own,
     // and a group given a body on the desktop appearing as a bare group on the
@@ -144,9 +150,14 @@ DashboardLayout deriveLayout(
     // phone. Without it every derived container falls back to fitting its own
     // members, which is the right answer here — the members have just been
     // repacked, so the box should be around wherever they landed.
+    //
+    // The **rotation goes with it**, and the fade stays, which is the same cut
+    // the placements make: an angle is stated against a canvas, and a cluster
+    // turned eight degrees across a wide page is a mistake once its members
+    // have been repacked into a phone's single column. A fade is not geometry.
     groups: [
       for (final g in sourceGroups)
-        if (!g.isPlain) g.copyWith(rect: null),
+        if (!g.isPlain) g.copyWith(rect: null, rotation: null),
     ],
   );
 }
@@ -184,7 +195,15 @@ DashboardLayout _write(DashboardLayout l, List<GridItem> items) {
         // is shaped to avoid: the page would save, reload as the grid, and
         // look exactly like an editor that failed to write.
         DashboardWidgetPlacement(
-            widgetId: i.id, x: i.x, y: i.y, w: i.w, h: i.h, rect: i.rect),
+          widgetId: i.id,
+          x: i.x,
+          y: i.y,
+          w: i.w,
+          h: i.h,
+          rect: i.rect,
+          rotation: i.rotation,
+          opacity: i.opacity,
+        ),
     ],
   );
 }
@@ -223,7 +242,16 @@ DashboardLayout reconcileWidgetSet(
   final engine = GridEngine(columns: columns);
   var grid = [
     for (final p in kept)
-      GridItem(id: p.widgetId, x: p.x, y: p.y, w: p.w, h: p.h, rect: p.rect),
+      GridItem(
+        id: p.widgetId,
+        x: p.x,
+        y: p.y,
+        w: p.w,
+        h: p.h,
+        rect: p.rect,
+        rotation: p.rotation,
+        opacity: p.opacity,
+      ),
   ];
   for (final i in missing) {
     grid = engine.add(

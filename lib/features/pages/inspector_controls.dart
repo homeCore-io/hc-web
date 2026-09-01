@@ -58,11 +58,23 @@ class InspectorSlider extends StatelessWidget {
     required this.value,
     required this.max,
     required this.onChanged,
+    this.min = 0,
+    this.suffix = '',
   });
 
   final String label;
   final double value;
   final double max;
+
+  /// Every slider in these panes started at zero until a group could be turned.
+  /// A turn goes both ways, and a control that could only turn one way would
+  /// make the other direction a journey through 359 degrees.
+  final double min;
+
+  /// A unit on the readout. Without it a slider reading 40 says nothing about
+  /// whether that is degrees, percent, or pixels.
+  final String suffix;
+
   final ValueChanged<double> onChanged;
 
   @override
@@ -81,16 +93,17 @@ class InspectorSlider extends StatelessWidget {
         ),
         Expanded(
           child: Slider(
-            value: value.clamp(0, max),
+            value: value.clamp(min, max),
+            min: min,
             max: max,
-            divisions: max.round(),
-            label: '${value.round()}',
+            divisions: (max - min).round(),
+            label: '${value.round()}$suffix',
             onChanged: onChanged,
           ),
         ),
         SizedBox(
-          width: 28,
-          child: Text('${value.round()}',
+          width: 34,
+          child: Text('${value.round()}$suffix',
               textAlign: TextAlign.right,
               style: t.text.captionStyle.copyWith(
                   color: t.surface.onBaseMuted,

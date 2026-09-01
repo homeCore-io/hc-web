@@ -93,6 +93,7 @@ double _contrast(Color a, Color b) {
 }
 
 void main() {
+  _inheritance();
   testWidgets('a group with no body draws no container', (tester) async {
     await _pump(tester, const []);
     // The default, and the state every page is in. Nothing may appear behind a
@@ -303,5 +304,73 @@ void main() {
     // almost nobody turns on is a cost paid by everybody.
     await _pump(tester, const [GroupBox(path: 'Wall', padding: 8)]);
     expect(find.byKey(const ValueKey('group-clip:a')), findsNothing);
+  });
+}
+
+/// The parent transform: a group that turns what is in it.
+///
+/// Geometry again, and it has to be — a rotation that "was applied" while every
+/// card stayed exactly where it was is the failure this whole file is written
+/// against. So the assertions are about where the cards land, not about which
+/// widgets exist.
+/// Where a card actually paints, which is *inside* the transforms.
+///
+///  resolves to the positioned box, and that box sits
+/// above both the group's transform and the card's own — so measuring it would
+/// report the untransformed rectangle and a broken inheritance would pass.
+Rect _paintedRect(WidgetTester tester, String id) => tester.getRect(find
+    .descendant(
+        of: find.byKey(ValueKey(id)), matching: find.byType(RepaintBoundary))
+    .first);
+
+void _inheritance() {
+  testWidgets('a turned group turns its members about the group centre',
+      (tester) async {
+    await _pump(tester, const [GroupBox(path: 'Wall')]);
+    final beforeA = _paintedRect(tester, 'a').center;
+    final beforeB = _paintedRect(tester, 'b').center;
+    final beforeC = _paintedRect(tester, 'c').center;
+
+    await _pump(tester, const [GroupBox(path: 'Wall', rotation: 90)]);
+    final afterA = _paintedRect(tester, 'a').center;
+    final afterB = _paintedRect(tester, 'b').center;
+    final afterC = _paintedRect(tester, 'c').center;
+
+    // The loose card is not in the group and does not move. Without this the
+    // test would pass just as well if the whole board had been turned.
+    expect(afterC, beforeC);
+
+    // `a` and `b` sit side by side, so a quarter turn about the group's centre
+    // stacks them: the one on the left ends up below the one on the right, or
+    // above it — either way they swap the axis they differ on.
+    expect((afterA.dx - afterB.dx).abs(), lessThan(1),
+        reason: 'a quarter turn puts them on the same vertical');
+    expect((afterA.dy - afterB.dy).abs(), greaterThan(1),
+        reason: 'and separates them on the other axis');
+
+    // The group's centre is the fixed point, so the midpoint between the two
+    // members is where it was.
+    final midBefore =
+        Offset((beforeA.dx + beforeB.dx) / 2, (beforeA.dy + beforeB.dy) / 2);
+    final midAfter =
+        Offset((afterA.dx + afterB.dx) / 2, (afterA.dy + afterB.dy) / 2);
+    expect((midAfter - midBefore).distance, lessThan(1),
+        reason: 'a rotation about the centre leaves the centre alone');
+  });
+
+  testWidgets('a faded group fades only its members', (tester) async {
+    await _pump(tester, const [GroupBox(path: 'Wall', opacity: 0.5)]);
+
+    // Inside the positioned box, not above it — the fade is applied to the
+    // card's own subtree.
+    Iterable<double> opacitiesOver(String id) => tester
+        .widgetList<Opacity>(find.descendant(
+          of: find.byKey(ValueKey(id)),
+          matching: find.byType(Opacity),
+        ))
+        .map((o) => o.opacity);
+
+    expect(opacitiesOver('a'), contains(0.5));
+    expect(opacitiesOver('c'), isNot(contains(0.5)));
   });
 }

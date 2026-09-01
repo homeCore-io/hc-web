@@ -252,5 +252,47 @@ void main() {
           a.y + a.h > b.y;
       expect(overlap, isFalse);
     });
+
+    // The engine takes a flow, and this normaliser used to build one without
+    // saying which — so it ran gravity over every layout it was handed. A free
+    // layout is exactly the one that must not be repacked: its gaps are
+    // content, and a composed element's cells are the snapped approximation a
+    // frame-unaware client draws.
+    test('a free layout keeps its gaps and its composed placement', () {
+      final dash = DashboardDefinition.fromJson({
+        ...Map<String, dynamic>.from(_liveDashboard),
+        'layouts': [
+          {
+            'breakpoint': 'desktop',
+            'columns': 12,
+            'row_height': 150.0,
+            'gap': 12.0,
+            'flow': 'free',
+            'placements': [
+              {'widget_id': 'house_status', 'x': 0, 'y': 0, 'w': 12, 'h': 3},
+              // Two rows of deliberate whitespace below the hero, and a
+              // rectangle saying this one was placed rather than packed.
+              {
+                'widget_id': 'tile_1',
+                'x': 0,
+                'y': 5,
+                'w': 3,
+                'h': 1,
+                'rect': {'x': 0.0, 'y': 750.0, 'w': 380.0, 'h': 150.0},
+              },
+            ],
+          }
+        ],
+      });
+
+      final layout = normalizeDashboardLayout(
+        dash.layoutFor(DashboardBreakpoint.desktop),
+        dash.widgets,
+      );
+
+      final tile = layout.placements.firstWhere((p) => p.widgetId == 'tile_1');
+      expect(tile.y, 5, reason: 'gravity must not run under a free flow');
+      expect(tile.rect, isNotNull);
+    });
   });
 }

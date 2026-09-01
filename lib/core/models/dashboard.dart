@@ -65,6 +65,22 @@ class DashboardWidgetPlacement {
   /// `core/dashboard/frame.dart`.
   final DashboardRect? rect;
 
+  /// Degrees clockwise about the card's own centre. Null means none.
+  ///
+  /// On the placement rather than in the widget's config, unlike `layer` and
+  /// `z`: lifting a card is a property of the *element* and holds at every
+  /// breakpoint, while an angle is a property of an *arrangement*. Eight
+  /// degrees on a wide canvas is a composition; the same card full-width on a
+  /// phone is a mistake.
+  final double? rotation;
+
+  /// 0–1. Null means fully opaque.
+  ///
+  /// A fraction, not a percentage: every renderer takes a fraction, and a
+  /// document storing 40 while every client divided by 100 would be describing
+  /// the division rather than the value.
+  final double? opacity;
+
   const DashboardWidgetPlacement({
     required this.widgetId,
     required this.x,
@@ -72,6 +88,8 @@ class DashboardWidgetPlacement {
     required this.w,
     required this.h,
     this.rect,
+    this.rotation,
+    this.opacity,
   });
 
   /// [rect] takes a sentinel because null is meaningful for it: clearing a
@@ -84,6 +102,8 @@ class DashboardWidgetPlacement {
     int? w,
     int? h,
     Object? rect = _unchanged,
+    Object? rotation = _unchanged,
+    Object? opacity = _unchanged,
   }) {
     return DashboardWidgetPlacement(
       widgetId: widgetId ?? this.widgetId,
@@ -92,6 +112,13 @@ class DashboardWidgetPlacement {
       w: w ?? this.w,
       h: h ?? this.h,
       rect: identical(rect, _unchanged) ? this.rect : rect as DashboardRect?,
+      // Sentinels for the same reason `rect` takes one: clearing a rotation
+      // back to none is a real edit, and `copyWith(rotation: null)` would
+      // otherwise silently mean *unchanged*.
+      rotation:
+          identical(rotation, _unchanged) ? this.rotation : rotation as double?,
+      opacity:
+          identical(opacity, _unchanged) ? this.opacity : opacity as double?,
     );
   }
 
@@ -104,6 +131,8 @@ class DashboardWidgetPlacement {
         // Omitted rather than null, matching core's `skip_serializing_if`. A
         // page nobody has composed must not gain a key by being saved.
         if (rect != null) 'rect': rect!.toJson(),
+        if (rotation != null) 'rotation': rotation,
+        if (opacity != null) 'opacity': opacity,
       };
 
   factory DashboardWidgetPlacement.fromJson(Map<String, dynamic> json) =>
@@ -114,7 +143,19 @@ class DashboardWidgetPlacement {
         w: json['w'] as int? ?? 1,
         h: json['h'] as int? ?? 1,
         rect: DashboardRect.fromJson(json['rect']),
+        // Core validates the ranges and refuses anything outside them, so a
+        // value that arrives here is one core accepted. Non-finite is still
+        // dropped rather than trusted: a hand-edited document never went
+        // through core at all, and NaN would draw the card nowhere.
+        rotation: _finiteOrNull(json['rotation']),
+        opacity: _finiteOrNull(json['opacity']),
       );
+
+  static double? _finiteOrNull(Object? raw) {
+    if (raw is! num) return null;
+    final value = raw.toDouble();
+    return value.isFinite ? value : null;
+  }
 }
 
 class DashboardLayout {
@@ -325,7 +366,13 @@ DashboardLayout normalizeDashboardLayout(
       ),
   ];
 
-  final engine = GridEngine(columns: layout.columns);
+  // Under the layout's OWN flow. Built without it this defaulted to packed and
+  // ran gravity over whatever it was handed — closing the gaps a free layout
+  // exists to keep, and rising a composed element to y = 0, since a composed
+  // item competes with nothing and so is blocked by nothing. The engine is the
+  // one place the two flows differ, so a caller that does not say which flow it
+  // is in has already asked for the wrong one.
+  final engine = GridEngine(columns: layout.columns, flow: layout.flow);
   final packed = engine.normalize(items);
 
   // Preserve the incoming order so a save does not reshuffle the JSON for no

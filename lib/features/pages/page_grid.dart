@@ -8,6 +8,7 @@ import '../../core/dashboard/canvas_view.dart';
 import '../../core/dashboard/card_style.dart';
 import '../../core/dashboard/frame.dart';
 import '../../core/dashboard/grid_engine.dart';
+import '../../core/models/device_state.dart';
 import '../../core/dashboard/group_frame.dart';
 import '../../core/dashboard/groups.dart';
 import '../../core/dashboard/widget_registry.dart';
@@ -47,6 +48,7 @@ class PageGrid extends StatefulWidget {
     this.onEnterGroup,
     this.groupOutline,
     this.groupStyles = const [],
+    this.deviceLookup,
     this.groupPaths = const {},
     this.frame,
     this.snapToGrid = true,
@@ -164,6 +166,18 @@ class PageGrid extends StatefulWidget {
   /// container that only existed while you were editing would not be a
   /// container.
   final List<GroupBox> groupStyles;
+
+  /// How a card finds a device it has an opinion about, for conditional style.
+  ///
+  /// Passed in rather than watched here so this widget stays usable without a
+  ///  — several tests pump it bare, and a grid that could only
+  /// be drawn inside a provider tree would make every one of them a fixture
+  /// about Riverpod instead of about layout.
+  ///
+  /// Null answers null for every id, which makes every device condition false
+  /// and every card draw in its base style. That is the right reading offline
+  /// as well: a house we cannot see is not a house whose doors are open.
+  final DeviceState? Function(String id)? deviceLookup;
 
   /// Which group each element is in — see `groups.dart`.
   final Map<String, String?> groupPaths;
@@ -422,6 +436,67 @@ class _PageGridState extends State<PageGrid> {
   /// Returns the child untouched when there is nothing to clip to, so a page
   /// with no clipping group pays for none of this: no extra layer, no extra
   /// render object, and the widget tree its tests walk is the one it was.
+  /// The transform a card inherits from the groups it is in.
+  ///
+  /// [m] is in **board** coordinates, because a group turns its members about
+  /// the group's centre and that point is nowhere near the card. The card's own
+  /// box is at ([left], [top]), so the matrix has to be conjugated into the
+  /// card's local space to mean the same thing: shift the card's origin to the
+  /// board's, turn, shift back.
+  ///
+  /// The group's fade multiplies the card's rather than replacing it, and this
+  /// is where the document's one inexactness lands: two members that overlap
+  /// each fade separately, so the overlap paints twice and reads darker than
+  /// fading the group as a single layer would. That is stated in
+  /// `docs/dashboard-layout.md` — the alternative costs a saved layer per group
+  /// on every frame, and members that overlap are rare.
+  static Widget _inherited(
+    Matrix4? m,
+    double? opacity,
+    double left,
+    double top,
+    Widget child,
+  ) {
+    var out = child;
+    if (opacity != null && opacity < 1) {
+      out = Opacity(opacity: opacity, child: out);
+    }
+    if (m != null) {
+      out = Transform(
+        transform: Matrix4.identity()
+          ..translateByDouble(-left, -top, 0, 1)
+          ..multiply(m)
+          ..translateByDouble(left, top, 0, 1),
+        child: out,
+      );
+    }
+    return out;
+  }
+
+  /// The card's own transform: turned about its centre, and faded.
+  ///
+  /// Paint only. The box `AnimatedPositioned` gives the card is untouched, so a
+  /// turned card still occupies exactly the cells it did — which is the promise
+  /// `docs/dashboard-layout.md` makes and the reason neither value enters the
+  /// layout engine. A rotated card may therefore overflow its cells and paint
+  /// over a neighbour, which is what turning something on a canvas *means*.
+  ///
+  /// Neither wrapper is added when there is nothing to apply. An `Opacity` of
+  /// 1.0 still costs a saved layer on every card, on a canvas that can hold
+  /// dozens.
+  static Widget _transformed(GridItem item, Widget child) {
+    var out = child;
+    final opacity = item.opacity;
+    if (opacity != null && opacity < 1) {
+      out = Opacity(opacity: opacity.clamp(0.0, 1.0), child: out);
+    }
+    final rotation = item.rotation;
+    if (rotation != null && rotation != 0) {
+      out = Transform.rotate(angle: rotation * math.pi / 180, child: out);
+    }
+    return out;
+  }
+
   static Widget _clipped(
     String id,
     DashboardRect? box,
@@ -511,6 +586,36 @@ class _PageGridState extends State<PageGrid> {
           }
         }
 
+        // What each card inherits from the groups it sits in.
+        //
+        // A group's rotation turns its members about the **group's** centre,
+        // which is the thing a card's own rotation cannot express, so this is a
+        // matrix in board coordinates rather than an angle. Nested groups
+        // compose — `resolveGroups` hands them back outermost first, so
+        // multiplying in order leaves the outer transform applied last, which
+        // is what a child inside a turned parent means.
+        final inheritedTransform = <String, Matrix4>{};
+        final inheritedOpacity = <String, double>{};
+        for (final container in containers) {
+          final angle = container.box.rotation;
+          final fade = container.box.opacity;
+          if ((angle == null || angle == 0) && fade == null) continue;
+          for (final id in membersOf(widget.groupPaths, container.path)) {
+            if (angle != null && angle != 0) {
+              final cx = container.rect.x + container.rect.w / 2;
+              final cy = container.rect.y + container.rect.h / 2;
+              inheritedTransform[id] =
+                  (inheritedTransform[id] ?? Matrix4.identity())
+                    ..translateByDouble(cx, cy, 0, 1)
+                    ..rotateZ(angle * math.pi / 180)
+                    ..translateByDouble(-cx, -cy, 0, 1);
+            }
+            if (fade != null) {
+              inheritedOpacity[id] =
+                  (inheritedOpacity[id] ?? 1) * fade.clamp(0.0, 1.0);
+            }
+          }
+        }
         double leftOf(GridItem i) => boxOf(i).x;
         double topOf(GridItem i) => boxOf(i).y;
         double widthOf(GridItem i) => boxOf(i).w;
@@ -1018,47 +1123,62 @@ class _PageGridState extends State<PageGrid> {
                     clipTo[item.id],
                     _dragId == item.id ? draggedLeft(item) : leftOf(item),
                     _dragId == item.id ? draggedTop(item) : topOf(item),
-                    RepaintBoundary(
-                      child: _Cell(
-                        onConfigChanged: widget.onWidgetConfig == null
-                            ? null
-                            : (next) => widget.onWidgetConfig!(item.id, next),
-                        item: item,
-                        model: widget.widgetsById[item.id],
-                        editing: widget.editing,
-                        simplified: gesturing,
-                        dragging: _dragId == item.id || _resizeId == item.id,
-                        selected: widget.selectedIds.contains(item.id),
-                        entered: _entered == item.id,
-                        enteredFocus: _enteredFocus,
-                        onEnter: () => _enter(item.id),
-                        onLeave: _leave,
-                        // Only while resizing. During a move the position is
-                        // already legible from where the card is; during a
-                        // resize the number of cells is exactly what you are
-                        // aiming at and the only thing you cannot read off the
-                        // screen.
-                        sizeLabel:
-                            _resizeId == item.id ? '${item.w}×${item.h}' : null,
-                        onRemove: () => widget.onRemove?.call(item.id),
-                        onConfigure: () => widget.onConfigure?.call(item.id),
-                        onMenu: (pos) => widget.onMenu?.call(item.id, pos),
-                        onSelect: widget.onSelect == null
-                            ? null
-                            // Shift is read at the moment of the tap rather than
-                            // tracked as state: a modifier held while the pointer
-                            // was elsewhere is not a modifier held for this click.
-                            : () => _tapped(
-                                  item.id,
-                                  HardwareKeyboard.instance.isShiftPressed,
-                                ),
-                        onDragStart: () => startDrag(item),
-                        onDragUpdate: updateDrag,
-                        onDragEnd: endDrag,
-                        onResizeStart: (handle) => startResize(item, handle),
-                        composed: item.isComposed,
-                        onResizeUpdate: updateResize,
-                        onResizeEnd: endResize,
+                    _inherited(
+                      inheritedTransform[item.id],
+                      inheritedOpacity[item.id],
+                      leftOf(item),
+                      topOf(item),
+                      _transformed(
+                        item,
+                        RepaintBoundary(
+                          child: _Cell(
+                            onConfigChanged: widget.onWidgetConfig == null
+                                ? null
+                                : (next) =>
+                                    widget.onWidgetConfig!(item.id, next),
+                            deviceLookup: widget.deviceLookup,
+                            item: item,
+                            model: widget.widgetsById[item.id],
+                            editing: widget.editing,
+                            simplified: gesturing,
+                            dragging:
+                                _dragId == item.id || _resizeId == item.id,
+                            selected: widget.selectedIds.contains(item.id),
+                            entered: _entered == item.id,
+                            enteredFocus: _enteredFocus,
+                            onEnter: () => _enter(item.id),
+                            onLeave: _leave,
+                            // Only while resizing. During a move the position is
+                            // already legible from where the card is; during a
+                            // resize the number of cells is exactly what you are
+                            // aiming at and the only thing you cannot read off the
+                            // screen.
+                            sizeLabel: _resizeId == item.id
+                                ? '${item.w}×${item.h}'
+                                : null,
+                            onRemove: () => widget.onRemove?.call(item.id),
+                            onConfigure: () =>
+                                widget.onConfigure?.call(item.id),
+                            onMenu: (pos) => widget.onMenu?.call(item.id, pos),
+                            onSelect: widget.onSelect == null
+                                ? null
+                                // Shift is read at the moment of the tap rather than
+                                // tracked as state: a modifier held while the pointer
+                                // was elsewhere is not a modifier held for this click.
+                                : () => _tapped(
+                                      item.id,
+                                      HardwareKeyboard.instance.isShiftPressed,
+                                    ),
+                            onDragStart: () => startDrag(item),
+                            onDragUpdate: updateDrag,
+                            onDragEnd: endDrag,
+                            onResizeStart: (handle) =>
+                                startResize(item, handle),
+                            composed: item.isComposed,
+                            onResizeUpdate: updateResize,
+                            onResizeEnd: endResize,
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -1530,6 +1650,7 @@ class Point {
 
 class _Cell extends StatelessWidget {
   const _Cell({
+    this.deviceLookup,
     required this.item,
     required this.model,
     required this.editing,
@@ -1579,6 +1700,9 @@ class _Cell extends StatelessWidget {
   /// How this card writes its own config back. Null when nothing is listening,
   /// which is also how a card knows it may not edit itself.
   final ValueChanged<Map<String, dynamic>>? onConfigChanged;
+
+  /// See [PageGrid.deviceLookup].
+  final DeviceState? Function(String id)? deviceLookup;
   final void Function(Offset globalPosition) onMenu;
 
   /// Null outside the surfaces that have somewhere to show a selection.
@@ -1640,7 +1764,11 @@ class _Cell extends StatelessWidget {
 
     // Only meaningful where there is a surface to style. A bare element has no
     // background to remove.
-    final style = CardStyle.fromConfig(model?.config ?? const {});
+    // Resolved against the house, so a card can go amber when its battery is
+    // low. Falls back to the base style whenever nothing matches, which is
+    // every card on every page until somebody writes a variant.
+    final style = CardStyle.fromConfig(model?.config ?? const {})
+        .resolve(deviceLookup ?? (_) => null);
     final tint = resolveCardTint(t, style.tint);
     final corner = resolveCardCorner(t, style.corner);
     final radius = corner == null ? null : BorderRadius.circular(corner);
