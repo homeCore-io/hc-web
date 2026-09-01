@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/dashboard/card_style.dart';
 import '../../core/dashboard/free_layer.dart';
+import '../../core/dashboard/transform.dart';
 import '../../core/dashboard/widget_registry.dart';
 import '../../core/models/dashboard.dart';
 import '../../core/providers/devices_provider.dart';
@@ -603,11 +604,10 @@ class _TransformSection extends StatelessWidget {
             // Shown as a percentage and stored as a fraction: every renderer
             // takes a fraction, and a document storing 40 while every client
             // divided by 100 would be describing the division.
-            value: (opacity ?? 1) * 100,
+            value: opacityToControl(opacity),
             max: 100,
             suffix: '%',
-            onChanged: (v) =>
-                onFade(v >= 100 ? null : (v / 100).clamp(0.0, 1.0)),
+            onChanged: (v) => onFade(opacityFromControl(v)),
           ),
         ],
       ),

@@ -8,6 +8,7 @@ import '../../core/dashboard/design_tools.dart';
 import '../../core/dashboard/frame.dart';
 import '../../core/dashboard/free_layer.dart';
 import '../../core/dashboard/grid_engine.dart';
+import '../../core/dashboard/transform.dart';
 import '../../core/dashboard/groups.dart';
 import '../../core/models/dashboard.dart';
 import '../../design/hc_icons.dart';
@@ -1127,6 +1128,41 @@ class _GroupSectionState extends State<_GroupSection> {
               label: 'Clip what sticks out',
               value: styled.clip,
               onChanged: (v) => write(styled.copyWith(clip: v)),
+            ),
+            SizedBox(height: t.space.xs),
+            // The parent transform, and the reason it is *here* rather than in
+            // a section of its own: in this document a group having an entry at
+            // all is what makes it a container, so a group cannot be turned
+            // without being one. Turning a cluster of cards that has no
+            // container would need a box that draws nothing, and every entry
+            // draws — see `page_grid.dart`.
+            InspectorSlider(
+              label: 'Turn',
+              value: styled.rotation ?? 0,
+              min: -180,
+              max: 180,
+              suffix: '°',
+              // Back to none rather than to zero: a group at exactly 0° and a
+              // group nobody turned are the same picture, and only one of them
+              // adds a key to the document.
+              onChanged: (v) =>
+                  write(styled.copyWith(rotation: rotationFromControl(v))),
+            ),
+            InspectorSlider(
+              label: 'Fade',
+              // Shown as a percentage and stored as a fraction, as everywhere
+              // else: every renderer takes a fraction.
+              value: opacityToControl(styled.opacity),
+              max: 100,
+              suffix: '%',
+              onChanged: (v) =>
+                  write(styled.copyWith(opacity: opacityFromControl(v))),
+            ),
+            SizedBox(height: t.space.xs),
+            Text(
+              'Members turn about the group, and fade with it.',
+              style: t.text.captionStyle
+                  .copyWith(color: t.surface.onBaseMuted, height: 1.4),
             ),
             SizedBox(height: t.space.xs),
             Text(
