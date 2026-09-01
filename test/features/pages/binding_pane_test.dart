@@ -42,6 +42,7 @@ final _house = [
 
 Future<Map<String, dynamic>> _pump(
   WidgetTester tester, {
+  String type = 'icon',
   Map<String, dynamic> config = const {'device_id': 'lamp'},
   List<DeviceState>? devices,
 }) async {
@@ -63,7 +64,7 @@ Future<Map<String, dynamic>> _pump(
             builder: (context, setState) => CardInspector(
               model: DashboardWidgetModel(
                 id: 'a',
-                type: 'icon',
+                type: type,
                 title: 'Hall lamp',
                 refreshPolicy: DashboardRefreshPolicy.live,
                 config: live,
@@ -91,16 +92,31 @@ void main() {
     await _pump(tester);
     expect(find.text('FOLLOWS THE HOUSE'), findsOneWidget);
     expect(find.text('Colour'), findsWidgets);
+    expect(find.text('follow a device…'), findsOneWidget);
+
+    // A shape offers four, including two that map through a range.
+    await _pump(tester, type: 'shape', config: const {'shape': 'rectangle'});
+    expect(find.text('Fill'), findsWidgets);
     expect(find.text('Turn'), findsWidgets);
-    expect(find.text('Fade'), findsWidgets);
-    expect(find.text('follow a device…'), findsNWidgets(3));
+    expect(find.text('follow a device…'), findsNWidgets(4));
   });
 
   testWidgets('a card that has not thought about it offers nothing',
       (tester) async {
     registerBuiltinDashboardWidgets();
     expect(WidgetRegistry.lookup('markdown')!.bindable, isEmpty);
-    expect(WidgetRegistry.lookup('icon')!.bindable, hasLength(3));
+    expect(WidgetRegistry.lookup('icon')!.bindable, hasLength(1));
+    expect(WidgetRegistry.lookup('shape')!.bindable, hasLength(4));
+    // Every bindable name is a real config key — that rule is what lets a
+    // binding resolve INTO the config the element already reads.
+    for (final type in ['icon', 'shape', 'text']) {
+      final d = WidgetRegistry.lookup(type)!;
+      final keys = {for (final f in d.configFields) f.name};
+      for (final b in d.bindable) {
+        expect(keys, contains(b.name),
+            reason: ' binds , which is not one of its fields');
+      }
+    }
   });
 
   testWidgets('wiring a colour writes an on/off pair that does something',
@@ -110,7 +126,7 @@ void main() {
     await tester.tap(find.text('follow a device…').first);
     await tester.pumpAndSettle();
 
-    final b = Bindings.fromConfig(config).forProperty('color')!;
+    final b = Bindings.fromConfig(config).forProperty('ink')!;
     expect(b.deviceId, 'lamp');
     expect(b.isLookup, isTrue);
     // A binding that changed nothing would look like the row had not worked.
@@ -119,10 +135,13 @@ void main() {
 
   testWidgets('a number property gets a range, not a colour table',
       (tester) async {
-    final config = await _pump(tester);
+    // A shape's Turn — the icon has no number property, because turning an
+    // element already belongs to its placement.
+    final config = await _pump(tester,
+        type: 'shape', config: const {'shape': 'rectangle'});
 
-    // The second dashed row is Turn.
-    await tester.tap(find.text('follow a device…').at(1));
+    // Fill, Stroke, Turn, Fade — the third is the first number.
+    await tester.tap(find.text('follow a device…').at(2));
     await tester.pumpAndSettle();
 
     final b = Bindings.fromConfig(config).forProperty('rotation')!;
@@ -137,12 +156,12 @@ void main() {
     final config = await _pump(tester);
     await tester.tap(find.text('follow a device…').first);
     await tester.pumpAndSettle();
-    expect(Bindings.fromConfig(config).forProperty('color')!.key, 'brightness');
+    expect(Bindings.fromConfig(config).forProperty('ink')!.key, 'brightness');
 
     await tester.tap(find.text('Hob').last);
     await tester.pumpAndSettle();
 
-    final b = Bindings.fromConfig(config).forProperty('color')!;
+    final b = Bindings.fromConfig(config).forProperty('ink')!;
     expect(b.deviceId, 'hob');
     expect(b.key, 'temperature');
   });
@@ -153,7 +172,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(config.containsKey('bindings'), isTrue);
 
-    final unbind = find.byKey(const ValueKey('unbind-color'));
+    final unbind = find.byKey(const ValueKey('unbind-ink'));
     expect(unbind, findsOneWidget);
     await tester.ensureVisible(unbind);
     await tester.pumpAndSettle();

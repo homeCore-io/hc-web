@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/dashboard/binding.dart';
 import '../../core/dashboard/card_style.dart';
 import '../../core/devices/presentation.dart';
 import '../../core/models/device_state.dart';
@@ -49,10 +48,6 @@ class IconElement extends ConsumerWidget {
         ? null
         : devices.where((d) => d.id == id).cast<DeviceState?>().firstOrNull;
 
-    DeviceState? lookup(String wanted) =>
-        devices?.where((d) => d.id == wanted).cast<DeviceState?>().firstOrNull;
-
-    final bindings = Bindings.fromConfig(config);
     final on = device != null && isOn(device);
 
     // A pinned facet wins; otherwise the device answers. With neither there is
@@ -65,15 +60,11 @@ class IconElement extends ConsumerWidget {
             ? deviceIcon(device, on: on)
             : HcIcons.forFacet(DeviceFacet.unknown);
 
-    // The bound colour beats the authored one, and the authored one beats the
-    // default — the same order every styled thing in this app resolves in.
-    final bound = bindings.resolve('color', lookup);
-    final ink = resolveInk(t, bound is String ? bound : null) ??
-        resolveInk(t, config['ink'] as String?) ??
+    // `ink` may already have been rewritten by a binding before this widget was
+    // built — see `BoundElement`. Nothing here has to know that, which is the
+    // point of resolving into the config rather than beside it.
+    final ink = resolveInk(t, config['ink'] as String?) ??
         (on ? t.accent.active : t.surface.onBaseMuted);
-
-    final rotation = bindings.resolve('rotation', lookup);
-    final opacity = bindings.resolve('opacity', lookup);
 
     return LayoutBuilder(
       builder: (context, c) {
@@ -96,17 +87,6 @@ class IconElement extends ConsumerWidget {
           );
         } else {
           out = Center(child: out);
-        }
-
-        if (rotation is double && rotation != 0) {
-          out = Transform.rotate(
-              angle: rotation * 3.1415926535 / 180, child: out);
-        }
-        // A fraction, not a percentage — see the bindable declaration. Clamped
-        // rather than trusted: a range mapped to 0–100 by mistake would
-        // otherwise throw rather than merely look wrong.
-        if (opacity is double) {
-          out = Opacity(opacity: opacity.clamp(0.0, 1.0), child: out);
         }
 
         // Unavailable is said, not implied. A device that has gone quiet drawn

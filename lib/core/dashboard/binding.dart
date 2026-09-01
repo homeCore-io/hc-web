@@ -43,6 +43,7 @@ class PropertyBinding {
     this.decimals,
     this.map = const {},
     this.fallback,
+    this.suffix,
   });
 
   /// The element property this drives — `color`, `rotation`, `opacity`,
@@ -78,6 +79,13 @@ class PropertyBinding {
   /// property alone, which is usually what an author means by not saying.
   final String? fallback;
 
+  /// Appended when the reading becomes words — `°`, `L/min`, `%`.
+  ///
+  /// On the binding rather than in the text itself, because the unit belongs to
+  /// the reading: change what a text element follows and the unit that came
+  /// with the old reading should not survive.
+  final String? suffix;
+
   bool get hasRange =>
       inFrom != null && inTo != null && outFrom != null && outTo != null;
 
@@ -109,6 +117,7 @@ class PropertyBinding {
             e.key as String: e.value as String,
       },
       fallback: json['fallback'] is String ? json['fallback'] as String : null,
+      suffix: json['suffix'] is String ? json['suffix'] as String : null,
     );
   }
 
@@ -125,6 +134,7 @@ class PropertyBinding {
         if (decimals != null) 'decimals': decimals,
         if (map.isNotEmpty) 'map': map,
         if (fallback != null) 'fallback': fallback,
+        if (suffix != null) 'suffix': suffix,
       };
 
   PropertyBinding copyWith({
@@ -137,6 +147,8 @@ class PropertyBinding {
     Object? outTo = _keep,
     Map<String, String>? map,
     Object? fallback = _keep,
+    Object? suffix = _keep,
+    int? decimals,
   }) =>
       PropertyBinding(
         property: property ?? this.property,
@@ -146,10 +158,11 @@ class PropertyBinding {
         inTo: identical(inTo, _keep) ? this.inTo : inTo as double?,
         outFrom: identical(outFrom, _keep) ? this.outFrom : outFrom as double?,
         outTo: identical(outTo, _keep) ? this.outTo : outTo as double?,
-        decimals: decimals,
+        decimals: decimals ?? this.decimals,
         map: map ?? this.map,
         fallback:
             identical(fallback, _keep) ? this.fallback : fallback as String?,
+        suffix: identical(suffix, _keep) ? this.suffix : suffix as String?,
       );
 
   /// What this binding says the property should be, for the house as [lookup]
@@ -246,6 +259,53 @@ class Bindings {
       .where((b) => b.property == property)
       .cast<PropertyBinding?>()
       .firstOrNull;
+
+  /// [config] with every binding's answer written into it.
+  ///
+  /// **This is why the drawing code needed no changes.** A bound property is
+  /// resolved into the config the element already reads, so
+  /// `ShapePrimitiveCard` and `TextPrimitiveCard` keep taking a plain map and
+  /// know nothing about devices. A binding is a value arriving from somewhere
+  /// else, not a second way of drawing.
+  ///
+  /// It follows that **a binding speaks the config's own units**: shape's
+  /// `opacity` field is 0–100, so a binding onto it writes 0–100. The
+  /// alternative — one canonical unit per property name across every element —
+  /// would mean the same word meaning different things depending on which
+  /// element it was written on.
+  ///
+  /// A property with no answer is left exactly as the author set it, which is
+  /// what makes an offline house look like a page rather than an incident.
+  Map<String, dynamic> apply(
+    Map<String, dynamic> config,
+    List<({String name, bool asText})> properties,
+    DeviceState? Function(String id) lookup,
+  ) {
+    if (all.isEmpty) return config;
+    final out = {...config};
+    for (final p in properties) {
+      final b = forProperty(p.name);
+      if (b == null) continue;
+      final value = b.resolve(lookup);
+      if (value == null) continue;
+      out[p.name] = p.asText ? _words(b, value) : value;
+    }
+    return out;
+  }
+
+  /// A reading as words: rounded if asked, and carrying its unit.
+  static String _words(PropertyBinding b, Object value) {
+    final text = value is double
+        ? (b.decimals == null
+            // Trailing `.0` is noise on a reading nobody asked to see to one
+            // decimal — 21 rather than 21.0.
+            ? (value == value.roundToDouble()
+                ? value.round().toString()
+                : value.toString())
+            : value.toStringAsFixed(b.decimals!))
+        : value.toString();
+    return b.suffix == null || b.suffix!.isEmpty ? text : '$text${b.suffix}';
+  }
 
   /// The resolved value for [property], or null to leave it as authored.
   Bound resolve(String property, DeviceState? Function(String id) lookup) =>

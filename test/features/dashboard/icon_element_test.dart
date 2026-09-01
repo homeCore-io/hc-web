@@ -6,6 +6,7 @@ import 'package:hc_web/core/models/device_state.dart';
 import 'package:hc_web/core/providers/devices_provider.dart';
 import 'package:hc_web/design/skins.dart';
 import 'package:hc_web/features/dashboard/builtin_cards.dart';
+import 'package:hc_web/features/dashboard/bound_element.dart';
 import 'package:hc_web/features/dashboard/icon_element.dart';
 
 /// One device, drawn as its own symbol.
@@ -49,7 +50,14 @@ Future<Icon> _pump(
           child: SizedBox(
             width: 120,
             height: 120,
-            child: IconElement(config: config),
+            // Through BoundElement, because that is the path the app uses:
+            // bindings resolve INTO the config before the element sees it, so
+            // pumping the element bare would test a shape nothing renders.
+            child: BoundElement(
+              type: 'icon',
+              config: config,
+              builder: (c) => IconElement(config: c),
+            ),
           ),
         ),
       ),
@@ -120,7 +128,7 @@ void main() {
         'ink': 'muted',
         'bindings': [
           {
-            'property': 'color',
+            'property': 'ink',
             'device_id': 'lamp',
             'key': 'on',
             'map': {'true': 'danger', 'false': 'muted'},
@@ -138,7 +146,7 @@ void main() {
         'ink': 'muted',
         'bindings': [
           {
-            'property': 'color',
+            'property': 'ink',
             'device_id': 'lamp',
             'key': 'on',
             'map': {'true': 'danger', 'false': 'muted'},

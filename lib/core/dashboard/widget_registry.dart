@@ -405,6 +405,9 @@ enum BindKind {
   /// A colour, an icon, a word — chosen from a table keyed by the value.
   look,
 
+  /// The reading itself, as words — rounded if asked and carrying its unit.
+  text,
+
   /// Degrees, a percentage, a width. Mapped through the binding's range.
   number,
 }

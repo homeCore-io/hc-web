@@ -13,6 +13,7 @@ library;
 
 import 'rooms_card.dart';
 import 'primitive_cards.dart';
+import 'bound_element.dart';
 import 'icon_element.dart';
 import 'plugin_render_view.dart';
 import 'dart:async';
@@ -2148,8 +2149,17 @@ void registerBuiltinDashboardWidgets() {
       // visible in the editor and says so, so it cannot be lost — and blocking
       // the save on it would mean you could not draw one out and fill it in
       // later.
-      builder: (context, a) =>
-          TextPrimitiveCard(config: a.config, editing: a.editing),
+      // The words themselves can be a reading — that is what turns a text
+      // element into a readout without a card around it.
+      bindable: const [
+        BindableProperty('text', 'Words', BindKind.text),
+        BindableProperty('ink', 'Colour', BindKind.look),
+      ],
+      builder: (context, a) => BoundElement(
+        type: 'text',
+        config: a.config,
+        builder: (c) => TextPrimitiveCard(config: c, editing: a.editing),
+      ),
     ),
     // An icon, bound to a device.
     //
@@ -2204,15 +2214,15 @@ void registerBuiltinDashboardWidgets() {
       // What a reading may drive here. Colour is the one people reach for —
       // amber when it is on, red when a door is open — and the two numbers are
       // what make a dial out of an arrow.
-      bindable: const [
-        BindableProperty('color', 'Colour', BindKind.look),
-        BindableProperty('rotation', 'Turn', BindKind.number, unit: '°'),
-        // No unit: a bound fade is a FRACTION, 0 to 1, like every other stored
-        // opacity in this codebase. The panels speak percent and the document
-        // stores a fraction, and a binding writes the document.
-        BindableProperty('opacity', 'Fade', BindKind.number),
-      ],
-      builder: (context, a) => IconElement(config: a.config),
+      // Just the colour. Turning and fading an element already belong to its
+      // placement — offering them again here would be two controls writing
+      // different keys for one visible result.
+      bindable: const [BindableProperty('ink', 'Colour', BindKind.look)],
+      builder: (context, a) => BoundElement(
+        type: 'icon',
+        config: a.config,
+        builder: (c) => IconElement(config: c),
+      ),
     ),
     WidgetDescriptor(
       type: 'shape',
@@ -2259,7 +2269,20 @@ void registerBuiltinDashboardWidgets() {
             help: 'An SVG path, scaled into the element. Only read when the '
                 'shape is “path”.'),
       ],
-      builder: (context, a) => ShapePrimitiveCard(config: a.config),
+      // Fill and stroke pick a look; the two numbers map through a range. All
+      // four are real config fields, so a binding writes what the card already
+      // reads and `ShapePrimitiveCard` is untouched.
+      bindable: const [
+        BindableProperty('fill', 'Fill', BindKind.look),
+        BindableProperty('stroke', 'Stroke', BindKind.look),
+        BindableProperty('rotation', 'Turn', BindKind.number, unit: '°'),
+        BindableProperty('opacity', 'Fade', BindKind.number, unit: '%'),
+      ],
+      builder: (context, a) => BoundElement(
+        type: 'shape',
+        config: a.config,
+        builder: (c) => ShapePrimitiveCard(config: c),
+      ),
     ),
     WidgetDescriptor(
       type: 'line',
