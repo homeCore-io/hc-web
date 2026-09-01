@@ -1394,6 +1394,47 @@ class _PageScreenState extends ConsumerState<PageScreen> {
   /// The card menu and the inspector both go through here, so "forward" cannot
   /// come to mean two different things depending on which control you reached
   /// for. The heights in use are known here and nowhere else.
+
+  /// Turn the selected card, or fade it.
+  ///
+  /// One entry in the history per gesture rather than per frame: dragging a
+  /// slider emits a value on every pixel, and a stack that recorded each one
+  /// would take a hundred presses to undo one drag. `coalesce` collapses the
+  /// run, exactly as renaming a card does.
+  ///
+  /// The two are separate methods because `null` is a real value for both —
+  /// back to none, not to zero — and one method taking two nullables could not
+  /// say which of them it had been asked to change.
+  void _rotate(String id, double? degrees) => _transform(
+        id,
+        'Turn the card',
+        'rotation-$id',
+        (i) => i.copyWith(rotation: degrees),
+      );
+
+  void _fade(String id, double? opacity) => _transform(
+        id,
+        'Fade the card',
+        'opacity-$id',
+        (i) => i.copyWith(opacity: opacity),
+      );
+
+  void _transform(
+    String id,
+    String label,
+    String coalesce,
+    GridItem Function(GridItem) change,
+  ) {
+    if (_draftItems == null) return;
+    _pushUndo(label, coalesce: coalesce);
+    setState(() {
+      _commit([
+        for (final i in _draftItems!)
+          if (i.id == id) change(i) else i,
+      ]);
+    });
+  }
+
   void _stack(String id, StackMove move, int columns) {
     final model = _draftWidgets?[id];
     if (model == null) return;
@@ -2216,6 +2257,12 @@ class _PageScreenState extends ConsumerState<PageScreen> {
             onStack: _selectedCard == null
                 ? null
                 : (move) => _stack(_selectedCard!, move, columns),
+            onRotate: _selectedCard == null
+                ? null
+                : (degrees) => _rotate(_selectedCard!, degrees),
+            onFade: _selectedCard == null
+                ? null
+                : (opacity) => _fade(_selectedCard!, opacity),
             onBackgroundChanged: (next) {
               _pushUndo('Change the background', coalesce: 'background');
               setState(() {

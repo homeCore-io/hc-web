@@ -41,6 +41,10 @@ class CardInspector extends ConsumerStatefulWidget {
     this.floating = false,
     this.z = 0,
     this.onStack,
+    this.rotation,
+    this.opacity,
+    this.onRotate,
+    this.onFade,
   });
 
   final DashboardWidgetModel model;
@@ -65,6 +69,22 @@ class CardInspector extends ConsumerStatefulWidget {
 
   /// Null outside the designer, where nothing can be restacked.
   final ValueChanged<StackMove>? onStack;
+
+  /// The card's own transform, from its *placement* rather than its config.
+  ///
+  /// Null outside the designer, where nothing can be turned. Both values live
+  /// on the placement because an angle is a property of an arrangement — see
+  /// `docs/dashboard-layout.md`.
+  final double? rotation;
+  final double? opacity;
+
+  /// Turn the card, or fade it. Null means the pair is not offered.
+  ///
+  /// Two callbacks rather than one taking both, because `null` is a real value
+  /// here — clearing a rotation back to none is an edit — and a single call
+  /// carrying two nullables could not say which of the two it meant.
+  final ValueChanged<double?>? onRotate;
+  final ValueChanged<double?>? onFade;
 
   @override
   ConsumerState<CardInspector> createState() => _CardInspectorState();
@@ -184,6 +204,13 @@ class _CardInspectorState extends ConsumerState<CardInspector> {
                   cardId: model.id,
                   style: CardStyle.fromConfig(model.config),
                   onChanged: (style) => onChanged(style.toConfig(model.config)),
+                ),
+              if (widget.onRotate case final onRotate?)
+                _TransformSection(
+                  rotation: widget.rotation,
+                  opacity: widget.opacity,
+                  onRotate: onRotate,
+                  onFade: widget.onFade ?? (_) {},
                 ),
               if (onStack != null)
                 _StackSection(
@@ -383,11 +410,23 @@ class _StyleSlider extends StatelessWidget {
     required this.value,
     required this.max,
     required this.onChanged,
+    this.min = 0,
+    this.suffix = '',
   });
 
   final String label;
   final double value;
   final double max;
+
+  /// Sliders here have started at zero until now. A turn goes both ways, and a
+  /// control that could only turn one way would make the other direction a
+  /// journey through 359 degrees.
+  final double min;
+
+  /// A unit on the readout. Without it a slider reading 40 says nothing about
+  /// whether that is degrees, percent, or pixels.
+  final String suffix;
+
   final ValueChanged<double> onChanged;
 
   @override
@@ -402,16 +441,17 @@ class _StyleSlider extends StatelessWidget {
         ),
         Expanded(
           child: Slider(
-            value: value.clamp(0, max),
+            value: value.clamp(min, max),
+            min: min,
             max: max,
-            divisions: max.round(),
-            label: '${value.round()}',
+            divisions: (max - min).round(),
+            label: '${value.round()}$suffix',
             onChanged: onChanged,
           ),
         ),
         SizedBox(
-          width: 24,
-          child: Text('${value.round()}',
+          width: 32,
+          child: Text('${value.round()}$suffix',
               textAlign: TextAlign.right,
               style: t.text.captionStyle.copyWith(
                   color: t.surface.onBaseMuted,
@@ -505,7 +545,76 @@ class _NameFieldState extends State<_NameField> {
 /// properties are independent and each maps to one thing you can see, so a
 /// preset would be a name to learn for a combination you can already read off
 /// the switches — and the interesting one, a card with a border and no fill, is
-/// the combination a three-item list would leave out.
+
+/// The card's transform: how far it is turned, and how far it has faded.
+///
+/// Separate from STYLE because the two are stored in different places and that
+/// difference is real rather than incidental. Style is the *element* — it moves
+/// with the card to every breakpoint, in its config. A transform is the
+/// *arrangement* — it lives on the placement, so a card turned on the desktop
+/// is not turned on the phone, which is the only reading that could be right:
+/// eight degrees on a wide canvas is a composition, and the same card
+/// full-width on a phone is a mistake.
+///
+/// Both are paint. Neither moves the card out of the cells it occupies, so
+/// turning something never reflows the page around it — see
+/// `docs/dashboard-layout.md`.
+class _TransformSection extends StatelessWidget {
+  const _TransformSection({
+    required this.rotation,
+    required this.opacity,
+    required this.onRotate,
+    required this.onFade,
+  });
+
+  final double? rotation;
+  final double? opacity;
+  final ValueChanged<double?> onRotate;
+  final ValueChanged<double?> onFade;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Padding(
+      padding: EdgeInsets.only(top: t.space.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('TRANSFORM',
+              style:
+                  t.text.overlineStyle.copyWith(color: t.surface.onBaseMuted)),
+          SizedBox(height: t.space.xs),
+          _StyleSlider(
+            label: 'Turn',
+            value: rotation ?? 0,
+            // Half a turn either way reaches every angle. Core allows a whole
+            // one, which a slider would spend half its length repeating.
+            min: -180,
+            max: 180,
+            suffix: '°',
+            // Back to none rather than to zero: a card at exactly 0° and a card
+            // nobody turned are the same picture, and only one of them adds a
+            // key to the document.
+            onChanged: (v) => onRotate(v == 0 ? null : v),
+          ),
+          SizedBox(height: t.space.xs),
+          _StyleSlider(
+            label: 'Fade',
+            // Shown as a percentage and stored as a fraction: every renderer
+            // takes a fraction, and a document storing 40 while every client
+            // divided by 100 would be describing the division.
+            value: (opacity ?? 1) * 100,
+            max: 100,
+            suffix: '%',
+            onChanged: (v) =>
+                onFade(v >= 100 ? null : (v / 100).clamp(0.0, 1.0)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _StyleSection extends StatelessWidget {
   const _StyleSection({
     required this.style,

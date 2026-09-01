@@ -107,6 +107,8 @@ class DesignerShell extends StatefulWidget {
     required this.tool,
     required this.onTool,
     this.onStack,
+    this.onRotate,
+    this.onFade,
   });
 
   final DashboardDefinition dashboard;
@@ -247,6 +249,10 @@ class DesignerShell extends StatefulWidget {
   /// Lift the selection above the grid, put it back, or move it within the
   /// stack. The page owns the arithmetic; this only forwards the request.
   final ValueChanged<StackMove>? onStack;
+
+  /// Turn or fade the selected card. Null outside the designer.
+  final ValueChanged<double?>? onRotate;
+  final ValueChanged<double?>? onFade;
 
   /// Fixed, because the frame is fixed. Panes that resized themselves would
   /// make the canvas scale jump while you worked in it.
@@ -698,6 +704,10 @@ class _DesignerShellState extends State<DesignerShell> {
                                       widget.selectedItem?.floating ?? false,
                                   z: widget.selectedItem?.z ?? 0,
                                   onStack: widget.onStack,
+                                  rotation: widget.selectedItem?.rotation,
+                                  opacity: widget.selectedItem?.opacity,
+                                  onRotate: widget.onRotate,
+                                  onFade: widget.onFade,
                                 ),
                     ),
                   ],
