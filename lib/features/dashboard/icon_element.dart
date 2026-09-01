@@ -102,6 +102,9 @@ class IconElement extends ConsumerWidget {
           out = Transform.rotate(
               angle: rotation * 3.1415926535 / 180, child: out);
         }
+        // A fraction, not a percentage — see the bindable declaration. Clamped
+        // rather than trusted: a range mapped to 0–100 by mistake would
+        // otherwise throw rather than merely look wrong.
         if (opacity is double) {
           out = Opacity(opacity: opacity.clamp(0.0, 1.0), child: out);
         }

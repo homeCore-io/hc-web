@@ -2201,6 +2201,17 @@ void registerBuiltinDashboardWidgets() {
         }
         return null;
       },
+      // What a reading may drive here. Colour is the one people reach for —
+      // amber when it is on, red when a door is open — and the two numbers are
+      // what make a dial out of an arrow.
+      bindable: const [
+        BindableProperty('color', 'Colour', BindKind.look),
+        BindableProperty('rotation', 'Turn', BindKind.number, unit: '°'),
+        // No unit: a bound fade is a FRACTION, 0 to 1, like every other stored
+        // opacity in this codebase. The panels speak percent and the document
+        // stores a fraction, and a binding writes the document.
+        BindableProperty('opacity', 'Fade', BindKind.number),
+      ],
       builder: (context, a) => IconElement(config: a.config),
     ),
     WidgetDescriptor(

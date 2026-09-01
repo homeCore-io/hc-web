@@ -26,6 +26,7 @@ class WidgetDescriptor {
     this.description,
     this.chrome = WidgetChrome.card,
     this.inPlaceLabel,
+    this.bindable = const [],
   });
 
   /// The wire value, e.g. `device_grid`. Plugin-contributed cards are namespaced
@@ -64,6 +65,17 @@ class WidgetDescriptor {
   /// The label is the promise: it appears on the button and in its tooltip, so
   /// "enter this card" is never the vague verb it is in a vector editor.
   final String? inPlaceLabel;
+
+  /// The properties of this card a device reading may drive.
+  ///
+  /// Declared here for the same reason [configFields] is: the inspector builds
+  /// itself from what the card says about itself, so teaching a card to react
+  /// is a row in its descriptor rather than a branch in the panel.
+  ///
+  /// Empty for almost everything today. A card that has not thought about what
+  /// a reading would mean for it should offer nothing rather than offer a
+  /// property that quietly does nothing when bound.
+  final List<BindableProperty> bindable;
 }
 
 /// What the renderer draws *around* a widget.
@@ -382,4 +394,33 @@ class UnknownWidget extends StatelessWidget {
       ),
     );
   }
+}
+
+/// What kind of answer a property wants from a reading.
+///
+/// The two shapes a binding takes, and the reason the editor can offer the
+/// right controls without asking: a number is mapped through a range, and
+/// anything else picks from a small table of value → look.
+enum BindKind {
+  /// A colour, an icon, a word — chosen from a table keyed by the value.
+  look,
+
+  /// Degrees, a percentage, a width. Mapped through the binding's range.
+  number,
+}
+
+/// One property a reading may drive.
+class BindableProperty {
+  const BindableProperty(this.name, this.label, this.kind, {this.unit});
+
+  /// The key the element reads, and the one written into the document.
+  final String name;
+
+  /// What the panel calls it.
+  final String label;
+
+  final BindKind kind;
+
+  /// Shown beside the numbers, so a range of 0–210 says what it is 210 of.
+  final String? unit;
 }
