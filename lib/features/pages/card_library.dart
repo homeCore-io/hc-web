@@ -3,15 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/dashboard/widget_registry.dart';
 import '../../core/models/dashboard.dart';
-import '../../core/models/device_state.dart';
-import '../../core/api/assets_api.dart';
-import '../../core/providers/assets_provider.dart';
-import '../../core/providers/devices_provider.dart';
-import '../../core/devices/presentation.dart';
-import '../../core/text/humanize.dart';
-import '../../design/hc_icons.dart';
 import '../../design/tokens.dart';
-import '../devices/device_query.dart';
 
 /// What you can put on a page, drawn from the house you are putting it on.
 ///
@@ -80,32 +72,6 @@ class _CardLibraryState extends ConsumerState<CardLibrary> {
   // contents are behind carets is a browser, not a palette. Tiles are three to
   // a row, so the whole catalogue fits without anything being hidden.
 
-  /// Rooms with something in them, most-populated first.
-  ///
-  /// Derived from the devices themselves rather than from `GET /areas`: the
-  /// area catalog is empty on a fresh house, and a room derived from a device
-  /// is guaranteed to select at least that device. The same reasoning the
-  /// config form's area list already uses.
-  List<_Room> _rooms(List<DeviceState> devices) {
-    final byArea = <String, List<DeviceState>>{};
-    for (final d in devices) {
-      if (d.isSystem || d.deviceType == 'scene') continue;
-      final area = d.effectiveArea;
-      if (area == null || area.isEmpty) continue;
-      byArea.putIfAbsent(area, () => []).add(d);
-    }
-    final rooms = [
-      for (final entry in byArea.entries)
-        _Room(
-          area: entry.key,
-          label: humanize(entry.key),
-          total: entry.value.length,
-          on: entry.value.where(isOn).length,
-        ),
-    ]..sort((a, b) => b.total.compareTo(a.total));
-    return rooms;
-  }
-
   /// The kinds this house has, with their live counts.
   ///
   /// Withheld from this panel until now, and the reason is worth keeping: a
@@ -118,61 +84,6 @@ class _CardLibraryState extends ConsumerState<CardLibrary> {
   ///
   /// Counted through the same `facetGroupOf(facetOf(...))` the card filters on,
   /// and past the same exclusions, so the number here is the number you get.
-  List<_Kind> _kinds(List<DeviceState> devices) {
-    final counts = <DeviceFacetGroup, int>{};
-    for (final d in devices) {
-      if (d.isSystem || d.deviceType == 'scene') continue;
-      final group = facetGroupOf(facetOf(d, d.schema));
-      counts[group] = (counts[group] ?? 0) + 1;
-    }
-    return [
-      for (final entry in counts.entries)
-        _Kind(group: entry.key, total: entry.value),
-    ]..sort((a, b) => b.total.compareTo(a.total));
-  }
-
-  DashboardWidgetModel _kindCard(_Kind kind) => _model(
-        type: 'device_grid',
-        // Named for what was picked, as rooms are. "Device grid" would be
-        // naming the renderer at them.
-        title: kind.group.label,
-        config: {
-          'selection_mode': 'facet',
-          'facet': kind.group.key,
-          'show_offline': true,
-          'limit': 12,
-        },
-      );
-
-  /// Individual devices, but only once you have typed something.
-  ///
-  /// A hundred and twenty-three rows above the rooms would bury them, and the
-  /// room is the answer most of the time. Search is what turns the list from a
-  /// wall into an index — the same reason `/devices` opens grouped and not as
-  /// one long list.
-  List<DeviceState> _matchingDevices(List<DeviceState> devices) {
-    final q = _query.toLowerCase();
-    return devices
-        .where((d) =>
-            !d.isSystem &&
-            d.deviceType != 'scene' &&
-            (d.displayName.toLowerCase().contains(q) ||
-                (d.effectiveArea ?? '').toLowerCase().contains(q)))
-        .toList()
-      ..sort((a, b) => a.displayName.compareTo(b.displayName));
-  }
-
-  /// One device, as a tile. What "manual" mode was always for, without making
-  /// anyone meet the word.
-  DashboardWidgetModel _deviceCard(DeviceState d) => _model(
-        type: 'device_tile',
-        title: d.displayName,
-        config: {
-          'selection_mode': 'manual',
-          'device_ids': [d.id],
-          ..._bareCard,
-        },
-      );
 
   /// A single device is not a collection, so it does not get a collection's
   /// container.
@@ -215,29 +126,9 @@ class _CardLibraryState extends ConsumerState<CardLibrary> {
         config: config,
       );
 
-  void _placeRoom(_Room room) => widget.onPick(_roomCard(room));
-
-  DashboardWidgetModel _roomCard(_Room room) => _model(
-        type: 'device_grid',
-        // Titled with the room, because that is what the user picked. A card
-        // called "Device grid" would be naming its renderer at them.
-        title: room.label,
-        config: {
-          'selection_mode': 'area',
-          'area_name': room.area,
-          'show_offline': true,
-          'limit': 12,
-        },
-      );
-
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
-    final devices = ref.watch(devicesProvider).value;
-    final rooms = devices == null ? const <_Room>[] : _rooms(devices);
-    final shownRooms = rooms.where((r) => _matches(r.label)).toList();
-    final kinds = devices == null ? const <_Kind>[] : _kinds(devices);
-    final shownKinds = kinds.where((k) => _matches(k.group.label)).toList();
 
     return Container(
       width: 320,
@@ -264,78 +155,19 @@ class _CardLibraryState extends ConsumerState<CardLibrary> {
                 controller: _scroll,
                 padding: EdgeInsets.only(right: t.space.sm),
                 children: [
-                  if (devices == null)
-                    Text('Loading the house…',
-                        style: t.text.captionStyle
-                            .copyWith(color: t.surface.onBaseMuted))
-                  else ...[
-                    if (shownRooms.isNotEmpty)
-                      _Section(
-                        label: 'Rooms',
-                        count: shownRooms.length,
-                        children: [
-                          for (final room in shownRooms)
-                            _Tile(
-                              label: room.label,
-                              badge: '${room.total}',
-                              // The live count comes with it. A room is a real
-                              // thing rather than a label because of these two
-                              // numbers, and a tile 88 pixels wide can only
-                              // carry one of them on its face.
-                              hint: '${room.total} devices, ${room.on} on',
-                              icon: HcIcons.home,
-                              onTap: () => _placeRoom(room),
-                              payload: () => _roomCard(room),
-                            ),
-                        ],
-                      )
-                    else if (_query.isEmpty && rooms.isEmpty)
-                      Padding(
-                        padding: EdgeInsets.only(bottom: t.space.md),
-                        child: Text(
-                          'No rooms yet. Assign devices to rooms in Manage and '
-                          'they will show up here.',
-                          style: t.text.captionStyle.copyWith(
-                              color: t.surface.onBaseMuted, height: 1.4),
-                        ),
-                      ),
-                    // Kinds sit under rooms because the room is the answer more
-                    // often: "the kitchen" before "every light". Both are one
-                    // drag, and neither asks anyone to meet the word "facet".
-                    if (shownKinds.isNotEmpty)
-                      _Section(
-                        label: 'Kinds',
-                        count: shownKinds.length,
-                        children: [
-                          for (final kind in shownKinds)
-                            _Tile(
-                              label: kind.group.label,
-                              badge: '${kind.total}',
-                              icon: kind.icon,
-                              onTap: () => widget.onPick(_kindCard(kind)),
-                              payload: () => _kindCard(kind),
-                            ),
-                        ],
-                      ),
-                  ],
-                  // Devices stay rows, not tiles: a device's name is long and
-                  // means little without its room, and neither survives a
-                  // label two lines deep in an 88-pixel tile.
-                  if (devices != null && _query.isNotEmpty)
-                    if (_matchingDevices(devices).isNotEmpty) ...[
-                      _SectionHead(
-                          label: 'Devices found',
-                          count: _matchingDevices(devices).length),
-                      for (final d in _matchingDevices(devices).take(12))
-                        _PlainRow(
-                          label: d.displayName,
-                          hint: humanize(d.effectiveArea ?? ''),
-                          type: 'device_tile',
-                          onTap: () => widget.onPick(_deviceCard(d)),
-                          payload: () => _deviceCard(d),
-                        ),
-                      SizedBox(height: t.space.md),
-                    ],
+                  // **Rooms, kinds and devices are gone from here.** They
+                  // live in the Devices panel, where they are FILTERS over a
+                  // list of devices rather than tiles you drop. John, twice:
+                  // "it should be a shortcut for selecting devices in the room
+                  // or of those kinds not a what it is", and then "it's not
+                  // intuitive to drop a blob on the page and have to remove
+                  // items". A tile you can drag reads as a thing; a chip that
+                  // narrows a list does not, and only one of those is what a
+                  // room actually is.
+                  //
+                  // Pictures went to the Assets panel for the same reason: this
+                  // is a catalogue of card and element TYPES, and everything
+                  // that is a fact about the HOUSE belongs in the panel.
                   for (final group in _groups)
                     if (group.entries.any((e) => _matches(e.label)))
                       _Section(
@@ -356,11 +188,6 @@ class _CardLibraryState extends ConsumerState<CardLibrary> {
                               ),
                         ],
                       ),
-                  // Your own pictures, which had no way in at all: placing one
-                  // meant making an image element and then typing an address
-                  // into it. They are assets of this house, so they belong
-                  // beside the rooms rather than behind a field.
-                  _AssetSection(query: _query, onPick: widget.onPick),
                 ],
               ),
             ),
@@ -558,49 +385,6 @@ class _Entry {
   final Map<String, dynamic> config;
 }
 
-class _Kind {
-  const _Kind({required this.group, required this.total});
-  final DeviceFacetGroup group;
-  final int total;
-
-  /// Borrowed from a facet in the group, so the icon in the library is the one
-  /// the devices themselves wear.
-  IconData get icon => switch (group) {
-        DeviceFacetGroup.lights => DeviceFacet.light.icon,
-        DeviceFacetGroup.outlets => DeviceFacet.outlet.icon,
-        DeviceFacetGroup.switches => DeviceFacet.switch_.icon,
-        DeviceFacetGroup.covers => DeviceFacet.cover.icon,
-        DeviceFacetGroup.locks => DeviceFacet.lock.icon,
-        DeviceFacetGroup.doorsWindows => DeviceFacet.door.icon,
-        DeviceFacetGroup.garage => DeviceFacet.garage.icon,
-        DeviceFacetGroup.motion => DeviceFacet.motion.icon,
-        DeviceFacetGroup.environment => DeviceFacet.temperature.icon,
-        DeviceFacetGroup.power => DeviceFacet.power.icon,
-        DeviceFacetGroup.safety => DeviceFacet.smoke.icon,
-        DeviceFacetGroup.climate => DeviceFacet.climate.icon,
-        DeviceFacetGroup.fans => DeviceFacet.fan.icon,
-        DeviceFacetGroup.media => DeviceFacet.mediaPlayer.icon,
-        DeviceFacetGroup.scenes => DeviceFacet.scene.icon,
-        DeviceFacetGroup.buttons => DeviceFacet.button.icon,
-        DeviceFacetGroup.timers => DeviceFacet.timer.icon,
-        DeviceFacetGroup.sirens => DeviceFacet.siren.icon,
-        DeviceFacetGroup.sensors => DeviceFacet.sensor.icon,
-        DeviceFacetGroup.other => DeviceFacet.unknown.icon,
-      };
-}
-
-class _Room {
-  const _Room(
-      {required this.area,
-      required this.label,
-      required this.total,
-      required this.on});
-  final String area;
-  final String label;
-  final int total;
-  final int on;
-}
-
 class _Search extends StatelessWidget {
   const _Search({required this.onChanged});
   final ValueChanged<String> onChanged;
@@ -707,7 +491,6 @@ class _Tile extends StatelessWidget {
     required this.onTap,
     required this.payload,
     this.hint,
-    this.badge,
   });
 
   final String label;
@@ -718,7 +501,6 @@ class _Tile extends StatelessWidget {
 
   /// A count — how many devices a room holds, how many a kind matches. The
   /// number the card will show, so the tile is a promise rather than a label.
-  final String? badge;
 
   static const double width = 88;
 
@@ -750,22 +532,7 @@ class _Tile extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    Icon(icon, size: 18, color: t.surface.onBaseMuted),
-                    if (badge case final n?)
-                      Positioned(
-                        right: -14,
-                        top: -2,
-                        child: Text(n,
-                            style: t.text.captionStyle.copyWith(
-                              color: t.surface.onBaseMuted,
-                              fontFeatures: t.numericFontFeatures,
-                            )),
-                      ),
-                  ],
-                ),
+                Icon(icon, size: 18, color: t.surface.onBaseMuted),
                 SizedBox(height: t.space.xs),
                 Text(
                   label,
@@ -817,224 +584,6 @@ class _DragRow extends StatelessWidget {
         ),
         childWhenDragging: Opacity(opacity: 0.4, child: child),
         child: child,
-      ),
-    );
-  }
-}
-
-/// An element you can place: what it is, what it does, and how big it lands.
-///
-/// Three deliberate choices, each replacing something that was wrong.
-///
-/// **The icon is the registry's own.** The palette this grew out of showed one
-/// per card and the first version of this panel dropped them, which turned a
-/// library into a column of prose.
-///
-/// **The size, not a truncated hint.** At 260px the right-hand hint ellipsised
-/// on nearly every row — "a card you fill y…", "lights, climate, s…" — which is
-/// the shape of text that is present but unreadable. The cell size is short,
-/// never truncates, and is the one fact about an element you cannot guess and
-/// would otherwise learn by dropping it.
-///
-/// **The description gets its own line.** It is what tells you Numbers from
-/// Chart, so it is worth the height rather than worth abbreviating.
-class _PlainRow extends StatelessWidget {
-  const _PlainRow(
-      {required this.label,
-      required this.hint,
-      required this.type,
-      required this.onTap,
-      required this.payload});
-
-  final String label;
-  final String hint;
-  final String type;
-  final VoidCallback onTap;
-  final DashboardWidgetModel Function() payload;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = HcTokens.of(context);
-    final d = WidgetRegistry.lookup(type);
-    final size = d == null
-        ? null
-        : '${d.sizeHint.recommendedW}×${d.sizeHint.recommendedH}';
-
-    return _DragRow(
-      payload: payload,
-      label: label,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(t.radius.sm),
-        child: Padding(
-          padding: EdgeInsets.symmetric(
-              vertical: t.space.xs, horizontal: t.space.xs),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.only(top: 1),
-                child: Icon(d?.icon ?? Icons.widgets_outlined,
-                    size: 15, color: t.surface.onBaseMuted),
-              ),
-              SizedBox(width: t.space.sm),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(label,
-                        style: t.text.bodySmallStyle
-                            .copyWith(color: t.surface.onBase)),
-                    Text(hint,
-                        style: t.text.captionStyle
-                            .copyWith(color: t.surface.onBaseMuted)),
-                  ],
-                ),
-              ),
-              if (size != null)
-                Padding(
-                  padding: const EdgeInsets.only(left: 4, top: 1),
-                  child: Text(size,
-                      style: t.text.captionStyle.copyWith(
-                          color: t.surface.onBaseMuted,
-                          fontFeatures: t.numericFontFeatures)),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// The pictures this house has, as things you can place.
-///
-/// **They had no way into a page at all.** Uploading worked, and four config
-/// fields could pick one, but placing a picture meant making an image element
-/// first and then finding the address to put in it — the file existed and the
-/// designer could not show you it. A page is designed *around* its pictures at
-/// least as often as the other way round.
-///
-/// Clicking one places an image element already pointing at it. The listing is
-/// authenticated, which is why it is only asked for here rather than kept warm
-/// somewhere: an asset id is unguessable on purpose, and enumerating them is
-/// the one call that would undo that.
-class _AssetSection extends ConsumerWidget {
-  const _AssetSection({required this.query, required this.onPick});
-
-  final String query;
-  final ValueChanged<DashboardWidgetModel> onPick;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final t = HcTokens.of(context);
-    final async = ref.watch(assetListProvider);
-
-    final pictures = [
-      for (final a in async.value ?? const <AssetRef>[])
-        if (a.contentType.startsWith('image/') &&
-            (query.isEmpty ||
-                a.name.toLowerCase().contains(query.toLowerCase())))
-          a,
-    ];
-
-    // **The section is always here.** Returning nothing while the listing was
-    // in flight — and, as written first, while it had *failed* — made the whole
-    // section appear not to exist, and there is no way to tell "still asking"
-    // from "not built yet" by looking at an empty stretch of panel. Which is
-    // exactly what happened: it went missing on the live house and the panel
-    // had nothing to say about why.
-    //
-    // A search that matches no picture is the one case that hides it, because
-    // then the empty section is just noise beside the other sections the search
-    // has already emptied.
-    if (query.isNotEmpty && pictures.isEmpty) return const SizedBox.shrink();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _SectionHead(label: 'Pictures', count: pictures.length),
-        if (async.hasError)
-          Text(
-            'Could not list your files: ${async.error}',
-            style: t.text.captionStyle
-                .copyWith(color: t.accent.danger, height: 1.4),
-          )
-        else if (async.isLoading)
-          Text('Looking…',
-              style: t.text.captionStyle.copyWith(color: t.surface.onBaseMuted))
-        else if (pictures.isEmpty)
-          Text(
-            'Nothing uploaded yet. Files you add in Manage → Files land here, '
-            'ready to place.',
-            style: t.text.captionStyle
-                .copyWith(color: t.surface.onBaseMuted, height: 1.4),
-          )
-        else
-          Wrap(
-            spacing: t.space.xs,
-            runSpacing: t.space.xs,
-            children: [
-              for (final asset in pictures)
-                _AssetTile(asset: asset, onPick: onPick),
-            ],
-          ),
-        SizedBox(height: t.space.md),
-      ],
-    );
-  }
-}
-
-class _AssetTile extends StatelessWidget {
-  const _AssetTile({required this.asset, required this.onPick});
-
-  final AssetRef asset;
-  final ValueChanged<DashboardWidgetModel> onPick;
-
-  DashboardWidgetModel _card() => DashboardWidgetModel(
-        id: 'widget_${DateTime.now().microsecondsSinceEpoch}',
-        // Named for the file, so the layer tree says which picture rather than
-        // "Image" four times.
-        title: asset.name,
-        type: 'image',
-        refreshPolicy: DashboardRefreshPolicy.passive,
-        config: {'url': asset.url, 'fit': 'cover'},
-      );
-
-  @override
-  Widget build(BuildContext context) {
-    final t = HcTokens.of(context);
-    return Tooltip(
-      message: asset.name,
-      waitDuration: const Duration(milliseconds: 500),
-      child: _DragRow(
-        payload: _card,
-        label: asset.name,
-        child: InkWell(
-          onTap: () => onPick(_card()),
-          borderRadius: BorderRadius.circular(t.radius.sm),
-          child: Container(
-            width: _Tile.width,
-            height: 72,
-            clipBehavior: Clip.antiAlias,
-            decoration: BoxDecoration(
-              color: t.surface.sunken,
-              borderRadius: BorderRadius.circular(t.radius.sm),
-              border:
-                  Border.all(color: t.stroke.hairline, width: t.stroke.width),
-            ),
-            // The picture itself is the label. A filename under a thumbnail
-            // would halve the thumbnail to repeat what the tooltip says.
-            child: Image.network(
-              asset.url,
-              fit: BoxFit.cover,
-              errorBuilder: (context, _, __) => Center(
-                child: Icon(Icons.broken_image_outlined,
-                    size: 18, color: t.surface.onBaseMuted),
-              ),
-            ),
-          ),
-        ),
       ),
     );
   }

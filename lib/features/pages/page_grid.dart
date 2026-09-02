@@ -12,6 +12,7 @@ import '../../core/models/device_state.dart';
 import '../../core/dashboard/group_frame.dart';
 import '../../core/dashboard/groups.dart';
 import '../../core/dashboard/widget_registry.dart';
+import '../../core/dashboard/wiring.dart';
 import '../../core/models/dashboard.dart';
 import '../../design/components/hc_surface.dart';
 import '../../design/hc_icons.dart';
@@ -1960,6 +1961,21 @@ class _Cell extends StatelessWidget {
               ),
             ),
           ),
+        // **What this element is wired to, on the element.**
+        //
+        // A binding was only ever visible by selecting the element and reading
+        // the inspector's Data section, which means a page's wiring could only
+        // be learned one element at a time. It is a fact about the thing, so it
+        // belongs on the thing — the way a layer name does.
+        //
+        // Only while editing, and only when there is something to say: a live
+        // page shows the house, not the plumbing.
+        if (editing && model != null)
+          Positioned(
+            left: 4,
+            top: 4,
+            child: _WireBadge(model: model!),
+          ),
         // Resize. One grip on a cell card, eight on a composed one — see
         // [ResizeHandle].
         if (!composed)
@@ -2174,6 +2190,68 @@ class _RoundButton extends StatelessWidget {
             child: Icon(icon, size: 13, color: t.surface.onBase),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// What an element reads and what it sets, said on the element.
+///
+/// Compact on purpose. The full picture — every wire on the page, grouped by
+/// device — is a question for a surface that can hold it; this is the one-line
+/// answer to "what is this one wired to", in the place you are already looking.
+class _WireBadge extends StatelessWidget {
+  const _WireBadge({required this.model});
+
+  final DashboardWidgetModel model;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    final wires = wiresOf([
+      (
+        id: model.id,
+        name: model.title,
+        type: model.type,
+        config: model.config,
+      )
+    ]);
+    if (wires.isEmpty) return const SizedBox.shrink();
+
+    return IgnorePointer(
+      child: Wrap(
+        spacing: 3,
+        runSpacing: 3,
+        children: [
+          for (final wire in wires)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+              decoration: BoxDecoration(
+                color: t.surface.overlay.withValues(alpha: .85),
+                borderRadius: BorderRadius.circular(t.radius.xs),
+                border: Border.all(
+                  color: wire.way == WireWay.reads
+                      ? t.accent.primary.withValues(alpha: .6)
+                      : t.accent.success.withValues(alpha: .6),
+                  width: t.stroke.width,
+                ),
+              ),
+              child: Text(
+                // The source, and what it lands on. `hob.temperature → rotation`
+                // is the whole binding in the width of a chip.
+                wire.way == WireWay.reads
+                    ? '${wire.key} → ${wire.property}'
+                    : 'sets ${wire.key}',
+                style: t.text.captionStyle.copyWith(
+                  fontSize: t.text.scaled(9),
+                  color: wire.way == WireWay.reads
+                      ? t.accent.primary
+                      : t.accent.success,
+                  fontFamily: t.text.monoFamily,
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
