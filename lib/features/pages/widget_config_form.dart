@@ -4,9 +4,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/dashboard/card_style.dart' show inkColours, resolveInk;
 import '../../core/dashboard/widget_registry.dart';
 import '../../core/providers/dashboard_vocabulary_provider.dart';
+import '../../core/devices/scene_state.dart';
 import '../../core/devices/presentation.dart';
 import '../../core/models/device_state.dart';
+import '../../core/schema/device_schema.dart';
+import '../../core/models/scene.dart';
 import '../../core/providers/areas_provider.dart';
+import '../../core/providers/scenes_provider.dart';
 import '../../core/providers/devices_provider.dart';
 import '../../core/text/humanize.dart';
 import '../../design/tokens.dart';
@@ -249,6 +253,35 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
         WidgetConfigKind.deviceRef => _deviceRef(f),
         WidgetConfigKind.deviceRefs => _deviceRefs(f),
         WidgetConfigKind.attribute => _attribute(f),
+        WidgetConfigKind.writableAttribute => _writable(
+            f,
+            accepts: (s) => s.kind == AttributeKind.bool_,
+            control: 'switch',
+            nothing: 'accepts no on/off writes',
+          ),
+        WidgetConfigKind.writableNumber => _writable(
+            f,
+            accepts: (s) => s.kind.isNumeric,
+            control: 'slider',
+            nothing: 'accepts no numbers',
+            showRange: true,
+          ),
+        WidgetConfigKind.writableColour => _writable(
+            f,
+            accepts: (s) =>
+                s.kind == AttributeKind.colorXy ||
+                s.kind == AttributeKind.colorRgb,
+            control: 'colour wheel',
+            nothing: 'accepts no colour',
+          ),
+        WidgetConfigKind.writableColourTemp => _writable(
+            f,
+            accepts: (s) => s.kind == AttributeKind.colorTemp,
+            control: 'warmth bar',
+            nothing: 'has no tunable white',
+            showRange: true,
+          ),
+        WidgetConfigKind.sceneRef => _scene(f),
         WidgetConfigKind.ink => _ink(f),
         WidgetConfigKind.pluginId => _pluginId(f),
         WidgetConfigKind.pluginWidgetId => _pluginWidgetId(f),
@@ -953,6 +986,163 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
       ],
     );
   }
+
+  /// The scenes this house has.
+  ///
+  /// A plain list, because a scene either exists or it does not — there is no
+  /// writability question here the way there is for a device attribute.
+  /// Both kinds of scene, in one list.
+  ///
+  /// Native scenes come from `/scenes`; plugin scenes arrive as devices with
+  /// `device_type == 'scene'`. To whoever is drawing the page they are the same
+  /// thing — a named thing you can run — and only the code that sends knows the
+  /// difference, so a picker that offered one and not the other would hide half
+  /// the house's scenes for no reason the author could see.
+  Widget _scene(WidgetConfigField f) {
+    final native = ref.watch(scenesProvider).value ?? const <SceneModel>[];
+    final devices = ref.watch(devicesProvider).value ?? const <DeviceState>[];
+
+    final choices = <({String id, String name})>[
+      for (final s in native) (id: s.id, name: s.name),
+      for (final d in devices)
+        if (isSceneDevice(d)) (id: d.id, name: d.displayName),
+    ]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+
+    final value = _config[f.name] as String?;
+    final known = choices.any((c) => c.id == value);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _label(f),
+        if (choices.isEmpty)
+          _hint('This house has no scenes yet.')
+        else
+          DropdownButtonFormField<String>(
+            initialValue: known ? value : null,
+            isExpanded: true,
+            decoration: const InputDecoration(
+              isDense: true,
+              border: OutlineInputBorder(),
+            ),
+            items: [
+              for (final c in choices)
+                DropdownMenuItem(value: c.id, child: Text(c.name)),
+            ],
+            onChanged: (v) => _set(f.name, v),
+          ),
+        // A scene that was deleted after the page was made. Said rather than
+        // silently blanked, because the button is still on somebody's wall.
+        if (value != null && value.isNotEmpty && !known && choices.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              'The scene this button used is gone.',
+              style: HcTokens.of(context)
+                  .text
+                  .captionStyle
+                  .copyWith(color: HcTokens.of(context).accent.warn),
+            ),
+          ),
+        _help(f),
+      ],
+    );
+  }
+
+  /// The things this device has **promised** it accepts a write of.
+  ///
+  /// Only a registered schema counts. `attribute_policy.dart` is explicit about
+  /// why: an inferred `writable` is this app's opinion, and attribute-style
+  /// writes are not universal — `hc-sonos::execute_command` dispatches on an
+  /// `action` and rejects `{"muted": true}` outright. A control built on the
+  /// guess would look right, send, and change nothing.
+  ///
+  /// A device that registered nothing therefore offers nothing here, and says
+  /// so. An empty dropdown would read as "this app is broken" rather than "that
+  /// plugin never said".
+  ///
+  /// One method for all four writable kinds. They differ only in which specs
+  /// they accept and what to call them when there are none — four copies of
+  /// this list would be four places for the promise rule to drift out of step,
+  /// which is exactly the failure it exists to prevent.
+  Widget _writable(
+    WidgetConfigField f, {
+    required bool Function(AttributeSchema) accepts,
+    required String control,
+    required String nothing,
+    bool showRange = false,
+  }) {
+    final t = HcTokens.of(context);
+    final devices = ref.watch(devicesProvider).value ?? const [];
+    final deviceId = _config['device_id'] as String?;
+    final device = devices.where((d) => d.id == deviceId).firstOrNull;
+
+    final specs = <String, AttributeSchema>{
+      for (final e in (device?.schema?.writable ?? const {}).entries)
+        if (accepts(e.value)) e.key: e.value,
+    };
+    final offered = specs.keys.toList()..sort();
+    final value = _config[f.name] as String?;
+    final chosen = specs[value];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _label(f),
+        if (device == null)
+          _hint('Pick a device first.')
+        else if (device.schema == null)
+          _hint('${device.displayName} has never told core what it accepts, '
+              'so nothing here can promise a $control will work.')
+        else if (offered.isEmpty)
+          _hint('${device.displayName} $nothing.')
+        else
+          DropdownButtonFormField<String>(
+            initialValue: offered.contains(value) ? value : null,
+            isExpanded: true,
+            decoration: const InputDecoration(
+              isDense: true,
+              border: OutlineInputBorder(),
+            ),
+            items: [
+              for (final a in offered)
+                DropdownMenuItem(value: a, child: Text(humanize(a))),
+            ],
+            onChanged: (v) => _set(f.name, v),
+          ),
+        _help(f),
+        // The plugin's own range, where the control will actually use it — an
+        // author should see it before wondering why the handle stops.
+        if (showRange && chosen != null)
+          Padding(
+            padding: EdgeInsets.only(top: t.space.xs),
+            child: Text(
+              chosen.hasRange
+                  ? 'The plugin says ${_trimNum(chosen.min!)} to '
+                      '${_trimNum(chosen.max!)}'
+                      '${chosen.unit == null ? '' : ' ${chosen.unit}'}.'
+                  : 'The plugin gave no range, so this $control needs one '
+                      'below.',
+              style: t.text.captionStyle.copyWith(
+                color: chosen.hasRange ? t.accent.success : t.accent.warn,
+              ),
+            ),
+          )
+        else if (!showRange && device?.schema != null && offered.isNotEmpty)
+          Padding(
+            padding: EdgeInsets.only(top: t.space.xs),
+            child: Text(
+              'Registered by the plugin, not guessed.',
+              style: t.text.captionStyle.copyWith(color: t.accent.success),
+            ),
+          ),
+      ],
+    );
+  }
+
+  /// 100, not 100.0 — a range read by a person.
+  static String _trimNum(double v) =>
+      v == v.roundToDouble() ? v.round().toString() : v.toString();
 
   Widget _attribute(WidgetConfigField f) {
     // Attributes come from whichever device this widget points at.

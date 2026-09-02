@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/devices/scene_state.dart';
 import '../../core/models/device_state.dart';
 import '../../core/models/plugin_entry.dart';
 import '../../core/models/scene.dart';
@@ -46,43 +47,10 @@ final _filterProvider = NotifierProvider<_Filter, _SceneFilter>(_Filter.new);
 
 const _kNative = 'homecore';
 
-/// Coerce an attribute to a bool, accepting the string spellings plugins use —
-/// mirrors the old Leptos `bool_attr`. Returns null when the value isn't a
-/// recognisable boolean, so the caller can fall through to the next key.
-bool? _boolAttr(dynamic v) {
-  if (v is bool) return v;
-  if (v is String) {
-    switch (v.trim().toLowerCase()) {
-      case 'true':
-      case 'on':
-      case 'open':
-      case 'active':
-      case 'occupied':
-      case 'detected':
-        return true;
-      case 'false':
-      case 'off':
-      case 'closed':
-      case 'inactive':
-      case 'clear':
-      case 'unoccupied':
-        return false;
-    }
-  }
-  return null;
-}
-
-/// Whether a plugin scene is currently applied. Plugins disagree on the field:
-/// Hue publishes `active`, Lutron publishes `on` (from the phantom-button LED),
-/// others `activate`/`state`. Check them in order, first recognisable boolean
-/// wins — the same resilient logic the previous (Leptos) UI used.
-bool _sceneActive(Map<String, dynamic> attrs) {
-  for (final k in const ['on', 'active', 'activate', 'state']) {
-    final b = _boolAttr(attrs[k]);
-    if (b != null) return b;
-  }
-  return false;
-}
+// The two helpers that used to live here — `_boolAttr` and `_sceneActive` —
+// moved to `core/devices/scene_state.dart` when a drawn scene button needed
+// the same answers. Two places deciding what "active" means would be two
+// answers to one question.
 
 class _DisplayScene {
   final String id;
@@ -176,7 +144,7 @@ class _ScenesPageState extends ConsumerState<ScenesPage> {
           isPlugin: true,
           source: d.pluginId,
           area: (d.effectiveArea?.isNotEmpty ?? false) ? d.effectiveArea : null,
-          active: _sceneActive(d.state),
+          active: sceneActive(d.state),
           groupKind: d.state['group_kind'] as String?,
         ),
     ];

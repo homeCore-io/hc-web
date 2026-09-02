@@ -119,7 +119,26 @@ void main() {
             .where((d) => d.chrome == WidgetChrome.bare)
             .map((d) => d.type)
             .toSet(),
-        {'heading', 'divider', 'spacer', 'text', 'shape', 'line'},
+        // The icon element joined them: a device drawn as its own symbol is
+        // an element, not a card — a surface and a title band around a
+        // lightbulb would be a box with a picture in it.
+        // `toggle` too: a switch inside a card would be a card with a switch
+        // in it, and the element is the thing you place.
+        {
+          'heading',
+          'divider',
+          'spacer',
+          'text',
+          'shape',
+          'line',
+          'icon',
+          'toggle',
+          'slider',
+          'scene_button',
+          'colour_wheel',
+          'warmth',
+          'stepper',
+        },
         reason: 'only the layout family and the primitives go frameless — a '
             'shape inside a card is a card with a shape in it',
       );

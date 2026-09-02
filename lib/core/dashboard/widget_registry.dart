@@ -26,6 +26,7 @@ class WidgetDescriptor {
     this.description,
     this.chrome = WidgetChrome.card,
     this.inPlaceLabel,
+    this.bindable = const [],
   });
 
   /// The wire value, e.g. `device_grid`. Plugin-contributed cards are namespaced
@@ -64,6 +65,17 @@ class WidgetDescriptor {
   /// The label is the promise: it appears on the button and in its tooltip, so
   /// "enter this card" is never the vague verb it is in a vector editor.
   final String? inPlaceLabel;
+
+  /// The properties of this card a device reading may drive.
+  ///
+  /// Declared here for the same reason [configFields] is: the inspector builds
+  /// itself from what the card says about itself, so teaching a card to react
+  /// is a row in its descriptor rather than a branch in the panel.
+  ///
+  /// Empty for almost everything today. A card that has not thought about what
+  /// a reading would mean for it should offer nothing rather than offer a
+  /// property that quietly does nothing when bound.
+  final List<BindableProperty> bindable;
 }
 
 /// What the renderer draws *around* a widget.
@@ -229,6 +241,47 @@ enum WidgetConfigKind {
   attribute,
   areaName,
 
+  /// An attribute this device has PROMISED it accepts a write of.
+  ///
+  /// Deliberately not [attribute], which lists everything a device reports so a
+  /// chart or a gauge can point at any reading. A control that writes must
+  /// offer only what the plugin registered as writable: `attribute_policy.dart`
+  /// spells out why — an inferred write is this app's opinion, and
+  /// `hc-sonos::execute_command` rejects attribute-style writes outright, so a
+  /// control built on a guess fails silently.
+  writableAttribute,
+
+  /// A NUMBER this device has promised it accepts a write of.
+  ///
+  /// Separate from [writableAttribute] rather than one kind filtered by the
+  /// caller, because the two answer different questions and an element that
+  /// asked the wrong one would offer a switch for a temperature.
+  writableNumber,
+
+  /// A COLOUR this device has promised it accepts a write of — a `color_xy` or
+  /// a `color_rgb`.
+  ///
+  /// Its own kind for the same reason [writableNumber] is: the wheel sends a
+  /// pair of coordinates, not a scalar, and a picker that offered it a
+  /// brightness would produce a control that cannot send anything at all.
+  writableColour,
+
+  /// A COLOUR TEMPERATURE this device has promised it accepts a write of.
+  ///
+  /// Numeric, so [writableNumber] would list it — and a slider pointed at
+  /// Kelvin does work. This kind exists so the warmth bar can offer *only*
+  /// Kelvin, because unlike the slider it paints the scale it is on: a
+  /// blue-to-amber gradient over a volume control would be a lie about what the
+  /// numbers mean.
+  writableColourTemp,
+
+  /// One of the scenes this house has.
+  ///
+  /// Scenes activate directly, like a device — a POST to `/scenes/id/activate`
+  /// — so a button for one is a peer of the switch and the slider rather than
+  /// anything to do with the rule engine.
+  sceneRef,
+
   /// A kind of device — lights, locks, sensors — picked from the kinds this
   /// house actually has. Distinct from [choice] because the options are the
   /// live device map, not a fixed list in a descriptor.
@@ -382,4 +435,36 @@ class UnknownWidget extends StatelessWidget {
       ),
     );
   }
+}
+
+/// What kind of answer a property wants from a reading.
+///
+/// The two shapes a binding takes, and the reason the editor can offer the
+/// right controls without asking: a number is mapped through a range, and
+/// anything else picks from a small table of value → look.
+enum BindKind {
+  /// A colour, an icon, a word — chosen from a table keyed by the value.
+  look,
+
+  /// The reading itself, as words — rounded if asked and carrying its unit.
+  text,
+
+  /// Degrees, a percentage, a width. Mapped through the binding's range.
+  number,
+}
+
+/// One property a reading may drive.
+class BindableProperty {
+  const BindableProperty(this.name, this.label, this.kind, {this.unit});
+
+  /// The key the element reads, and the one written into the document.
+  final String name;
+
+  /// What the panel calls it.
+  final String label;
+
+  final BindKind kind;
+
+  /// Shown beside the numbers, so a range of 0–210 says what it is 210 of.
+  final String? unit;
 }

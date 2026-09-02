@@ -218,6 +218,10 @@ void main() {
       // Text legibility over a live colour wheel, not elevation: the label sits
       // on whatever hue the user is dragging through.
       'color_light_controls.dart': 'text shadows over arbitrary colours',
+      // The wheel's and the bar's handle rings, which must stay visible over
+      // any hue — moved here out of color_light_controls.dart when the drawn
+      // colour elements needed the same controls.
+      'colour_controls.dart': 'handle rings over arbitrary colours',
     };
 
     final offenders = <String>[];
@@ -262,6 +266,7 @@ void main() {
       // A colour picker. Its white swatch, its saturation ramp to white, and
       // the handle ring that must show over any hue are all literally white.
       'color_light_controls.dart': 'a colour picker is made of colours',
+      'colour_controls.dart': 'a colour picker is made of colours',
       // Modal scrims. Black at low alpha is what a scrim is, on any skin.
       'hc_sheet.dart': 'modal scrim',
       'hub_launcher.dart': 'modal scrim',

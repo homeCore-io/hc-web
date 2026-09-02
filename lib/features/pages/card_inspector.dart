@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/dashboard/binding.dart';
 import '../../core/dashboard/card_condition.dart';
 import '../../core/dashboard/card_style.dart';
 import '../../core/dashboard/free_layer.dart';
@@ -214,6 +215,15 @@ class _CardInspectorState extends ConsumerState<CardInspector> {
                   onChanged: (style) => onChanged(style.toConfig(model.config)),
                 ),
               ],
+              // Outside the chrome test above: an element with no surface —
+              // an icon, a shape — is exactly the kind of thing worth binding,
+              // so this must not hang off whether the card has a frame.
+              if (descriptor != null && descriptor.bindable.isNotEmpty)
+                _DataSection(
+                  descriptor: descriptor,
+                  config: model.config,
+                  onChanged: onChanged,
+                ),
               if (widget.onRotate case final onRotate?)
                 _TransformSection(
                   rotation: widget.rotation,
@@ -554,6 +564,394 @@ class _NameFieldState extends State<_NameField> {
 /// properties are independent and each maps to one thing you can see, so a
 /// preset would be a name to learn for a combination you can already read off
 /// the switches — and the interesting one, a card with a border and no fill, is
+
+/// What the house is driving on this element.
+///
+/// The panel builds itself from [WidgetDescriptor.bindable], so an element that
+/// has thought about what a reading would mean for it gets an editor for free
+/// and one that has not offers nothing — rather than offering a property that
+/// quietly does nothing once bound.
+///
+/// Every property is listed, bound or not. A dashed row saying a colour COULD
+/// follow a device is the whole discoverability of the feature; a list that
+/// showed only what was already wired would leave the capability invisible to
+/// anyone who had not been told.
+class _DataSection extends ConsumerWidget {
+  const _DataSection({
+    required this.descriptor,
+    required this.config,
+    required this.onChanged,
+  });
+
+  final WidgetDescriptor descriptor;
+  final Map<String, dynamic> config;
+  final ValueChanged<Map<String, dynamic>> onChanged;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = HcTokens.of(context);
+    final devices = ref.watch(devicesProvider).value ?? const <DeviceState>[];
+    final bindings = Bindings.fromConfig(config);
+
+    void write(Bindings next) => onChanged(next.toConfig(config));
+
+    return Padding(
+      padding: EdgeInsets.only(top: t.space.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'FOLLOWS THE HOUSE',
+            style: t.text.overlineStyle.copyWith(color: t.accent.primary),
+          ),
+          SizedBox(height: t.space.xs),
+          for (final p in descriptor.bindable)
+            _BindingRow(
+              key: ValueKey('bind-${p.name}'),
+              property: p,
+              binding: bindings.forProperty(p.name),
+              devices: devices,
+              onChanged: (b) => write(bindings.with_(b)),
+              onRemove: () => write(bindings.without(p.name)),
+            ),
+          if (devices.isEmpty)
+            Padding(
+              padding: EdgeInsets.only(top: t.space.xs),
+              child: Text(
+                'No devices here yet, so there is nothing to follow.',
+                style: t.text.captionStyle
+                    .copyWith(color: t.surface.onBaseMuted, height: 1.4),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BindingRow extends StatelessWidget {
+  const _BindingRow({
+    super.key,
+    required this.property,
+    required this.binding,
+    required this.devices,
+    required this.onChanged,
+    required this.onRemove,
+  });
+
+  final BindableProperty property;
+  final PropertyBinding? binding;
+  final List<DeviceState> devices;
+  final ValueChanged<PropertyBinding> onChanged;
+  final VoidCallback onRemove;
+
+  /// What a device is actually reporting, not what its schema says it might.
+  ///
+  /// An attribute a device has never sent is one a binding could only ever
+  /// answer null about, and offering it would be offering a wire to nowhere.
+  static List<String> _attributes(DeviceState d) =>
+      d.state.keys.toList()..sort();
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    final b = binding;
+
+    if (b == null) {
+      return Padding(
+        padding: EdgeInsets.only(bottom: t.space.xs),
+        child: GestureDetector(
+          onTap: devices.isEmpty ? null : () => onChanged(_seed()),
+          child: Container(
+            padding: EdgeInsets.symmetric(
+                horizontal: t.space.sm, vertical: t.space.sm),
+            decoration: BoxDecoration(
+              border: Border.all(
+                color: t.accent.primary.withValues(alpha: .30),
+                style: BorderStyle.solid,
+              ),
+              borderRadius: t.radius.smR,
+            ),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 54,
+                  child: Text(property.label,
+                      style: t.text.captionStyle
+                          .copyWith(color: t.surface.onBaseMuted)),
+                ),
+                Expanded(
+                  child: Text(
+                    devices.isEmpty ? 'nothing to follow' : 'follow a device…',
+                    style: t.text.captionStyle
+                        .copyWith(color: t.surface.onBaseMuted),
+                  ),
+                ),
+                Icon(Icons.add, size: 13, color: t.accent.primary),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    final device = devices
+        .where((d) => d.id == b.deviceId)
+        .cast<DeviceState?>()
+        .firstOrNull;
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: t.space.sm),
+      child: Container(
+        padding: EdgeInsets.all(t.space.sm),
+        decoration: BoxDecoration(
+          color: t.accent.primary.withValues(alpha: .06),
+          border: Border.all(color: t.accent.primary.withValues(alpha: .28)),
+          borderRadius: t.radius.smR,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                SizedBox(
+                  width: 54,
+                  child: Text(property.label,
+                      style: t.text.captionStyle
+                          .copyWith(color: t.accent.primary)),
+                ),
+                Expanded(
+                  child: Text(
+                    device?.name ?? b.deviceId,
+                    style:
+                        t.text.bodySmallStyle.copyWith(color: t.surface.onBase),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                GestureDetector(
+                  // Keyed: `Icons.close` appears several times in this panel,
+                  // including the one that shuts it, so a finder by icon would
+                  // reach for whichever came first.
+                  key: ValueKey('unbind-${property.name}'),
+                  onTap: onRemove,
+                  child:
+                      Icon(Icons.close, size: 13, color: t.surface.onBaseMuted),
+                ),
+              ],
+            ),
+            SizedBox(height: t.space.xs),
+            _Picker(
+              label: 'Device',
+              value: b.deviceId,
+              options: [
+                for (final d in devices) (key: d.id, label: d.name ?? d.id),
+              ],
+              // Changing the device clears the attribute: it belonged to the
+              // device that was chosen, and keeping it would name a reading the
+              // new one does not send — a wire that answers null forever with
+              // nothing on screen saying why.
+              onChanged: (v) {
+                final next = devices.firstWhere((d) => d.id == v);
+                onChanged(b.copyWith(
+                  deviceId: v,
+                  key: _attributes(next).firstOrNull ?? '',
+                ));
+              },
+            ),
+            if (device != null)
+              _Picker(
+                label: 'Reading',
+                value: b.key,
+                options: [
+                  for (final a in _attributes(device)) (key: a, label: a),
+                ],
+                onChanged: (v) => onChanged(b.copyWith(key: v)),
+              ),
+            if (property.kind == BindKind.look)
+              _LookTable(binding: b, onChanged: onChanged)
+            else
+              _RangeFields(
+                binding: b,
+                unit: property.unit,
+                onChanged: onChanged,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// A new binding that already does something.
+  ///
+  /// Seeded with the first device and its first reading, and — for a colour —
+  /// with an on/off pair, because a binding that changed nothing would look
+  /// like the row had not worked.
+  PropertyBinding _seed() {
+    final d = devices.first;
+    return PropertyBinding(
+      property: property.name,
+      deviceId: d.id,
+      key: _attributes(d).firstOrNull ?? '',
+      map: property.kind == BindKind.look
+          ? const {'true': 'accent', 'false': 'muted'}
+          : const {},
+    );
+  }
+}
+
+/// The value → look table, for the readings that are not numbers.
+class _LookTable extends StatelessWidget {
+  const _LookTable({required this.binding, required this.onChanged});
+
+  final PropertyBinding binding;
+  final ValueChanged<PropertyBinding> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    final on = binding.map['true'];
+    final off = binding.map['false'];
+
+    Widget swatch(String forValue, String? ink) => GestureDetector(
+          onTap: () {
+            // Round the palette rather than opening a picker: two taps to try
+            // every colour beats a dialog for a choice with six answers.
+            final keys = [for (final i in inkColours) i.key];
+            final at = ink == null ? -1 : keys.indexOf(ink);
+            final next = keys[(at + 1) % keys.length];
+            onChanged(binding.copyWith(map: {...binding.map, forValue: next}));
+          },
+          child: Container(
+            width: 18,
+            height: 18,
+            decoration: BoxDecoration(
+              color: resolveInk(t, ink) ?? t.surface.sunken,
+              borderRadius: t.radius.xsR,
+              border: Border.all(color: t.stroke.hairline),
+            ),
+          ),
+        );
+
+    return Padding(
+      padding: EdgeInsets.only(top: t.space.xs),
+      child: Row(
+        children: [
+          Text('on',
+              style:
+                  t.text.captionStyle.copyWith(color: t.surface.onBaseMuted)),
+          SizedBox(width: t.space.xs),
+          swatch('true', on),
+          SizedBox(width: t.space.md),
+          Text('off',
+              style:
+                  t.text.captionStyle.copyWith(color: t.surface.onBaseMuted)),
+          SizedBox(width: t.space.xs),
+          swatch('false', off),
+        ],
+      ),
+    );
+  }
+}
+
+/// The four range bounds, which are all four or none.
+class _RangeFields extends StatelessWidget {
+  const _RangeFields({
+    required this.binding,
+    required this.unit,
+    required this.onChanged,
+  });
+
+  final PropertyBinding binding;
+  final String? unit;
+  final ValueChanged<PropertyBinding> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+
+    Widget field(String label, double? value, ValueChanged<double?> set) =>
+        Expanded(
+          child: Padding(
+            padding: EdgeInsets.only(right: t.space.xs),
+            child: TextFormField(
+              key: ValueKey('range-$label-${binding.property}'),
+              initialValue: value == null ? '' : '$value',
+              style: t.text.captionStyle.copyWith(color: t.surface.onBase),
+              decoration: InputDecoration(
+                isDense: true,
+                labelText: label,
+                labelStyle:
+                    t.text.captionStyle.copyWith(color: t.surface.onBaseMuted),
+                border: const OutlineInputBorder(),
+                contentPadding:
+                    EdgeInsets.symmetric(horizontal: 6, vertical: t.space.xs),
+              ),
+              keyboardType: TextInputType.number,
+              onChanged: (v) => set(double.tryParse(v)),
+            ),
+          ),
+        );
+
+    return Padding(
+      padding: EdgeInsets.only(top: t.space.xs),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            field('from', binding.inFrom,
+                (v) => onChanged(binding.copyWith(inFrom: v))),
+            field('to', binding.inTo,
+                (v) => onChanged(binding.copyWith(inTo: v))),
+          ]),
+          SizedBox(height: t.space.xs),
+          Row(children: [
+            field('→', binding.outFrom,
+                (v) => onChanged(binding.copyWith(outFrom: v))),
+            field('→', binding.outTo,
+                (v) => onChanged(binding.copyWith(outTo: v))),
+          ]),
+          SizedBox(height: t.space.xs),
+          Text(
+            binding.hasRange
+                ? 'Mapped${unit == null ? '' : ' to $unit'}.'
+                : 'All four, or none — three of them is how a dial quietly '
+                    'reads nothing.',
+            style: t.text.captionStyle.copyWith(
+              color: binding.hasRange ? t.surface.onBaseMuted : t.accent.warn,
+              height: 1.35,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The compact label-over-chips row the rest of this panel uses.
+class _Picker extends StatelessWidget {
+  const _Picker({
+    required this.label,
+    required this.value,
+    required this.options,
+    required this.onChanged,
+  });
+
+  final String label;
+  final String value;
+  final List<({String key, String label})> options;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(bottom: 4),
+        child: _StyleChoice(
+          label: label,
+          value: value,
+          options: options,
+          onChanged: onChanged,
+        ),
+      );
+}
 
 /// "When the house says this, look like that."
 ///

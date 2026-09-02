@@ -13,6 +13,10 @@ library;
 
 import 'rooms_card.dart';
 import 'primitive_cards.dart';
+import 'bound_element.dart';
+import 'icon_element.dart';
+import 'slider_element.dart';
+import 'toggle_element.dart';
 import 'plugin_render_view.dart';
 import 'dart:async';
 
@@ -53,6 +57,10 @@ import '../../core/providers/scenes_provider.dart';
 import '../../core/providers/time_display_provider.dart';
 import 'code_card.dart';
 import 'gauge_card.dart';
+import 'colour_wheel_element.dart';
+import 'scene_button_element.dart';
+import 'stepper_element.dart';
+import 'warmth_element.dart';
 import 'svg_card.dart';
 
 /// Which devices a device-oriented card shows, for a given config.
@@ -2147,8 +2155,293 @@ void registerBuiltinDashboardWidgets() {
       // visible in the editor and says so, so it cannot be lost — and blocking
       // the save on it would mean you could not draw one out and fill it in
       // later.
-      builder: (context, a) =>
-          TextPrimitiveCard(config: a.config, editing: a.editing),
+      // The words themselves can be a reading — that is what turns a text
+      // element into a readout without a card around it.
+      bindable: const [
+        BindableProperty('text', 'Words', BindKind.text),
+        BindableProperty('ink', 'Colour', BindKind.look),
+      ],
+      builder: (context, a) => BoundElement(
+        type: 'text',
+        config: a.config,
+        builder: (c) => TextPrimitiveCard(config: c, editing: a.editing),
+      ),
+    ),
+    // The first element that WRITES. Everything above shows the house; this
+    // changes it, which is why its attribute picker offers only what a plugin
+    // registered rather than everything a device reports.
+    WidgetDescriptor(
+      type: 'toggle',
+      title: 'Switch',
+      description: 'A switch for one device, drawn where you want it.',
+      icon: Icons.toggle_on_outlined,
+      chrome: WidgetChrome.bare,
+      sizeHint: const WidgetSizeHint(
+          minW: 2, minH: 1, recommendedW: 3, recommendedH: 1),
+      configFields: const [
+        WidgetConfigField('device_id', WidgetConfigKind.deviceRef,
+            label: 'Device', required: true),
+        WidgetConfigField('attribute', WidgetConfigKind.writableAttribute,
+            label: 'Sets',
+            defaultValue: 'on',
+            help: 'Only what the plugin registered as writable — a guess here '
+                'would send a command the device never advertised.'),
+        WidgetConfigField('label', WidgetConfigKind.text, label: 'Label'),
+        WidgetConfigField('ink', WidgetConfigKind.ink,
+            group: 'Colour', label: 'When on'),
+      ],
+      validate: (c) {
+        if ((c['device_id'] as String? ?? '').trim().isEmpty) {
+          return 'Which device does this switch?';
+        }
+        if ((c['attribute'] as String? ?? '').trim().isEmpty) {
+          return 'Which of its settings?';
+        }
+        return null;
+      },
+      builder: (context, a) => ToggleElement(config: a.config),
+    ),
+    WidgetDescriptor(
+      type: 'slider',
+      title: 'Slider',
+      description: 'A number you can set — brightness, volume, a setpoint.',
+      icon: Icons.tune_outlined,
+      chrome: WidgetChrome.bare,
+      sizeHint: const WidgetSizeHint(
+          minW: 3, minH: 1, recommendedW: 4, recommendedH: 1),
+      configFields: const [
+        WidgetConfigField('device_id', WidgetConfigKind.deviceRef,
+            label: 'Device', required: true),
+        WidgetConfigField('attribute', WidgetConfigKind.writableNumber,
+            label: 'Sets',
+            help: 'Only numbers the plugin registered as writable.'),
+        WidgetConfigField('label', WidgetConfigKind.text, label: 'Label'),
+        WidgetConfigField('min', WidgetConfigKind.integer,
+            group: 'Range',
+            label: 'From',
+            help: 'Only used when the plugin gave no range of its own — its '
+                'own is always better, because it survives the bulb being '
+                'replaced.'),
+        WidgetConfigField('max', WidgetConfigKind.integer,
+            group: 'Range', label: 'To'),
+        WidgetConfigField('ink', WidgetConfigKind.ink,
+            group: 'Colour', label: 'Track'),
+      ],
+      validate: (c) {
+        if ((c['device_id'] as String? ?? '').trim().isEmpty) {
+          return 'Which device does this set?';
+        }
+        if ((c['attribute'] as String? ?? '').trim().isEmpty) {
+          return 'Which of its numbers?';
+        }
+        return null;
+      },
+      builder: (context, a) => SliderElement(config: a.config),
+    ),
+    // A scene button.
+    //
+    // Unlike the switch and the slider it needs no writability check: a scene
+    // is not an attribute somebody might have registered, it is a thing core
+    // or a bridge already exposes as runnable. Activating one is a direct call
+    // — no rule stands between the button and the house.
+    //
+    // The picker offers both kinds together (`sceneRef`) because to whoever is
+    // drawing the page they are the same thing; only the code that sends knows
+    // the difference. See `core/devices/scene_state.dart`.
+    WidgetDescriptor(
+      type: 'scene_button',
+      title: 'Scene button',
+      description: 'Runs one scene. Shows whether it is on, where that is '
+          'knowable.',
+      icon: Icons.play_circle_outline,
+      chrome: WidgetChrome.bare,
+      sizeHint: const WidgetSizeHint(
+          minW: 2, minH: 1, recommendedW: 3, recommendedH: 1),
+      configFields: const [
+        WidgetConfigField('scene_id', WidgetConfigKind.sceneRef,
+            label: 'Scene', required: true),
+        WidgetConfigField('label', WidgetConfigKind.text,
+            label: 'Label',
+            help: 'Left empty, the scene names itself — and keeps up when it '
+                'is renamed.'),
+        WidgetConfigField('ink', WidgetConfigKind.ink,
+            group: 'Colour', label: 'When on'),
+      ],
+      validate: (c) {
+        if ((c['scene_id'] as String? ?? '').trim().isEmpty) {
+          return 'Which scene does this run?';
+        }
+        return null;
+      },
+      builder: (context, a) => SceneButtonElement(config: a.config),
+    ),
+    // The rest of the control row: colour, warmth, a stepper.
+    //
+    // The wheel and the bar are the DEVICE PANEL'S controls, imported rather
+    // than reimplemented — see `design/components/colour_controls.dart`. A
+    // second wheel with its own idea of where hue starts would mean the same
+    // bulb picked a different colour depending on which surface you touched.
+    WidgetDescriptor(
+      type: 'colour_wheel',
+      title: 'Colour wheel',
+      description: 'Pick a colour for a bulb, by hue and saturation.',
+      icon: Icons.palette_outlined,
+      chrome: WidgetChrome.bare,
+      sizeHint: const WidgetSizeHint(
+          minW: 2, minH: 2, recommendedW: 3, recommendedH: 3),
+      configFields: const [
+        WidgetConfigField('device_id', WidgetConfigKind.deviceRef,
+            label: 'Device', required: true),
+        WidgetConfigField('attribute', WidgetConfigKind.writableColour,
+            label: 'Sets',
+            defaultValue: 'color_xy',
+            help: 'A colour the plugin registered — the wheel sends whichever '
+                'shape that attribute is, xy or rgb.'),
+        WidgetConfigField('label', WidgetConfigKind.text, label: 'Label'),
+      ],
+      validate: (c) {
+        if ((c['device_id'] as String? ?? '').trim().isEmpty) {
+          return 'Which bulb does this colour?';
+        }
+        if ((c['attribute'] as String? ?? '').trim().isEmpty) {
+          return 'Which of its colour settings?';
+        }
+        return null;
+      },
+      builder: (context, a) => ColourWheelElement(config: a.config),
+    ),
+    WidgetDescriptor(
+      type: 'warmth',
+      title: 'Warmth',
+      description: 'Warm to cool, for a tunable-white bulb.',
+      icon: Icons.wb_incandescent_outlined,
+      chrome: WidgetChrome.bare,
+      sizeHint: const WidgetSizeHint(
+          minW: 1, minH: 2, recommendedW: 1, recommendedH: 3),
+      configFields: const [
+        WidgetConfigField('device_id', WidgetConfigKind.deviceRef,
+            label: 'Device', required: true),
+        WidgetConfigField('attribute', WidgetConfigKind.writableColourTemp,
+            label: 'Sets',
+            defaultValue: 'color_temp',
+            help: 'Only colour temperature. A slider would take any number; '
+                'this one paints the scale, so it has to BE that scale.'),
+        WidgetConfigField('label', WidgetConfigKind.text, label: 'Label'),
+        WidgetConfigField('axis', WidgetConfigKind.choice,
+            label: 'Runs',
+            defaultValue: 'vertical',
+            options: ['vertical', 'horizontal'],
+            help: 'A bar across a wide box wants to run left to right; one in '
+                'a tall box down the page. Cool is always the start.'),
+      ],
+      validate: (c) {
+        if ((c['device_id'] as String? ?? '').trim().isEmpty) {
+          return 'Which bulb does this warm?';
+        }
+        return null;
+      },
+      builder: (context, a) => WarmthElement(config: a.config),
+    ),
+    // The control for a number with no range — where a slider cannot go, since
+    // its ends are its whole vocabulary. Also the right control for a setpoint,
+    // which people nudge rather than aim.
+    WidgetDescriptor(
+      type: 'stepper',
+      title: 'Stepper',
+      description: 'Up a bit, down a bit — a setpoint, a volume.',
+      icon: Icons.exposure_outlined,
+      chrome: WidgetChrome.bare,
+      sizeHint: const WidgetSizeHint(
+          minW: 2, minH: 1, recommendedW: 3, recommendedH: 1),
+      configFields: const [
+        WidgetConfigField('device_id', WidgetConfigKind.deviceRef,
+            label: 'Device', required: true),
+        WidgetConfigField('attribute', WidgetConfigKind.writableNumber,
+            label: 'Sets',
+            help: 'Only numbers the plugin registered as writable. Unlike the '
+                'slider, this one does not need a range.'),
+        WidgetConfigField('label', WidgetConfigKind.text, label: 'Label'),
+        WidgetConfigField('step', WidgetConfigKind.integer,
+            label: 'By',
+            help: 'Only used when the plugin named no step of its own — its '
+                'own is what the device actually quantises to, and a decimal '
+                'step can only come from there.'),
+        WidgetConfigField('ink', WidgetConfigKind.ink,
+            group: 'Colour', label: 'Keys'),
+      ],
+      validate: (c) {
+        if ((c['device_id'] as String? ?? '').trim().isEmpty) {
+          return 'Which device does this step?';
+        }
+        if ((c['attribute'] as String? ?? '').trim().isEmpty) {
+          return 'Which of its numbers?';
+        }
+        return null;
+      },
+      builder: (context, a) => StepperElement(config: a.config),
+    ),
+    // An icon, bound to a device.
+    //
+    // The vocabulary is the FACET names, the same list `status_icon` already
+    // uses, because every one of them has artwork a skin can answer for. A free
+    // icon-name field would have been a second vocabulary and a licence to name
+    // a glyph nobody has drawn.
+    //
+    // Bound to a device it needs no facet at all: the device says what it is and
+    // whether it is on, and Phosphor's weight axis turns the second into the
+    // icon's own form rather than only its colour.
+    WidgetDescriptor(
+      type: 'icon',
+      title: 'Icon',
+      description: 'One device, as its own symbol. Fills in when it is on.',
+      icon: Icons.lightbulb_outline,
+      chrome: WidgetChrome.bare,
+      sizeHint: const WidgetSizeHint(
+          minW: 1, minH: 1, recommendedW: 2, recommendedH: 2),
+      // Not const: the facet list is derived from the enum so it cannot drift
+      // from the artwork, and a derived list is worth more than a const one.
+      configFields: [
+        const WidgetConfigField('device_id', WidgetConfigKind.deviceRef,
+            label: 'Device',
+            help: 'The icon follows what this device is, and fills in when it '
+                'is on.'),
+        WidgetConfigField('facet', WidgetConfigKind.choice,
+            group: 'Symbol',
+            label: 'Show as',
+            options: kIconFacets,
+            help: 'Overrides the device’s own kind. Leave it be and the '
+                'device decides.'),
+        const WidgetConfigField('ink', WidgetConfigKind.ink,
+            group: 'Symbol', label: 'Colour'),
+        const WidgetConfigField('backing', WidgetConfigKind.boolean,
+            group: 'Symbol',
+            label: 'Disc behind it',
+            defaultValue: false,
+            help: 'A tinted circle, for an icon that has to read against a '
+                'photograph.'),
+      ],
+      validate: (c) {
+        final device = (c['device_id'] as String? ?? '').trim();
+        final facet = (c['facet'] as String? ?? '').trim();
+        // One or the other. With neither there is nothing to draw, and a blank
+        // square is the failure this whole element exists to avoid.
+        if (device.isEmpty && facet.isEmpty) {
+          return 'Pick a device, or a symbol to show.';
+        }
+        return null;
+      },
+      // What a reading may drive here. Colour is the one people reach for —
+      // amber when it is on, red when a door is open — and the two numbers are
+      // what make a dial out of an arrow.
+      // Just the colour. Turning and fading an element already belong to its
+      // placement — offering them again here would be two controls writing
+      // different keys for one visible result.
+      bindable: const [BindableProperty('ink', 'Colour', BindKind.look)],
+      builder: (context, a) => BoundElement(
+        type: 'icon',
+        config: a.config,
+        builder: (c) => IconElement(config: c),
+      ),
     ),
     WidgetDescriptor(
       type: 'shape',
@@ -2195,7 +2488,20 @@ void registerBuiltinDashboardWidgets() {
             help: 'An SVG path, scaled into the element. Only read when the '
                 'shape is “path”.'),
       ],
-      builder: (context, a) => ShapePrimitiveCard(config: a.config),
+      // Fill and stroke pick a look; the two numbers map through a range. All
+      // four are real config fields, so a binding writes what the card already
+      // reads and `ShapePrimitiveCard` is untouched.
+      bindable: const [
+        BindableProperty('fill', 'Fill', BindKind.look),
+        BindableProperty('stroke', 'Stroke', BindKind.look),
+        BindableProperty('rotation', 'Turn', BindKind.number, unit: '°'),
+        BindableProperty('opacity', 'Fade', BindKind.number, unit: '%'),
+      ],
+      builder: (context, a) => BoundElement(
+        type: 'shape',
+        config: a.config,
+        builder: (c) => ShapePrimitiveCard(config: c),
+      ),
     ),
     WidgetDescriptor(
       type: 'line',
