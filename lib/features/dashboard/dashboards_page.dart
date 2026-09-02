@@ -371,29 +371,148 @@ Future<void> _showTemplateDialog(BuildContext context, WidgetRef ref) async {
   await ref.read(dashboardsProvider.notifier).createFromTemplate(templateId);
 }
 
+/// Two jobs, and they want opposite things.
+///
+/// **Back up** goes home to the house it came from, so it keeps every device
+/// id and restores exactly. **Share** goes to somebody else, where those ids
+/// are dangling references to hardware they do not have — so every one becomes
+/// a slot labelled with what belonged there, and the person wires them in the
+/// editor.
+///
+/// One dialog with a switch rather than two menu items, because the difference
+/// is worth reading before you copy: a backup pasted into a stranger's house
+/// is a page of dead controls, and a share pasted back into your own is an
+/// afternoon of re-wiring.
 Future<void> _showExportDialog(
   BuildContext context,
   WidgetRef ref,
   DashboardDefinition dashboard,
 ) async {
-  final exported =
-      await ref.read(dashboardsProvider.notifier).exportDashboard(dashboard.id);
-  if (!context.mounted) return;
-  final controller = TextEditingController(
-    text: const JsonEncoder.withIndent('  ').convert(exported.toJson()),
-  );
+  var wired = true;
+  var busy = false;
+  final controller = TextEditingController();
+
+  Future<void> load(void Function(void Function()) setState) async {
+    setState(() => busy = true);
+    try {
+      final exported = await ref
+          .read(dashboardsProvider.notifier)
+          .exportDashboard(dashboard.id, wired: wired);
+      controller.text =
+          const JsonEncoder.withIndent('  ').convert(exported.toJson());
+    } catch (e) {
+      controller.text = 'Could not export this page: $e';
+    }
+    setState(() => busy = false);
+  }
+
   await showDialog<void>(
     context: context,
-    builder: (context) => HcDialog(
-      title: 'Export ${dashboard.name}',
-      description: 'Copy this and paste it into Import on another house.',
-      width: 700,
-      actions: [
-        HcButton(label: 'Close', onPressed: () => Navigator.pop(context)),
-      ],
-      child: _JsonField(controller: controller, label: 'Page JSON'),
+    builder: (context) => StatefulBuilder(
+      builder: (context, setState) {
+        if (controller.text.isEmpty && !busy) {
+          // First build: fetch the wired form, which is what this dialog has
+          // always shown.
+          WidgetsBinding.instance.addPostFrameCallback((_) => load(setState));
+        }
+        return HcDialog(
+          title: 'Export ${dashboard.name}',
+          description: wired
+              ? 'Keeps the devices this page points at. Use this to back the '
+                  'page up, or to move it within this house.'
+              : 'Every device is replaced by a label saying what belonged '
+                  'there. Whoever imports it wires their own devices in the '
+                  'editor.',
+          width: 700,
+          actions: [
+            HcButton(label: 'Close', onPressed: () => Navigator.pop(context)),
+          ],
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _ExportMode(
+                wired: wired,
+                onChanged: (v) {
+                  if (v == wired) return;
+                  wired = v;
+                  load(setState);
+                },
+              ),
+              SizedBox(height: HcTokens.of(context).space.sm),
+              _JsonField(controller: controller, label: 'Page JSON'),
+            ],
+          ),
+        );
+      },
     ),
   );
+}
+
+/// The switch between the two jobs.
+class _ExportMode extends StatelessWidget {
+  const _ExportMode({required this.wired, required this.onChanged});
+
+  final bool wired;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Container(
+      padding: EdgeInsets.all(t.space.xs),
+      decoration: BoxDecoration(
+        color: t.surface.sunken,
+        border: Border.all(color: t.stroke.hairline),
+        borderRadius: t.radius.smR,
+      ),
+      child: Row(children: [
+        for (final option in const [
+          (on: true, label: 'Back up', hint: 'keeps your devices'),
+          (
+            on: false,
+            label: 'Share as a template',
+            hint: 'strips them to slots'
+          ),
+        ])
+          Expanded(
+            child: InkWell(
+              onTap: () => onChanged(option.on),
+              borderRadius: t.radius.smR,
+              child: Container(
+                padding: EdgeInsets.symmetric(
+                    horizontal: t.space.sm, vertical: t.space.sm),
+                decoration: BoxDecoration(
+                  color: option.on == wired
+                      ? t.accent.active.withValues(alpha: .14)
+                      : null,
+                  borderRadius: t.radius.smR,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      option.label,
+                      style: t.text.bodySmallStyle.copyWith(
+                        color: option.on == wired
+                            ? t.accent.active
+                            : t.surface.onBase,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Text(
+                      option.hint,
+                      style: t.text.captionStyle
+                          .copyWith(color: t.surface.onBaseMuted),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+      ]),
+    );
+  }
 }
 
 Future<void> _showImportDialog(BuildContext context, WidgetRef ref) async {

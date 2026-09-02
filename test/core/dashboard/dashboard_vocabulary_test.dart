@@ -180,6 +180,50 @@ void main() {
     );
   });
 
+  /// Which fields name something in the house — one answer, core's.
+  ///
+  /// This is what makes a page shareable: an export has to know which values
+  /// are ids so it can replace them with a label. A client that worked that out
+  /// from field names would miss the field a new widget added, and the page
+  /// would travel carrying somebody else's hardware.
+  test('this app agrees with core about what points at a device', () {
+    const kinds = {
+      'device': WidgetConfigKind.deviceRef,
+      'devices': WidgetConfigKind.deviceRefs,
+      'scene': WidgetConfigKind.sceneRef,
+    };
+    final disagreements = <String>[];
+
+    for (final w in widgets) {
+      final type = w['type'] as String;
+      final descriptor = WidgetRegistry.lookup(type);
+      if (descriptor == null) continue;
+      for (final f in (w['fields'] as List).cast<Map<String, dynamic>>()) {
+        final declared = kinds[f['reference']];
+        if (declared == null) continue;
+        final field = descriptor.configFields
+            .where((c) => c.name == f['name'])
+            .firstOrNull;
+        // A field core marks as a reference and the editor does not offer at
+        // all is covered by the coverage test above; here we only care that
+        // the ones it DOES offer agree about what they point at.
+        if (field == null) continue;
+        if (field.kind != declared) {
+          disagreements.add('$type.${f['name']}: core says ${f['reference']}, '
+              'this app offers ${field.kind.name}');
+        }
+      }
+    }
+
+    expect(
+      disagreements,
+      isEmpty,
+      reason: 'a reference this app fills from the wrong list is a wire that '
+          'cannot resolve, and one it does not know is a device id that '
+          'survives being shared.',
+    );
+  });
+
   /// A capability claim, checked against core.
   ///
   /// When this test was written hc-web could not draw a `render` tree at all,

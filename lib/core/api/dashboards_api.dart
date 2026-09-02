@@ -68,8 +68,21 @@ class DashboardsApi {
     return _parseDashboard(Map<String, dynamic>.from(response.data as Map));
   }
 
-  Future<DashboardDefinition> exportDashboard(String id) async {
-    final response = await client.dio.get('/dashboards/$id/export');
+  /// A page, on its way out.
+  ///
+  /// [wired] true keeps the device ids, which is what a BACKUP wants: it is
+  /// going home to the house it came from and must restore exactly. False
+  /// strips every reference to a labelled slot, which is what SHARING wants:
+  /// the ids mean nothing in anybody else's house, and a file full of another
+  /// person's bridge serials is not a gift.
+  Future<DashboardDefinition> exportDashboard(
+    String id, {
+    bool wired = true,
+  }) async {
+    final response = await client.dio.get(
+      '/dashboards/$id/export',
+      queryParameters: {'wired': wired},
+    );
     return _parseDashboard(Map<String, dynamic>.from(response.data as Map));
   }
 
