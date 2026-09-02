@@ -417,6 +417,24 @@ class _CardLibraryState extends ConsumerState<CardLibrary> {
     // figure to read across a room, a line to see where it has been.
     _Group('Show a reading', [
       _Entry('Icon', 'icon', 'a device as its own symbol', {}),
+      // **A state dot is not a new element.** It is a circle whose fill follows
+      // a reading, and the binding arc made exactly that expressible: `fill` is
+      // a bindable property of `shape`, so this is the shape element with a
+      // starting config and nothing more.
+      //
+      // Adding a `state_dot` type would have been a second way to say one
+      // thing — a type to declare in core, a renderer to keep in step, and a
+      // page able to express the same dot two ways with different bugs. The
+      // mockup lists it beside the others because that is where it belongs in
+      // a catalogue, not because it needs its own code.
+      //
+      // Placed unbound: which device it follows is the next thing you choose,
+      // and the Data section is where you say so.
+      _Entry('State dot', 'shape', 'a circle that follows a device', {
+        'shape': 'circle',
+        'fill': 'muted',
+        ..._bareCard,
+      }),
       _Entry('Gauge', 'gauge', 'one reading against a range',
           {'min': 0, 'max': 100}),
       // The same element with its card taken off and its number turned down —
@@ -439,6 +457,11 @@ class _CardLibraryState extends ConsumerState<CardLibrary> {
         ..._bareCard,
       }),
       _Entry('Reading', 'device_reading', 'one number, large', {}),
+      // A sparkline is a chart with its box taken off — the piece you put
+      // beside a number rather than the panel you hang on a wall. The same
+      // element, as the arc and the bar are the same gauge.
+      _Entry('Sparkline', 'history_chart', 'a line to tuck beside a value',
+          {'timeframe_hours': 6, ..._bareCard}),
       _Entry('Chart', 'history_chart', 'a value over time',
           {'timeframe_hours': 24}),
       _Entry('Numbers', 'stat_summary', 'counts of things', {
