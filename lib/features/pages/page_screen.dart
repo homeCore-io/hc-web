@@ -1406,6 +1406,18 @@ class _PageScreenState extends ConsumerState<PageScreen> {
   /// The two are separate methods because `null` is a real value for both —
   /// back to none, not to zero — and one method taking two nullables could not
   /// say which of them it had been asked to change.
+  /// Move or resize an element by typing, rather than by dragging.
+  ///
+  /// Coalesced per element the way a rotation is, so typing a width and then a
+  /// height is one undo rather than two — and typing 1, 2, 0 into a width is
+  /// one, not three.
+  void _reposition(String id, DashboardRect rect) => _transform(
+        id,
+        'Move the card',
+        'rect-',
+        (i) => i.copyWith(rect: rect),
+      );
+
   void _rotate(String id, double? degrees) => _transform(
         id,
         'Turn the card',
@@ -2270,6 +2282,9 @@ class _PageScreenState extends ConsumerState<PageScreen> {
             onStack: _selectedCard == null
                 ? null
                 : (move) => _stack(_selectedCard!, move, columns),
+            onRect: _selectedCard == null
+                ? null
+                : (rect) => _reposition(_selectedCard!, rect),
             onRotate: _selectedCard == null
                 ? null
                 : (degrees) => _rotate(_selectedCard!, degrees),

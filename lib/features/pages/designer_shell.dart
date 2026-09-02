@@ -108,6 +108,7 @@ class DesignerShell extends StatefulWidget {
     required this.tool,
     required this.onTool,
     this.onStack,
+    this.onRect,
     this.onRotate,
     this.onFade,
   });
@@ -250,6 +251,10 @@ class DesignerShell extends StatefulWidget {
   /// Lift the selection above the grid, put it back, or move it within the
   /// stack. The page owns the arithmetic; this only forwards the request.
   final ValueChanged<StackMove>? onStack;
+
+  /// Move or resize the selected element by typing. Null outside the designer,
+  /// and ignored for a card the grid engine packs, which has no x to be told.
+  final ValueChanged<DashboardRect>? onRect;
 
   /// Turn or fade the selected card. Null outside the designer.
   final ValueChanged<double?>? onRotate;
@@ -707,6 +712,8 @@ class _DesignerShellState extends State<DesignerShell> {
                                   onStack: widget.onStack,
                                   rotation: widget.selectedItem?.rotation,
                                   opacity: widget.selectedItem?.opacity,
+                                  rect: widget.selectedItem?.rect,
+                                  onRect: widget.onRect,
                                   onRotate: widget.onRotate,
                                   onFade: widget.onFade,
                                 ),
