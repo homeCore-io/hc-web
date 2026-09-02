@@ -124,20 +124,29 @@ void main() {
   /// will not touch: open the card elsewhere, narrow it, open it here, save,
   /// and the narrowing is gone.
   ///
-  /// The known ones are listed rather than tolerated. Every entry is a real
-  /// gap with its consequence written beside it, and the list can only shrink.
+  /// **Not every editor is a config field.** `card_members.dart` edits `add`
+  /// and `remove` for the four selection widgets, as a section of its own with
+  /// a device list you tick — a `WidgetConfigField` could not have been that.
+  /// Reading a bare `configFields` scan as the whole answer reports those eight
+  /// as gaps, which is wrong and was: the first version of this test did, and
+  /// the reason string beside them claimed the inspector edited only the rule.
+  /// So editors outside the config form are declared here.
   test('every field core describes is one the editor offers', () {
+    // Fields with an editor that is not a config field, and where it lives.
+    const elsewhere = {
+      'add': 'card_members.dart',
+      'remove': 'card_members.dart',
+      // Every widget carries it, and no widget declares it as a config field:
+      // an action belongs to all of them, so it has a section of its own.
+      'on_tap': 'card_inspector.dart, the WHEN TAPPED section',
+    };
+
+    // Real gaps. Each is a setting a document can carry and this app cannot
+    // change, with what is lost written beside it. The list can only shrink.
     const known = {
-      // The selection exceptions. A selection is a rule plus the device it
-      // does not reach and the one it reaches wrongly; the inspector still
-      // edits only the rule.
-      'device_grid.add', 'device_grid.remove',
-      'device_list.add', 'device_list.remove',
-      'device_tile.add', 'device_tile.remove',
-      'media_player.add', 'media_player.remove',
-      // An event feed can be narrowed to types or to devices. The form offers
-      // neither, so a feed narrowed elsewhere widens the moment it is saved
-      // here.
+      // An event feed can be narrowed to event types or to devices. The form
+      // offers neither, so a feed narrowed elsewhere widens the moment it is
+      // saved here.
       'event_feed.types', 'event_feed.device_ids',
       // A chart's row cap. The form offers the timeframe and not this.
       'history_chart.limit',
@@ -153,7 +162,10 @@ void main() {
       for (final f in (w['fields'] as List).cast<Map<String, dynamic>>()) {
         final name = f['name'] as String;
         final id = '$type.$name';
-        if (!offered.contains(name) && !known.contains(id)) gaps.add(id);
+        if (offered.contains(name)) continue;
+        if (elsewhere.containsKey(name)) continue;
+        if (known.contains(id)) continue;
+        gaps.add(id);
       }
     }
 
@@ -162,8 +174,9 @@ void main() {
       isEmpty,
       reason: 'core validates these fields and this editor has no control for '
           'them, so a document written elsewhere carries settings this app '
-          'silently cannot change. Add the control, or add the field to '
-          '`known` above with what is lost meanwhile.',
+          'silently cannot change. Add the control; if it is not a config '
+          'field, name it in `elsewhere`; if it is a real gap, add it to '
+          '`known` with what is lost meanwhile.',
     );
   });
 

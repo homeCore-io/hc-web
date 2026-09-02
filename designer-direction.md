@@ -166,8 +166,13 @@ Each step is shippable and leaves the tool working.
    `blur`, `corner`, `image`, `imageFit`, `imageOpacity` — §8.3 records the pane
    exposing only booleans. Expose what the model already holds. This alone
    removes most of "flat".
-3. **Selection as an object** (§8.1) — `exclude_ids`, and an inspector editor for
-   it. Rooms and kinds become pickers, not automatic containers.
+3. ~~**Selection as an object** (§8.1) — `exclude_ids`, and an inspector editor
+   for it. Rooms and kinds become pickers, not automatic containers.~~
+   **Done, and not as written.** `exclude_ids` was one-sided; what shipped is
+   two-sided — a selection is a rule plus `add` for the device it does not
+   reach and `remove` for the one it reaches wrongly, with `card_members.dart`
+   as the editor: the devices listed and tickable. Core validates both fields
+   for all four selection widgets.
 4. **Groups become real containers.** They have `rect`, `padding`, `radius`,
    `clip` already; give them a transform their members inherit. This is the
    parent/child row in §0 and the largest of the five.

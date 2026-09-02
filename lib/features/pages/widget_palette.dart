@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../../core/dashboard/design_tools.dart';
 import '../../core/dashboard/widget_registry.dart';
 import '../../core/models/dashboard.dart';
 import '../../design/tokens.dart';
 import '../../shell/hc_sheet.dart';
+import 'card_library.dart';
 import 'widget_config_form.dart';
 
 /// The add-a-widget surface.
@@ -20,23 +22,33 @@ Future<DashboardWidgetModel?> showWidgetPalette(BuildContext context) {
   );
 }
 
-/// Everything a person would add. Config-heavy cards (a history chart, a camera)
-/// are in — the config form handles them now — with sensible starting values.
-const _addable = <String>[
-  'house_status_hero',
-  'device_grid',
-  'device_list',
-  'device_tile',
-  'media_player',
-  'mode_chips',
-  'scene_row',
-  'event_feed',
-  'history_chart',
-  'camera_video',
-  'web_embed',
-  'markdown',
-  'stat_summary',
-];
+/// Everything a person would add, taken from the catalogue rather than listed
+/// again here.
+///
+/// **This was the third hand-kept list of the same set.** `DesignTool` said
+/// what you can draw, `CardLibrary` said what you can pick, and this said what
+/// the sheet offers — and the doc above it claimed it listed "whatever the
+/// WidgetRegistry knows", which it had not done for a long time. Seven elements
+/// were missing from two of the three and nothing noticed for a release.
+///
+/// One list now. The card tool and the add button open a sheet of exactly what
+/// the catalogue holds, so an element added in one place is added everywhere.
+List<String> get _addable {
+  final offered = CardLibrary.offeredTypes.toList()..sort();
+  return [
+    for (final type in offered)
+      // The primitives are on the tool rail, where drawing one is a drag rather
+      // than a trip through a modal. They stay in the catalogue panel, which is
+      // a browse surface; this sheet is the fast path to a card.
+      if (!_drawnWithATool.contains(type)) type,
+  ];
+}
+
+/// Types with a tool of their own.
+final Set<String> _drawnWithATool = {
+  for (final tool in DesignTool.values)
+    if (tool.type != null) tool.type!,
+};
 
 /// Starting values, so a form opens on something reasonable rather than blank.
 Map<String, dynamic> _defaultConfig(String type) => switch (type) {

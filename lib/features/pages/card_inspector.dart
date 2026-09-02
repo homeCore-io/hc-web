@@ -3,13 +3,21 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/dashboard/binding.dart';
 import '../../core/dashboard/card_condition.dart';
+import '../../core/dashboard/tap_action.dart';
 import '../../core/dashboard/card_style.dart';
+import '../../core/dashboard/grid_engine.dart' show DashboardRect;
 import '../../core/dashboard/free_layer.dart';
 import '../../core/dashboard/transform.dart';
 import '../../core/dashboard/widget_registry.dart';
+import '../../core/devices/scene_state.dart';
 import '../../core/models/device_state.dart';
 import '../../core/models/dashboard.dart';
 import '../../core/providers/devices_provider.dart';
+import '../../core/providers/dashboards_provider.dart';
+import '../../core/providers/modes_provider.dart';
+import '../../core/providers/scenes_provider.dart';
+import '../../core/schema/device_schema.dart';
+import '../../core/text/humanize.dart';
 import '../../design/tokens.dart';
 import '../assets/asset_field.dart';
 import '../dashboard/builtin_cards.dart';
@@ -49,6 +57,8 @@ class CardInspector extends ConsumerStatefulWidget {
     this.opacity,
     this.onRotate,
     this.onFade,
+    this.rect,
+    this.onRect,
   });
 
   final DashboardWidgetModel model;
@@ -89,6 +99,16 @@ class CardInspector extends ConsumerStatefulWidget {
   /// carrying two nullables could not say which of the two it meant.
   final ValueChanged<double?>? onRotate;
   final ValueChanged<double?>? onFade;
+
+  /// The element's own rectangle, when it has one.
+  ///
+  /// Null for a card the grid engine packs — it has no x it could be told,
+  /// because the engine decides. Four fields that silently did nothing would
+  /// be worse than none.
+  final DashboardRect? rect;
+
+  /// Move or resize it by typing. Null means the fields are not offered.
+  final ValueChanged<DashboardRect>? onRect;
 
   @override
   ConsumerState<CardInspector> createState() => _CardInspectorState();
@@ -224,6 +244,13 @@ class _CardInspectorState extends ConsumerState<CardInspector> {
                   config: model.config,
                   onChanged: onChanged,
                 ),
+              if (widget.rect != null && widget.onRect != null)
+                _PositionSection(
+                  rect: widget.rect!,
+                  rotation: widget.rotation,
+                  onRect: widget.onRect!,
+                  onRotate: widget.onRotate ?? (_) {},
+                ),
               if (widget.onRotate case final onRotate?)
                 _TransformSection(
                   rotation: widget.rotation,
@@ -234,6 +261,14 @@ class _CardInspectorState extends ConsumerState<CardInspector> {
               if (onStack != null)
                 _StackSection(
                     floating: widget.floating, z: widget.z, onStack: onStack),
+              // Every element, not only the ones that thought to ask. An
+              // action belongs to all of them or to none — see `_TapSection`.
+              _TapSection(config: model.config, onChanged: onChanged),
+              // Last, and folded: the drawn controls above are how you are
+              // meant to work. This is the hatch for everything they do not
+              // reach — including keys this version of this app has never
+              // heard of.
+              _AllPropertiesSection(config: model.config, onChanged: onChanged),
               SizedBox(height: t.space.md),
               Align(
                 alignment: Alignment.centerLeft,
@@ -1216,6 +1251,622 @@ class _RowChoice extends StatelessWidget {
 /// Both are paint. Neither moves the card out of the cells it occupies, so
 /// turning something never reflows the page around it — see
 /// `docs/dashboard-layout.md`.
+
+/// X, Y, W, H — typed, not only dragged.
+///
+/// **The gap this closes is the difference between a layout tool and a design
+/// tool.** Everything about where a card sits could be *dragged* and nothing
+/// about it could be *said*: two cards could be nudged until they looked
+/// aligned and be a pixel apart, and there was no way to find out, let alone
+/// fix it. Every drawing application since the first has had these four boxes
+/// in the corner of its inspector for that reason.
+///
+/// It appears only for a composed element — one with a rectangle of its own. A
+/// card packed by the grid engine has no x it could be told, because the engine
+/// decides; offering four fields that silently did nothing would be worse than
+/// offering none.
+
+/// Every key on this element, whether or not anyone drew a control for it.
+///
+/// **The editor never hides a key it does not understand.** Three fields core
+/// validates had no control here at all — an event feed's type and device
+/// filters, a chart's row cap — which means opening such a card, changing
+/// anything, and saving silently dropped settings a person had made elsewhere.
+/// That is not a bug in three widgets; it is what happens whenever the form and
+/// the document disagree about what a card holds, and the form is the only way
+/// in.
+///
+/// So this is the way in for everything else. A config a plugin card wrote, a
+/// key a newer client added, a field somebody typed by hand: all here, all
+/// editable, none of them lost because this version of this app has not caught
+/// up.
+///
+/// Folded shut by default. It is a hatch, not a panel — the drawn controls
+/// above are how you are meant to work, and a raw key list open by default
+/// would say otherwise.
+
+/// What this element does when you touch it.
+///
+/// Offered for **every** element, because an action belongs to all of them or
+/// to none — that is the whole finding behind `on_tap` being a property rather
+/// than a Button element. A shape you styled, a label, an icon, a photograph of
+/// a room: any of them can run a scene.
+///
+/// Nothing here reaches the rule engine. Each action is a call the app already
+/// makes somewhere else; see `features/dashboard/tappable.dart`.
+class _TapSection extends ConsumerWidget {
+  const _TapSection({required this.config, required this.onChanged});
+
+  final Map<String, dynamic> config;
+  final ValueChanged<Map<String, dynamic>> onChanged;
+
+  void _write(TapAction? action) =>
+      onChanged(TapAction.toConfig(config, action));
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = HcTokens.of(context);
+    final action = TapAction.fromConfig(config);
+
+    return Padding(
+      padding: EdgeInsets.only(top: t.space.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(children: [
+            Text('WHEN TAPPED',
+                style: t.text.overlineStyle
+                    .copyWith(color: t.surface.onBaseMuted)),
+            const Spacer(),
+            if (action != null)
+              InkWell(
+                key: const ValueKey('clear-on-tap'),
+                onTap: () => _write(null),
+                child: Padding(
+                  padding: EdgeInsets.all(t.space.xs),
+                  child:
+                      Icon(Icons.close, size: 14, color: t.surface.onBaseMuted),
+                ),
+              ),
+          ]),
+          SizedBox(height: t.space.xs),
+          _RowChoice(
+            label: 'Does',
+            value: action?.action.wire ?? '',
+            options: const [
+              (key: '', label: 'Nothing'),
+              (key: 'scene', label: 'Run a scene'),
+              (key: 'mode', label: 'Set a mode'),
+              (key: 'set', label: 'Set a device'),
+              (key: 'page', label: 'Go to a page'),
+            ],
+            onChanged: (v) {
+              final kind = TapDo.fromWire(v);
+              if (kind == null) return _write(null);
+              _write(action == null
+                  ? TapAction(action: kind)
+                  : action.with_(action: kind));
+            },
+          ),
+          if (action != null) ...[
+            SizedBox(height: t.space.xs),
+            _TapTarget(
+              action: action,
+              onChanged: (next) => _write(next),
+            ),
+            // Said, rather than left to be discovered by tapping something on a
+            // wall. A half-set action is what a control looks like while it is
+            // being built, not an error — but it must not look finished.
+            if (!action.isComplete)
+              Padding(
+                padding: EdgeInsets.only(top: t.space.xs),
+                child: Text(
+                  action.action == TapDo.set
+                      ? 'Pick a device and one of its settings, or this does '
+                          'nothing.'
+                      : 'Pick one, or this does nothing.',
+                  style: t.text.captionStyle.copyWith(color: t.accent.warn),
+                ),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// The thing an action acts on: a scene, a mode, a device, or a page.
+class _TapTarget extends ConsumerWidget {
+  const _TapTarget({required this.action, required this.onChanged});
+
+  final TapAction action;
+  final ValueChanged<TapAction> onChanged;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = HcTokens.of(context);
+    switch (action.action) {
+      case TapDo.scene:
+        // Both kinds together, because to whoever is drawing the page they are
+        // the same thing — only the code that sends knows the difference.
+        final native = ref.watch(scenesProvider).value ?? const [];
+        final devices = ref.watch(devicesProvider).value ?? const [];
+        final choices = <({String id, String label})>[
+          for (final s in native) (id: s.id, label: s.name),
+          for (final d in devices)
+            if (isSceneDevice(d)) (id: d.id, label: d.displayName),
+        ]..sort(
+            (a, b) => a.label.toLowerCase().compareTo(b.label.toLowerCase()));
+        return _Picker(
+          label: 'Scene',
+          value: action.targetId ?? '',
+          options: choices.map((c) => (key: c.id, label: c.label)).toList(),
+          onChanged: (v) => onChanged(action.with_(targetId: v)),
+        );
+      case TapDo.mode:
+        final modes = ref.watch(modesProvider).value ?? const [];
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _Picker(
+              label: 'Mode',
+              value: action.targetId ?? '',
+              options: [
+                for (final m in modes)
+                  (key: m.id, label: m.name ?? humanize(m.id))
+              ],
+              onChanged: (v) => onChanged(action.with_(targetId: v)),
+            ),
+            SizedBox(height: t.space.xs),
+            _RowChoice(
+              label: 'To',
+              value: action.value is bool
+                  ? (action.value! as bool ? 'on' : 'off')
+                  : 'flip',
+              options: const [
+                (key: 'flip', label: 'The other way'),
+                (key: 'on', label: 'On'),
+                (key: 'off', label: 'Off'),
+              ],
+              onChanged: (v) => onChanged(v == 'flip'
+                  ? action.with_(clearValue: true)
+                  : action.with_(value: v == 'on')),
+            ),
+          ],
+        );
+      case TapDo.set:
+        final devices = ref.watch(devicesProvider).value ?? const [];
+        final device =
+            devices.where((d) => d.id == action.targetId).firstOrNull;
+        // Only what the plugin registered, and only booleans while the action
+        // flips: a tap that "toggles" a brightness has no second state to go
+        // to. Same rule as the switch — see `attribute_policy.dart`.
+        final offered = <String>[
+          for (final e in (device?.schema?.writable ?? const {}).entries)
+            if (e.value.kind == AttributeKind.bool_) e.key,
+        ]..sort();
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _Picker(
+              label: 'Device',
+              value: action.targetId ?? '',
+              options: [
+                for (final d in devices)
+                  if (!isSceneDevice(d)) (key: d.id, label: d.displayName)
+              ],
+              onChanged: (v) => onChanged(action.with_(targetId: v)),
+            ),
+            SizedBox(height: t.space.xs),
+            if (device == null)
+              Text('Pick a device first.',
+                  style: t.text.captionStyle
+                      .copyWith(color: t.surface.onBaseMuted))
+            else if (offered.isEmpty)
+              Text(
+                '${device.displayName} accepts no on/off writes, so a tap '
+                'cannot set it.',
+                style:
+                    t.text.captionStyle.copyWith(color: t.surface.onBaseMuted),
+              )
+            else
+              _Picker(
+                label: 'Flips',
+                value: action.attribute ?? '',
+                options: [
+                  for (final a in offered) (key: a, label: humanize(a))
+                ],
+                onChanged: (v) => onChanged(action.with_(attribute: v)),
+              ),
+          ],
+        );
+      case TapDo.page:
+        final pages = ref.watch(dashboardsProvider).value ?? const [];
+        return _Picker(
+          label: 'Page',
+          value: action.targetId ?? '',
+          options: [for (final d in pages) (key: d.id, label: d.name)],
+          onChanged: (v) => onChanged(action.with_(targetId: v)),
+        );
+    }
+  }
+}
+
+class _AllPropertiesSection extends StatefulWidget {
+  const _AllPropertiesSection({required this.config, required this.onChanged});
+
+  final Map<String, dynamic> config;
+  final ValueChanged<Map<String, dynamic>> onChanged;
+
+  @override
+  State<_AllPropertiesSection> createState() => _AllPropertiesSectionState();
+}
+
+class _AllPropertiesSectionState extends State<_AllPropertiesSection> {
+  bool _open = false;
+  String _filter = '';
+
+  /// A typed value back into the config, keeping the type it had.
+  ///
+  /// A `limit` that was 20 must not come back as `"20"`: core validates it as
+  /// an integer and would refuse the save, having accepted the card until
+  /// somebody opened this list. Text is the fallback, not the rule.
+  void _write(String key, String raw) {
+    final was = widget.config[key];
+    final text = raw.trim();
+    final Object? value;
+    if (was is bool) {
+      value = text.toLowerCase() == 'true';
+    } else if (was is int) {
+      value = int.tryParse(text) ?? was;
+    } else if (was is double) {
+      value = double.tryParse(text) ?? was;
+    } else if (was is List || was is Map) {
+      // Structured values are shown and not edited here. A comma-splitting
+      // guess at a device id list is how you lose one.
+      return;
+    } else {
+      value = text;
+    }
+    widget.onChanged({...widget.config, key: value});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    final keys = widget.config.keys.toList()..sort();
+    final shown = _filter.isEmpty
+        ? keys
+        : keys.where((k) => k.toLowerCase().contains(_filter)).toList();
+
+    return Padding(
+      padding: EdgeInsets.only(top: t.space.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          InkWell(
+            onTap: () => setState(() => _open = !_open),
+            child: Padding(
+              padding: EdgeInsets.symmetric(vertical: t.space.xs),
+              child: Row(children: [
+                Text('ALL PROPERTIES',
+                    style: t.text.overlineStyle
+                        .copyWith(color: t.surface.onBaseMuted)),
+                SizedBox(width: t.space.xs),
+                Text('${keys.length}',
+                    style: t.text.captionStyle
+                        .copyWith(color: t.surface.onBaseMuted)),
+                const Spacer(),
+                Icon(
+                  _open ? Icons.expand_less : Icons.expand_more,
+                  size: 16,
+                  color: t.surface.onBaseMuted,
+                ),
+              ]),
+            ),
+          ),
+          if (_open) ...[
+            if (keys.length > 8)
+              Padding(
+                padding: EdgeInsets.only(bottom: t.space.xs),
+                child: TextField(
+                  onChanged: (v) =>
+                      setState(() => _filter = v.trim().toLowerCase()),
+                  style:
+                      t.text.bodySmallStyle.copyWith(color: t.surface.onBase),
+                  decoration: const InputDecoration(
+                    isDense: true,
+                    hintText: 'Filter',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ),
+            if (shown.isEmpty)
+              Text(
+                keys.isEmpty ? 'Nothing set on this one yet.' : 'No key here.',
+                style:
+                    t.text.captionStyle.copyWith(color: t.surface.onBaseMuted),
+              )
+            else
+              for (final key in shown)
+                _PropertyRow(
+                  name: key,
+                  value: widget.config[key],
+                  onChanged: (v) => _write(key, v),
+                ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _PropertyRow extends StatelessWidget {
+  const _PropertyRow({
+    required this.name,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final String name;
+  final Object? value;
+  final ValueChanged<String> onChanged;
+
+  /// Structured values are read-only here — see `_write`.
+  bool get _editable => value is! List && value is! Map;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    final text = switch (value) {
+      null => '',
+      final List l => '${l.length} items',
+      final Map m => '${m.length} keys',
+      final other => '$other',
+    };
+    return Padding(
+      padding: EdgeInsets.only(bottom: t.space.xs),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          SizedBox(
+            width: 116,
+            child: Text(
+              name,
+              overflow: TextOverflow.ellipsis,
+              style: t.text.captionStyle.copyWith(
+                color: t.surface.onBaseMuted,
+                fontFamily: t.text.monoFamily,
+              ),
+            ),
+          ),
+          Expanded(
+            child: _editable
+                ? TextFormField(
+                    key: ValueKey('prop-$name-$text'),
+                    initialValue: text,
+                    onFieldSubmitted: onChanged,
+                    // Commits on blur too, the way the position boxes do: a
+                    // value you typed and clicked away from was still typed.
+                    onTapOutside: (_) =>
+                        FocusManager.instance.primaryFocus?.unfocus(),
+                    style: t.text.bodySmallStyle.copyWith(
+                      color: t.surface.onBase,
+                      fontFamily: t.text.monoFamily,
+                    ),
+                    decoration: InputDecoration(
+                      isDense: true,
+                      border: const OutlineInputBorder(),
+                      contentPadding: EdgeInsets.symmetric(
+                          horizontal: t.space.sm, vertical: t.space.xs),
+                    ),
+                  )
+                : Text(
+                    text,
+                    style: t.text.captionStyle.copyWith(
+                      color: t.surface.onBaseMuted,
+                      fontFamily: t.text.monoFamily,
+                    ),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PositionSection extends StatelessWidget {
+  const _PositionSection({
+    required this.rect,
+    required this.rotation,
+    required this.onRect,
+    required this.onRotate,
+  });
+
+  final DashboardRect rect;
+  final double? rotation;
+  final ValueChanged<DashboardRect> onRect;
+  final ValueChanged<double?> onRotate;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Padding(
+      padding: EdgeInsets.only(top: t.space.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('POSITION',
+              style:
+                  t.text.overlineStyle.copyWith(color: t.surface.onBaseMuted)),
+          SizedBox(height: t.space.xs),
+          Row(children: [
+            Expanded(
+              child: _NumberBox(
+                label: 'X',
+                value: rect.x,
+                onChanged: (v) => onRect(rect.copyWith(x: v)),
+              ),
+            ),
+            SizedBox(width: t.space.xs),
+            Expanded(
+              child: _NumberBox(
+                label: 'Y',
+                value: rect.y,
+                onChanged: (v) => onRect(rect.copyWith(y: v)),
+              ),
+            ),
+          ]),
+          SizedBox(height: t.space.xs),
+          Row(children: [
+            Expanded(
+              child: _NumberBox(
+                label: 'W',
+                value: rect.w,
+                // Never zero. A rectangle with no width is a card you cannot
+                // see and cannot click, so it cannot be selected to be fixed —
+                // the one edit here that could lose somebody their work.
+                min: 1,
+                onChanged: (v) => onRect(rect.copyWith(w: v)),
+              ),
+            ),
+            SizedBox(width: t.space.xs),
+            Expanded(
+              child: _NumberBox(
+                label: 'H',
+                value: rect.h,
+                min: 1,
+                onChanged: (v) => onRect(rect.copyWith(h: v)),
+              ),
+            ),
+          ]),
+          SizedBox(height: t.space.xs),
+          Row(children: [
+            Expanded(
+              child: _NumberBox(
+                label: '∠',
+                value: rotation ?? 0,
+                suffix: '°',
+                // Cleared back to none rather than to zero: a card at exactly
+                // 0° and a card nobody turned are the same picture, and only
+                // one of them adds a key to the document.
+                onChanged: (v) => onRotate(v == 0 ? null : v),
+              ),
+            ),
+            SizedBox(width: t.space.xs),
+            const Expanded(child: SizedBox()),
+          ]),
+        ],
+      ),
+    );
+  }
+}
+
+/// One number you can type.
+///
+/// Commits on Enter and on losing focus, never per keystroke: a field that
+/// applied every character would move the card to x=1 on the way to typing 120,
+/// and each of those is an undo entry.
+class _NumberBox extends StatefulWidget {
+  const _NumberBox({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+    this.min,
+    this.suffix,
+  });
+
+  final String label;
+  final double value;
+  final ValueChanged<double> onChanged;
+  final double? min;
+  final String? suffix;
+
+  @override
+  State<_NumberBox> createState() => _NumberBoxState();
+}
+
+class _NumberBoxState extends State<_NumberBox> {
+  late final TextEditingController _controller =
+      TextEditingController(text: _show(widget.value));
+  late final FocusNode _focus = FocusNode()..addListener(_onFocus);
+
+  @override
+  void didUpdateWidget(covariant _NumberBox old) {
+    super.didUpdateWidget(old);
+    // Dragged on the canvas while the field is on screen: follow it, unless
+    // somebody is mid-edit, where overwriting what they are typing is worse
+    // than being briefly out of date.
+    if (widget.value != old.value && !_focus.hasFocus) {
+      _controller.text = _show(widget.value);
+      _sent = widget.value;
+    }
+  }
+
+  @override
+  void dispose() {
+    _focus.dispose();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _onFocus() {
+    if (!_focus.hasFocus) _commit();
+  }
+
+  /// The value this box last sent, so pressing Enter and then clicking away
+  /// is one edit rather than two. Both gestures commit, deliberately — a
+  /// number you typed and clicked away from was still typed — and without this
+  /// the second would send the same rectangle again and take an undo step with
+  /// it.
+  late double _sent = widget.value;
+
+  void _commit() {
+    final typed = double.tryParse(_controller.text.trim());
+    // Unparseable goes back to what it was rather than to zero. "12o" is a
+    // typo, not a request to move the card to the origin.
+    if (typed == null) {
+      _controller.text = _show(widget.value);
+      return;
+    }
+    final next = widget.min != null && typed < widget.min!
+        ? widget.min!
+        : typed.roundToDouble();
+    _controller.text = _show(next);
+    if (next == _sent) return;
+    _sent = next;
+    widget.onChanged(next);
+  }
+
+  static String _show(double v) =>
+      v == v.roundToDouble() ? v.round().toString() : v.toStringAsFixed(1);
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return TextField(
+      controller: _controller,
+      focusNode: _focus,
+      onSubmitted: (_) => _commit(),
+      keyboardType: const TextInputType.numberWithOptions(signed: true),
+      style: t.text.bodySmallStyle.copyWith(
+        color: t.surface.onBase,
+        fontFeatures: t.numericFontFeatures,
+      ),
+      decoration: InputDecoration(
+        isDense: true,
+        prefixText: '${widget.label}  ',
+        prefixStyle: t.text.captionStyle.copyWith(color: t.surface.onBaseMuted),
+        suffixText: widget.suffix,
+        suffixStyle: t.text.captionStyle.copyWith(color: t.surface.onBaseMuted),
+        border: const OutlineInputBorder(),
+        contentPadding:
+            EdgeInsets.symmetric(horizontal: t.space.sm, vertical: t.space.sm),
+      ),
+    );
+  }
+}
+
 class _TransformSection extends StatelessWidget {
   const _TransformSection({
     required this.rotation,

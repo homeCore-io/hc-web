@@ -395,6 +395,22 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
             ),
           ),
         ),
+        // Any colour, typed.
+        //
+        // The Custom swatch was a single hard-coded blue: one colour off the
+        // palette and no way to reach a second, which meant a page could not
+        // carry a brand colour or match a photograph. `resolveInk` has always
+        // understood `#RRGGBB` — the picker simply had no way to say one.
+        //
+        // Under the palette rather than instead of it. A named ink follows the
+        // skin, so a page built from the palette still looks right in every
+        // one of the five; a hex is a decision to stop following, and it should
+        // read as the more deliberate of the two.
+        PopupMenuItem<String?>(
+          height: 0,
+          padding: EdgeInsets.fromLTRB(t.space.sm, 0, t.space.sm, t.space.sm),
+          child: SizedBox(width: 196, child: _HexField(current: current)),
+        ),
       ],
     );
     if (!mounted) return;
@@ -1358,6 +1374,93 @@ class _InkButton extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// A colour typed as hex, inside the palette popover.
+///
+/// Pops the menu with the value the moment it is a colour, so typing six digits
+/// and pressing Enter picks it — the same gesture as clicking a swatch, not a
+/// second dialog to dismiss afterwards.
+class _HexField extends StatefulWidget {
+  const _HexField({required this.current});
+
+  final String? current;
+
+  @override
+  State<_HexField> createState() => _HexFieldState();
+}
+
+class _HexFieldState extends State<_HexField> {
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.current != null && widget.current!.startsWith('#')
+        ? widget.current!.substring(1).toUpperCase()
+        : '',
+  );
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  /// `#RRGGBB` from what was typed, or null when it is not one yet.
+  ///
+  /// Accepts a leading `#` and either case, because both are what people paste.
+  /// Three digits are not expanded: `#FFF` is a shorthand this app's resolver
+  /// does not read, and silently turning it into something else would be
+  /// picking a colour nobody chose.
+  static String? _colour(String raw) {
+    final hex = raw.trim().replaceFirst('#', '').toUpperCase();
+    if (hex.length != 6 && hex.length != 8) return null;
+    if (!RegExp(r'^[0-9A-F]+$').hasMatch(hex)) return null;
+    return '#$hex';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    final parsed = _colour(_controller.text);
+    return TextField(
+      controller: _controller,
+      autofocus: false,
+      onChanged: (_) => setState(() {}),
+      onSubmitted: (v) {
+        final picked = _colour(v);
+        if (picked != null) Navigator.of(context).pop(picked);
+      },
+      style: t.text.bodySmallStyle.copyWith(
+        color: t.surface.onBase,
+        fontFamily: t.text.monoFamily,
+      ),
+      decoration: InputDecoration(
+        isDense: true,
+        prefixText: '#',
+        prefixStyle: t.text.captionStyle.copyWith(color: t.surface.onBaseMuted),
+        hintText: 'RRGGBB',
+        border: const OutlineInputBorder(),
+        contentPadding:
+            EdgeInsets.symmetric(horizontal: t.space.sm, vertical: t.space.sm),
+        // The colour it would be, shown before you commit to it.
+        suffixIcon: parsed == null
+            ? null
+            : Padding(
+                padding: EdgeInsets.only(right: t.space.sm),
+                child: Center(
+                  widthFactor: 1,
+                  child: Container(
+                    width: 16,
+                    height: 16,
+                    decoration: BoxDecoration(
+                      color: resolveInk(t, parsed),
+                      borderRadius: t.radius.xsR,
+                      border: Border.all(color: t.stroke.hairline),
+                    ),
+                  ),
+                ),
+              ),
       ),
     );
   }

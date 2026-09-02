@@ -1,8 +1,12 @@
 import 'homecore_client.dart';
 
 class ModesApi {
-  final HomecoreClient client;
+  late final HomecoreClient client;
   ModesApi(this.client);
+
+  /// For fakes that override the methods they need and never reach the wire —
+  /// the same arrangement, and the same reasoning, as [DevicesApi.fake].
+  ModesApi.fake();
 
   Future<List<Map<String, dynamic>>> listModes() async {
     final response = await client.dio.get('/modes');
