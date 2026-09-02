@@ -7,6 +7,7 @@ import '../../core/devices/presentation.dart';
 import '../../core/models/dashboard.dart';
 import '../../core/models/device_state.dart';
 import '../../core/providers/devices_provider.dart';
+import '../../core/text/humanize.dart';
 import '../../design/tokens.dart';
 import '../devices/device_query.dart';
 
@@ -105,7 +106,11 @@ class _DevicesPanelState extends ConsumerState<DevicesPanel> {
           label: 'Room',
           chosen: _room,
           options: [for (final r in roomKeys) (key: r, count: rooms[r]!)],
-          labelOf: (key) => key,
+          // The key is `master_bedroom`; the room is Master Bedroom. Core
+          // stores the first because it is an identifier, and every surface
+          // that shows one to a person runs it through `humanize` — this one
+          // was not, so the panel was showing the database.
+          labelOf: humanize,
           onPick: (v) => setState(() => _room = v),
         ),
         _Chips(
@@ -225,7 +230,8 @@ class _Chips extends StatelessWidget {
                   t.text.captionStyle.copyWith(color: t.surface.onBaseMuted)),
           for (final option in options)
             _Chip(
-              label: '${labelOf(option.key)} ${option.count}',
+              label: labelOf(option.key),
+              count: option.count,
               on: option.key == chosen,
               // Tapping the one that is on turns it off, which is how every
               // filter chip anywhere works and saves a separate "clear".
@@ -237,10 +243,23 @@ class _Chips extends StatelessWidget {
   }
 }
 
+/// A filter, and how many it would leave.
+///
+/// **The count is not part of the name.** Written as one string it read as
+/// "Bathroom 2 3" — a room called Bathroom 2 with three devices in it, or a
+/// room called Bathroom with twenty-three, and no way to tell. So the number is
+/// a separate span in its own colour, set apart by a rule: a name and a count
+/// are different kinds of thing and have to look it.
 class _Chip extends StatelessWidget {
-  const _Chip({required this.label, required this.on, required this.onTap});
+  const _Chip({
+    required this.label,
+    required this.count,
+    required this.on,
+    required this.onTap,
+  });
 
   final String label;
+  final int count;
   final bool on;
   final VoidCallback onTap;
 
@@ -260,11 +279,35 @@ class _Chip extends StatelessWidget {
                   : t.stroke.hairline),
           borderRadius: t.radius.pillR,
         ),
-        child: Text(
-          label,
-          style: t.text.captionStyle.copyWith(
-            color: on ? t.accent.active : t.surface.onBaseMuted,
-          ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: t.text.captionStyle.copyWith(
+                color: on ? t.accent.active : t.surface.onBase,
+              ),
+            ),
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: t.space.xs),
+              child: SizedBox(
+                height: 9,
+                child: VerticalDivider(
+                  width: t.stroke.width,
+                  color: on
+                      ? t.accent.active.withValues(alpha: .4)
+                      : t.stroke.hairline,
+                ),
+              ),
+            ),
+            Text(
+              '$count',
+              style: t.text.captionStyle.copyWith(
+                color: t.surface.onBaseMuted,
+                fontFeatures: t.numericFontFeatures,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -311,7 +354,7 @@ class _DeviceRow extends StatelessWidget {
                 ),
                 if ((device.effectiveArea ?? '').isNotEmpty)
                   Text(
-                    device.effectiveArea!,
+                    humanize(device.effectiveArea),
                     overflow: TextOverflow.ellipsis,
                     style: t.text.captionStyle
                         .copyWith(color: t.surface.onBaseMuted),

@@ -86,7 +86,7 @@ void main() {
         (tester) async {
       // The whole point. Tapping Kitchen must not put anything on the page.
       final picked = await _pump(tester);
-      await tester.tap(find.text('Kitchen 2'));
+      await tester.tap(find.text('Kitchen').first);
       await tester.pumpAndSettle();
 
       expect(find.text('Hob Light'), findsOneWidget);
@@ -96,11 +96,11 @@ void main() {
 
     testWidgets('tapping the chosen chip clears it', (tester) async {
       await _pump(tester);
-      await tester.tap(find.text('Office 2'));
+      await tester.tap(find.text('Office').first);
       await tester.pumpAndSettle();
       expect(find.text('Hob Light'), findsNothing);
 
-      await tester.tap(find.text('Office 2'));
+      await tester.tap(find.text('Office').first);
       await tester.pumpAndSettle();
       expect(find.text('Hob Light'), findsOneWidget);
     });
@@ -111,8 +111,8 @@ void main() {
       await _pump(tester);
       await tester.enterText(find.byType(TextField), 'office');
       await tester.pumpAndSettle();
-      expect(find.text('Office 2'), findsOneWidget);
-      expect(find.text('Kitchen 2'), findsNothing,
+      expect(find.text('Office'), findsWidgets);
+      expect(find.text('Kitchen'), findsNothing,
           reason: 'no Kitchen device matches, so the chip is gone');
     });
   });
@@ -213,5 +213,53 @@ void main() {
       expect((p.config['style'] as Map)['titled'], false);
       expect(p.config['device_ids'], ['lamp']);
     });
+  });
+
+  group('reading the chips', () {
+    testWidgets('a room is named the way a person names it', (tester) async {
+      // The key is `master_bedroom`; the room is Master Bedroom. Showing the
+      // key is showing the database.
+      await _pump(tester, devices: [
+        _d('Lamp', area: 'master_bedroom'),
+        _d('Fan', area: 'bathroom_2'),
+      ]);
+      // On the chip, and again under the device that is in it.
+      expect(find.text('Master Bedroom'), findsWidgets);
+      expect(find.text('master_bedroom'), findsNothing);
+      expect(find.text('Bathroom 2'), findsWidgets);
+    });
+
+    testWidgets('the count is not part of the name', (tester) async {
+      // "Bathroom 2 3" is a room called Bathroom 2 with three devices, or a
+      // room called Bathroom with twenty-three, and no way to tell.
+      await _pump(tester, devices: [
+        _d('Fan', area: 'bathroom_2'),
+        _d('Light', area: 'bathroom_2'),
+        _d('Vent', area: 'bathroom_2'),
+      ]);
+      expect(find.text('Bathroom 2'), findsWidgets);
+      // Twice — the room chip and the kind chip — and each one on its own,
+      // which is the point: the number is never glued to a name.
+      expect(find.text('3'), findsNWidgets(2));
+      expect(find.text('Bathroom 2 3'), findsNothing);
+    });
+
+    testWidgets('a room row under a device name is readable too',
+        (tester) async {
+      await _pump(tester, devices: [_d('Lamp', area: 'living_room')]);
+      expect(find.text('Living Room'), findsWidgets);
+    });
+  });
+
+  test('a plugin scene lands as a button, not a tile', () {
+    // A scene arrives as a device and is in this list like any other, but it
+    // is a thing you RUN. A tile for "Arctic aurora" is a box reporting that a
+    // scene exists.
+    final scene = _d('Arctic aurora', area: 'Office', type: 'scene');
+    expect(placementFor(DesignTool.select, scene).type, 'scene_button');
+    expect(placementFor(DesignTool.select, scene).config['scene_id'],
+        'Arctic aurora');
+    // The icon tool still wins: an icon bound to a scene is a real thing.
+    expect(placementFor(DesignTool.deviceIcon, scene).type, 'icon');
   });
 }

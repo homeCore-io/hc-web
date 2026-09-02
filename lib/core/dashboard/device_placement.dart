@@ -14,6 +14,7 @@
 /// devices rather than becoming things.
 library;
 
+import '../devices/scene_state.dart';
 import '../models/device_state.dart';
 import '../schema/device_schema.dart';
 import 'design_tools.dart';
@@ -29,6 +30,16 @@ typedef DevicePlacement = ({String type, Map<String, dynamic> config});
 /// here", and a tile is the honest answer to that.
 DevicePlacement placementFor(DesignTool tool, DeviceState device) {
   final id = device.id;
+
+  // A plugin scene arrives as a device and is in this list like any other, but
+  // it is not a thing with a state you show — it is a thing you run. A tile for
+  // "Arctic aurora" is a box reporting that a scene exists. The icon tool still
+  // wins, because an icon bound to a scene is a real thing to want; everything
+  // else gives way to the button.
+  if (isSceneDevice(device) && tool != DesignTool.deviceIcon) {
+    return (type: 'scene_button', config: {'scene_id': id});
+  }
+
   switch (tool) {
     case DesignTool.deviceIcon:
       return (type: 'icon', config: {'device_id': id});
