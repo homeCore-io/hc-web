@@ -275,6 +275,14 @@ enum WidgetConfigKind {
   /// numbers mean.
   writableColourTemp,
 
+  /// One of this house's other pages.
+  ///
+  /// Its own kind rather than [text], because a dashboard id is as unguessable
+  /// as a device id and typing one is how a link ends up pointing at nothing.
+  /// `dashboard_link` takes a *list* of them; this is the singular — where an
+  /// element goes to exactly one page.
+  dashboardRef,
+
   /// One of the scenes this house has.
   ///
   /// Scenes activate directly, like a device — a POST to `/scenes/id/activate`

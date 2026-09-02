@@ -11,6 +11,7 @@ import '../../core/schema/device_schema.dart';
 import '../../core/models/scene.dart';
 import '../../core/providers/areas_provider.dart';
 import '../../core/providers/scenes_provider.dart';
+import '../../core/providers/dashboards_provider.dart';
 import '../../core/providers/devices_provider.dart';
 import '../../core/text/humanize.dart';
 import '../../design/tokens.dart';
@@ -283,6 +284,7 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
           ),
         WidgetConfigKind.sceneRef => _scene(f),
         WidgetConfigKind.ink => _ink(f),
+        WidgetConfigKind.dashboardRef => _dashboard(f),
         WidgetConfigKind.pluginId => _pluginId(f),
         WidgetConfigKind.pluginWidgetId => _pluginWidgetId(f),
       };
@@ -1007,6 +1009,53 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
   ///
   /// A plain list, because a scene either exists or it does not — there is no
   /// writability question here the way there is for a device attribute.
+  /// One of this house's other pages.
+  ///
+  /// The page this one is on is offered too. A dashboard that opens itself is
+  /// a loop, but it is also how somebody builds a "back to the top" link on a
+  /// long page, and refusing it would be this form deciding what they meant.
+  Widget _dashboard(WidgetConfigField f) {
+    final pages = ref.watch(dashboardsProvider).value ?? const [];
+    final value = _config[f.name] as String?;
+    final known = pages.any((d) => d.id == value);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _label(f),
+        if (pages.isEmpty)
+          _hint('There are no other pages yet.')
+        else
+          DropdownButtonFormField<String>(
+            initialValue: known ? value : null,
+            isExpanded: true,
+            decoration: const InputDecoration(
+              isDense: true,
+              border: OutlineInputBorder(),
+            ),
+            items: [
+              for (final page in pages)
+                DropdownMenuItem(value: page.id, child: Text(page.name)),
+            ],
+            onChanged: (v) => _set(f.name, v),
+          ),
+        // A page deleted after this link was made. Said rather than silently
+        // blanked, because the link is still on somebody's wall.
+        if (value != null && value.isNotEmpty && !known && pages.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              'The page this opened is gone.',
+              style: HcTokens.of(context)
+                  .text
+                  .captionStyle
+                  .copyWith(color: HcTokens.of(context).accent.warn),
+            ),
+          ),
+        _help(f),
+      ],
+    );
+  }
+
   /// Both kinds of scene, in one list.
   ///
   /// Native scenes come from `/scenes`; plugin scenes arrive as devices with

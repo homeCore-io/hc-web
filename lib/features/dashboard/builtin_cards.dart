@@ -58,6 +58,9 @@ import '../../core/providers/time_display_provider.dart';
 import 'code_card.dart';
 import 'gauge_card.dart';
 import 'colour_wheel_element.dart';
+import 'keypad_element.dart';
+import 'room_field_element.dart';
+import 'thermostat_element.dart';
 import 'scene_button_element.dart';
 import 'stepper_element.dart';
 import 'warmth_element.dart';
@@ -2274,6 +2277,81 @@ void registerBuiltinDashboardWidgets() {
         return null;
       },
       builder: (context, a) => SceneButtonElement(config: a.config),
+    ),
+    // ── The three the mockups needed and the app did not have ──────────
+    //
+    // A keypad, a thermostat and the field of rooms. Each is an element rather
+    // than a card because each is a THING on a page rather than a box around
+    // one — and each says something a grid of cards structurally could not.
+    WidgetDescriptor(
+      type: 'keypad',
+      title: 'Keypad',
+      description: "A keypad's real buttons, pressable.",
+      icon: Icons.dialpad_outlined,
+      chrome: WidgetChrome.bare,
+      sizeHint: const WidgetSizeHint(
+          minW: 2, minH: 2, recommendedW: 4, recommendedH: 3),
+      configFields: const [
+        WidgetConfigField('device_id', WidgetConfigKind.deviceRef,
+            label: 'Keypad',
+            required: true,
+            help: 'The buttons come from the device itself — a keypad '
+                'publishes every one a person can press, so the page never '
+                'offers one the plugin will not send.'),
+        WidgetConfigField('label', WidgetConfigKind.text, label: 'Label'),
+        WidgetConfigField('ink', WidgetConfigKind.ink,
+            group: 'Colour', label: 'When lit'),
+      ],
+      validate: (c) => (c['device_id'] as String? ?? '').trim().isEmpty
+          ? 'Which keypad?'
+          : null,
+      builder: (context, a) => KeypadElement(config: a.config),
+    ),
+    WidgetDescriptor(
+      type: 'thermostat',
+      title: 'Thermostat',
+      description: 'A dial: what it is, what it is going to, and how far.',
+      icon: Icons.thermostat_outlined,
+      chrome: WidgetChrome.bare,
+      sizeHint: const WidgetSizeHint(
+          minW: 2, minH: 2, recommendedW: 3, recommendedH: 4),
+      configFields: const [
+        WidgetConfigField('device_id', WidgetConfigKind.deviceRef,
+            label: 'Device', required: true),
+        WidgetConfigField('attribute', WidgetConfigKind.attribute,
+            label: 'Reads',
+            help: 'Left empty it finds the reading itself — a thermostat that '
+                'calls it `temperature` and one that calls it '
+                '`current_temperature` are the same thermostat.'),
+        WidgetConfigField('target', WidgetConfigKind.writableNumber,
+            label: 'Sets',
+            help: 'The setpoint. Only a number the plugin registered as '
+                'writable, because raising it is a write to the house.'),
+        WidgetConfigField('label', WidgetConfigKind.text, label: 'Label'),
+      ],
+      validate: (c) => (c['device_id'] as String? ?? '').trim().isEmpty
+          ? 'Which thermostat?'
+          : null,
+      builder: (context, a) => ThermostatElement(config: a.config),
+    ),
+    // The one element with no device at all: its subject is the house.
+    WidgetDescriptor(
+      type: 'room_field',
+      title: 'Rooms',
+      description: 'Every room, sized by what is in it and lit by what is on.',
+      icon: Icons.grid_view_outlined,
+      chrome: WidgetChrome.bare,
+      sizeHint: const WidgetSizeHint(
+          minW: 4, minH: 3, recommendedW: 8, recommendedH: 6),
+      configFields: const [
+        WidgetConfigField('room_page', WidgetConfigKind.dashboardRef,
+            label: 'Opens',
+            help: 'Tapping a room goes here, carrying the room with it. A '
+                'house has one room page, not fifteen.'),
+        WidgetConfigField('gap', WidgetConfigKind.integer,
+            label: 'Gap', unit: 'px', min: 0, max: 24),
+      ],
+      builder: (context, a) => RoomFieldElement(config: a.config),
     ),
     // The rest of the control row: colour, warmth, a stepper.
     //
