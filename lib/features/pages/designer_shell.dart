@@ -10,6 +10,7 @@ import '../../core/dashboard/free_layer.dart';
 import '../../core/dashboard/grid_engine.dart';
 import '../../core/dashboard/transform.dart';
 import '../../core/dashboard/groups.dart';
+import '../../core/dashboard/wiring.dart';
 import '../../core/models/dashboard.dart';
 import '../../design/hc_icons.dart';
 import '../../design/tokens.dart';
@@ -19,6 +20,7 @@ import 'card_inspector.dart';
 import 'card_library.dart';
 import 'inspector_controls.dart';
 import 'layer_tree_panel.dart';
+import 'wiring_view.dart';
 import 'page_inspector.dart';
 import 'page_background.dart';
 import 'scaled_canvas.dart';
@@ -1375,8 +1377,23 @@ class _LeftRail extends StatefulWidget {
   State<_LeftRail> createState() => _LeftRailState();
 }
 
+/// The three questions the left panel answers.
+///
+/// Wires is the one that had no home. "What drives this element" was the
+/// inspector's, and "what can I place" was the catalogue's; "what is wired on
+/// this page at all" could only be answered by selecting every element in turn,
+/// which on a page of forty bindings is not answering it.
+enum _Panel {
+  layers('Layers'),
+  add('Add'),
+  wires('Wires');
+
+  const _Panel(this.label);
+  final String label;
+}
+
 class _LeftRailState extends State<_LeftRail> {
-  bool _layers = true;
+  _Panel _panel = _Panel.layers;
 
   @override
   Widget build(BuildContext context) {
@@ -1386,29 +1403,45 @@ class _LeftRailState extends State<_LeftRail> {
       children: [
         Row(
           children: [
-            _RailTab(
-              label: 'Layers',
-              on: _layers,
-              onTap: () => setState(() => _layers = true),
-            ),
-            _RailTab(
-              label: 'Add',
-              on: !_layers,
-              onTap: () => setState(() => _layers = false),
-            ),
+            for (final tab in _Panel.values)
+              _RailTab(
+                label: tab.label,
+                on: _panel == tab,
+                onTap: () => setState(() => _panel = tab),
+              ),
           ],
         ),
         Divider(height: t.stroke.width, color: t.stroke.hairline),
         Expanded(
-          child: _layers
-              ? LayerTreePanel(
-                  items: widget.items,
-                  widgetsById: widget.widgetsById,
-                  selectedIds: widget.selectedIds,
-                  onSelect: (ids) => widget.onSelectMany?.call(ids),
-                  onEnterGroup: widget.onEnterGroupId,
-                )
-              : CardLibrary(onPick: widget.onPick),
+          child: switch (_panel) {
+            _Panel.layers => LayerTreePanel(
+                items: widget.items,
+                widgetsById: widget.widgetsById,
+                selectedIds: widget.selectedIds,
+                onSelect: (ids) => widget.onSelectMany?.call(ids),
+                onEnterGroup: widget.onEnterGroupId,
+              ),
+            _Panel.add => CardLibrary(onPick: widget.onPick),
+            // Every binding and action on the page, at once. The inspector
+            // answers "what drives this element"; this answers "what does this
+            // device drive", which selecting things one at a time cannot.
+            _Panel.wires => WiringView(
+                wires: wiresOf([
+                  for (final item in widget.items)
+                    if (widget.widgetsById[item.id] case final model?)
+                      (
+                        id: model.id,
+                        name: model.title.isEmpty ? model.type : model.title,
+                        type: model.type,
+                        config: model.config,
+                      ),
+                ]),
+                selectedId: widget.selectedIds.length == 1
+                    ? widget.selectedIds.first
+                    : null,
+                onSelect: (id) => widget.onSelectMany?.call({id}),
+              ),
+          },
         ),
       ],
     );
