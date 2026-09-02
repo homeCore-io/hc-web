@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/dashboard/canvas_view.dart';
 import '../../core/dashboard/design_tools.dart';
+import '../../core/dashboard/device_slot.dart';
 import '../../core/dashboard/frame.dart';
 import '../../core/dashboard/free_layer.dart';
 import '../../core/dashboard/grid_engine.dart';
@@ -18,6 +19,7 @@ import 'canvas_rulers.dart';
 import 'card_inspector.dart';
 import 'assets_panel.dart';
 import 'devices_panel.dart';
+import 'wiring_panel.dart';
 import 'inspector_controls.dart';
 import 'layer_tree_panel.dart';
 import 'page_inspector.dart';
@@ -110,6 +112,7 @@ class DesignerShell extends StatefulWidget {
     required this.onTool,
     this.onStack,
     this.onRect,
+    this.onWire,
     this.onRotate,
     this.onFade,
   });
@@ -252,6 +255,13 @@ class DesignerShell extends StatefulWidget {
   /// Lift the selection above the grid, put it back, or move it within the
   /// stack. The page owns the arithmetic; this only forwards the request.
   final ValueChanged<StackMove>? onStack;
+
+  /// Point one unwired reference at a device. Null outside the designer.
+  ///
+  /// Three arguments rather than a model, because the panel is editing ONE
+  /// field of one element and a whole config would invite a caller to send
+  /// back more than the person changed.
+  final void Function(String widgetId, String field, String id)? onWire;
 
   /// Move or resize the selected element by typing. Null outside the designer,
   /// and ignored for a card the grid engine packs, which has no x to be told.
@@ -590,91 +600,109 @@ class _DesignerShellState extends State<DesignerShell> {
                       ),
                     // The canvas is the only thing allowed to be large. It
                     // scrolls inside itself; the frame around it never moves.
+                    // The canvas, with what is not wired yet above it.
                     Expanded(
-                      child: _CanvasKeys(
-                        onNudge: widget.onNudge,
-                        onDuplicate: widget.onDuplicate,
-                        onCopy: widget.onCopy,
-                        onPaste: widget.onPaste,
-                        onSelectAll: widget.onSelectAll,
-                        onRemove: widget.selectedCount == 0
-                            ? null
-                            : widget.onRemoveSelected,
-                        onDeselect: widget.onDeselect,
-                        onFit: () => setState(() => _zoom = null),
-                        onFrameSelection: () =>
-                            _frameSelection(geometry, t.space.lg),
-                        onPanKey: (down) {
-                          if (down == _panArmed) return;
-                          setState(() => _panArmed = down);
-                        },
-                        onGroup: widget.onGroup,
-                        onUngroup: widget.onUngroup,
-                        onUndo: widget.canUndo ? widget.onUndo : null,
-                        onRedo: widget.canRedo ? widget.onRedo : null,
-                        onTool: widget.onTool,
-                        child: _Ruled(
-                          geometry: geometry,
-                          scale: scale,
-                          lead: t.space.lg,
-                          horizontal: _horizontal,
-                          vertical: _vertical,
-                          items: widget.items,
-                          selected: widget.selectedIds,
-                          child: _PanArea(
-                            armed: _panArmed,
-                            onPan: _panBy,
-                            child: Container(
-                              color: t.surface.sunken,
-                              // The page's own background, behind the canvas: you are
-                              // arranging cards *on* it, so it has to be visible
-                              // while you arrange them.
-                              child: PageBackground(
-                                background: widget.dashboard.background,
-                                // Two scrollers, because zoom has two directions. The
-                                // canvas draws the layout at the width that breakpoint
-                                // really has — 1600 for desktop — which the middle pane
-                                // is nowhere near once two panels take their 600; and
-                                // above Fit it is wider still. Vertical alone would
-                                // strand the right-hand edge of the page off-screen
-                                // with no way to reach it.
-                                // Both bars always drawn, both reachable.
-                                //
-                                // The nesting alone was not enough: Flutter web draws
-                                // no scrollbar for an unmanaged scroll view, and a
-                                // mouse wheel only ever reaches the vertical one — so
-                                // at any zoom where the canvas is wider than the pane,
-                                // the right-hand side of the page existed and could not
-                                // be got to. `ScaledCanvas` made the extent honest,
-                                // which is precisely what turned a slightly clipped
-                                // card into unreachable content.
-                                child: Scrollbar(
-                                  controller: _vertical,
-                                  thumbVisibility: true,
-                                  child: SingleChildScrollView(
-                                    controller: _vertical,
-                                    padding: EdgeInsets.all(t.space.lg),
-                                    child: Scrollbar(
-                                      controller: _horizontal,
-                                      thumbVisibility: true,
-                                      child: SingleChildScrollView(
-                                        controller: _horizontal,
-                                        scrollDirection: Axis.horizontal,
-                                        child: widget.emptyStart == null
-                                            ? ScaledCanvas(
-                                                scale: scale,
-                                                child: SizedBox(
-                                                    width: width,
-                                                    child: widget.canvas),
-                                              )
-                                            : SizedBox(
-                                                // The pane's own width, so the
-                                                // offer is centred in what you
-                                                // are looking at rather than in
-                                                // a board that is not there.
-                                                width: available,
-                                                child: widget.emptyStart,
-                                              ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          // Above the canvas rather than in the panel beside
+                          // it: the panel holds what the HOUSE has, and this
+                          // holds what this PAGE is still missing. It is also a
+                          // job you finish, and it disappears when you have.
+                          if (widget.onWire case final onWire?)
+                            WiringPanel(
+                              gaps: wiringGaps(widget.widgetsById.values),
+                              onWire: onWire,
+                              onSelect: (id) => widget.onSelectMany?.call({id}),
+                            ),
+                          Expanded(
+                            child: _CanvasKeys(
+                              onNudge: widget.onNudge,
+                              onDuplicate: widget.onDuplicate,
+                              onCopy: widget.onCopy,
+                              onPaste: widget.onPaste,
+                              onSelectAll: widget.onSelectAll,
+                              onRemove: widget.selectedCount == 0
+                                  ? null
+                                  : widget.onRemoveSelected,
+                              onDeselect: widget.onDeselect,
+                              onFit: () => setState(() => _zoom = null),
+                              onFrameSelection: () =>
+                                  _frameSelection(geometry, t.space.lg),
+                              onPanKey: (down) {
+                                if (down == _panArmed) return;
+                                setState(() => _panArmed = down);
+                              },
+                              onGroup: widget.onGroup,
+                              onUngroup: widget.onUngroup,
+                              onUndo: widget.canUndo ? widget.onUndo : null,
+                              onRedo: widget.canRedo ? widget.onRedo : null,
+                              onTool: widget.onTool,
+                              child: _Ruled(
+                                geometry: geometry,
+                                scale: scale,
+                                lead: t.space.lg,
+                                horizontal: _horizontal,
+                                vertical: _vertical,
+                                items: widget.items,
+                                selected: widget.selectedIds,
+                                child: _PanArea(
+                                  armed: _panArmed,
+                                  onPan: _panBy,
+                                  child: Container(
+                                    color: t.surface.sunken,
+                                    // The page's own background, behind the canvas: you are
+                                    // arranging cards *on* it, so it has to be visible
+                                    // while you arrange them.
+                                    child: PageBackground(
+                                      background: widget.dashboard.background,
+                                      // Two scrollers, because zoom has two directions. The
+                                      // canvas draws the layout at the width that breakpoint
+                                      // really has — 1600 for desktop — which the middle pane
+                                      // is nowhere near once two panels take their 600; and
+                                      // above Fit it is wider still. Vertical alone would
+                                      // strand the right-hand edge of the page off-screen
+                                      // with no way to reach it.
+                                      // Both bars always drawn, both reachable.
+                                      //
+                                      // The nesting alone was not enough: Flutter web draws
+                                      // no scrollbar for an unmanaged scroll view, and a
+                                      // mouse wheel only ever reaches the vertical one — so
+                                      // at any zoom where the canvas is wider than the pane,
+                                      // the right-hand side of the page existed and could not
+                                      // be got to. `ScaledCanvas` made the extent honest,
+                                      // which is precisely what turned a slightly clipped
+                                      // card into unreachable content.
+                                      child: Scrollbar(
+                                        controller: _vertical,
+                                        thumbVisibility: true,
+                                        child: SingleChildScrollView(
+                                          controller: _vertical,
+                                          padding: EdgeInsets.all(t.space.lg),
+                                          child: Scrollbar(
+                                            controller: _horizontal,
+                                            thumbVisibility: true,
+                                            child: SingleChildScrollView(
+                                              controller: _horizontal,
+                                              scrollDirection: Axis.horizontal,
+                                              child: widget.emptyStart == null
+                                                  ? ScaledCanvas(
+                                                      scale: scale,
+                                                      child: SizedBox(
+                                                          width: width,
+                                                          child: widget.canvas),
+                                                    )
+                                                  : SizedBox(
+                                                      // The pane's own width, so the
+                                                      // offer is centred in what you
+                                                      // are looking at rather than in
+                                                      // a board that is not there.
+                                                      width: available,
+                                                      child: widget.emptyStart,
+                                                    ),
+                                            ),
+                                          ),
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -682,7 +710,7 @@ class _DesignerShellState extends State<DesignerShell> {
                               ),
                             ),
                           ),
-                        ),
+                        ],
                       ),
                     ),
                     if (!_rightOpen)

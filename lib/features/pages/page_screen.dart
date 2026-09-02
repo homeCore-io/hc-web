@@ -10,6 +10,7 @@ import '../../core/dashboard/breakpoints.dart';
 import '../../core/dashboard/canvas_view.dart';
 import '../../core/dashboard/clipboard.dart';
 import '../../core/dashboard/design_tools.dart';
+import '../../core/dashboard/device_slot.dart';
 import '../../core/dashboard/frame.dart';
 import '../../core/dashboard/free_layer.dart';
 import '../../core/dashboard/grid_engine.dart';
@@ -1772,6 +1773,24 @@ class _PageScreenState extends ConsumerState<PageScreen> {
     });
   }
 
+  /// Point one unwired reference at a device.
+  ///
+  /// Its own entry in the undo stack, and NOT coalesced with the others:
+  /// wiring twelve slots is twelve decisions, and one undo that unwired all of
+  /// them would be the worst possible answer to a mis-click on the twelfth.
+  void _wire(String widgetId, String field, String deviceId) {
+    final model = _draftWidgets?[widgetId];
+    if (model == null) return;
+    _pushUndo('Wire ${_cardLabel(model)}');
+    setState(() {
+      _draftWidgets = {
+        ...?_draftWidgets,
+        widgetId: model.copyWith(config: wire(model.config, field, deviceId)),
+      };
+      _contentDirty = true;
+    });
+  }
+
   Future<void> _configureWidget(String id) async {
     final model = _draftWidgets?[id];
     if (model == null) return;
@@ -2282,6 +2301,7 @@ class _PageScreenState extends ConsumerState<PageScreen> {
             onStack: _selectedCard == null
                 ? null
                 : (move) => _stack(_selectedCard!, move, columns),
+            onWire: _wire,
             onRect: _selectedCard == null
                 ? null
                 : (rect) => _reposition(_selectedCard!, rect),
