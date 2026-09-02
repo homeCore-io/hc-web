@@ -99,11 +99,12 @@ class DashboardsNotifier extends AsyncNotifier<List<DashboardDefinition>> {
     await reload();
   }
 
-  Future<DashboardDefinition> exportDashboard(String id) async {
+  Future<DashboardDefinition> exportDashboard(String id,
+      {bool wired = true}) async {
     if (!_dashboardApiAvailable) {
       return (state.value ?? const []).firstWhere((item) => item.id == id);
     }
-    return ref.read(dashboardsApiProvider).exportDashboard(id);
+    return ref.read(dashboardsApiProvider).exportDashboard(id, wired: wired);
   }
 
   Future<void> createFromTemplate(String templateId) async {

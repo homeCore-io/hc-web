@@ -316,6 +316,12 @@ class _CardLibraryState extends ConsumerState<CardLibrary> {
       // Scenes activate directly, like a device — no rule stands between the
       // button and the house.
       _Entry('Scene button', 'scene_button', 'runs one scene', {}),
+      // A setpoint against its reading, which two numbers side by side cannot
+      // say: whether the house is working, which way, and how far to go.
+      _Entry('Thermostat', 'thermostat', 'a dial, not two numbers', {}),
+      // The buttons a keypad publishes, pressable. The repeater accepts a
+      // virtual press on every one of them.
+      _Entry('Keypad', 'keypad', 'a keypad’s real buttons', {}),
     ]),
     // ── The house ───────────────────────────────────────────────────────────
     _Group('The house', [
@@ -331,6 +337,10 @@ class _CardLibraryState extends ConsumerState<CardLibrary> {
       // the house on its own, and you could not put it on a page.
       _Entry('Rooms', 'rooms', 'every device, by room',
           {'rooms_mode': 'all', 'hide_empty': true}),
+      // The whole house as one shape. A row of room cards says there are
+      // fifteen rooms; this says which of them the house is actually in.
+      _Entry('Room field', 'room_field', 'every room, sized by what is in it',
+          {'gap': 4}),
       _Entry('Other pages', 'dashboard_link', 'links to your dashboards',
           {'dashboard_ids': <String>[]}),
     ]),

@@ -89,7 +89,7 @@ void main() {
     testWidgets('a section still says how much is in it', (tester) async {
       await _pump(tester, house);
       expect(find.text('THE HOUSE'), findsOneWidget);
-      expect(find.text('7'), findsWidgets,
+      expect(find.text('8'), findsWidgets,
           reason: 'the count is what tells you a section is complete');
     });
 

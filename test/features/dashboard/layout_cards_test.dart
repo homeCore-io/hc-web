@@ -138,6 +138,9 @@ void main() {
           'colour_wheel',
           'warmth',
           'stepper',
+          'keypad',
+          'thermostat',
+          'room_field',
         },
         reason: 'only the layout family and the primitives go frameless — a '
             'shape inside a card is a card with a shape in it',
