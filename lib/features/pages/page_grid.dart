@@ -54,8 +54,17 @@ class PageGrid extends StatefulWidget {
     this.groupPaths = const {},
     this.frame,
     this.snapToGrid = true,
+    this.composing = false,
     this.onCompose,
   });
+
+  /// Whether this layout composes freely rather than packing.
+  ///
+  /// It decides what the magnet is. A packed card can only sit on a cell
+  /// edge, so the cell IS the grid; a composed one can sit anywhere, and
+  /// pulling it to a cell edge means a text box is 120 or 240 wide and
+  /// never the width of its own words.
+  final bool composing;
 
   final List<GridItem> items;
   final Map<String, DashboardWidgetModel> widgetsById;
@@ -681,8 +690,10 @@ class _PageGridState extends State<PageGrid> {
           _accum += delta;
           if (_gestureRect case final from?) {
             final rect = from.copyWith(
-              x: geometry.snapX(from.x + _accum.dx, on: widget.snapToGrid),
-              y: geometry.snapY(from.y + _accum.dy, on: widget.snapToGrid),
+              x: geometry.snapX(from.x + _accum.dx,
+                  on: widget.snapToGrid, coarse: !widget.composing),
+              y: geometry.snapY(from.y + _accum.dy,
+                  on: widget.snapToGrid, coarse: !widget.composing),
             );
             setState(() => _preview = composedPreview(_dragId!, rect));
             return;
@@ -905,6 +916,11 @@ class _PageGridState extends State<PageGrid> {
                             cellW: cellW,
                             gap: widget.gap,
                             color: t.stroke.hairline,
+                            // Only while composing. On a packed layout a card
+                            // can only sit on a cell edge, so dots between
+                            // them would be marks you cannot land on.
+                            dots: widget.composing ? FrameGeometry.fine : null,
+                            dotColour: t.surface.onBaseMuted,
                           ),
                         ),
                       ),
@@ -1302,7 +1318,14 @@ class _ColumnGuides extends CustomPainter {
     required this.cellW,
     required this.gap,
     required this.color,
+    this.dots,
+    this.dotColour,
   });
+
+  /// The fine grid's spacing, or null on a packed layout where there is
+  /// nothing between the cells to land on.
+  final double? dots;
+  final Color? dotColour;
 
   final int columns;
   final double cellW;
@@ -1320,6 +1343,27 @@ class _ColumnGuides extends CustomPainter {
       final left = i * (cellW + gap);
       canvas.drawRect(Rect.fromLTWH(left, 0, cellW, size.height), paint);
     }
+
+    // The fine grid, as dots rather than lines. A ruled grid at eight pixels
+    // is a grey field — it would out-shout every element on the page. Dots at
+    // low alpha read as a surface you can feel rather than as something drawn
+    // on top of, which is what a snapping grid is for.
+    final step = dots;
+    final ink = dotColour;
+    if (step == null || ink == null || step <= 0) return;
+    // Below about four pixels apart the dots merge into a wash. Thinning by a
+    // power of two keeps them on the same lattice, so a thing snapped at one
+    // zoom is still on a dot at another.
+    var spacing = step;
+    while (spacing < 4) {
+      spacing *= 2;
+    }
+    final dot = Paint()..color = ink.withValues(alpha: 0.16);
+    for (var x = 0.0; x <= size.width; x += spacing) {
+      for (var y = 0.0; y <= size.height; y += spacing) {
+        canvas.drawCircle(Offset(x, y), 0.6, dot);
+      }
+    }
   }
 
   @override
@@ -1327,7 +1371,9 @@ class _ColumnGuides extends CustomPainter {
       old.columns != columns ||
       old.cellW != cellW ||
       old.gap != gap ||
-      old.color != color;
+      old.color != color ||
+      old.dots != dots ||
+      old.dotColour != dotColour;
 }
 
 /// The lines a held card agrees with.

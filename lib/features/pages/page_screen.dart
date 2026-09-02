@@ -2182,6 +2182,15 @@ class _PageScreenState extends ConsumerState<PageScreen> {
                   frame: layout.frame,
                   onCompose: (id, rect) => _composeCard(id, rect, columns),
                   snapToGrid: _snapToGrid,
+                  // Which magnet the drags use, and whether the fine grid is
+                  // drawn. A packed card can only sit on a cell edge; a
+                  // composed one can sit anywhere, so the cell is the wrong
+                  // thing to pull it to.
+                  composing: _draftLayouts
+                          ?.where((l) => l.breakpoint == breakpoint)
+                          .firstOrNull
+                          ?.isComposed ??
+                      false,
                   selectedIds: _selection,
                   onDropCard: (payload, x, y) {
                     if (payload is DashboardWidgetModel) {

@@ -1343,9 +1343,16 @@ class _TapSection extends ConsumerWidget {
             onChanged: (v) {
               final kind = TapDo.fromWire(v);
               if (kind == null) return _write(null);
-              _write(action == null
-                  ? TapAction(action: kind)
-                  : action.with_(action: kind));
+              // **Start on the device this element already points at.** An
+              // icon bound to the Overhead light that is given a tap almost
+              // certainly wants to set the Overhead light, and making somebody
+              // find it again in a list of a hundred and eighty-nine is the
+              // panel forgetting what it already knows.
+              final own = config['device_id'];
+              final seed = kind == TapDo.set && own is String && own.isNotEmpty
+                  ? TapAction(action: kind, targetId: own, attribute: 'on')
+                  : TapAction(action: kind);
+              _write(action == null ? seed : action.with_(action: kind));
             },
           ),
           if (action != null) ...[
@@ -1375,6 +1382,139 @@ class _TapSection extends ConsumerWidget {
   }
 }
 
+/// A device field: what is chosen, and a way to change it.
+///
+/// One line, and the picker is the searchable sheet every other device field
+/// already uses. The panel is an inspector, not a form — a row says what it is
+/// and what it holds, and choosing is a surface of its own.
+class _DeviceButton extends StatelessWidget {
+  const _DeviceButton({
+    required this.label,
+    required this.chosen,
+    required this.onPick,
+  });
+
+  final String label;
+  final DeviceState? chosen;
+  final VoidCallback onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: t.space.xs),
+      child: Row(children: [
+        SizedBox(
+          width: 62,
+          child: Text(label,
+              style:
+                  t.text.captionStyle.copyWith(color: t.surface.onBaseMuted)),
+        ),
+        Expanded(
+          child: InkWell(
+            onTap: onPick,
+            borderRadius: t.radius.smR,
+            child: Container(
+              padding: EdgeInsets.symmetric(
+                  horizontal: t.space.sm, vertical: t.space.sm),
+              decoration: BoxDecoration(
+                color: t.surface.raised,
+                border: Border.all(color: t.stroke.hairline),
+                borderRadius: t.radius.smR,
+              ),
+              child: Row(children: [
+                Expanded(
+                  child: Text(
+                    chosen?.displayName ?? 'Choose a device…',
+                    overflow: TextOverflow.ellipsis,
+                    style: t.text.bodySmallStyle.copyWith(
+                      color: chosen == null
+                          ? t.surface.onBaseMuted
+                          : t.surface.onBase,
+                    ),
+                  ),
+                ),
+                if ((chosen?.effectiveArea ?? '').isNotEmpty)
+                  Text(humanize(chosen!.effectiveArea),
+                      style: t.text.captionStyle
+                          .copyWith(color: t.surface.onBaseMuted)),
+                SizedBox(width: t.space.xs),
+                Icon(Icons.unfold_more, size: 14, color: t.surface.onBaseMuted),
+              ]),
+            ),
+          ),
+        ),
+      ]),
+    );
+  }
+}
+
+/// A short list, as a menu on one line.
+///
+/// A dropdown rather than a row of chips: a chip row grows with the house and
+/// reflows the whole panel when it does, and neither of those is true of a
+/// menu. Chips are for a fixed handful — the four things a tap can DO — and a
+/// list of the house's scenes is not that.
+class _MenuPick extends StatelessWidget {
+  const _MenuPick({
+    required this.label,
+    required this.value,
+    required this.options,
+    required this.empty,
+    required this.onChanged,
+  });
+
+  final String label;
+  final String? value;
+  final List<({String key, String label})> options;
+  final String empty;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    final known = options.any((o) => o.key == value);
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: t.space.xs),
+      child: Row(children: [
+        SizedBox(
+          width: 62,
+          child: Text(label,
+              style:
+                  t.text.captionStyle.copyWith(color: t.surface.onBaseMuted)),
+        ),
+        Expanded(
+          child: options.isEmpty
+              ? Text(empty,
+                  style: t.text.captionStyle
+                      .copyWith(color: t.surface.onBaseMuted))
+              : DropdownButtonFormField<String>(
+                  initialValue: known ? value : null,
+                  isExpanded: true,
+                  isDense: true,
+                  decoration: InputDecoration(
+                    isDense: true,
+                    border: const OutlineInputBorder(),
+                    contentPadding: EdgeInsets.symmetric(
+                        horizontal: t.space.sm, vertical: t.space.sm),
+                  ),
+                  items: [
+                    for (final o in options)
+                      DropdownMenuItem(
+                        value: o.key,
+                        child: Text(o.label, overflow: TextOverflow.ellipsis),
+                      ),
+                  ],
+                  onChanged: (v) {
+                    if (v != null) onChanged(v);
+                  },
+                ),
+        ),
+      ]),
+    );
+  }
+}
+
 /// The thing an action acts on: a scene, a mode, a device, or a page.
 class _TapTarget extends ConsumerWidget {
   const _TapTarget({required this.action, required this.onChanged});
@@ -1397,10 +1537,11 @@ class _TapTarget extends ConsumerWidget {
             if (isSceneDevice(d)) (id: d.id, label: d.displayName),
         ]..sort(
             (a, b) => a.label.toLowerCase().compareTo(b.label.toLowerCase()));
-        return _Picker(
+        return _MenuPick(
           label: 'Scene',
-          value: action.targetId ?? '',
+          value: action.targetId,
           options: choices.map((c) => (key: c.id, label: c.label)).toList(),
+          empty: 'This house has no scenes yet.',
           onChanged: (v) => onChanged(action.with_(targetId: v)),
         );
       case TapDo.mode:
@@ -1408,13 +1549,14 @@ class _TapTarget extends ConsumerWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _Picker(
+            _MenuPick(
               label: 'Mode',
-              value: action.targetId ?? '',
+              value: action.targetId,
               options: [
                 for (final m in modes)
                   (key: m.id, label: m.name ?? humanize(m.id))
               ],
+              empty: 'This house has no modes yet.',
               onChanged: (v) => onChanged(action.with_(targetId: v)),
             ),
             SizedBox(height: t.space.xs),
@@ -1438,6 +1580,9 @@ class _TapTarget extends ConsumerWidget {
         final devices = ref.watch(devicesProvider).value ?? const [];
         final device =
             devices.where((d) => d.id == action.targetId).firstOrNull;
+        // The searchable sheet, not a wall of chips. A hundred and eighty-nine
+        // devices as pills is a dump: you cannot search it, you cannot see the
+        // room a device is in, and finding one means reading all of them.
         // Only what the plugin registered, and only booleans while the action
         // flips: a tap that "toggles" a brightness has no second state to go
         // to. Same rule as the switch — see `attribute_policy.dart`.
@@ -1448,14 +1593,20 @@ class _TapTarget extends ConsumerWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _Picker(
+            _DeviceButton(
               label: 'Device',
-              value: action.targetId ?? '',
-              options: [
-                for (final d in devices)
-                  if (!isSceneDevice(d)) (key: d.id, label: d.displayName)
-              ],
-              onChanged: (v) => onChanged(action.with_(targetId: v)),
+              chosen: device,
+              onPick: () async {
+                final picked = await pickDevices(
+                  context,
+                  devices.where((d) => !isSceneDevice(d)).toList(),
+                  single: true,
+                  selected: {if (action.targetId != null) action.targetId!},
+                );
+                if (picked != null && picked.isNotEmpty) {
+                  onChanged(action.with_(targetId: picked.first));
+                }
+              },
             ),
             SizedBox(height: t.space.xs),
             if (device == null)
@@ -1470,22 +1621,24 @@ class _TapTarget extends ConsumerWidget {
                     t.text.captionStyle.copyWith(color: t.surface.onBaseMuted),
               )
             else
-              _Picker(
+              _MenuPick(
                 label: 'Flips',
-                value: action.attribute ?? '',
+                value: action.attribute,
                 options: [
                   for (final a in offered) (key: a, label: humanize(a))
                 ],
+                empty: 'Nothing here can be flipped.',
                 onChanged: (v) => onChanged(action.with_(attribute: v)),
               ),
           ],
         );
       case TapDo.page:
         final pages = ref.watch(dashboardsProvider).value ?? const [];
-        return _Picker(
+        return _MenuPick(
           label: 'Page',
-          value: action.targetId ?? '',
+          value: action.targetId,
           options: [for (final d in pages) (key: d.id, label: d.name)],
+          empty: 'There are no other pages yet.',
           onChanged: (v) => onChanged(action.with_(targetId: v)),
         );
     }
