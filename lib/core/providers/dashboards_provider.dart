@@ -107,6 +107,16 @@ class DashboardsNotifier extends AsyncNotifier<List<DashboardDefinition>> {
     return ref.read(dashboardsApiProvider).exportDashboard(id, wired: wired);
   }
 
+  /// One template, by id.
+  ///
+  /// From the list core already serves rather than a second endpoint: the list
+  /// is small, it is already cached for the picker, and a template that exists
+  /// in one place and not the other would be a page you could see and not use.
+  Future<DashboardDefinition?> fetchTemplate(String templateId) async {
+    final templates = await ref.read(dashboardTemplatesProvider.future);
+    return templates.where((t) => t.id == templateId).firstOrNull;
+  }
+
   Future<void> createFromTemplate(String templateId) async {
     final currentUser = await ref.read(currentUserProvider.future);
     final owner = currentUser?['id'] as String? ??
