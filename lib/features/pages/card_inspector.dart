@@ -3,14 +3,21 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/dashboard/binding.dart';
 import '../../core/dashboard/card_condition.dart';
+import '../../core/dashboard/tap_action.dart';
 import '../../core/dashboard/card_style.dart';
 import '../../core/dashboard/grid_engine.dart' show DashboardRect;
 import '../../core/dashboard/free_layer.dart';
 import '../../core/dashboard/transform.dart';
 import '../../core/dashboard/widget_registry.dart';
+import '../../core/devices/scene_state.dart';
 import '../../core/models/device_state.dart';
 import '../../core/models/dashboard.dart';
 import '../../core/providers/devices_provider.dart';
+import '../../core/providers/dashboards_provider.dart';
+import '../../core/providers/modes_provider.dart';
+import '../../core/providers/scenes_provider.dart';
+import '../../core/schema/device_schema.dart';
+import '../../core/text/humanize.dart';
 import '../../design/tokens.dart';
 import '../assets/asset_field.dart';
 import '../dashboard/builtin_cards.dart';
@@ -254,6 +261,9 @@ class _CardInspectorState extends ConsumerState<CardInspector> {
               if (onStack != null)
                 _StackSection(
                     floating: widget.floating, z: widget.z, onStack: onStack),
+              // Every element, not only the ones that thought to ask. An
+              // action belongs to all of them or to none — see `_TapSection`.
+              _TapSection(config: model.config, onChanged: onChanged),
               // Last, and folded: the drawn controls above are how you are
               // meant to work. This is the hatch for everything they do not
               // reach — including keys this version of this app has never
@@ -1274,6 +1284,214 @@ class _RowChoice extends StatelessWidget {
 /// Folded shut by default. It is a hatch, not a panel — the drawn controls
 /// above are how you are meant to work, and a raw key list open by default
 /// would say otherwise.
+
+/// What this element does when you touch it.
+///
+/// Offered for **every** element, because an action belongs to all of them or
+/// to none — that is the whole finding behind `on_tap` being a property rather
+/// than a Button element. A shape you styled, a label, an icon, a photograph of
+/// a room: any of them can run a scene.
+///
+/// Nothing here reaches the rule engine. Each action is a call the app already
+/// makes somewhere else; see `features/dashboard/tappable.dart`.
+class _TapSection extends ConsumerWidget {
+  const _TapSection({required this.config, required this.onChanged});
+
+  final Map<String, dynamic> config;
+  final ValueChanged<Map<String, dynamic>> onChanged;
+
+  void _write(TapAction? action) =>
+      onChanged(TapAction.toConfig(config, action));
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = HcTokens.of(context);
+    final action = TapAction.fromConfig(config);
+
+    return Padding(
+      padding: EdgeInsets.only(top: t.space.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(children: [
+            Text('WHEN TAPPED',
+                style: t.text.overlineStyle
+                    .copyWith(color: t.surface.onBaseMuted)),
+            const Spacer(),
+            if (action != null)
+              InkWell(
+                key: const ValueKey('clear-on-tap'),
+                onTap: () => _write(null),
+                child: Padding(
+                  padding: EdgeInsets.all(t.space.xs),
+                  child:
+                      Icon(Icons.close, size: 14, color: t.surface.onBaseMuted),
+                ),
+              ),
+          ]),
+          SizedBox(height: t.space.xs),
+          _RowChoice(
+            label: 'Does',
+            value: action?.action.wire ?? '',
+            options: const [
+              (key: '', label: 'Nothing'),
+              (key: 'scene', label: 'Run a scene'),
+              (key: 'mode', label: 'Set a mode'),
+              (key: 'set', label: 'Set a device'),
+              (key: 'page', label: 'Go to a page'),
+            ],
+            onChanged: (v) {
+              final kind = TapDo.fromWire(v);
+              if (kind == null) return _write(null);
+              _write(action == null
+                  ? TapAction(action: kind)
+                  : action.with_(action: kind));
+            },
+          ),
+          if (action != null) ...[
+            SizedBox(height: t.space.xs),
+            _TapTarget(
+              action: action,
+              onChanged: (next) => _write(next),
+            ),
+            // Said, rather than left to be discovered by tapping something on a
+            // wall. A half-set action is what a control looks like while it is
+            // being built, not an error — but it must not look finished.
+            if (!action.isComplete)
+              Padding(
+                padding: EdgeInsets.only(top: t.space.xs),
+                child: Text(
+                  action.action == TapDo.set
+                      ? 'Pick a device and one of its settings, or this does '
+                          'nothing.'
+                      : 'Pick one, or this does nothing.',
+                  style: t.text.captionStyle.copyWith(color: t.accent.warn),
+                ),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// The thing an action acts on: a scene, a mode, a device, or a page.
+class _TapTarget extends ConsumerWidget {
+  const _TapTarget({required this.action, required this.onChanged});
+
+  final TapAction action;
+  final ValueChanged<TapAction> onChanged;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = HcTokens.of(context);
+    switch (action.action) {
+      case TapDo.scene:
+        // Both kinds together, because to whoever is drawing the page they are
+        // the same thing — only the code that sends knows the difference.
+        final native = ref.watch(scenesProvider).value ?? const [];
+        final devices = ref.watch(devicesProvider).value ?? const [];
+        final choices = <({String id, String label})>[
+          for (final s in native) (id: s.id, label: s.name),
+          for (final d in devices)
+            if (isSceneDevice(d)) (id: d.id, label: d.displayName),
+        ]..sort(
+            (a, b) => a.label.toLowerCase().compareTo(b.label.toLowerCase()));
+        return _Picker(
+          label: 'Scene',
+          value: action.targetId ?? '',
+          options: choices.map((c) => (key: c.id, label: c.label)).toList(),
+          onChanged: (v) => onChanged(action.with_(targetId: v)),
+        );
+      case TapDo.mode:
+        final modes = ref.watch(modesProvider).value ?? const [];
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _Picker(
+              label: 'Mode',
+              value: action.targetId ?? '',
+              options: [
+                for (final m in modes)
+                  (key: m.id, label: m.name ?? humanize(m.id))
+              ],
+              onChanged: (v) => onChanged(action.with_(targetId: v)),
+            ),
+            SizedBox(height: t.space.xs),
+            _RowChoice(
+              label: 'To',
+              value: action.value is bool
+                  ? (action.value! as bool ? 'on' : 'off')
+                  : 'flip',
+              options: const [
+                (key: 'flip', label: 'The other way'),
+                (key: 'on', label: 'On'),
+                (key: 'off', label: 'Off'),
+              ],
+              onChanged: (v) => onChanged(v == 'flip'
+                  ? action.with_(clearValue: true)
+                  : action.with_(value: v == 'on')),
+            ),
+          ],
+        );
+      case TapDo.set:
+        final devices = ref.watch(devicesProvider).value ?? const [];
+        final device =
+            devices.where((d) => d.id == action.targetId).firstOrNull;
+        // Only what the plugin registered, and only booleans while the action
+        // flips: a tap that "toggles" a brightness has no second state to go
+        // to. Same rule as the switch — see `attribute_policy.dart`.
+        final offered = <String>[
+          for (final e in (device?.schema?.writable ?? const {}).entries)
+            if (e.value.kind == AttributeKind.bool_) e.key,
+        ]..sort();
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _Picker(
+              label: 'Device',
+              value: action.targetId ?? '',
+              options: [
+                for (final d in devices)
+                  if (!isSceneDevice(d)) (key: d.id, label: d.displayName)
+              ],
+              onChanged: (v) => onChanged(action.with_(targetId: v)),
+            ),
+            SizedBox(height: t.space.xs),
+            if (device == null)
+              Text('Pick a device first.',
+                  style: t.text.captionStyle
+                      .copyWith(color: t.surface.onBaseMuted))
+            else if (offered.isEmpty)
+              Text(
+                '${device.displayName} accepts no on/off writes, so a tap '
+                'cannot set it.',
+                style:
+                    t.text.captionStyle.copyWith(color: t.surface.onBaseMuted),
+              )
+            else
+              _Picker(
+                label: 'Flips',
+                value: action.attribute ?? '',
+                options: [
+                  for (final a in offered) (key: a, label: humanize(a))
+                ],
+                onChanged: (v) => onChanged(action.with_(attribute: v)),
+              ),
+          ],
+        );
+      case TapDo.page:
+        final pages = ref.watch(dashboardsProvider).value ?? const [];
+        return _Picker(
+          label: 'Page',
+          value: action.targetId ?? '',
+          options: [for (final d in pages) (key: d.id, label: d.name)],
+          onChanged: (v) => onChanged(action.with_(targetId: v)),
+        );
+    }
+  }
+}
+
 class _AllPropertiesSection extends StatefulWidget {
   const _AllPropertiesSection({required this.config, required this.onChanged});
 

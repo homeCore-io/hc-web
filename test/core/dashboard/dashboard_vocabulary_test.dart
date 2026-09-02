@@ -136,6 +136,9 @@ void main() {
     const elsewhere = {
       'add': 'card_members.dart',
       'remove': 'card_members.dart',
+      // Every widget carries it, and no widget declares it as a config field:
+      // an action belongs to all of them, so it has a section of its own.
+      'on_tap': 'card_inspector.dart, the WHEN TAPPED section',
     };
 
     // Real gaps. Each is a setting a document can carry and this app cannot

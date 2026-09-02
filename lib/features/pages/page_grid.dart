@@ -16,6 +16,7 @@ import '../../core/models/dashboard.dart';
 import '../../design/components/hc_surface.dart';
 import '../../design/hc_icons.dart';
 import '../../design/tokens.dart';
+import '../dashboard/tappable.dart';
 
 /// The grid that draws a page — live in view mode, directly manipulable in edit.
 ///
@@ -1739,19 +1740,28 @@ class _Cell extends StatelessWidget {
             ? const SizedBox.shrink()
             : descriptor == null
                 ? UnknownWidget(type: model!.type)
-                : descriptor.builder(
-                    context,
-                    WidgetRenderArgs(
-                      id: model!.id,
-                      title: model!.title,
-                      subtitle: model!.subtitle,
-                      config: model!.config,
-                      w: item.w,
-                      h: item.h,
-                      sizeHint: descriptor.sizeHint,
-                      editing: editing,
-                      entered: entered,
-                      onConfigChanged: onConfigChanged,
+                // Wrapped once, here, so `on_tap` belongs to EVERY element
+                // rather than to the ones that remembered to ask. A shape, a
+                // label, an icon and a photograph all become live without any
+                // of them knowing the property exists — the same reason the
+                // binding model wraps rather than threads.
+                : Tappable(
+                    config: model!.config,
+                    editing: editing,
+                    child: descriptor.builder(
+                      context,
+                      WidgetRenderArgs(
+                        id: model!.id,
+                        title: model!.title,
+                        subtitle: model!.subtitle,
+                        config: model!.config,
+                        w: item.w,
+                        h: item.h,
+                        sizeHint: descriptor.sizeHint,
+                        editing: editing,
+                        entered: entered,
+                        onConfigChanged: onConfigChanged,
+                      ),
                     ),
                   );
 
