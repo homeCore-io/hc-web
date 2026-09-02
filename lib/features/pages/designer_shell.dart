@@ -10,17 +10,16 @@ import '../../core/dashboard/free_layer.dart';
 import '../../core/dashboard/grid_engine.dart';
 import '../../core/dashboard/transform.dart';
 import '../../core/dashboard/groups.dart';
-import '../../core/dashboard/wiring.dart';
 import '../../core/models/dashboard.dart';
 import '../../design/hc_icons.dart';
 import '../../design/tokens.dart';
 import 'breakpoint_bar.dart';
 import 'canvas_rulers.dart';
 import 'card_inspector.dart';
-import 'card_library.dart';
+import 'assets_panel.dart';
+import 'devices_panel.dart';
 import 'inspector_controls.dart';
 import 'layer_tree_panel.dart';
-import 'wiring_view.dart';
 import 'page_inspector.dart';
 import 'page_background.dart';
 import 'scaled_canvas.dart';
@@ -272,6 +271,15 @@ class DesignerShell extends StatefulWidget {
 }
 
 class _DesignerShellState extends State<DesignerShell> {
+  /// Whether each side panel is out.
+  ///
+  /// Both, because a laptop laying out a wall display is spending four hundred
+  /// pixels of a fourteen-hundred-pixel window on furniture, and the canvas is
+  /// the only thing on this screen that is actually the work. The tool rail is
+  /// deliberately not one of these: you are always holding a tool.
+  bool _leftOpen = true;
+  bool _rightOpen = true;
+
   /// The chosen zoom, or null for **Fit** — which is the default and was the
   /// only behaviour before. Fit is a *rule* rather than a number: it keeps
   /// re-deriving as the window changes, which a remembered 66% would not.
@@ -549,22 +557,37 @@ class _DesignerShellState extends State<DesignerShell> {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _Pane(
-                      width: DesignerShell._libraryWidth,
-                      border: Border(
-                          right: BorderSide(
-                              color: t.stroke.hairline, width: t.stroke.width)),
-                      child: _LeftRail(
-                        items: widget.items,
-                        widgetsById: widget.widgetsById,
-                        selectedIds: widget.selectedIds,
-                        onSelectMany: widget.onSelectMany,
-                        onEnterGroupId: widget.onEnterGroupId,
-                        onPick: widget.onPick,
-                      ),
-                    ),
-                    // The tools, against the canvas they act on.
+                    // **The rail is the outermost thing on the left.** It is
+                    // the one piece of furniture that is never put away — you
+                    // are always holding a tool, even if it is Select — so it
+                    // sits outside the panel that comes and goes. Every drawing
+                    // application since MacPaint has put it against the window
+                    // edge for the same reason.
                     ToolPalette(tool: widget.tool, onTool: widget.onTool),
+                    if (_leftOpen)
+                      _Pane(
+                        width: DesignerShell._libraryWidth,
+                        border: Border(
+                            right: BorderSide(
+                                color: t.stroke.hairline,
+                                width: t.stroke.width)),
+                        child: _LeftRail(
+                          items: widget.items,
+                          widgetsById: widget.widgetsById,
+                          selectedIds: widget.selectedIds,
+                          onSelectMany: widget.onSelectMany,
+                          onEnterGroupId: widget.onEnterGroupId,
+                          onPick: widget.onPick,
+                          tool: widget.tool,
+                          onClose: () => setState(() => _leftOpen = false),
+                        ),
+                      )
+                    else
+                      _PaneHandle(
+                        icon: Icons.chevron_right,
+                        tooltip: 'Layers, devices and pictures',
+                        onTap: () => setState(() => _leftOpen = true),
+                      ),
                     // The canvas is the only thing allowed to be large. It
                     // scrolls inside itself; the frame around it never moves.
                     Expanded(
@@ -662,64 +685,74 @@ class _DesignerShellState extends State<DesignerShell> {
                         ),
                       ),
                     ),
-                    _Pane(
-                      width: DesignerShell._inspectorWidth,
-                      border: Border(
-                          left: BorderSide(
-                              color: t.stroke.hairline, width: t.stroke.width)),
-                      child: widget.selected == null && widget.selectedCount > 1
-                          ? _ManySelected(
-                              count: widget.selectedCount,
-                              onDistribute: widget.selectedCount < 3
-                                  ? null
-                                  : widget.onDistribute,
-                              onAlign: widget.onAlign,
-                              onRemove: widget.onRemoveSelected,
-                              onDeselect: widget.onDeselect,
-                              groupInHand: widget.groupInHand,
-                              onGroup: widget.onGroup,
-                              onUngroup: widget.onUngroup,
-                              onRenameGroup: widget.onRenameGroup,
-                              onEnterGroup: widget.onEnterGroup,
-                              groupBox: widget.groupBox,
-                              onGroupBox: widget.onGroupBox,
-                            )
-                          : widget.selected == null
-                              ? PageInspector(
-                                  dashboard: widget.dashboard,
-                                  breakpoint: widget.breakpoint,
-                                  layout: widget.layouts
-                                      ?.where((l) =>
-                                          l.breakpoint == widget.breakpoint)
-                                      .firstOrNull,
-                                  cardCount: widget.cardCount,
-                                  onFlowChanged: widget.onFlowChanged,
-                                  onComposeChanged: widget.onComposeChanged,
-                                  onFrameChanged: widget.onFrameChanged,
-                                  snapToGrid: widget.snapToGrid,
-                                  onSnapChanged: widget.onSnapChanged,
-                                  sourceComposed: _followsAComposition,
-                                  onBackgroundChanged:
-                                      widget.onBackgroundChanged,
-                                )
-                              : CardInspector(
-                                  model: widget.selected!,
-                                  onChanged: widget.onChanged,
-                                  onRemove: widget.onRemoveSelected,
-                                  onClose: widget.onDeselect,
-                                  onRename: widget.onRename,
-                                  floating:
-                                      widget.selectedItem?.floating ?? false,
-                                  z: widget.selectedItem?.z ?? 0,
-                                  onStack: widget.onStack,
-                                  rotation: widget.selectedItem?.rotation,
-                                  opacity: widget.selectedItem?.opacity,
-                                  rect: widget.selectedItem?.rect,
-                                  onRect: widget.onRect,
-                                  onRotate: widget.onRotate,
-                                  onFade: widget.onFade,
-                                ),
-                    ),
+                    if (!_rightOpen)
+                      _PaneHandle(
+                        icon: Icons.chevron_left,
+                        tooltip: 'The inspector',
+                        onTap: () => setState(() => _rightOpen = true),
+                      ),
+                    if (_rightOpen)
+                      _Pane(
+                        width: DesignerShell._inspectorWidth,
+                        onClose: () => setState(() => _rightOpen = false),
+                        border: Border(
+                            left: BorderSide(
+                                color: t.stroke.hairline,
+                                width: t.stroke.width)),
+                        child: widget.selected == null &&
+                                widget.selectedCount > 1
+                            ? _ManySelected(
+                                count: widget.selectedCount,
+                                onDistribute: widget.selectedCount < 3
+                                    ? null
+                                    : widget.onDistribute,
+                                onAlign: widget.onAlign,
+                                onRemove: widget.onRemoveSelected,
+                                onDeselect: widget.onDeselect,
+                                groupInHand: widget.groupInHand,
+                                onGroup: widget.onGroup,
+                                onUngroup: widget.onUngroup,
+                                onRenameGroup: widget.onRenameGroup,
+                                onEnterGroup: widget.onEnterGroup,
+                                groupBox: widget.groupBox,
+                                onGroupBox: widget.onGroupBox,
+                              )
+                            : widget.selected == null
+                                ? PageInspector(
+                                    dashboard: widget.dashboard,
+                                    breakpoint: widget.breakpoint,
+                                    layout: widget.layouts
+                                        ?.where((l) =>
+                                            l.breakpoint == widget.breakpoint)
+                                        .firstOrNull,
+                                    cardCount: widget.cardCount,
+                                    onFlowChanged: widget.onFlowChanged,
+                                    onComposeChanged: widget.onComposeChanged,
+                                    onFrameChanged: widget.onFrameChanged,
+                                    snapToGrid: widget.snapToGrid,
+                                    onSnapChanged: widget.onSnapChanged,
+                                    sourceComposed: _followsAComposition,
+                                    onBackgroundChanged:
+                                        widget.onBackgroundChanged,
+                                  )
+                                : CardInspector(
+                                    model: widget.selected!,
+                                    onChanged: widget.onChanged,
+                                    onRemove: widget.onRemoveSelected,
+                                    onClose: widget.onDeselect,
+                                    onRename: widget.onRename,
+                                    floating:
+                                        widget.selectedItem?.floating ?? false,
+                                    z: widget.selectedItem?.z ?? 0,
+                                    onStack: widget.onStack,
+                                    rotation: widget.selectedItem?.rotation,
+                                    opacity: widget.selectedItem?.opacity,
+                                    rect: widget.selectedItem?.rect,
+                                    onRect: widget.onRect,
+                                    onRotate: widget.onRotate,
+                                    onFade: widget.onFade,
+                                  ),
+                      ),
                   ],
                 ),
               ),
@@ -756,11 +789,21 @@ class _DesignerShellState extends State<DesignerShell> {
 }
 
 class _Pane extends StatelessWidget {
-  const _Pane({required this.width, required this.border, required this.child});
+  const _Pane({
+    required this.width,
+    required this.border,
+    required this.child,
+    this.onClose,
+  });
 
   final double width;
   final Border border;
   final Widget child;
+
+  /// Put this pane away. Null when the pane closes itself from inside — the
+  /// left one does, because its tab strip is a better place for the control
+  /// than a chevron floating above it.
+  final VoidCallback? onClose;
 
   @override
   Widget build(BuildContext context) {
@@ -769,7 +812,88 @@ class _Pane extends StatelessWidget {
       width: width,
       decoration: BoxDecoration(color: t.surface.base, border: border),
       padding: EdgeInsets.all(t.space.sm),
-      child: child,
+      child: onClose == null
+          ? child
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: _CollapseButton(
+                    icon: Icons.chevron_right,
+                    tooltip: 'Hide',
+                    onTap: onClose!,
+                  ),
+                ),
+                Expanded(child: child),
+              ],
+            ),
+    );
+  }
+}
+
+/// A pane that has been put away: a strip you can push to bring it back.
+///
+/// Narrow rather than absent, because a panel with no way back is a panel
+/// somebody loses. Twenty-two pixels is the whole cost of being able to
+/// reopen it, against the two hundred and something it gives the canvas.
+class _PaneHandle extends StatelessWidget {
+  const _PaneHandle({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Container(
+      width: 22,
+      decoration: BoxDecoration(
+        color: t.surface.base,
+        border: Border.symmetric(
+          vertical: BorderSide(color: t.stroke.hairline, width: t.stroke.width),
+        ),
+      ),
+      child: Tooltip(
+        message: tooltip,
+        child: InkWell(
+          onTap: onTap,
+          child: Icon(icon, size: 15, color: t.surface.onBaseMuted),
+        ),
+      ),
+    );
+  }
+}
+
+class _CollapseButton extends StatelessWidget {
+  const _CollapseButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: t.radius.smR,
+        child: Padding(
+          padding: EdgeInsets.all(t.space.xs),
+          child: Icon(icon, size: 15, color: t.surface.onBaseMuted),
+        ),
+      ),
     );
   }
 }
@@ -1358,6 +1482,8 @@ class _ManySelected extends StatelessWidget {
 /// something behind them.
 class _LeftRail extends StatefulWidget {
   const _LeftRail({
+    required this.tool,
+    required this.onClose,
     required this.items,
     required this.widgetsById,
     required this.selectedIds,
@@ -1365,6 +1491,13 @@ class _LeftRail extends StatefulWidget {
     this.onSelectMany,
     this.onEnterGroupId,
   });
+
+  /// What is in your hand. The Devices tab needs it: picking a device places
+  /// whatever the held tool makes of it.
+  final DesignTool tool;
+
+  /// Put the whole panel away.
+  final VoidCallback onClose;
 
   final List<GridItem> items;
   final Map<String, DashboardWidgetModel> widgetsById;
@@ -1377,16 +1510,18 @@ class _LeftRail extends StatefulWidget {
   State<_LeftRail> createState() => _LeftRailState();
 }
 
-/// The three questions the left panel answers.
+/// The three things the left panel holds.
 ///
-/// Wires is the one that had no home. "What drives this element" was the
-/// inspector's, and "what can I place" was the catalogue's; "what is wired on
-/// this page at all" could only be answered by selecting every element in turn,
-/// which on a page of forty bindings is not answering it.
+/// **These are the mockup's, and the mockup is right about why.** The panel is
+/// for what this *house* has — its layers, its devices, its pictures. What you
+/// can *draw* is the rail, and what you can *place from a catalogue* is one
+/// tool on that rail. An "Add" tab holding a catalogue of card types put a
+/// third answer beside those two and made rooms and kinds look like things you
+/// drop, which is exactly the gesture that was wrong.
 enum _Panel {
   layers('Layers'),
-  add('Add'),
-  wires('Wires');
+  devices('Devices'),
+  assets('Assets');
 
   const _Panel(this.label);
   final String label;
@@ -1409,6 +1544,12 @@ class _LeftRailState extends State<_LeftRail> {
                 on: _panel == tab,
                 onTap: () => setState(() => _panel = tab),
               ),
+            const Spacer(),
+            _CollapseButton(
+              icon: Icons.chevron_left,
+              tooltip: 'Hide the panel',
+              onTap: widget.onClose,
+            ),
           ],
         ),
         Divider(height: t.stroke.width, color: t.stroke.hairline),
@@ -1421,26 +1562,9 @@ class _LeftRailState extends State<_LeftRail> {
                 onSelect: (ids) => widget.onSelectMany?.call(ids),
                 onEnterGroup: widget.onEnterGroupId,
               ),
-            _Panel.add => CardLibrary(onPick: widget.onPick),
-            // Every binding and action on the page, at once. The inspector
-            // answers "what drives this element"; this answers "what does this
-            // device drive", which selecting things one at a time cannot.
-            _Panel.wires => WiringView(
-                wires: wiresOf([
-                  for (final item in widget.items)
-                    if (widget.widgetsById[item.id] case final model?)
-                      (
-                        id: model.id,
-                        name: model.title.isEmpty ? model.type : model.title,
-                        type: model.type,
-                        config: model.config,
-                      ),
-                ]),
-                selectedId: widget.selectedIds.length == 1
-                    ? widget.selectedIds.first
-                    : null,
-                onSelect: (id) => widget.onSelectMany?.call({id}),
-              ),
+            _Panel.devices =>
+              DevicesPanel(tool: widget.tool, onPick: widget.onPick),
+            _Panel.assets => AssetsPanel(onPick: widget.onPick),
           },
         ),
       ],

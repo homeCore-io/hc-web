@@ -560,7 +560,11 @@ void main() {
 
       await tester.tap(find.text('Add widget').last);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('House status'));
+      // Through the search, which is how anybody finds one entry in a
+      // catalogue of forty rather than by scrolling to where it happens to be.
+      await tester.enterText(find.byType(TextField).last, 'glance');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('At a glance'));
       await tester.pumpAndSettle();
 
       await tester.tap(find.text('Mobile'));

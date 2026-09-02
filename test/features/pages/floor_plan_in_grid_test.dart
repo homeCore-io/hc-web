@@ -8,7 +8,8 @@ import 'package:hc_web/core/models/device_state.dart';
 import 'package:hc_web/core/providers/devices_provider.dart';
 import 'package:hc_web/design/skins.dart';
 import 'package:hc_web/features/dashboard/builtin_cards.dart';
-import 'package:hc_web/features/pages/card_library.dart';
+import 'package:hc_web/core/dashboard/design_tools.dart';
+import 'package:hc_web/features/pages/devices_panel.dart';
 import 'package:hc_web/features/pages/page_grid.dart';
 
 /// The floor plan **inside the grid it lives in**, driven by a pointer.
@@ -81,14 +82,23 @@ Future<_Board> _pumpGrid(
   await tester.pumpWidget(ProviderScope(
     overrides: [
       devicesProvider.overrideWith(
-          () => _Devices([_light('light.a', area: 'Living Room')])),
+          () => _Devices([_light('Sofa Lamp', area: 'Living Room')])),
     ],
     child: MaterialApp(
       theme: hcThemeFromTokens(HcSkin.midnight.tokens),
       home: Scaffold(
         body: Row(
           children: [
-            SizedBox(width: 300, child: CardLibrary(onPick: (_) {})),
+            // Dragged from the Devices panel, which is where devices
+            // live now — rooms and kinds are filters over it rather
+            // than tiles you drop.
+            SizedBox(
+              width: 300,
+              child: DevicesPanel(
+                tool: DesignTool.select,
+                onPick: (_) {},
+              ),
+            ),
             Expanded(
               child: PageGrid(
                 items: const [GridItem(id: 'plan', x: 0, y: 0, w: 8, h: 4)],
@@ -245,7 +255,8 @@ void main() {
     await _enterCard(tester);
     expect(find.textContaining('Drag a device'), findsOneWidget);
 
-    final row = find.text('Living Room').first;
+    // A device, not a room: a room was never a thing you dropped.
+    final row = find.text('Sofa Lamp').first;
     final plan = tester.getRect(find.byType(PageGrid));
     // A quarter across and half down the card, which is 8 of 12 columns wide
     // and 4 rows tall at the board's top-left.
@@ -264,8 +275,8 @@ void main() {
     final marker = out.markers.single;
     expect(marker['x'] as double, closeTo(0.25, 0.06));
     expect(marker['y'] as double, closeTo(0.5, 0.06));
-    expect((marker['selection'] as Map)['area_name'], 'Living Room',
-        reason: 'a room becomes a marker that speaks for the room');
+    expect((marker['selection'] as Map)['device_ids'], ['Sofa Lamp'],
+        reason: 'the device you dragged is the device the marker speaks for');
   });
 
   testWidgets('outside the card the board still takes the drop',
@@ -274,7 +285,8 @@ void main() {
     // not entered places a card, exactly as it does over empty canvas.
     final out = await _pumpGrid(tester, config: const {});
 
-    final row = find.text('Living Room').first;
+    // A device, not a room: a room was never a thing you dropped.
+    final row = find.text('Sofa Lamp').first;
     final plan = tester.getRect(find.byType(PageGrid));
     final gesture = await tester.startGesture(tester.getCenter(row));
     await tester.pump(const Duration(milliseconds: 20));

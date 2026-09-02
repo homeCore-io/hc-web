@@ -128,25 +128,30 @@ Finder get _caret => find.descendant(
     );
 
 void main() {
-  testWidgets('the rail opens on Layers, not on the card catalogue',
+  testWidgets('the panel opens on Layers, and holds what the house has',
       (tester) async {
+    // Layers, Devices, Assets — and no catalogue tab. The panel is for what
+    // this HOUSE has; what you can draw is the rail, and a catalogue of card
+    // types is one tool on it. An Add tab put a third answer beside those two,
+    // and made rooms and kinds look like things you drop.
     await _open(tester);
     expect(find.text('Layers'), findsOneWidget);
-    expect(find.text('Add'), findsOneWidget);
-    // The tree is showing, so the page's own contents are what the rail says.
+    expect(find.text('Devices'), findsOneWidget);
+    expect(find.text('Assets'), findsOneWidget);
+    expect(find.text('Add'), findsNothing);
+
     expect(_row('Header'), findsOneWidget);
     expect(_row('Wall'), findsOneWidget);
-    // And the catalogue is behind its tab rather than in the way.
-    expect(find.text('Add to this page'), findsNothing);
   });
 
-  testWidgets('the Add tab still reaches the card library', (tester) async {
-    // Moved, not removed. Adding is a thing you do in bursts; it just is not
-    // the permanent furniture of a design tool.
+  testWidgets('Devices lists the house, and says what a pick will make',
+      (tester) async {
     await _open(tester);
-    await tester.tap(find.text('Add'));
+    await tester.tap(find.text('Devices'));
     await tester.pumpAndSettle();
-    expect(find.text('Add to this page'), findsOneWidget);
+    // The sentence is where the rail and this list are explained as one
+    // gesture, so a pick is never a surprise.
+    expect(find.textContaining('Picking one places'), findsOneWidget);
   });
 
   testWidgets('one click on a group row holds the whole group', (tester) async {
