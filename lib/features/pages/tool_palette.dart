@@ -37,36 +37,55 @@ class ToolPalette extends StatelessWidget {
     return Container(
       width: width,
       decoration: BoxDecoration(
-        color: t.surface.base,
+        color: t.surface.sunken,
         border: Border(
           right: BorderSide(color: t.stroke.hairline, width: t.stroke.width),
         ),
       ),
-      child: Column(
-        children: [
-          SizedBox(height: t.space.xs),
-          for (final each in DesignTool.values) ...[
-            // Select is the tool you return to, so it is set apart from the
-            // ones that make things rather than sitting first in a list of
-            // equals.
-            if (each == DesignTool.text)
-              Padding(
-                padding: EdgeInsets.symmetric(
-                    horizontal: t.space.sm, vertical: t.space.xs),
-                child:
-                    Divider(height: t.stroke.width, color: t.stroke.hairline),
+      child: SingleChildScrollView(
+        child: Column(
+          children: [
+            SizedBox(height: t.space.xs),
+            for (var i = 0; i < DesignTool.values.length; i++) ...[
+              // A rule wherever the band changes. Select sits above the first
+              // one on its own, because it is the tool you return to rather
+              // than one of the ones that make things.
+              if (i > 0 &&
+                  (DesignTool.values[i].band != DesignTool.values[i - 1].band ||
+                      DesignTool.values[i - 1] == DesignTool.select))
+                Padding(
+                  padding: EdgeInsets.symmetric(
+                      horizontal: t.space.sm, vertical: t.space.xs),
+                  child:
+                      Divider(height: t.stroke.width, color: t.stroke.hairline),
+                ),
+              _ToolButton(
+                tool: DesignTool.values[i],
+                on: DesignTool.values[i] == tool,
+                onTap: () => onTool(DesignTool.values[i]),
               ),
-            _ToolButton(
-              tool: each,
-              on: each == tool,
-              onTap: () => onTool(each),
-            ),
+            ],
+            SizedBox(height: t.space.xs),
           ],
-        ],
+        ),
       ),
     );
   }
 }
+
+/// The colour a band's tools are drawn in when they are not the one you hold.
+///
+/// **This is an argument, not decoration.** A rectangle is a rectangle whatever
+/// the house is doing; a gauge reads the house; a switch changes it. Those are
+/// three different kinds of act and the rail said so about none of them. The
+/// band that *sets* is the one the app did not have at all, and it is worth
+/// being able to see that it now does.
+Color bandColour(ToolBand band, HcTokens t) => switch (band) {
+      ToolBand.draw => t.surface.onBaseMuted,
+      ToolBand.read => t.accent.active,
+      ToolBand.set_ => t.accent.success,
+      ToolBand.more => t.surface.onBaseMuted,
+    };
 
 class _ToolButton extends StatelessWidget {
   const _ToolButton(
@@ -98,7 +117,7 @@ class _ToolButton extends StatelessWidget {
             child: Icon(
               toolIcon(tool.icon),
               size: 18,
-              color: on ? t.accent.active : t.surface.onBaseMuted,
+              color: on ? t.accent.active : bandColour(tool.band, t),
             ),
           ),
         ),
@@ -120,6 +139,12 @@ IconData toolIcon(String name) => switch (name) {
       'image' => Icons.image_outlined,
       'gauge' => Icons.speed_outlined,
       'code' => Icons.code_outlined,
+      'ellipse' => Icons.circle_outlined,
+      'path' => Icons.gesture_outlined,
+      'icon' => Icons.lightbulb_outline,
+      'toggle' => Icons.toggle_on_outlined,
+      'slider' => Icons.tune_outlined,
+      'stepper' => Icons.exposure_outlined,
       'card' => Icons.dashboard_customize_outlined,
       _ => Icons.help_outline,
     };

@@ -36,6 +36,14 @@ DeviceState _d(String id, String area, {bool on = false, String? type}) =>
       state: {'on': on},
     );
 
+/// Tall enough to hold the whole catalogue at once.
+///
+/// It grew when the elements that were registered-but-unreachable joined the
+/// list — the switch, the slider, the icon, the stepper, the colour wheel, the
+/// warmth bar, the scene button, and the three cards that had been in no picker
+/// at all. These tests are about what the catalogue *contains*, so the surface
+/// holds it rather than every assertion learning to scroll.
+const double _tall = 2600;
 Future<List<DashboardWidgetModel>> _pump(
   WidgetTester tester,
   List<DeviceState> devices, {
@@ -43,7 +51,7 @@ Future<List<DashboardWidgetModel>> _pump(
 }) async {
   registerBuiltinDashboardWidgets();
   final picked = <DashboardWidgetModel>[];
-  await tester.binding.setSurfaceSize(const Size(420, 1600));
+  await tester.binding.setSurfaceSize(const Size(420, _tall));
   addTearDown(() => tester.binding.setSurfaceSize(null));
   await tester.pumpWidget(ProviderScope(
     overrides: [
@@ -99,7 +107,7 @@ void main() {
       // Claiming "no rooms yet" while devices are still arriving is the same
       // lie as a card claiming "no devices match" mid-load.
       registerBuiltinDashboardWidgets();
-      await tester.binding.setSurfaceSize(const Size(420, 1600));
+      await tester.binding.setSurfaceSize(const Size(420, _tall));
       addTearDown(() => tester.binding.setSurfaceSize(null));
       await tester.pumpWidget(ProviderScope(
         child: MaterialApp(
@@ -209,7 +217,7 @@ void main() {
       // live house with no way to tell why. The header stays; only the claim
       // waits.
       registerBuiltinDashboardWidgets();
-      await tester.binding.setSurfaceSize(const Size(420, 1600));
+      await tester.binding.setSurfaceSize(const Size(420, _tall));
       addTearDown(() => tester.binding.setSurfaceSize(null));
       await tester.pumpWidget(ProviderScope(
         overrides: [
@@ -231,7 +239,7 @@ void main() {
     testWidgets('a listing that fails says so, rather than vanishing',
         (tester) async {
       registerBuiltinDashboardWidgets();
-      await tester.binding.setSurfaceSize(const Size(420, 1600));
+      await tester.binding.setSurfaceSize(const Size(420, _tall));
       addTearDown(() => tester.binding.setSurfaceSize(null));
       await tester.pumpWidget(ProviderScope(
         overrides: [

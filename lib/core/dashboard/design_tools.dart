@@ -27,6 +27,28 @@ import 'grid_engine.dart' show DashboardRect;
 /// this is data and not a set of subclasses: adding "drag out a gauge" needs a
 /// row here and nothing else, and every element the registry knows is
 /// reachable this way in principle.
+/// What a tool is for, which is what groups it on the rail.
+///
+/// The mockup's rail is banded and the bands are colour-coded, and that is
+/// carrying an argument rather than decorating one: **there are three kinds of
+/// thing you can put on a page and only one of them existed as a tool.** You
+/// could draw a rectangle, and you could place a card that showed a reading,
+/// and there was no way at all to draw something that *sets* the house. Naming
+/// the bands makes the missing one visible on the rail itself.
+enum ToolBand {
+  /// Marks. A rectangle is a rectangle whatever the house is doing.
+  draw,
+
+  /// Instruments. They read the house and show it.
+  read,
+
+  /// Controls. They read the house and change it — the class that was missing.
+  set_,
+
+  /// Escape hatches: your own markup, and the catalogue of everything else.
+  more,
+}
+
 enum DesignTool {
   /// The default, and the one you return to after every other. Dragging
   /// selects; nothing is created.
@@ -34,26 +56,34 @@ enum DesignTool {
     label: 'Select',
     shortcut: 'V',
     icon: 'cursor',
+    band: ToolBand.draw,
   ),
 
-  /// Words. The first tool anyone reaches for on an empty page.
-  text(
-    label: 'Text',
-    shortcut: 'T',
-    icon: 'text',
-    type: 'text',
-    defaults: {'size': 'title', 'align': 'start', 'vertical': 'middle'},
-  ),
+  // ── Draw ────────────────────────────────────────────────────────────────
 
-  /// A filled path. Defaults to a rectangle because that is what dragging a
-  /// box means everywhere else, and the kind is one click away in the
-  /// inspector.
+  /// A filled rectangle — what dragging a box means everywhere else.
   shape(
-    label: 'Shape',
+    label: 'Rectangle',
     shortcut: 'R',
     icon: 'shape',
     type: 'shape',
     defaults: {'shape': 'rectangle', 'fill': 'accent', 'opacity': 20},
+    band: ToolBand.draw,
+  ),
+
+  /// The same element, started as a circle.
+  ///
+  /// Its own tool rather than a setting on [shape], because the mockup's rail
+  /// has both and it is right: choosing the outline *after* drawing means every
+  /// ellipse is drawn wrong first. One row here costs nothing — a tool is a
+  /// type plus a starting config, and this is the same type.
+  ellipse(
+    label: 'Ellipse',
+    shortcut: 'O',
+    icon: 'ellipse',
+    type: 'shape',
+    defaults: {'shape': 'circle', 'fill': 'accent', 'opacity': 20},
+    band: ToolBand.draw,
   ),
 
   /// A rule at an angle.
@@ -69,6 +99,45 @@ enum DesignTool {
     icon: 'line',
     type: 'line',
     defaults: {'ink': 'muted'},
+    band: ToolBand.draw,
+  ),
+
+  /// A shape whose outline you write. Starts as a rectangle's box with the
+  /// outline already set to `path`, so the inspector's path field is the next
+  /// thing you touch rather than something to go looking for.
+  path(
+    label: 'Path',
+    shortcut: 'P',
+    icon: 'path',
+    type: 'shape',
+    defaults: {'shape': 'path', 'stroke': 'accent', 'stroke_width': 2},
+    band: ToolBand.draw,
+  ),
+
+  /// Words. The first tool anyone reaches for on an empty page.
+  text(
+    label: 'Text',
+    shortcut: 'T',
+    icon: 'text',
+    type: 'text',
+    defaults: {'size': 'title', 'align': 'start', 'vertical': 'middle'},
+    band: ToolBand.draw,
+  ),
+
+  // ── Show a reading ──────────────────────────────────────────────────────
+
+  /// A device as its own symbol.
+  ///
+  /// It takes `I` and the picture tool moved to `M`. Deliberate: an icon is
+  /// drawn constantly on a house dashboard and a picture is placed
+  /// occasionally, so the letter belongs to the icon. The churn is one
+  /// keystroke in a tool set nobody has years of muscle memory in yet.
+  deviceIcon(
+    label: 'Icon',
+    shortcut: 'I',
+    icon: 'icon',
+    type: 'icon',
+    band: ToolBand.read,
   ),
 
   /// A picture. The element exists already; what is new is drawing its box
@@ -76,9 +145,10 @@ enum DesignTool {
   /// actually works in.
   image(
     label: 'Image',
-    shortcut: 'I',
+    shortcut: 'M',
     icon: 'image',
     type: 'image',
+    band: ToolBand.read,
   ),
 
   /// One reading against a range.
@@ -87,7 +157,45 @@ enum DesignTool {
     shortcut: 'G',
     icon: 'gauge',
     type: 'gauge',
+    band: ToolBand.read,
   ),
+
+  // ── Set something ───────────────────────────────────────────────────────
+  //
+  // The band the app did not have. Each of these reads a device AND writes to
+  // it, and each refuses to write unless the plugin registered the attribute —
+  // see `toggle_element.dart` for why an inferred `writable` is not enough.
+
+  /// On and off.
+  toggle(
+    label: 'Switch',
+    shortcut: 'S',
+    icon: 'toggle',
+    type: 'toggle',
+    defaults: {'attribute': 'on'},
+    band: ToolBand.set_,
+  ),
+
+  /// A number you drag.
+  slider(
+    label: 'Slider',
+    shortcut: 'D',
+    icon: 'slider',
+    type: 'slider',
+    band: ToolBand.set_,
+  ),
+
+  /// A number you nudge — and the only control for one the plugin gave no
+  /// range for, which a slider cannot show at all.
+  stepper(
+    label: 'Stepper',
+    shortcut: 'N',
+    icon: 'stepper',
+    type: 'stepper',
+    band: ToolBand.set_,
+  ),
+
+  // ── More ────────────────────────────────────────────────────────────────
 
   /// Markup the author writes, run in a sandbox.
   code(
@@ -95,6 +203,7 @@ enum DesignTool {
     shortcut: 'C',
     icon: 'code',
     type: 'code',
+    band: ToolBand.more,
   ),
 
   /// The catalogue, opened as a tool rather than as a permanent panel.
@@ -103,21 +212,31 @@ enum DesignTool {
   /// history chart — and none of it can be *drawn*, because what it draws is
   /// decided by what you pick. So this tool opens the picker, and the rectangle
   /// you dragged becomes the card's placement.
+  ///
+  /// It is also where the controls that are not on the rail live: a colour
+  /// wheel, a warmth bar and a scene button are placed a few times on a page,
+  /// not dragged out constantly, and a rail long enough to hold everything is a
+  /// rail nobody can scan.
   card(
     label: 'Card',
     shortcut: 'A',
     icon: 'card',
     picks: true,
+    band: ToolBand.more,
   );
 
   const DesignTool({
     required this.label,
     required this.shortcut,
     required this.icon,
+    required this.band,
     this.type,
     this.defaults = const {},
     this.picks = false,
   });
+
+  /// Which band of the rail it sits in — and what colour it is drawn in.
+  final ToolBand band;
 
   final String label;
 

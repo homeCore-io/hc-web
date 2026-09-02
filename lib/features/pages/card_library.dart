@@ -42,6 +42,22 @@ class CardLibrary extends ConsumerStatefulWidget {
 
   @override
   ConsumerState<CardLibrary> createState() => _CardLibraryState();
+
+  /// Every widget type the catalogue offers.
+  ///
+  /// Public so a test can ask. `WidgetRegistry` says what this app can *draw*
+  /// and this list says what you can *place*, and for seven elements those two
+  /// answers disagreed in silence for a whole release: the switch, the slider,
+  /// the icon, the stepper, the colour wheel, the warmth bar and the scene
+  /// button were all registered, validated, drawable and unreachable. The page
+  /// looked identical to the one before them because it was.
+  ///
+  /// Exactly the drift the dashboard vocabulary exists to prevent between core
+  /// and this client, living inside this client between two hand-kept lists.
+  static Set<String> get offeredTypes => {
+        for (final group in _CardLibraryState._groups)
+          for (final entry in group.entries) entry.type,
+      };
 }
 
 class _CardLibraryState extends ConsumerState<CardLibrary> {
@@ -354,28 +370,39 @@ class _CardLibraryState extends ConsumerState<CardLibrary> {
     );
   }
 
-  /// Everything that is not a room, grouped by what it is for rather than by
-  /// which renderer draws it.
+  /// Everything that is not a room, grouped by **what the thing does to the
+  /// house** rather than by which renderer draws it.
+  ///
+  /// The groups are the mockup's, and the order is its argument. A page is made
+  /// of marks, of instruments that read, of controls that set, and of things
+  /// that hold other things — and until now the catalogue had no name for the
+  /// third, because the app had nothing to put in it. "Set something" being a
+  /// heading you can see is the point.
+  ///
+  /// The cards that were here before are unchanged and still here. They are
+  /// simply no longer the only thing you can place.
   static const _groups = <_Group>[
-    _Group('Devices', [
-      // Search above finds individual devices; these two are the containers.
-      _Entry('Several devices', 'device_grid', 'a card you fill yourself',
-          {'selection_mode': 'manual', 'device_ids': <String>[]}),
-      _Entry('One device', 'device_tile', 'pick it in the panel', {
-        'selection_mode': 'manual',
-        'device_ids': <String>[],
-        ..._bareCard,
-      }),
-    ]),
-    _Group('The house', [
+    // ── Draw ────────────────────────────────────────────────────────────────
+    // Marks. A rectangle is a rectangle whatever the house is doing. Most of
+    // these are faster from the tool rail — drag and it exists at the size you
+    // dragged — and they are here too because a catalogue that omitted them
+    // would be lying about what you can place.
+    _Group('Draw', [
+      _Entry('Rectangle', 'shape', 'drag one out with R',
+          {'shape': 'rectangle', 'fill': 'accent', 'opacity': 20}),
+      _Entry('Ellipse', 'shape', 'or O for a circle',
+          {'shape': 'circle', 'fill': 'accent', 'opacity': 20}),
+      _Entry('Line', 'line', 'a rule at an angle', {'ink': 'muted'}),
+      _Entry('Path', 'shape', 'an outline you write',
+          {'shape': 'path', 'stroke': 'accent', 'stroke_width': 2}),
+      _Entry('Text', 'text', 'words, at any size',
+          {'text': 'Text', 'size': 'title', 'align': 'start'}),
+      _Entry('Heading', 'heading', 'a section title',
+          {'text': 'Section', 'level': 'section', 'align': 'start'}),
+      _Entry('Divider', 'divider', 'a rule between things', {}),
+      _Entry('Spacer', 'spacer', 'a gap that stays a gap', {}),
       _Entry(
-          'At a glance', 'house_status_hero', 'lights, climate, security', {}),
-      _Entry('Activity', 'event_feed', 'what just happened',
-          {'limit': 20, 'group_by': 'none'}),
-      _Entry('Modes', 'mode_chips', 'day, night, away', {}),
-      _Entry('Scenes', 'scene_row', 'one tap each', {}),
-      _Entry('Now playing', 'media_player', 'speakers and TVs',
-          {'selection_mode': 'query', 'query': '', 'limit': 4}),
+          'Image', 'image', 'a picture, scaled to the card', {'fit': 'cover'}),
       // **It was in no picker at all.** The whole floor plan feature could only
       // be reached by already having one of these cards on the page, which
       // meant editing the document by hand. Added blank on purpose: an empty
@@ -384,17 +411,16 @@ class _CardLibraryState extends ConsumerState<CardLibrary> {
       _Entry('Floor plan', 'floor_plan', 'your home, with its lights on',
           {'fit': 'contain'}),
     ]),
-    // Data is its own family, not part of "Other". Three ways to show a
-    // number, and which one you want depends on the room rather than on the
+    // ── Show a reading ──────────────────────────────────────────────────────
+    // Instruments. Which one you want depends on the room rather than on the
     // number: a dial to see at a glance whether something is in range, a big
     // figure to read across a room, a line to see where it has been.
-    _Group('Data', [
+    _Group('Show a reading', [
+      _Entry('Icon', 'icon', 'a device as its own symbol', {}),
       _Entry('Gauge', 'gauge', 'one reading against a range',
           {'min': 0, 'max': 100}),
       // The same element with its card taken off and its number turned down —
-      // the piece you stack. Three of these at three sizes on the free layer
-      // is the instrument cluster that used to need a page of JavaScript, and
-      // offering only the full dial would keep that a secret.
+      // the piece you stack.
       _Entry('Arc', 'gauge', 'a ring you can stack', {
         'min': 0,
         'max': 100,
@@ -418,41 +444,77 @@ class _CardLibraryState extends ConsumerState<CardLibrary> {
       _Entry('Numbers', 'stat_summary', 'counts of things', {
         'metrics': ['devices', 'on', 'offline']
       }),
+      _Entry('Camera', 'camera_video', 'a live view',
+          {'source_type': 'image_refresh'}),
     ]),
-    // Structure and space, rather than anything about the house. These are the
-    // elements that let a page stop being a wall of boxes — and the spacer is
-    // the one that makes a gap survive a save, which free flow alone does not
-    // do for the derived breakpoints.
-    _Group('Layout', [
-      _Entry('Heading', 'heading', 'a section title',
-          {'text': 'Section', 'level': 'section', 'align': 'start'}),
-      _Entry('Divider', 'divider', 'a rule between things', {}),
-      _Entry('Spacer', 'spacer', 'a gap that stays a gap', {}),
+    // ── Set something ───────────────────────────────────────────────────────
+    // The class the catalogue had no heading for, because the app had nothing
+    // to put in it. Each of these reads a device AND writes to it, and each
+    // refuses to write unless the plugin registered the attribute — an inferred
+    // `writable` is this app's opinion, and a control built on one looks right,
+    // sends, and changes nothing. See `attribute_policy.dart`.
+    _Group('Set something', [
+      _Entry('Switch', 'toggle', 'on and off', {'attribute': 'on'}),
+      _Entry('Slider', 'slider', 'a number you drag', {}),
+      // The control for a number the plugin gave no range for, which a slider
+      // cannot show at all.
+      _Entry('Stepper', 'stepper', 'up a bit, down a bit', {}),
+      _Entry('Colour wheel', 'colour_wheel', 'hue and saturation',
+          {'attribute': 'color_xy'}),
+      _Entry('Warmth', 'warmth', 'warm to cool white',
+          {'attribute': 'color_temp', 'axis': 'vertical'}),
+      // Scenes activate directly, like a device — no rule stands between the
+      // button and the house.
+      _Entry('Scene button', 'scene_button', 'runs one scene', {}),
+    ]),
+    // ── The house ───────────────────────────────────────────────────────────
+    _Group('The house', [
+      _Entry(
+          'At a glance', 'house_status_hero', 'lights, climate, security', {}),
+      _Entry('Activity', 'event_feed', 'what just happened',
+          {'limit': 20, 'group_by': 'none'}),
+      _Entry('Modes', 'mode_chips', 'day, night, away', {}),
+      _Entry('Scenes', 'scene_row', 'one tap each', {}),
+      _Entry('Now playing', 'media_player', 'speakers and TVs',
+          {'selection_mode': 'query', 'query': '', 'limit': 4}),
+      // Reachable from nothing until now — the one element that keeps up with
+      // the house on its own, and you could not put it on a page.
+      _Entry('Rooms', 'rooms', 'every device, by room',
+          {'rooms_mode': 'all', 'hide_empty': true}),
+      _Entry('Other pages', 'dashboard_link', 'links to your dashboards',
+          {'dashboard_ids': <String>[]}),
+    ]),
+    // ── Hold other things ───────────────────────────────────────────────────
+    _Group('Hold other things', [
+      // Search above finds individual devices; these two are the containers.
+      _Entry('Several devices', 'device_grid', 'a card you fill yourself',
+          {'selection_mode': 'manual', 'device_ids': <String>[]}),
+      _Entry('One device', 'device_tile', 'pick it in the panel', {
+        'selection_mode': 'manual',
+        'device_ids': <String>[],
+        ..._bareCard,
+      }),
+      _Entry('A list of devices', 'device_list', 'a row each, with its state',
+          {'selection_mode': 'manual', 'device_ids': <String>[]}),
       // "A group is one card with a heading and its own arrangement of
       // devices, which is what a room card already is generalised" — so it is
       // that card, pre-titled, rather than a fourth type that would be
       // `device_grid` wearing a hat. See designer-plan.md §7.
       _Entry('Group', 'device_grid', 'a titled box of devices',
           {'selection_mode': 'manual', 'device_ids': <String>[]}),
-    ]),
-    _Group('Other', [
-      _Entry('Camera', 'camera_video', 'a live view',
-          {'source_type': 'image_refresh'}),
-      _Entry('Web page', 'web_embed', 'anything with a URL',
-          {'sandbox_profile': 'readonly_embed'}),
-      _Entry(
-          'Image', 'image', 'a picture, scaled to the card', {'fit': 'cover'}),
       _Entry('Note', 'markdown', 'text you write',
           {'markdown': '# Note\nWrite something here.'}),
-      // Placed blank on purpose, like the floor plan: an empty code element
-      // renders its own starter, which says what the API is at the moment
-      // somebody wants to know. Granted nothing until it is told otherwise —
-      // the device selection is the permission, so the safe default is none.
+      _Entry('Web page', 'web_embed', 'anything with a URL',
+          {'sandbox_profile': 'readonly_embed'}),
       // Between the gauges we draw and the code you write: bring the artwork,
       // wire it up in a list. Granted nothing until told otherwise, like the
       // code element it shares a sandbox with.
       _Entry('Drawing', 'svg', 'your svg, wired to the house',
           {'selection_mode': 'manual', 'device_ids': <String>[]}),
+      // Placed blank on purpose, like the floor plan: an empty code element
+      // renders its own starter, which says what the API is at the moment
+      // somebody wants to know. Granted nothing until it is told otherwise —
+      // the device selection is the permission, so the safe default is none.
       _Entry('Code', 'code', 'html, svg and script you write',
           {'selection_mode': 'manual', 'device_ids': <String>[]}),
     ]),

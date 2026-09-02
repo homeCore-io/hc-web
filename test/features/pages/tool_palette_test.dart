@@ -151,7 +151,7 @@ void main() {
     // recommended size, and not a whole number of cells — the rectangle that
     // was dragged, in pixels.
     await _open(tester);
-    await tester.tap(find.byTooltip('Shape  R'));
+    await tester.tap(find.byTooltip('Rectangle  R'));
     await tester.pumpAndSettle();
 
     final dragged = await _dragOnBoard(
@@ -233,7 +233,7 @@ void main() {
     // One shape per press of the tool. A tool that stays down is one you make
     // shapes with by accident.
     await _open(tester);
-    await tester.tap(find.byTooltip('Shape  R'));
+    await tester.tap(find.byTooltip('Rectangle  R'));
     await tester.pumpAndSettle();
     await _dragOnBoard(tester, const Offset(0.3, 0.3), const Offset(0.5, 0.5));
 
