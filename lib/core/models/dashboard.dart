@@ -475,6 +475,21 @@ class DashboardDefinition {
   /// What the page sits on. Null is every dashboard saved before there was one.
   final DashboardBackground? background;
 
+  /// Whether this document is a **starting point** rather than a page.
+  ///
+  /// A template is a dashboard in every other respect — same widgets, same
+  /// layouts, same access, same editor — and differs in which list it appears
+  /// in: the pages you use, or the ones you start from.
+  ///
+  /// **A copy, never a link.** Making a page from a template copies it and the
+  /// two have nothing to do with each other afterwards, which is what keeps
+  /// this a boolean rather than an instance model: there is nothing to
+  /// re-sync, nothing to override, and no question about who wins when a
+  /// template changes under a page made from it.
+  ///
+  /// False for every dashboard saved before templates could be made.
+  final bool isTemplate;
+
   const DashboardDefinition({
     required this.id,
     required this.name,
@@ -489,6 +504,7 @@ class DashboardDefinition {
     required this.layouts,
     required this.widgets,
     this.background,
+    this.isTemplate = false,
   });
 
   DashboardDefinition copyWith({
@@ -505,6 +521,7 @@ class DashboardDefinition {
     List<DashboardLayout>? layouts,
     List<DashboardWidgetModel>? widgets,
     DashboardBackground? background,
+    bool? isTemplate,
   }) {
     return DashboardDefinition(
       id: id ?? this.id,
@@ -520,6 +537,7 @@ class DashboardDefinition {
       layouts: layouts ?? this.layouts,
       widgets: widgets ?? this.widgets,
       background: background ?? this.background,
+      isTemplate: isTemplate ?? this.isTemplate,
     );
   }
 
@@ -553,6 +571,9 @@ class DashboardDefinition {
         // Omitted when there is none, so a dashboard that never had a
         // background round-trips byte-identically.
         if (background != null) 'background': background!.toJson(),
+        // The same rule: a page says nothing about templates, so every
+        // document that predates them is written back exactly as it was read.
+        if (isTemplate) 'template': true,
       };
 
   factory DashboardDefinition.fromJson(Map<String, dynamic> json) =>
@@ -588,6 +609,7 @@ class DashboardDefinition {
             ? DashboardBackground.fromJson(
                 Map<String, dynamic>.from(json['background'] as Map))
             : null,
+        isTemplate: json['template'] == true,
       );
 }
 

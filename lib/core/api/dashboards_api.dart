@@ -67,6 +67,18 @@ class DashboardsApi {
     return _parseDashboard(Map<String, dynamic>.from(response.data as Map));
   }
 
+  /// This page, saved as something to start the next one from.
+  ///
+  /// The page carries on being the page — this is a copy, not a conversion —
+  /// and the template it leaves behind is unwired, because a starting point
+  /// carrying one house's device ids is a starting point for exactly one
+  /// house. Core does that transform; it is the same one [exportDashboard]
+  /// does with `wired: false`.
+  Future<DashboardDefinition> saveAsTemplate(String id) async {
+    final response = await client.dio.post('/dashboards/$id/template');
+    return _parseDashboard(Map<String, dynamic>.from(response.data as Map));
+  }
+
   Future<DashboardDefinition> duplicateDashboard(String id) async {
     final response = await client.dio.post('/dashboards/$id/duplicate');
     return _parseDashboard(Map<String, dynamic>.from(response.data as Map));

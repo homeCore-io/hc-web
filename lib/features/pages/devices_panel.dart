@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import '../../core/dashboard/card_style.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/dashboard/design_tools.dart';
@@ -193,7 +195,7 @@ class _DevicesPanelState extends ConsumerState<DevicesPanel> {
       title: device.displayName,
       type: placement.type,
       refreshPolicy: DashboardRefreshPolicy.live,
-      config: placement.config,
+      config: CardStyle.undecorated.toConfig(placement.config),
     );
   }
 }

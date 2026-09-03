@@ -5,8 +5,10 @@ import '../../core/dashboard/binding.dart';
 import '../../core/dashboard/card_condition.dart';
 import '../../core/dashboard/tap_action.dart';
 import '../../core/dashboard/card_style.dart';
+import '../../core/dashboard/constraints.dart';
 import '../../core/dashboard/grid_engine.dart' show DashboardRect;
 import '../../core/dashboard/free_layer.dart';
+import '../../core/dashboard/named_styles.dart';
 import '../../core/dashboard/transform.dart';
 import '../../core/dashboard/widget_registry.dart';
 import '../../core/devices/scene_state.dart';
@@ -59,9 +61,18 @@ class CardInspector extends ConsumerStatefulWidget {
     this.onFade,
     this.rect,
     this.onRect,
+    this.insideFrame,
   });
 
   final DashboardWidgetModel model;
+
+  /// The frame this element sits in, by name, or null when it sits on the page.
+  ///
+  /// Only there to decide whether the pins are worth showing and what to call
+  /// the thing they are relative to. A pin outside a frame is a rule about
+  /// nothing — every page is exactly as wide as it is — and a section of
+  /// controls that can never do anything is worse than one that is absent.
+  final String? insideFrame;
 
   /// A config the user has just edited. Applied to the draft immediately.
   final ValueChanged<Map<String, dynamic>> onChanged;
@@ -228,6 +239,13 @@ class _CardInspectorState extends ConsumerState<CardInspector> {
                 _StyleSection(
                   cardId: model.id,
                   style: CardStyle.fromConfig(model.config),
+                  // Derived on every build rather than cached, and cheap
+                  // enough to be: it is a walk of the widgets already in
+                  // memory, and a cached library is one that can be wrong
+                  // about a style you named ten seconds ago. See
+                  // `named_styles.dart` for why there is nothing stored.
+                  saved: namedStylesIn(
+                      ref.watch(dashboardsProvider).value ?? const []),
                   onChanged: (style) => onChanged(style.toConfig(model.config)),
                 ),
                 _VariantsSection(
@@ -250,6 +268,12 @@ class _CardInspectorState extends ConsumerState<CardInspector> {
                   rotation: widget.rotation,
                   onRect: widget.onRect!,
                   onRotate: widget.onRotate ?? (_) {},
+                ),
+              if (widget.insideFrame case final frame?)
+                _PinSection(
+                  frame: frame,
+                  pins: Pins.fromConfig(model.config),
+                  onChanged: (pins) => onChanged(pins.toConfig(model.config)),
                 ),
               if (widget.onRotate case final onRotate?)
                 _TransformSection(
@@ -1842,6 +1866,70 @@ class _PropertyRow extends StatelessWidget {
   }
 }
 
+/// What this element does when the frame around it changes size.
+///
+/// Only ever shown for something inside a frame, because outside one there is
+/// no size to be relative to. Two rows rather than a nine-square diagram: the
+/// axes are genuinely independent — a rail pinned left that stretches top to
+/// bottom is the commonest thing on any of these pages — and a diagram makes
+/// the pairs look like the unit when they are not.
+class _PinSection extends StatelessWidget {
+  const _PinSection({
+    required this.frame,
+    required this.pins,
+    required this.onChanged,
+  });
+
+  final String frame;
+  final Pins pins;
+  final ValueChanged<Pins> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Padding(
+      padding: EdgeInsets.only(top: t.space.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('WHEN ${frame.toUpperCase()} RESIZES',
+              style:
+                  t.text.overlineStyle.copyWith(color: t.surface.onBaseMuted)),
+          SizedBox(height: t.space.xs),
+          _StyleChoice(
+            label: 'Across',
+            value: pins.across.key,
+            options: [
+              for (final pin in Pin.values)
+                (key: pin.key, label: pin.acrossLabel),
+            ],
+            onChanged: (v) => onChanged(pins.copyWith(across: Pin.from(v))),
+          ),
+          SizedBox(height: t.space.xs),
+          _StyleChoice(
+            label: 'Down',
+            value: pins.down.key,
+            options: [
+              for (final pin in Pin.values)
+                (key: pin.key, label: pin.downLabel),
+            ],
+            onChanged: (v) => onChanged(pins.copyWith(down: Pin.from(v))),
+          ),
+          SizedBox(height: t.space.xs),
+          Text(
+            pins.isNone
+                ? 'It stays where it is and keeps its size.'
+                : 'Hold the same edges and this design works at more than one '
+                    'width without being drawn twice.',
+            style: t.text.captionStyle
+                .copyWith(color: t.surface.onBaseMuted, height: 1.4),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _PositionSection extends StatelessWidget {
   const _PositionSection({
     required this.rect,
@@ -2094,10 +2182,14 @@ class _StyleSection extends StatelessWidget {
     required this.style,
     required this.onChanged,
     required this.cardId,
+    this.saved = const [],
   });
 
   final CardStyle style;
   final ValueChanged<CardStyle> onChanged;
+
+  /// Every look anybody has named, on any page. See `named_styles.dart`.
+  final List<NamedStyle> saved;
 
   /// Keys the picture field, so moving the selection to another card does not
   /// leave the previous card's address sitting in it.
@@ -2114,6 +2206,91 @@ class _StyleSection extends StatelessWidget {
           Text('STYLE',
               style:
                   t.text.overlineStyle.copyWith(color: t.surface.onBaseMuted)),
+          SizedBox(height: t.space.xs),
+          // **The two ends of the three switches below, in one press each.**
+          //
+          // An element now arrives undecorated — see `CardStyle.undecorated`,
+          // and the reason there. Which is right for designing and wrong for
+          // the moment you actually want the card look, because the card look
+          // is three switches and nobody wants to find out that it is three.
+          //
+          // Not a mode: these set the same three booleans the rows below show,
+          // and the rows stay live. Whichever end you are at is marked, and
+          // anything in between is at neither.
+          Row(
+            children: [
+              Expanded(
+                child: _StylePreset(
+                  label: 'Plain',
+                  on: !style.filled && !style.bordered && !style.titled,
+                  onTap: () => onChanged(style.copyWith(
+                      filled: false, bordered: false, titled: false)),
+                ),
+              ),
+              SizedBox(width: t.space.xs),
+              Expanded(
+                child: _StylePreset(
+                  label: 'Card',
+                  on: style.filled && style.bordered && style.titled,
+                  onTap: () => onChanged(style.copyWith(
+                      filled: true, bordered: true, titled: true)),
+                ),
+              ),
+            ],
+          ),
+          if (saved.isNotEmpty || !style.isDefault) ...[
+            SizedBox(height: t.space.sm),
+            Text('SAVED LOOKS',
+                style: t.text.overlineStyle
+                    .copyWith(color: t.surface.onBaseMuted)),
+            SizedBox(height: t.space.xs),
+            Wrap(
+              spacing: t.space.xs,
+              runSpacing: t.space.xs,
+              children: [
+                for (final entry in saved)
+                  _StylePill(
+                    label: entry.name,
+                    count: entry.uses,
+                    on: entry.name == style.name,
+                    // **Applying copies.** The nine properties and the name go
+                    // onto this card and nothing links back — see
+                    // `named_styles.dart`. Editing it a second later is an
+                    // ordinary edit and reaches nothing else, on this page or
+                    // any other.
+                    onTap: () => onChanged(entry.style),
+                  ),
+                if (!style.isDefault)
+                  _StylePill(
+                    label: style.name == null ? 'Save this look…' : 'Rename…',
+                    on: false,
+                    onTap: () async {
+                      final name = await _promptStyleName(
+                        context,
+                        style.name ??
+                            freshStyleName([for (final e in saved) e.name]),
+                      );
+                      if (name == null) return;
+                      // An empty answer forgets the name and keeps the look,
+                      // which is the only way back out of the library — a
+                      // style stops existing when the last card wearing it is
+                      // unnamed.
+                      onChanged(style.called(name.isEmpty ? null : name));
+                    },
+                  ),
+              ],
+            ),
+            SizedBox(height: t.space.xs),
+            Text(
+              style.name == null
+                  ? 'A saved look is copied onto the card. Change it afterwards '
+                      'and nothing else moves.'
+                  : 'Wearing “${style.name}”. Editing it here changes this card '
+                      'only.',
+              style: t.text.captionStyle
+                  .copyWith(color: t.surface.onBaseMuted, height: 1.4),
+            ),
+          ],
           SizedBox(height: t.space.xs),
           _StyleSwitch(
             label: 'Background',
@@ -2202,8 +2379,8 @@ class _StyleSection extends StatelessWidget {
             Text(
               style.filled
                   ? 'No outline — it sits on the page without a frame.'
-                  : 'The page shows through. Useful for a heading strip or a '
-                      'row of controls that should not read as a card.',
+                  : 'The page shows through, and the contents reach the edges '
+                      'of the box you drew.',
               style: t.text.captionStyle
                   .copyWith(color: t.surface.onBaseMuted, height: 1.4),
             ),
@@ -2349,6 +2526,121 @@ class _StackSection extends StatelessWidget {
           ),
         ],
       ],
+    );
+  }
+}
+
+/// One saved look, as something to press.
+///
+/// The count is what makes the list readable rather than a row of words: a look
+/// worn by four cards is a house style, and one worn once is something you
+/// named a minute ago and may have finished with.
+class _StylePill extends StatelessWidget {
+  const _StylePill({
+    required this.label,
+    required this.on,
+    required this.onTap,
+    this.count,
+  });
+
+  final String label;
+  final bool on;
+  final int? count;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Semantics(
+      button: true,
+      selected: on,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: EdgeInsets.symmetric(
+              horizontal: t.space.sm, vertical: t.space.xs / 2),
+          decoration: BoxDecoration(
+            color: on ? t.surface.raised : null,
+            borderRadius: BorderRadius.circular(t.radius.pill),
+            border: Border.all(
+              color: on ? t.accent.active : t.stroke.hairline,
+              width: t.stroke.width,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(label,
+                  style: t.text.captionStyle.copyWith(
+                      color: on ? t.surface.onBase : t.surface.onBaseMuted)),
+              if (count case final n?) ...[
+                SizedBox(width: t.space.xs / 2),
+                Text('$n',
+                    style: t.text.captionStyle
+                        .copyWith(color: t.surface.onBaseMuted)),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Name this look, or clear the name by answering with nothing.
+Future<String?> _promptStyleName(BuildContext context, String initial) {
+  final controller = TextEditingController(text: initial);
+  return showDialog<String>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Name this look'),
+      content: TextField(
+        controller: controller,
+        autofocus: true,
+        decoration: const InputDecoration(
+          helperText: 'Applying it elsewhere copies it. Nothing stays linked.',
+        ),
+        onSubmitted: (v) => Navigator.of(context).pop(v.trim()),
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel')),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(controller.text.trim()),
+          child: const Text('Save'),
+        ),
+      ],
+    ),
+  );
+}
+
+/// One end of the STYLE section, as a button that shows whether you are at it.
+class _StylePreset extends StatelessWidget {
+  const _StylePreset({
+    required this.label,
+    required this.on,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool on;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return OutlinedButton(
+      onPressed: onTap,
+      style: OutlinedButton.styleFrom(
+        visualDensity: VisualDensity.compact,
+        foregroundColor: on ? t.accent.primary : t.surface.onBaseMuted,
+        side: BorderSide(
+          color: on ? t.accent.primary : t.stroke.hairline,
+          width: t.stroke.width,
+        ),
+      ),
+      child: Text(label),
     );
   }
 }

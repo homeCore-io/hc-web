@@ -36,6 +36,14 @@ class DashboardsNotifier extends AsyncNotifier<List<DashboardDefinition>> {
 
   Future<void> createDashboard(DashboardDefinition dashboard) async {
     if (!_dashboardApiAvailable) {
+      // **Templates are not pages.** On the wire core keeps the two lists
+      // apart; here this list *is* the store, so the same distinction has to
+      // be made at the door. A starting point among the pages you use is
+      // clutter at best and, being wired to nothing, a page of dead controls
+      // at worst. Nothing reaches this today — [saveAsTemplate] refuses
+      // without core — but a list that quietly accepts one is how it stops
+      // being true.
+      if (dashboard.isTemplate) return;
       state = AsyncData([...(state.value ?? const []), dashboard]);
       return;
     }
@@ -84,6 +92,38 @@ class DashboardsNotifier extends AsyncNotifier<List<DashboardDefinition>> {
     await ref.read(dashboardsApiProvider).duplicateDashboard(id);
     await reload();
   }
+
+  /// Save a page as something to start the next one from.
+  ///
+  /// Returns what it made, so the caller can say the template's name — which
+  /// may not be the page's, because a second template of the same name gets a
+  /// suffix, and finding that out by going to look is a worse way to learn it.
+  ///
+  /// **The page is untouched.** This copies; it does not convert. Somebody who
+  /// carries on using the page they just saved a template of is the common
+  /// case, not the exception.
+  ///
+  /// The templates list is invalidated rather than reloaded, because the list
+  /// you pick from is a different provider from the pages you use — and a new
+  /// starting point that only appears after a restart is a feature nobody
+  /// trusts.
+  ///
+  /// **Not offered without core.** In the local-only fallback the templates
+  /// list is a fixed set built in Dart, so there is nowhere for a saved one to
+  /// go: it would be written into the pages list, hidden from it, and lost on
+  /// the next reload. Refusing out loud is the only honest answer — see
+  /// [canSaveTemplates].
+  Future<DashboardDefinition> saveAsTemplate(String id) async {
+    if (!_dashboardApiAvailable) {
+      throw StateError('templates need core');
+    }
+    final template = await ref.read(dashboardsApiProvider).saveAsTemplate(id);
+    ref.invalidate(dashboardTemplatesProvider);
+    return template;
+  }
+
+  /// Whether saved templates have anywhere to live. See [saveAsTemplate].
+  bool get canSaveTemplates => _dashboardApiAvailable;
 
   Future<void> importDashboard(DashboardDefinition dashboard) async {
     if (!_dashboardApiAvailable) {

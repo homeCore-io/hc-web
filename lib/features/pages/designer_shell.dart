@@ -90,6 +90,8 @@ class DesignerShell extends StatefulWidget {
     this.onEnterGroup,
     this.groupBox,
     this.onGroupBox,
+    this.onGroupFrame,
+    this.insideFrame,
     this.onSelectMany,
     this.onEnterGroupId,
     required this.groupInHand,
@@ -220,6 +222,18 @@ class DesignerShell extends StatefulWidget {
 
   /// Restyle the group in hand.
   final ValueChanged<GroupBox>? onGroupBox;
+
+  /// The frame the selected element sits in, by name — see
+  /// [CardInspector.insideFrame].
+  final String? insideFrame;
+
+  /// Make the group in hand a frame, or stop it being one.
+  ///
+  /// Separate from [onGroupBox] because it is not a style: it changes what the
+  /// numbers in the document *mean*, and doing it correctly needs the members'
+  /// resolved rectangles, which live with the canvas rather than the panel.
+  /// Null when there is nothing to frame — see `page_screen`.
+  final ValueChanged<bool>? onGroupFrame;
 
   /// The group you have stepped into, as a path. Null at the top of the page.
   final String? inside;
@@ -635,6 +649,7 @@ class _DesignerShellState extends State<DesignerShell> {
                               },
                               onGroup: widget.onGroup,
                               onUngroup: widget.onUngroup,
+                              onStack: widget.onStack,
                               onUndo: widget.canUndo ? widget.onUndo : null,
                               onRedo: widget.canRedo ? widget.onRedo : null,
                               onTool: widget.onTool,
@@ -744,6 +759,7 @@ class _DesignerShellState extends State<DesignerShell> {
                                 onEnterGroup: widget.onEnterGroup,
                                 groupBox: widget.groupBox,
                                 onGroupBox: widget.onGroupBox,
+                                onGroupFrame: widget.onGroupFrame,
                               )
                             : widget.selected == null
                                 ? PageInspector(
@@ -777,6 +793,7 @@ class _DesignerShellState extends State<DesignerShell> {
                                     opacity: widget.selectedItem?.opacity,
                                     rect: widget.selectedItem?.rect,
                                     onRect: widget.onRect,
+                                    insideFrame: widget.insideFrame,
                                     onRotate: widget.onRotate,
                                     onFade: widget.onFade,
                                   ),
@@ -1134,6 +1151,7 @@ class _GroupSection extends StatefulWidget {
     required this.onEnter,
     required this.box,
     required this.onBox,
+    required this.onFrame,
   });
 
   final String? path;
@@ -1145,6 +1163,11 @@ class _GroupSection extends StatefulWidget {
 
   /// How this group is styled, or null while it is only a name.
   final GroupBox? box;
+
+  /// Make it a frame, or stop it being one. Null when this layout has nothing
+  /// to frame — a packed layout positions by cells, and cells are not measured
+  /// from anything.
+  final ValueChanged<bool>? onFrame;
 
   /// Restyle it. Null means the surface has nowhere to write — the phone's
   /// in-place editor has no document to save a container into.
@@ -1290,6 +1313,32 @@ class _GroupSectionState extends State<_GroupSection> {
               value: styled.clip,
               onChanged: (v) => write(styled.copyWith(clip: v)),
             ),
+            // **The switch that turns a box into a place.** Everything above
+            // decorates a rectangle drawn around some cards; this makes the
+            // cards be *in* it — see `frame_space.dart`.
+            //
+            // The copy says what it does rather than naming the concept,
+            // like every other row here. "Frame" is the word in the code and
+            // the right one there; on screen, what a person wants to know is
+            // whether dragging this takes the contents along.
+            if (widget.onFrame case final frame?) ...[
+              SizedBox(height: t.space.xs),
+              InspectorToggle(
+                label: 'Things inside move with it',
+                value: styled.isFrame,
+                onChanged: frame,
+              ),
+              SizedBox(height: t.space.xs),
+              Text(
+                styled.isFrame
+                    ? 'Positions inside are measured from this box, so moving '
+                        'it moves everything in it.'
+                    : 'The box is only drawn around them. Moving it leaves '
+                        'them where they are.',
+                style: t.text.captionStyle
+                    .copyWith(color: t.surface.onBaseMuted, height: 1.4),
+              ),
+            ],
             SizedBox(height: t.space.xs),
             // The parent transform, and the reason it is *here* rather than in
             // a section of its own: in this document a group having an entry at
@@ -1329,7 +1378,7 @@ class _GroupSectionState extends State<_GroupSection> {
             Text(
               styled.rect == null
                   ? 'The box fits its members and follows them as they move.'
-                  : 'The box is where you put it. Members move inside it.',
+                  : 'The box is where you put it.',
               style: t.text.captionStyle
                   .copyWith(color: t.surface.onBaseMuted, height: 1.4),
             ),
@@ -1363,6 +1412,7 @@ class _ManySelected extends StatelessWidget {
     required this.onEnterGroup,
     required this.groupBox,
     required this.onGroupBox,
+    required this.onGroupFrame,
   });
 
   final int count;
@@ -1379,6 +1429,7 @@ class _ManySelected extends StatelessWidget {
   final VoidCallback? onEnterGroup;
   final GroupBox? groupBox;
   final ValueChanged<GroupBox>? onGroupBox;
+  final ValueChanged<bool>? onGroupFrame;
 
   @override
   Widget build(BuildContext context) {
@@ -1416,6 +1467,7 @@ class _ManySelected extends StatelessWidget {
             onEnter: onEnterGroup,
             box: groupBox,
             onBox: onGroupBox,
+            onFrame: onGroupFrame,
           ),
           SizedBox(height: t.space.md),
           Text('ALIGN',
@@ -1661,6 +1713,7 @@ class _CanvasKeys extends StatelessWidget {
     required this.onPanKey,
     required this.onGroup,
     required this.onUngroup,
+    required this.onStack,
     required this.onUndo,
     required this.onRedo,
     required this.onTool,
@@ -1681,6 +1734,16 @@ class _CanvasKeys extends StatelessWidget {
   final ValueChanged<bool> onPanKey;
   final VoidCallback? onGroup;
   final VoidCallback? onUngroup;
+
+  /// Move what is held up or down the stack.
+  ///
+  /// The six moves have been in `free_layer.dart` and on the card menu since
+  /// the free layer shipped, and they have never had a key. That is most of
+  /// why raising and lowering has not felt like something this editor does:
+  /// stacking is a thing you do twenty times while arranging a cluster, and
+  /// twenty trips to a context menu is not the same operation.
+  final ValueChanged<StackMove>? onStack;
+
   final VoidCallback? onUndo;
   final VoidCallback? onRedo;
 
@@ -1745,6 +1808,20 @@ class _CanvasKeys extends StatelessWidget {
         // where anyone finds them the first time.
         const CharacterActivator('!'): onFit,
         const CharacterActivator('@'): onFrameSelection,
+        // The brackets, as everywhere else that stacks things: bare steps one
+        // place, with the modifier goes all the way. Characters rather than
+        // key codes for the reason above — the bracket keys move around a lot
+        // more between layouts than the letters do.
+        const CharacterActivator(']'): () => onStack?.call(StackMove.forward),
+        const CharacterActivator('['): () => onStack?.call(StackMove.backward),
+        const CharacterActivator(']', meta: true): () =>
+            onStack?.call(StackMove.front),
+        const CharacterActivator(']', control: true): () =>
+            onStack?.call(StackMove.front),
+        const CharacterActivator('[', meta: true): () =>
+            onStack?.call(StackMove.back),
+        const CharacterActivator('[', control: true): () =>
+            onStack?.call(StackMove.back),
         // Both spellings, because this is one of the few shortcuts people
         // arrive already knowing and the modifier differs by platform.
         const SingleActivator(LogicalKeyboardKey.keyG, meta: true): () =>

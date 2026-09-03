@@ -8,16 +8,19 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/dashboard/breakpoints.dart';
 import '../../core/dashboard/canvas_view.dart';
+import '../../core/dashboard/constraints.dart';
 import '../../core/dashboard/clipboard.dart';
 import '../../core/dashboard/design_tools.dart';
 import '../../core/dashboard/device_slot.dart';
 import '../../core/dashboard/frame.dart';
+import '../../core/dashboard/frame_space.dart';
 import '../../core/dashboard/free_layer.dart';
 import '../../core/dashboard/grid_engine.dart';
 import '../../core/dashboard/group_frame.dart';
 import '../../core/dashboard/groups.dart';
 import '../../core/dashboard/layout_write.dart';
 import '../../core/dashboard/page_starts.dart';
+import '../../core/dashboard/repeat.dart';
 import '../../core/text/humanize.dart';
 import '../../core/dashboard/widget_registry.dart';
 import '../../core/models/dashboard.dart';
@@ -371,6 +374,182 @@ class _PageScreenState extends ConsumerState<PageScreen> {
     });
   }
 
+  /// Make the group in hand a frame, or stop it being one.
+  ///
+  /// The one edit in the designer that changes what the document's numbers
+  /// *mean* rather than what they are, and the whole requirement is that
+  /// **nothing moves**. Turning it on must leave every card exactly where it
+  /// was on screen; turning it off must put it back.
+  ///
+  /// Which is why almost nothing happens here. The draft holds page
+  /// coordinates — every gesture on the canvas produces them and always has —
+  /// and page coordinates are precisely what this edit does not change. So the
+  /// cards are not touched at all, and `_commit` writes them into whatever
+  /// space the frames then describe. The only rectangles that need restating
+  /// are the *boxes'* own, because a container nested inside the new frame is
+  /// measured from it too, and `rebase` does that arithmetic as a round trip
+  /// rather than as a shift — see `frame_space.dart` for why that distinction
+  /// is worth the words.
+  ///
+  /// **A frame has to state a rectangle**, so turning it on materialises one
+  /// from where the members currently are. That is the only geometry invented
+  /// here, and it is invented to sit exactly around what is already there.
+  void _setGroupFrame(String path, bool on) {
+    final layouts = _draftLayouts;
+    final items = _draftItems;
+    final selected = _editingBreakpoint;
+    if (layouts == null || items == null || selected == null) return;
+    final layout = layouts.where((l) => l.breakpoint == selected).firstOrNull;
+    if (layout == null) return;
+
+    final before = framesByPath(layout.groups);
+    final existing = layout.groups.where((g) => g.path == path).firstOrNull;
+
+    var rect = existing?.rect;
+    if (on && rect == null) {
+      final members = membersOf(_paths, path);
+      final bounds = boundsOfRects([
+        for (final i in items)
+          if (members.contains(i.id))
+            if (i.rect case final r?) r,
+      ]);
+      // Nothing composed to be around. A packed group has no rectangles of its
+      // own — its members are positioned by cells — so there is no honest box
+      // to invent and nothing to measure from. The panel does not offer this
+      // on such a layout; this is the guard for the case it is called anyway.
+      if (bounds == null) return;
+      // Materialised in the box's *parent's* space, which is where a box's
+      // rectangle lives. On an unnested group that is the page, and this is
+      // the identity.
+      rect = toLocal(bounds, spaceOfBox(path), before);
+    }
+
+    final next =
+        (existing ?? GroupBox(path: path)).copyWith(frame: on, rect: rect);
+    final rebased = rebase(
+      boxes: [
+        for (final g in layout.groups)
+          if (g.path != path) g,
+        if (!next.isPlain) next,
+      ],
+      before: before,
+      // The cards are already where they belong: see above.
+      paths: const {},
+      rects: const {},
+    );
+
+    _pushUndo(on ? 'Hold things inside the group' : 'Let the group go');
+    setState(() {
+      _draftLayouts = [
+        for (final l in layouts)
+          if (l.breakpoint != selected)
+            l
+          else
+            l.copyWith(groups: rebased.boxes),
+      ];
+      _contentDirty = true;
+    });
+  }
+
+  /// A frame put somewhere new — dragged by its name, or pulled by an edge.
+  ///
+  /// Two things move, and only one of them is written down. The **box** gets a
+  /// new rectangle, restated in whatever space it sits in. The **members** are
+  /// not touched in the document at all — their rectangles are stated inside
+  /// this frame, and the frame is what moved — but the draft holds them
+  /// resolved to the page, so those resolved numbers are carried along here or
+  /// the next edit would localise stale positions and snap everything back to
+  /// where the frame used to be.
+  ///
+  /// The layout is updated *before* the commit, deliberately: `_commit`
+  /// localises against the frames it finds, and the frame it must find is the
+  /// one at its new position.
+  void _setFrameRect(String path, DashboardRect pageRect) {
+    final layouts = _draftLayouts;
+    final items = _draftItems;
+    final selected = _editingBreakpoint;
+    if (layouts == null || items == null || selected == null) return;
+    final layout = layouts.where((l) => l.breakpoint == selected).firstOrNull;
+    if (layout == null) return;
+
+    final frames = framesByPath(layout.groups);
+    final box = layout.groups.where((g) => g.path == path).firstOrNull;
+    final was = box == null ? null : pageRectOf(box, frames);
+    if (box == null || was == null) return;
+
+    // Bail on the whole rectangle, not on the corner: pulling the right edge
+    // moves nothing and resizes everything, and a guard that only watched the
+    // corner would drop it on the floor.
+    if (pageRect == was) return;
+
+    // **Every member is re-resolved rather than nudged**, and stating it that
+    // way is what makes the two halves of a frame gesture one piece of
+    // arithmetic instead of two that have to agree.
+    //
+    // Down into the old frame's space, apply whatever the member's pin says
+    // about the *size* change, back up through the new one. The **corner**
+    // falls out of the last step — a member is stated from the frame's
+    // top-left, so it goes wherever that corner goes, the whole way on a move,
+    // the whole way when the left or top edge is pulled, and not at all when
+    // it is the right or bottom. The **size** is `constraints.dart`, and for
+    // everything nobody has pinned that is the identity, so a page written
+    // before pins existed resizes exactly as it did yesterday.
+    final boxes = [
+      for (final g in layout.groups)
+        if (g.path == path)
+          // A box's own rectangle lives in its *parent's* space, which for a
+          // frame at the top of the page is the page.
+          g.copyWith(rect: toLocal(pageRect, spaceOfBox(path), frames))
+        else
+          g,
+    ];
+    final after = framesByPath(boxes);
+    final widgets = _draftWidgets ?? const <String, DashboardWidgetModel>{};
+    final paths = _paths;
+    final carried = membersOf(paths, path);
+
+    /// [rect] where it ends up, in page units.
+    DashboardRect settled(String id, DashboardRect rect) {
+      final where = paths[id];
+      var local = toLocal(rect, where, frames);
+      // Pins are the *nearest* frame's business. A card two frames down is
+      // measured from the inner one, and the inner one has not changed size —
+      // it has only moved, which the resolve below already carries. Applying
+      // this frame's size change to it would stretch it twice.
+      if (nearestFrame(where, frames) == path) {
+        local = applyPins(
+          local,
+          Pins.fromConfig(widgets[id]?.config ?? const {}),
+          was: was.w,
+          wasHeight: was.h,
+          now: pageRect.w,
+          nowHeight: pageRect.h,
+        );
+      }
+      return toPage(local, where, after);
+    }
+
+    _pushUndo(
+      pageRect.w == was.w && pageRect.h == was.h
+          ? 'Move ${nameOf(path)}'
+          : 'Resize ${nameOf(path)}',
+      coalesce: 'frame:$path',
+    );
+    setState(() {
+      _draftLayouts = [
+        for (final l in layouts)
+          if (l.breakpoint != selected) l else l.copyWith(groups: boxes),
+      ];
+      _commit([
+        for (final i in items)
+          if (i.rect case final rect? when carried.contains(i.id))
+            i.copyWith(rect: settled(i.id, rect))
+          else
+            i,
+      ]);
+    });
+  }
+
   /// Write a new path onto a set of elements, as one undoable edit.
   void _writePaths(String label, Map<String, String?> next) {
     final widgets = _draftWidgets;
@@ -540,6 +719,7 @@ class _PageScreenState extends ConsumerState<PageScreen> {
   }
 
   List<GridItem> _itemsFrom(DashboardDefinition d, DashboardLayout layout) {
+    final frames = framesByPath(layout.groups);
     return [
       for (final p in layout.placements)
         if (d.widgetById(p.widgetId) case final w?)
@@ -559,7 +739,10 @@ class _PageScreenState extends ConsumerState<PageScreen> {
             // The composition, the angle and the fade travel on the
             // *placement*, and every one of them has to be read back or the
             // next save writes over it with what the cells alone imply.
-            rect: p.rect,
+            // Stated in the element's frame's space, drawn in the page's —
+            // see `frame_space.dart`. One conversion here means no gesture
+            // downstream has to know what a frame is.
+            rect: placedRect(p.rect, groupOf(w.config), frames),
             rotation: p.rotation,
             opacity: p.opacity,
           ),
@@ -640,10 +823,45 @@ class _PageScreenState extends ConsumerState<PageScreen> {
     // notice row is what places it.
     _draftLayouts = writeArrangement(
       layouts: _draftLayouts!,
-      items: items,
+      // The draft holds page coordinates, because that is what every gesture
+      // on the canvas produces; the document holds each element's rectangle in
+      // its frame's space. This is the one place the two meet.
+      items: itemsToLocal(
+        items,
+        _paths,
+        framesByPath(_draftLayouts!
+                .where((l) => l.breakpoint == selected)
+                .firstOrNull
+                ?.groups ??
+            const []),
+      ),
       edited: selected,
     );
   }
+
+  /// The frame [id] sits in, by name, or null when it sits on the page.
+  ///
+  /// The *nearest* framed ancestor rather than the group it belongs to: a card
+  /// in `Panel/Row` where only `Panel` is a frame is grouped in `Row` and
+  /// measured from `Panel`, and it is `Panel` whose size its pins are about.
+  String? _frameAround(String? id) {
+    if (id == null) return null;
+    final groups = _draftLayouts
+        ?.where((l) => l.breakpoint == _editingBreakpoint)
+        .firstOrNull
+        ?.groups;
+    if (groups == null) return null;
+    final path = nearestFrame(_paths[id], framesByPath(groups));
+    return path == null ? null : nameOf(path);
+  }
+
+  /// Whether the layout being edited composes rather than packs.
+  bool get _composedHere =>
+      _draftLayouts
+          ?.where((l) => l.breakpoint == _editingBreakpoint)
+          .firstOrNull
+          ?.isComposed ??
+      false;
 
   /// The pixel shape of the layout being edited, in the units it is drawn in.
   CanvasGeometry _geometry(int columns) {
@@ -834,10 +1052,63 @@ class _PageScreenState extends ConsumerState<PageScreen> {
   /// validates stays true to the rectangle.
   void _composeCard(String id, DashboardRect rect, int columns) {
     if (_draftItems == null) return;
-    _pushUndo('Move', coalesce: 'compose:$id');
     final geometry = _geometry(columns);
+
+    // **Where you drop it is what it joins.**
+    //
+    // Every other way into a group is a command — select these, group them,
+    // name it — which is right for a cluster you are gathering and wrong for a
+    // template you are filling. There, putting a control in a panel is a thing
+    // you do by dragging it onto the panel, and being made to select-and-group
+    // afterwards is the tool asking you to say twice what you already said
+    // once. This is the gesture "widgets are placed inside the template"
+    // actually names.
+    //
+    // Only frames catch. An ordinary group is a tag several elements agree on
+    // and has no inside to fall into — a card dragged across one is a card
+    // that happens to be over it.
+    final frames = framesByPath(_draftLayouts
+            ?.where((l) => l.breakpoint == _editingBreakpoint)
+            .firstOrNull
+            ?.groups ??
+        const []);
+    final leaving = nearestFrame(_paths[id], frames);
+    final joining = frameHolding(rect, frames);
+    final moved = joining != leaving;
+
+    final model = _draftWidgets?[id];
+    final what = model == null ? 'it' : _cardLabel(model);
+    _pushUndo(
+      !moved
+          ? 'Move'
+          : joining != null
+              ? 'Put $what in ${nameOf(joining)}'
+              : 'Take $what out of ${nameOf(leaving!)}',
+      // Empty means *never fold this into the edit before it*. A re-parenting
+      // is a different edit from the drags around it: undoing "put this in the
+      // panel" has to give back the card **and** where it was.
+      coalesce: moved ? '' : 'compose:$id',
+    );
     setState(() {
       _goFree();
+      if (moved) {
+        // Written before the commit, because `_commit` localises against
+        // `_paths` and the path this card is about to be measured from is the
+        // new one. Its *page* rectangle does not change at all — it is where
+        // you let go of it — so nothing on screen moves and only the number in
+        // the document does.
+        if (model != null) {
+          _draftWidgets = {
+            ..._draftWidgets!,
+            id: model.copyWith(
+              config: withGroup(
+                model.config,
+                reparented(_paths[id], leaving, joining),
+              ),
+            ),
+          };
+        }
+      }
       _commit([
         for (final i in _draftItems!)
           if (i.id == id)
@@ -1029,6 +1300,7 @@ class _PageScreenState extends ConsumerState<PageScreen> {
   /// below a card's minimum.
   List<GridItem> _draftItemsFor(DashboardBreakpoint b) {
     final layout = _draftLayouts!.firstWhere((l) => l.breakpoint == b);
+    final frames = framesByPath(layout.groups);
     return [
       for (final p in layout.placements)
         if (_draftWidgets![p.widgetId] case final w?)
@@ -1048,7 +1320,7 @@ class _PageScreenState extends ConsumerState<PageScreen> {
             // The composition, the angle and the fade travel on the
             // *placement*, and every one of them has to be read back or the
             // next save writes over it with what the cells alone imply.
-            rect: p.rect,
+            rect: placedRect(p.rect, groupOf(w.config), frames),
             rotation: p.rotation,
             opacity: p.opacity,
           ),
@@ -1282,6 +1554,11 @@ class _PageScreenState extends ConsumerState<PageScreen> {
       items: [
         const PopupMenuItem(value: 'configure', child: Text('Configure')),
         const PopupMenuItem(value: 'duplicate', child: Text('Duplicate')),
+        // Beside Duplicate, because it is duplicate with a purpose: one copy
+        // per device, each wired to its own. See `repeat.dart` for the number
+        // this exists for.
+        const PopupMenuItem(
+            value: 'repeat', child: Text('Repeat for devices…')),
         const PopupMenuDivider(),
         // Copy, cut and paste were keyboard-only when they landed, which for
         // most people is the same as not existing. The shortcut is shown
@@ -1353,9 +1630,78 @@ class _PageScreenState extends ConsumerState<PageScreen> {
         _stack(id, StackMove.forward, columns);
       case 'backward':
         _stack(id, StackMove.backward, columns);
+      case 'repeat':
+        await _repeatForDevices(id, columns);
       case 'remove':
         _removeWidget(id, columns);
     }
+  }
+
+  /// One design, once per device — see `repeat.dart`.
+  ///
+  /// **What is repeated is what is in hand**, which is the whole reason this
+  /// is on the card menu rather than in a panel: a row is usually a cluster,
+  /// and a cluster is what a click on one of its members already selects.
+  /// Right-clicking a light row and asking for six of them is the gesture; the
+  /// alternative is a form asking which elements you meant, about a thing you
+  /// are pointing at.
+  ///
+  /// Only on a composed layout. Stamping copies at a step of so many pixels
+  /// means nothing on a page positioned by cells, where the engine decides
+  /// where things land.
+  Future<void> _repeatForDevices(String id, int columns) async {
+    final widgets = _draftWidgets;
+    final items = _draftItems;
+    if (widgets == null || items == null || !_composedHere) return;
+
+    // The selection when this card is in it, so a row selected as a group
+    // repeats as a row; otherwise just this card.
+    final chosen = _selection.contains(id) && _selection.length > 1
+        ? _selection
+        : _clickHolds(id, _paths);
+    final design = [
+      for (final wid in chosen)
+        if (widgets[wid] case final w?) w,
+    ];
+    final placed = [
+      for (final item in items)
+        if (chosen.contains(item.id)) item,
+    ];
+    if (design.isEmpty || placed.any((i) => i.rect == null)) return;
+
+    final devices = ref.read(devicesProvider).value ?? const <DeviceState>[];
+    final picked =
+        await pickDevices(context, devices, single: false, selected: const {});
+    if (picked == null || picked.isEmpty || !mounted) return;
+
+    // In the order they were picked, mapped through the house so a device that
+    // has gone away between the picker opening and closing is simply absent
+    // rather than a row wired to nothing.
+    final byId = {for (final d in devices) d.id: d};
+    final set = [
+      for (final deviceId in picked)
+        if (byId[deviceId] case final d?) d,
+    ];
+    if (set.isEmpty) return;
+
+    var n = DateTime.now().microsecondsSinceEpoch;
+    final out = repeatFor(
+      design: design,
+      items: placed,
+      devices: set,
+      step: stepFor(placed),
+      stamp: (_) => 'widget_${n++}',
+      takenPaths: _paths.values.whereType<String>().toSet(),
+    );
+
+    _pushUndo(set.length == 1
+        ? 'Wire to ${set.first.displayName}'
+        : 'Repeat for ${set.length} devices');
+    setState(() {
+      _draftWidgets = {...widgets, ...out.rewired, ...out.widgets};
+      _pendingPlacement.addAll(out.widgets.keys);
+      _commit([...items, ...out.items]);
+    });
   }
 
   /// Lifts a card above the grid, puts it back, or moves it within the stack.
@@ -2181,6 +2527,7 @@ class _PageScreenState extends ConsumerState<PageScreen> {
                   groupPaths: _pathsIn(widgetsById),
                   frame: layout.frame,
                   onCompose: (id, rect) => _composeCard(id, rect, columns),
+                  onFrameMove: widget.designer ? _setFrameRect : null,
                   snapToGrid: _snapToGrid,
                   // Which magnet the drags use, and whether the fine grid is
                   // drawn. A packed card can only sit on a cell edge; a
@@ -2263,7 +2610,14 @@ class _PageScreenState extends ConsumerState<PageScreen> {
                 : layout.groupBox(_groupInHand!)?.isPlain ?? true
                     ? null
                     : layout.groupBox(_groupInHand!),
+            insideFrame: _frameAround(_selectedCard),
             onGroupBox: _groupInHand == null ? null : _setGroupBox,
+            // Only on a composed layout. A packed one positions by cells,
+            // and a cell is not measured from anything — offering to frame a
+            // group there would be a switch that could not do what it says.
+            onGroupFrame: _groupInHand == null || !_composedHere
+                ? null
+                : (on) => _setGroupFrame(_groupInHand!, on),
             onSave: () => _save(dashboard),
             canvas: canvas(),
             emptyStart: emptyStart(),
@@ -2586,6 +2940,11 @@ class _PageMenu extends ConsumerWidget {
       itemBuilder: (_) => const [
         PopupMenuItem(value: 'new', child: Text('New page')),
         PopupMenuItem(value: 'duplicate', child: Text('Duplicate')),
+        // Beside Duplicate, which is the thing it is nearly: both copy this
+        // page, and the difference is where the copy goes and whether it keeps
+        // this house's devices.
+        PopupMenuItem(
+            value: 'template', child: Text('Save as a starting point')),
         PopupMenuDivider(),
         PopupMenuItem(value: 'rename', child: Text('Rename')),
         PopupMenuItem(value: 'home', child: Text('Set as Home page')),
