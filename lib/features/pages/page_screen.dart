@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/dashboard/breakpoints.dart';
 import '../../core/dashboard/canvas_view.dart';
+import '../../core/dashboard/constraints.dart';
 import '../../core/dashboard/clipboard.dart';
 import '../../core/dashboard/design_tools.dart';
 import '../../core/dashboard/device_slot.dart';
@@ -480,21 +481,53 @@ class _PageScreenState extends ConsumerState<PageScreen> {
     // corner would drop it on the floor.
     if (pageRect == was) return;
 
-    // **The corner decides what the contents do.** A member is stated from the
-    // frame's top-left, so it goes wherever that corner goes — the whole way
-    // on a move, the whole way when the left or top edge is pulled, and not at
-    // all when it is the right or bottom. No branch on which gesture it was,
-    // because there does not need to be: this is the same number `page_grid`
-    // previews the drag with, which is what keeps the frame landing where the
-    // preview showed it rather than near it.
+    // **Every member is re-resolved rather than nudged**, and stating it that
+    // way is what makes the two halves of a frame gesture one piece of
+    // arithmetic instead of two that have to agree.
     //
-    // What a member does about the frame's *size* is a constraint, and that is
-    // the next arc. Until then it stays where it is stated, which is what
-    // every design tool does with a shape that has no constraint set.
-    final dx = pageRect.x - was.x;
-    final dy = pageRect.y - was.y;
+    // Down into the old frame's space, apply whatever the member's pin says
+    // about the *size* change, back up through the new one. The **corner**
+    // falls out of the last step — a member is stated from the frame's
+    // top-left, so it goes wherever that corner goes, the whole way on a move,
+    // the whole way when the left or top edge is pulled, and not at all when
+    // it is the right or bottom. The **size** is `constraints.dart`, and for
+    // everything nobody has pinned that is the identity, so a page written
+    // before pins existed resizes exactly as it did yesterday.
+    final boxes = [
+      for (final g in layout.groups)
+        if (g.path == path)
+          // A box's own rectangle lives in its *parent's* space, which for a
+          // frame at the top of the page is the page.
+          g.copyWith(rect: toLocal(pageRect, spaceOfBox(path), frames))
+        else
+          g,
+    ];
+    final after = framesByPath(boxes);
+    final widgets = _draftWidgets ?? const <String, DashboardWidgetModel>{};
+    final paths = _paths;
+    final carried = membersOf(paths, path);
 
-    final carried = membersOf(_paths, path);
+    /// [rect] where it ends up, in page units.
+    DashboardRect settled(String id, DashboardRect rect) {
+      final where = paths[id];
+      var local = toLocal(rect, where, frames);
+      // Pins are the *nearest* frame's business. A card two frames down is
+      // measured from the inner one, and the inner one has not changed size —
+      // it has only moved, which the resolve below already carries. Applying
+      // this frame's size change to it would stretch it twice.
+      if (nearestFrame(where, frames) == path) {
+        local = applyPins(
+          local,
+          Pins.fromConfig(widgets[id]?.config ?? const {}),
+          was: was.w,
+          wasHeight: was.h,
+          now: pageRect.w,
+          nowHeight: pageRect.h,
+        );
+      }
+      return toPage(local, where, after);
+    }
+
     _pushUndo(
       pageRect.w == was.w && pageRect.h == was.h
           ? 'Move ${nameOf(path)}'
@@ -504,24 +537,12 @@ class _PageScreenState extends ConsumerState<PageScreen> {
     setState(() {
       _draftLayouts = [
         for (final l in layouts)
-          if (l.breakpoint != selected)
-            l
-          else
-            l.copyWith(groups: [
-              for (final g in l.groups)
-                if (g.path == path)
-                  // A box's own rectangle lives in its *parent's* space, which
-                  // for a frame at the top of the page is the page.
-                  g.copyWith(rect: toLocal(pageRect, spaceOfBox(path), frames))
-                else
-                  g,
-            ]),
+          if (l.breakpoint != selected) l else l.copyWith(groups: boxes),
       ];
       _commit([
         for (final i in items)
-          if (carried.contains(i.id) && i.rect != null)
-            i.copyWith(
-                rect: i.rect!.copyWith(x: i.rect!.x + dx, y: i.rect!.y + dy))
+          if (i.rect case final rect? when carried.contains(i.id))
+            i.copyWith(rect: settled(i.id, rect))
           else
             i,
       ]);
@@ -817,6 +838,22 @@ class _PageScreenState extends ConsumerState<PageScreen> {
     );
   }
 
+  /// The frame [id] sits in, by name, or null when it sits on the page.
+  ///
+  /// The *nearest* framed ancestor rather than the group it belongs to: a card
+  /// in `Panel/Row` where only `Panel` is a frame is grouped in `Row` and
+  /// measured from `Panel`, and it is `Panel` whose size its pins are about.
+  String? _frameAround(String? id) {
+    if (id == null) return null;
+    final groups = _draftLayouts
+        ?.where((l) => l.breakpoint == _editingBreakpoint)
+        .firstOrNull
+        ?.groups;
+    if (groups == null) return null;
+    final path = nearestFrame(_paths[id], framesByPath(groups));
+    return path == null ? null : nameOf(path);
+  }
+
   /// Whether the layout being edited composes rather than packs.
   bool get _composedHere =>
       _draftLayouts
@@ -1014,10 +1051,63 @@ class _PageScreenState extends ConsumerState<PageScreen> {
   /// validates stays true to the rectangle.
   void _composeCard(String id, DashboardRect rect, int columns) {
     if (_draftItems == null) return;
-    _pushUndo('Move', coalesce: 'compose:$id');
     final geometry = _geometry(columns);
+
+    // **Where you drop it is what it joins.**
+    //
+    // Every other way into a group is a command — select these, group them,
+    // name it — which is right for a cluster you are gathering and wrong for a
+    // template you are filling. There, putting a control in a panel is a thing
+    // you do by dragging it onto the panel, and being made to select-and-group
+    // afterwards is the tool asking you to say twice what you already said
+    // once. This is the gesture "widgets are placed inside the template"
+    // actually names.
+    //
+    // Only frames catch. An ordinary group is a tag several elements agree on
+    // and has no inside to fall into — a card dragged across one is a card
+    // that happens to be over it.
+    final frames = framesByPath(_draftLayouts
+            ?.where((l) => l.breakpoint == _editingBreakpoint)
+            .firstOrNull
+            ?.groups ??
+        const []);
+    final leaving = nearestFrame(_paths[id], frames);
+    final joining = frameHolding(rect, frames);
+    final moved = joining != leaving;
+
+    final model = _draftWidgets?[id];
+    final what = model == null ? 'it' : _cardLabel(model);
+    _pushUndo(
+      !moved
+          ? 'Move'
+          : joining != null
+              ? 'Put $what in ${nameOf(joining)}'
+              : 'Take $what out of ${nameOf(leaving!)}',
+      // Empty means *never fold this into the edit before it*. A re-parenting
+      // is a different edit from the drags around it: undoing "put this in the
+      // panel" has to give back the card **and** where it was.
+      coalesce: moved ? '' : 'compose:$id',
+    );
     setState(() {
       _goFree();
+      if (moved) {
+        // Written before the commit, because `_commit` localises against
+        // `_paths` and the path this card is about to be measured from is the
+        // new one. Its *page* rectangle does not change at all — it is where
+        // you let go of it — so nothing on screen moves and only the number in
+        // the document does.
+        if (model != null) {
+          _draftWidgets = {
+            ..._draftWidgets!,
+            id: model.copyWith(
+              config: withGroup(
+                model.config,
+                reparented(_paths[id], leaving, joining),
+              ),
+            ),
+          };
+        }
+      }
       _commit([
         for (final i in _draftItems!)
           if (i.id == id)
@@ -2445,6 +2535,7 @@ class _PageScreenState extends ConsumerState<PageScreen> {
                 : layout.groupBox(_groupInHand!)?.isPlain ?? true
                     ? null
                     : layout.groupBox(_groupInHand!),
+            insideFrame: _frameAround(_selectedCard),
             onGroupBox: _groupInHand == null ? null : _setGroupBox,
             // Only on a composed layout. A packed one positions by cells,
             // and a cell is not measured from anything — offering to frame a

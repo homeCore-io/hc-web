@@ -91,6 +91,7 @@ class DesignerShell extends StatefulWidget {
     this.groupBox,
     this.onGroupBox,
     this.onGroupFrame,
+    this.insideFrame,
     this.onSelectMany,
     this.onEnterGroupId,
     required this.groupInHand,
@@ -221,6 +222,10 @@ class DesignerShell extends StatefulWidget {
 
   /// Restyle the group in hand.
   final ValueChanged<GroupBox>? onGroupBox;
+
+  /// The frame the selected element sits in, by name — see
+  /// [CardInspector.insideFrame].
+  final String? insideFrame;
 
   /// Make the group in hand a frame, or stop it being one.
   ///
@@ -788,6 +793,7 @@ class _DesignerShellState extends State<DesignerShell> {
                                     opacity: widget.selectedItem?.opacity,
                                     rect: widget.selectedItem?.rect,
                                     onRect: widget.onRect,
+                                    insideFrame: widget.insideFrame,
                                     onRotate: widget.onRotate,
                                     onFade: widget.onFade,
                                   ),

@@ -5,6 +5,7 @@ import '../../core/dashboard/binding.dart';
 import '../../core/dashboard/card_condition.dart';
 import '../../core/dashboard/tap_action.dart';
 import '../../core/dashboard/card_style.dart';
+import '../../core/dashboard/constraints.dart';
 import '../../core/dashboard/grid_engine.dart' show DashboardRect;
 import '../../core/dashboard/free_layer.dart';
 import '../../core/dashboard/transform.dart';
@@ -59,9 +60,18 @@ class CardInspector extends ConsumerStatefulWidget {
     this.onFade,
     this.rect,
     this.onRect,
+    this.insideFrame,
   });
 
   final DashboardWidgetModel model;
+
+  /// The frame this element sits in, by name, or null when it sits on the page.
+  ///
+  /// Only there to decide whether the pins are worth showing and what to call
+  /// the thing they are relative to. A pin outside a frame is a rule about
+  /// nothing — every page is exactly as wide as it is — and a section of
+  /// controls that can never do anything is worse than one that is absent.
+  final String? insideFrame;
 
   /// A config the user has just edited. Applied to the draft immediately.
   final ValueChanged<Map<String, dynamic>> onChanged;
@@ -250,6 +260,12 @@ class _CardInspectorState extends ConsumerState<CardInspector> {
                   rotation: widget.rotation,
                   onRect: widget.onRect!,
                   onRotate: widget.onRotate ?? (_) {},
+                ),
+              if (widget.insideFrame case final frame?)
+                _PinSection(
+                  frame: frame,
+                  pins: Pins.fromConfig(model.config),
+                  onChanged: (pins) => onChanged(pins.toConfig(model.config)),
                 ),
               if (widget.onRotate case final onRotate?)
                 _TransformSection(
@@ -1835,6 +1851,70 @@ class _PropertyRow extends StatelessWidget {
                       fontFamily: t.text.monoFamily,
                     ),
                   ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// What this element does when the frame around it changes size.
+///
+/// Only ever shown for something inside a frame, because outside one there is
+/// no size to be relative to. Two rows rather than a nine-square diagram: the
+/// axes are genuinely independent — a rail pinned left that stretches top to
+/// bottom is the commonest thing on any of these pages — and a diagram makes
+/// the pairs look like the unit when they are not.
+class _PinSection extends StatelessWidget {
+  const _PinSection({
+    required this.frame,
+    required this.pins,
+    required this.onChanged,
+  });
+
+  final String frame;
+  final Pins pins;
+  final ValueChanged<Pins> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Padding(
+      padding: EdgeInsets.only(top: t.space.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('WHEN ${frame.toUpperCase()} RESIZES',
+              style:
+                  t.text.overlineStyle.copyWith(color: t.surface.onBaseMuted)),
+          SizedBox(height: t.space.xs),
+          _StyleChoice(
+            label: 'Across',
+            value: pins.across.key,
+            options: [
+              for (final pin in Pin.values)
+                (key: pin.key, label: pin.acrossLabel),
+            ],
+            onChanged: (v) => onChanged(pins.copyWith(across: Pin.from(v))),
+          ),
+          SizedBox(height: t.space.xs),
+          _StyleChoice(
+            label: 'Down',
+            value: pins.down.key,
+            options: [
+              for (final pin in Pin.values)
+                (key: pin.key, label: pin.downLabel),
+            ],
+            onChanged: (v) => onChanged(pins.copyWith(down: Pin.from(v))),
+          ),
+          SizedBox(height: t.space.xs),
+          Text(
+            pins.isNone
+                ? 'It stays where it is and keeps its size.'
+                : 'Hold the same edges and this design works at more than one '
+                    'width without being drawn twice.',
+            style: t.text.captionStyle
+                .copyWith(color: t.surface.onBaseMuted, height: 1.4),
           ),
         ],
       ),

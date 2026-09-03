@@ -235,3 +235,68 @@ List<GridItem> itemsToLocal(
     },
   );
 }
+
+/// The innermost frame whose box holds the centre of [rect], or null.
+///
+/// **How something gets put inside a frame.** Every other way of joining a
+/// group is a command — select these, group them, name it — which is right for
+/// a cluster you are gathering and wrong for a template you are filling: there,
+/// putting a control in a panel is a thing you do by dragging it onto the
+/// panel, and having to select-and-group afterwards is the tool asking you to
+/// say twice what you already did once.
+///
+/// **The centre, not a corner or an overlap.** A corner makes a card that
+/// visibly straddles an edge belong to whichever way it happens to lean, and an
+/// overlap test makes it belong to two things at once. The centre is the rule
+/// every design tool settled on and the only one a person can predict without
+/// being told it.
+///
+/// **Innermost wins**, because a nested frame is inside its parent by
+/// definition — every point in the child is also a point in the parent, so
+/// "deepest" is the only answer that lets a child ever be chosen.
+String? frameHolding(DashboardRect rect, Map<String, GroupBox> frames) {
+  final x = rect.x + rect.w / 2;
+  final y = rect.y + rect.h / 2;
+  String? best;
+  var deepest = -1;
+  for (final entry in frames.entries) {
+    final box = pageRectOf(entry.value, frames);
+    if (box == null) continue;
+    if (x < box.x || x > box.right || y < box.y || y > box.bottom) continue;
+    final depth = segmentsOf(entry.key).length;
+    if (depth > deepest) {
+      deepest = depth;
+      best = entry.key;
+    }
+  }
+  return best;
+}
+
+/// The framed ancestor [path] is measured from, or null when it is on the page.
+///
+/// Not the same question as "which group is it in": a card in `Panel/Row` where
+/// only `Panel` is a frame is *grouped* in `Row` and *measured* from `Panel`.
+/// Every piece of arithmetic here cares about the second.
+String? nearestFrame(String? path, Map<String, GroupBox> frames) {
+  if (path == null || frames.isEmpty) return null;
+  final parts = segmentsOf(path);
+  String? found;
+  for (var i = 1; i <= parts.length; i++) {
+    final candidate = parts.take(i).join(groupSeparator);
+    if (frames.containsKey(candidate)) found = candidate;
+  }
+  return found;
+}
+
+/// [path], with its frame changed from [from] to [to].
+///
+/// Whatever plain grouping sat *below* the frame comes along: a card in
+/// `Panel/Row` dragged into `Other` lands in `Other/Row`, because `Row` is a
+/// cluster somebody made and dragging one of its members onto a panel is not a
+/// request to dissolve it. Dragged onto the bare page it becomes `Row` — still
+/// a cluster, no longer in anything.
+String? reparented(String? path, String? from, String? to) {
+  final tail = from == null ? path : relativeTo(path ?? '', from);
+  if (tail == null || tail.isEmpty) return to;
+  return to == null ? tail : '$to$groupSeparator$tail';
+}
