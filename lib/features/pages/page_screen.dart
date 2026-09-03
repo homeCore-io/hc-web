@@ -2865,6 +2865,11 @@ class _PageMenu extends ConsumerWidget {
       itemBuilder: (_) => const [
         PopupMenuItem(value: 'new', child: Text('New page')),
         PopupMenuItem(value: 'duplicate', child: Text('Duplicate')),
+        // Beside Duplicate, which is the thing it is nearly: both copy this
+        // page, and the difference is where the copy goes and whether it keeps
+        // this house's devices.
+        PopupMenuItem(
+            value: 'template', child: Text('Save as a starting point')),
         PopupMenuDivider(),
         PopupMenuItem(value: 'rename', child: Text('Rename')),
         PopupMenuItem(value: 'home', child: Text('Set as Home page')),

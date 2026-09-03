@@ -50,6 +50,35 @@ Future<void> onPageAction(
           .read(dashboardsProvider.notifier)
           .duplicateDashboard(dashboard.id);
       break;
+    // **The page you designed becomes something to start the next one from.**
+    //
+    // Templates were five documents compiled into core, read-only, so every
+    // good page anybody made stayed a one-off. This is the write path, and the
+    // whole of it: a template is a copy of this page with the house taken out
+    // of it, which is the transform sharing already did.
+    //
+    // It says the name back, because the name may not be this page's — a
+    // second template of the same name is given a suffix, and finding out by
+    // going to look is a worse way to learn it.
+    case 'template':
+      final messenger = ScaffoldMessenger.of(context);
+      final notifier = ref.read(dashboardsProvider.notifier);
+      if (!notifier.canSaveTemplates) {
+        // Rather than appearing to work. Without core the templates list is a
+        // fixed set built in Dart, so a saved one has nowhere to go.
+        messenger.showSnackBar(const SnackBar(
+          content: Text('Starting points need a connection to the house.'),
+        ));
+        return;
+      }
+      final template = await notifier.saveAsTemplate(dashboard.id);
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Saved “${template.name}” — start a page from it '
+              'with New page'),
+        ),
+      );
+      break;
     case 'delete':
       final ok = await _confirmDelete(context, dashboard.name);
       if (!ok) return;
