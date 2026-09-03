@@ -20,6 +20,7 @@ import '../../core/dashboard/group_frame.dart';
 import '../../core/dashboard/groups.dart';
 import '../../core/dashboard/layout_write.dart';
 import '../../core/dashboard/page_starts.dart';
+import '../../core/dashboard/repeat.dart';
 import '../../core/text/humanize.dart';
 import '../../core/dashboard/widget_registry.dart';
 import '../../core/models/dashboard.dart';
@@ -1553,6 +1554,11 @@ class _PageScreenState extends ConsumerState<PageScreen> {
       items: [
         const PopupMenuItem(value: 'configure', child: Text('Configure')),
         const PopupMenuItem(value: 'duplicate', child: Text('Duplicate')),
+        // Beside Duplicate, because it is duplicate with a purpose: one copy
+        // per device, each wired to its own. See `repeat.dart` for the number
+        // this exists for.
+        const PopupMenuItem(
+            value: 'repeat', child: Text('Repeat for devices…')),
         const PopupMenuDivider(),
         // Copy, cut and paste were keyboard-only when they landed, which for
         // most people is the same as not existing. The shortcut is shown
@@ -1624,9 +1630,78 @@ class _PageScreenState extends ConsumerState<PageScreen> {
         _stack(id, StackMove.forward, columns);
       case 'backward':
         _stack(id, StackMove.backward, columns);
+      case 'repeat':
+        await _repeatForDevices(id, columns);
       case 'remove':
         _removeWidget(id, columns);
     }
+  }
+
+  /// One design, once per device — see `repeat.dart`.
+  ///
+  /// **What is repeated is what is in hand**, which is the whole reason this
+  /// is on the card menu rather than in a panel: a row is usually a cluster,
+  /// and a cluster is what a click on one of its members already selects.
+  /// Right-clicking a light row and asking for six of them is the gesture; the
+  /// alternative is a form asking which elements you meant, about a thing you
+  /// are pointing at.
+  ///
+  /// Only on a composed layout. Stamping copies at a step of so many pixels
+  /// means nothing on a page positioned by cells, where the engine decides
+  /// where things land.
+  Future<void> _repeatForDevices(String id, int columns) async {
+    final widgets = _draftWidgets;
+    final items = _draftItems;
+    if (widgets == null || items == null || !_composedHere) return;
+
+    // The selection when this card is in it, so a row selected as a group
+    // repeats as a row; otherwise just this card.
+    final chosen = _selection.contains(id) && _selection.length > 1
+        ? _selection
+        : _clickHolds(id, _paths);
+    final design = [
+      for (final wid in chosen)
+        if (widgets[wid] case final w?) w,
+    ];
+    final placed = [
+      for (final item in items)
+        if (chosen.contains(item.id)) item,
+    ];
+    if (design.isEmpty || placed.any((i) => i.rect == null)) return;
+
+    final devices = ref.read(devicesProvider).value ?? const <DeviceState>[];
+    final picked =
+        await pickDevices(context, devices, single: false, selected: const {});
+    if (picked == null || picked.isEmpty || !mounted) return;
+
+    // In the order they were picked, mapped through the house so a device that
+    // has gone away between the picker opening and closing is simply absent
+    // rather than a row wired to nothing.
+    final byId = {for (final d in devices) d.id: d};
+    final set = [
+      for (final deviceId in picked)
+        if (byId[deviceId] case final d?) d,
+    ];
+    if (set.isEmpty) return;
+
+    var n = DateTime.now().microsecondsSinceEpoch;
+    final out = repeatFor(
+      design: design,
+      items: placed,
+      devices: set,
+      step: stepFor(placed),
+      stamp: (_) => 'widget_${n++}',
+      takenPaths: _paths.values.whereType<String>().toSet(),
+    );
+
+    _pushUndo(set.length == 1
+        ? 'Wire to ${set.first.displayName}'
+        : 'Repeat for ${set.length} devices');
+    setState(() {
+      _draftWidgets = {...widgets, ...out.rewired, ...out.widgets};
+      _pendingPlacement.addAll(out.widgets.keys);
+      _commit([...items, ...out.items]);
+    });
   }
 
   /// Lifts a card above the grid, puts it back, or moves it within the stack.
