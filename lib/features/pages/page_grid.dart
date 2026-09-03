@@ -845,8 +845,17 @@ class _PageGridState extends State<PageGrid> {
           // every frame and the resize feels dead.
           _resizeAccum += delta;
           if (_gestureRect case final from?) {
+            // The element's own floor, not a flat 24 — see [WidgetSizeHint
+            // .minHeight]. Without it a box can be pulled smaller than the
+            // control inside it, and the only sign is a clipped knob.
+            final hint =
+                WidgetRegistry.lookup(widget.widgetsById[_resizeId]?.type ?? '')
+                    ?.sizeHint;
             final rect = geometry.resizedBy(from, _handle, _resizeAccum,
-                snap: widget.snapToGrid, coarse: !widget.composing);
+                snap: widget.snapToGrid,
+                coarse: !widget.composing,
+                minWidth: hint?.minWidth,
+                minHeight: hint?.minHeight);
             setState(() => _preview = composedPreview(_resizeId!, rect));
             return;
           }

@@ -1606,7 +1606,12 @@ void registerBuiltinDashboardWidgets() {
       title: 'Device list',
       icon: Icons.list_alt_outlined,
       sizeHint: const WidgetSizeHint(
-          minW: 3, minH: 2, recommendedW: 6, recommendedH: 2),
+          minW: 3,
+          minH: 2,
+          recommendedW: 6,
+          recommendedH: 2,
+          minWidth: 220,
+          minHeight: 96),
       configFields: _selectionFields,
       validate: _validateSelection,
       builder: (context, a) => _DeviceListWidget(
@@ -1630,7 +1635,12 @@ void registerBuiltinDashboardWidgets() {
       title: 'Media player',
       icon: Icons.speaker_outlined,
       sizeHint: const WidgetSizeHint(
-          minW: 4, minH: 2, recommendedW: 6, recommendedH: 2),
+          minW: 4,
+          minH: 2,
+          recommendedW: 6,
+          recommendedH: 2,
+          minWidth: 280,
+          minHeight: 150),
       configFields: _selectionFields,
       validate: _validateSelection,
       builder: (context, a) => _MediaPlayerDashboardWidget(
@@ -1748,7 +1758,12 @@ void registerBuiltinDashboardWidgets() {
       description: 'One number, large.',
       icon: Icons.speed_outlined,
       sizeHint: const WidgetSizeHint(
-          minW: 2, minH: 1, recommendedW: 3, recommendedH: 1),
+          minW: 2,
+          minH: 1,
+          recommendedW: 3,
+          recommendedH: 1,
+          minWidth: 80,
+          minHeight: 44),
       configFields: const [
         WidgetConfigField('device_id', WidgetConfigKind.deviceRef,
             required: true),
@@ -2180,7 +2195,12 @@ void registerBuiltinDashboardWidgets() {
       icon: Icons.toggle_on_outlined,
       chrome: WidgetChrome.bare,
       sizeHint: const WidgetSizeHint(
-          minW: 2, minH: 1, recommendedW: 3, recommendedH: 1),
+          minW: 2,
+          minH: 1,
+          recommendedW: 3,
+          recommendedH: 1,
+          minWidth: 56,
+          minHeight: 28),
       configFields: const [
         WidgetConfigField('device_id', WidgetConfigKind.deviceRef,
             label: 'Device', required: true),
@@ -2211,7 +2231,12 @@ void registerBuiltinDashboardWidgets() {
       icon: Icons.tune_outlined,
       chrome: WidgetChrome.bare,
       sizeHint: const WidgetSizeHint(
-          minW: 3, minH: 1, recommendedW: 4, recommendedH: 1),
+          minW: 3,
+          minH: 1,
+          recommendedW: 4,
+          recommendedH: 1,
+          minWidth: 180,
+          minHeight: 64),
       configFields: const [
         WidgetConfigField('device_id', WidgetConfigKind.deviceRef,
             label: 'Device', required: true),
@@ -2259,7 +2284,12 @@ void registerBuiltinDashboardWidgets() {
       icon: Icons.play_circle_outline,
       chrome: WidgetChrome.bare,
       sizeHint: const WidgetSizeHint(
-          minW: 2, minH: 1, recommendedW: 3, recommendedH: 1),
+          minW: 2,
+          minH: 1,
+          recommendedW: 3,
+          recommendedH: 1,
+          minWidth: 96,
+          minHeight: 40),
       configFields: const [
         WidgetConfigField('scene_id', WidgetConfigKind.sceneRef,
             label: 'Scene', required: true),
@@ -2290,7 +2320,12 @@ void registerBuiltinDashboardWidgets() {
       icon: Icons.dialpad_outlined,
       chrome: WidgetChrome.bare,
       sizeHint: const WidgetSizeHint(
-          minW: 2, minH: 2, recommendedW: 4, recommendedH: 3),
+          minW: 2,
+          minH: 2,
+          recommendedW: 4,
+          recommendedH: 3,
+          minWidth: 180,
+          minHeight: 120),
       configFields: const [
         WidgetConfigField('device_id', WidgetConfigKind.deviceRef,
             label: 'Keypad',
@@ -2314,7 +2349,12 @@ void registerBuiltinDashboardWidgets() {
       icon: Icons.thermostat_outlined,
       chrome: WidgetChrome.bare,
       sizeHint: const WidgetSizeHint(
-          minW: 2, minH: 2, recommendedW: 3, recommendedH: 4),
+          minW: 2,
+          minH: 2,
+          recommendedW: 3,
+          recommendedH: 4,
+          minWidth: 180,
+          minHeight: 180),
       configFields: const [
         WidgetConfigField('device_id', WidgetConfigKind.deviceRef,
             label: 'Device', required: true),
@@ -2366,7 +2406,12 @@ void registerBuiltinDashboardWidgets() {
       icon: Icons.palette_outlined,
       chrome: WidgetChrome.bare,
       sizeHint: const WidgetSizeHint(
-          minW: 2, minH: 2, recommendedW: 3, recommendedH: 3),
+          minW: 2,
+          minH: 2,
+          recommendedW: 3,
+          recommendedH: 3,
+          minWidth: 96,
+          minHeight: 96),
       configFields: const [
         WidgetConfigField('device_id', WidgetConfigKind.deviceRef,
             label: 'Device', required: true),
@@ -2395,7 +2440,12 @@ void registerBuiltinDashboardWidgets() {
       icon: Icons.wb_incandescent_outlined,
       chrome: WidgetChrome.bare,
       sizeHint: const WidgetSizeHint(
-          minW: 1, minH: 2, recommendedW: 1, recommendedH: 3),
+          minW: 1,
+          minH: 2,
+          recommendedW: 1,
+          recommendedH: 3,
+          minWidth: 56,
+          minHeight: 96),
       configFields: const [
         WidgetConfigField('device_id', WidgetConfigKind.deviceRef,
             label: 'Device', required: true),
@@ -2430,7 +2480,12 @@ void registerBuiltinDashboardWidgets() {
       icon: Icons.exposure_outlined,
       chrome: WidgetChrome.bare,
       sizeHint: const WidgetSizeHint(
-          minW: 2, minH: 1, recommendedW: 3, recommendedH: 1),
+          minW: 2,
+          minH: 1,
+          recommendedW: 3,
+          recommendedH: 1,
+          minWidth: 140,
+          minHeight: 56),
       configFields: const [
         WidgetConfigField('device_id', WidgetConfigKind.deviceRef,
             label: 'Device', required: true),

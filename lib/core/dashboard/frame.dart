@@ -166,6 +166,9 @@ extension ResizeGeometry on CanvasGeometry {
   /// It defaulted to the cell here while dragging had already moved on, which
   /// is why a box could be *moved* to the width of its words and not *sized* to
   /// it — the two halves of one gesture pulling to grids 120 pixels apart.
+  /// [minWidth] and [minHeight] are the element's own floor, when it has one.
+  /// A slider that loses its knob below 64 should not be draggable to 48; the
+  /// flat [min] is what everything gets when it has said nothing.
   DashboardRect resizedBy(
     DashboardRect from,
     ResizeHandle handle,
@@ -173,7 +176,11 @@ extension ResizeGeometry on CanvasGeometry {
     bool snap = true,
     bool coarse = true,
     double min = minComposedSize,
+    double? minWidth,
+    double? minHeight,
   }) {
+    final floorW = minWidth ?? min;
+    final floorH = minHeight ?? min;
     var x = from.x;
     var y = from.y;
     var w = from.w;
@@ -182,20 +189,20 @@ extension ResizeGeometry on CanvasGeometry {
     if (handle.movesLeft) {
       final edge = snapX(from.x + by.dx, on: snap, coarse: coarse);
       // Never past the edge being held still, or the card turns inside out.
-      x = edge > from.right - min ? from.right - min : edge;
+      x = edge > from.right - floorW ? from.right - floorW : edge;
       w = from.right - x;
     } else if (handle.movesRight) {
       final edge = snapX(from.right + by.dx, on: snap, coarse: coarse);
-      w = edge < from.x + min ? min : edge - from.x;
+      w = edge < from.x + floorW ? floorW : edge - from.x;
     }
 
     if (handle.movesTop) {
       final edge = snapY(from.y + by.dy, on: snap, coarse: coarse);
-      y = edge > from.bottom - min ? from.bottom - min : edge;
+      y = edge > from.bottom - floorH ? from.bottom - floorH : edge;
       h = from.bottom - y;
     } else if (handle.movesBottom) {
       final edge = snapY(from.bottom + by.dy, on: snap, coarse: coarse);
-      h = edge < from.y + min ? min : edge - from.y;
+      h = edge < from.y + floorH ? floorH : edge - from.y;
     }
 
     return DashboardRect(x: x, y: y, w: w, h: h);
