@@ -635,9 +635,25 @@ class _DataSection extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // **"What is 'follows the house' for an icon?"** A fair question,
+          // and the heading was no answer: it named a feeling rather than a
+          // thing. What these rows do is take one property's value from a
+          // reading instead of from the fixed value set above them — the
+          // icon's colour from a temperature rather than from the swatch.
+          //
+          // Worth being explicit for the icon in particular, because it
+          // already follows a device: its Device field decides which symbol it
+          // wears and whether it is filled. A colour binding is a SECOND
+          // device driving one property, which is not obvious and was not
+          // said anywhere.
           Text(
-            'FOLLOWS THE HOUSE',
+            'DRIVEN BY A READING',
             style: t.text.overlineStyle.copyWith(color: t.accent.primary),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            'Takes the value from a device instead of the setting above.',
+            style: t.text.captionStyle.copyWith(color: t.surface.onBaseMuted),
           ),
           SizedBox(height: t.space.xs),
           for (final p in descriptor.bindable)
@@ -646,6 +662,7 @@ class _DataSection extends ConsumerWidget {
               property: p,
               binding: bindings.forProperty(p.name),
               devices: devices,
+              ownDeviceId: config['device_id'] as String?,
               onChanged: (b) => write(bindings.with_(b)),
               onRemove: () => write(bindings.without(p.name)),
             ),
@@ -653,7 +670,7 @@ class _DataSection extends ConsumerWidget {
             Padding(
               padding: EdgeInsets.only(top: t.space.xs),
               child: Text(
-                'No devices here yet, so there is nothing to follow.',
+                'No devices here yet, so there is nothing to read.',
                 style: t.text.captionStyle
                     .copyWith(color: t.surface.onBaseMuted, height: 1.4),
               ),
@@ -670,6 +687,7 @@ class _BindingRow extends StatelessWidget {
     required this.property,
     required this.binding,
     required this.devices,
+    required this.ownDeviceId,
     required this.onChanged,
     required this.onRemove,
   });
@@ -677,6 +695,10 @@ class _BindingRow extends StatelessWidget {
   final BindableProperty property;
   final PropertyBinding? binding;
   final List<DeviceState> devices;
+
+  /// The device this element already points at, if any. A binding started here
+  /// begins there.
+  final String? ownDeviceId;
   final ValueChanged<PropertyBinding> onChanged;
   final VoidCallback onRemove;
 
@@ -775,31 +797,41 @@ class _BindingRow extends StatelessWidget {
               ],
             ),
             SizedBox(height: t.space.xs),
-            _Picker(
+            // The searchable sheet, the same one every other device field
+            // uses. A menu of a hundred and eighty-nine is a menu nobody can
+            // find anything in.
+            _DeviceButton(
+              key: ValueKey('bind-device-${property.name}'),
               label: 'Device',
-              value: b.deviceId,
-              options: [
-                for (final d in devices) (key: d.id, label: d.name ?? d.id),
-              ],
-              // Changing the device clears the attribute: it belonged to the
-              // device that was chosen, and keeping it would name a reading the
-              // new one does not send — a wire that answers null forever with
-              // nothing on screen saying why.
-              onChanged: (v) {
-                final next = devices.firstWhere((d) => d.id == v);
+              chosen: device,
+              onPick: () async {
+                final picked = await pickDevices(
+                  context,
+                  devices,
+                  single: true,
+                  selected: {b.deviceId},
+                );
+                if (picked == null || picked.isEmpty) return;
+                final next = devices.firstWhere((d) => d.id == picked.first);
+                // Changing the device clears the attribute: it belonged to the
+                // device that was chosen, and keeping it would name a reading
+                // the new one does not send — a wire that answers null forever
+                // with nothing on screen saying why.
                 onChanged(b.copyWith(
-                  deviceId: v,
+                  deviceId: next.id,
                   key: _attributes(next).firstOrNull ?? '',
                 ));
               },
             ),
             if (device != null)
-              _Picker(
+              _MenuPick(
                 label: 'Reading',
                 value: b.key,
                 options: [
-                  for (final a in _attributes(device)) (key: a, label: a),
+                  for (final a in _attributes(device))
+                    (key: a, label: humanize(a)),
                 ],
+                empty: '${device.displayName} is not reporting anything yet.',
                 onChanged: (v) => onChanged(b.copyWith(key: v)),
               ),
             if (property.kind == BindKind.look)
@@ -821,8 +853,15 @@ class _BindingRow extends StatelessWidget {
   /// Seeded with the first device and its first reading, and — for a colour —
   /// with an on/off pair, because a binding that changed nothing would look
   /// like the row had not worked.
+  /// A new binding, pointed somewhere sensible.
+  ///
+  /// **At the element's own device, when it has one.** An icon showing the
+  /// Overhead light whose colour is being bound almost certainly means the
+  /// Overhead light — starting at whichever device sorts first is the panel
+  /// ignoring what it already knows, and it made every binding two edits.
   PropertyBinding _seed() {
-    final d = devices.first;
+    final own = devices.where((d) => d.id == ownDeviceId).firstOrNull;
+    final d = own ?? devices.first;
     return PropertyBinding(
       property: property.name,
       deviceId: d.id,
@@ -960,32 +999,6 @@ class _RangeFields extends StatelessWidget {
       ),
     );
   }
-}
-
-/// The compact label-over-chips row the rest of this panel uses.
-class _Picker extends StatelessWidget {
-  const _Picker({
-    required this.label,
-    required this.value,
-    required this.options,
-    required this.onChanged,
-  });
-
-  final String label;
-  final String value;
-  final List<({String key, String label})> options;
-  final ValueChanged<String> onChanged;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(bottom: 4),
-        child: _StyleChoice(
-          label: label,
-          value: value,
-          options: options,
-          onChanged: onChanged,
-        ),
-      );
 }
 
 /// "When the house says this, look like that."
@@ -1389,6 +1402,7 @@ class _TapSection extends ConsumerWidget {
 /// and what it holds, and choosing is a surface of its own.
 class _DeviceButton extends StatelessWidget {
   const _DeviceButton({
+    super.key,
     required this.label,
     required this.chosen,
     required this.onPick,

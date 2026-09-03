@@ -90,7 +90,9 @@ void main() {
     // A list showing only what is already wired would leave the whole feature
     // invisible to anyone who had not been told it exists.
     await _pump(tester);
-    expect(find.text('FOLLOWS THE HOUSE'), findsOneWidget);
+    // Renamed: "follows the house" named a feeling rather than a thing,
+    // and could not say how it differed from the Device field above it.
+    expect(find.text('DRIVEN BY A READING'), findsOneWidget);
     expect(find.text('Colour'), findsWidgets);
     expect(find.text('follow a device…'), findsOneWidget);
 
@@ -158,6 +160,12 @@ void main() {
     await tester.pumpAndSettle();
     expect(Bindings.fromConfig(config).forProperty('ink')!.key, 'brightness');
 
+    // Through the searchable sheet now, the same one every other device
+    // field uses — a menu of a hundred and eighty-nine is a menu nobody can
+    // find anything in.
+    await tester.tap(find.byKey(const ValueKey('bind-device-ink')));
+    await tester.pumpAndSettle();
+    expect(find.text('Pick devices'), findsOneWidget);
     await tester.tap(find.text('Hob').last);
     await tester.pumpAndSettle();
 

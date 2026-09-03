@@ -218,25 +218,59 @@ class _Chips extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
     if (options.isEmpty) return const SizedBox.shrink();
+    // **The label is a heading, not the first chip.** Inline it read as one
+    // more bubble in the row — "Room" looked like something you could filter
+    // by, and the group had no visible start. A heading above says what the
+    // row is; a chip beside them says it is one of them.
     return Padding(
-      padding: EdgeInsets.only(bottom: t.space.xs),
-      child: Wrap(
-        spacing: t.space.xs,
-        runSpacing: t.space.xs,
-        crossAxisAlignment: WrapCrossAlignment.center,
+      padding: EdgeInsets.only(bottom: t.space.sm),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label,
-              style:
-                  t.text.captionStyle.copyWith(color: t.surface.onBaseMuted)),
-          for (final option in options)
-            _Chip(
-              label: labelOf(option.key),
-              count: option.count,
-              on: option.key == chosen,
-              // Tapping the one that is on turns it off, which is how every
-              // filter chip anywhere works and saves a separate "clear".
-              onTap: () => onPick(option.key == chosen ? null : option.key),
-            ),
+          Padding(
+            padding: EdgeInsets.only(bottom: t.space.xs),
+            child: Row(children: [
+              Text(
+                label.toUpperCase(),
+                style:
+                    t.text.overlineStyle.copyWith(color: t.surface.onBaseMuted),
+              ),
+              SizedBox(width: t.space.xs),
+              Text(
+                '${options.length}',
+                style: t.text.captionStyle.copyWith(color: t.stroke.hairline),
+              ),
+              const Spacer(),
+              // Only when one is on: a clear that is always there is a control
+              // that does nothing most of the time.
+              if (chosen != null)
+                InkWell(
+                  onTap: () => onPick(null),
+                  borderRadius: t.radius.smR,
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(horizontal: t.space.xs),
+                    child: Text('Clear',
+                        style: t.text.captionStyle
+                            .copyWith(color: t.accent.active)),
+                  ),
+                ),
+            ]),
+          ),
+          Wrap(
+            spacing: t.space.xs,
+            runSpacing: t.space.xs,
+            children: [
+              for (final option in options)
+                _Chip(
+                  label: labelOf(option.key),
+                  count: option.count,
+                  on: option.key == chosen,
+                  // Tapping the one that is on turns it off, which is how
+                  // every filter chip anywhere works.
+                  onTap: () => onPick(option.key == chosen ? null : option.key),
+                ),
+            ],
+          ),
         ],
       ),
     );

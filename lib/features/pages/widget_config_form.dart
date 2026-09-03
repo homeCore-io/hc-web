@@ -1315,26 +1315,35 @@ class _DevicePickerState extends State<_DevicePicker> {
             itemBuilder: (context, i) {
               final d = matches[i];
               final on = _selected.contains(d.id);
-              return CheckboxListTile(
-                dense: true,
-                value: on,
-                title: Text(d.displayName,
-                    style: t.text.bodyStyle.copyWith(color: t.surface.onBase)),
-                subtitle: (d.effectiveArea ?? '').isEmpty
-                    ? null
-                    : Text(humanize(d.effectiveArea!),
-                        style: t.text.captionStyle
-                            .copyWith(color: t.surface.onBaseMuted)),
-                onChanged: (_) => setState(() {
-                  if (widget.single) {
-                    _selected
-                      ..clear()
-                      ..add(d.id);
-                    Navigator.of(context).pop(_selected.toList());
-                    return;
-                  }
-                  on ? _selected.remove(d.id) : _selected.add(d.id);
-                }),
+              // A ListTile paints its ink on the nearest Material ancestor, and
+              // the sheet's own surface is a DecoratedBox — so without this the
+              // splash is drawn behind the background and every tap in the
+              // picker looks like nothing happened. Flutter says so out loud in
+              // debug; in release it is simply a list that feels dead.
+              return Material(
+                type: MaterialType.transparency,
+                child: CheckboxListTile(
+                  dense: true,
+                  value: on,
+                  title: Text(d.displayName,
+                      style:
+                          t.text.bodyStyle.copyWith(color: t.surface.onBase)),
+                  subtitle: (d.effectiveArea ?? '').isEmpty
+                      ? null
+                      : Text(humanize(d.effectiveArea!),
+                          style: t.text.captionStyle
+                              .copyWith(color: t.surface.onBaseMuted)),
+                  onChanged: (_) => setState(() {
+                    if (widget.single) {
+                      _selected
+                        ..clear()
+                        ..add(d.id);
+                      Navigator.of(context).pop(_selected.toList());
+                      return;
+                    }
+                    on ? _selected.remove(d.id) : _selected.add(d.id);
+                  }),
+                ),
               );
             },
           ),
