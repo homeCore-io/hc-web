@@ -69,16 +69,40 @@ extension FrameGeometry on CanvasGeometry {
     return GridItem(id: id, x: x, y: y, w: w, h: h, floating: floating, z: z);
   }
 
-  /// [value] pulled to the nearest cell edge on one axis, or left alone.
+  /// How far apart the things you snap to are, when composing.
+  ///
+  /// **A column is not a unit of composition.** Snapping a free element to a
+  /// 120-pixel cell edge means a text box can be 120 or 240 wide and nothing
+  /// between, so it is never the width of its own words — John, sizing a label:
+  /// *"I should be able to size the box to near perfect width for the words."*
+  /// A cell is the right magnet for a card that IS a cell, and the wrong one
+  /// for everything the composition arc added.
+  ///
+  /// Eight, because that is the design system's space unit: every padding,
+  /// gap and radius in the app is a multiple of it, so an element snapped to
+  /// this grid lines up with the things drawn inside it rather than only with
+  /// other elements.
+  static const double fine = 8;
+
+  /// [value] pulled to the nearest edge on one axis, or left alone.
   ///
   /// Snapping is a choice per gesture rather than a property of the document —
   /// which is what "the grid is a magnet, not a law" actually means in the one
   /// place it has to be true.
-  double snapX(double value, {bool on = true}) =>
-      on && stepX > 0 ? (value / stepX).round() * stepX : value;
+  ///
+  /// [coarse] is for a card the engine packs, where the cell edge IS the only
+  /// legal position. A composed element takes the fine grid.
+  double snapX(double value, {bool on = true, bool coarse = true}) {
+    if (!on) return value;
+    final step = coarse ? stepX : fine;
+    return step > 0 ? (value / step).round() * step : value;
+  }
 
-  double snapY(double value, {bool on = true}) =>
-      on && stepY > 0 ? (value / stepY).round() * stepY : value;
+  double snapY(double value, {bool on = true, bool coarse = true}) {
+    if (!on) return value;
+    final step = coarse ? stepY : fine;
+    return step > 0 ? (value / step).round() * step : value;
+  }
 }
 
 /// Which part of a card you took hold of to resize it.

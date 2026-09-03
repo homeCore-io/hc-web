@@ -635,9 +635,25 @@ class _DataSection extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // **"What is 'follows the house' for an icon?"** A fair question,
+          // and the heading was no answer: it named a feeling rather than a
+          // thing. What these rows do is take one property's value from a
+          // reading instead of from the fixed value set above them — the
+          // icon's colour from a temperature rather than from the swatch.
+          //
+          // Worth being explicit for the icon in particular, because it
+          // already follows a device: its Device field decides which symbol it
+          // wears and whether it is filled. A colour binding is a SECOND
+          // device driving one property, which is not obvious and was not
+          // said anywhere.
           Text(
-            'FOLLOWS THE HOUSE',
+            'DRIVEN BY A READING',
             style: t.text.overlineStyle.copyWith(color: t.accent.primary),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            'Takes the value from a device instead of the setting above.',
+            style: t.text.captionStyle.copyWith(color: t.surface.onBaseMuted),
           ),
           SizedBox(height: t.space.xs),
           for (final p in descriptor.bindable)
@@ -646,6 +662,7 @@ class _DataSection extends ConsumerWidget {
               property: p,
               binding: bindings.forProperty(p.name),
               devices: devices,
+              ownDeviceId: config['device_id'] as String?,
               onChanged: (b) => write(bindings.with_(b)),
               onRemove: () => write(bindings.without(p.name)),
             ),
@@ -653,7 +670,7 @@ class _DataSection extends ConsumerWidget {
             Padding(
               padding: EdgeInsets.only(top: t.space.xs),
               child: Text(
-                'No devices here yet, so there is nothing to follow.',
+                'No devices here yet, so there is nothing to read.',
                 style: t.text.captionStyle
                     .copyWith(color: t.surface.onBaseMuted, height: 1.4),
               ),
@@ -670,6 +687,7 @@ class _BindingRow extends StatelessWidget {
     required this.property,
     required this.binding,
     required this.devices,
+    required this.ownDeviceId,
     required this.onChanged,
     required this.onRemove,
   });
@@ -677,6 +695,10 @@ class _BindingRow extends StatelessWidget {
   final BindableProperty property;
   final PropertyBinding? binding;
   final List<DeviceState> devices;
+
+  /// The device this element already points at, if any. A binding started here
+  /// begins there.
+  final String? ownDeviceId;
   final ValueChanged<PropertyBinding> onChanged;
   final VoidCallback onRemove;
 
@@ -775,31 +797,41 @@ class _BindingRow extends StatelessWidget {
               ],
             ),
             SizedBox(height: t.space.xs),
-            _Picker(
+            // The searchable sheet, the same one every other device field
+            // uses. A menu of a hundred and eighty-nine is a menu nobody can
+            // find anything in.
+            _DeviceButton(
+              key: ValueKey('bind-device-${property.name}'),
               label: 'Device',
-              value: b.deviceId,
-              options: [
-                for (final d in devices) (key: d.id, label: d.name ?? d.id),
-              ],
-              // Changing the device clears the attribute: it belonged to the
-              // device that was chosen, and keeping it would name a reading the
-              // new one does not send — a wire that answers null forever with
-              // nothing on screen saying why.
-              onChanged: (v) {
-                final next = devices.firstWhere((d) => d.id == v);
+              chosen: device,
+              onPick: () async {
+                final picked = await pickDevices(
+                  context,
+                  devices,
+                  single: true,
+                  selected: {b.deviceId},
+                );
+                if (picked == null || picked.isEmpty) return;
+                final next = devices.firstWhere((d) => d.id == picked.first);
+                // Changing the device clears the attribute: it belonged to the
+                // device that was chosen, and keeping it would name a reading
+                // the new one does not send — a wire that answers null forever
+                // with nothing on screen saying why.
                 onChanged(b.copyWith(
-                  deviceId: v,
+                  deviceId: next.id,
                   key: _attributes(next).firstOrNull ?? '',
                 ));
               },
             ),
             if (device != null)
-              _Picker(
+              _MenuPick(
                 label: 'Reading',
                 value: b.key,
                 options: [
-                  for (final a in _attributes(device)) (key: a, label: a),
+                  for (final a in _attributes(device))
+                    (key: a, label: humanize(a)),
                 ],
+                empty: '${device.displayName} is not reporting anything yet.',
                 onChanged: (v) => onChanged(b.copyWith(key: v)),
               ),
             if (property.kind == BindKind.look)
@@ -821,8 +853,15 @@ class _BindingRow extends StatelessWidget {
   /// Seeded with the first device and its first reading, and — for a colour —
   /// with an on/off pair, because a binding that changed nothing would look
   /// like the row had not worked.
+  /// A new binding, pointed somewhere sensible.
+  ///
+  /// **At the element's own device, when it has one.** An icon showing the
+  /// Overhead light whose colour is being bound almost certainly means the
+  /// Overhead light — starting at whichever device sorts first is the panel
+  /// ignoring what it already knows, and it made every binding two edits.
   PropertyBinding _seed() {
-    final d = devices.first;
+    final own = devices.where((d) => d.id == ownDeviceId).firstOrNull;
+    final d = own ?? devices.first;
     return PropertyBinding(
       property: property.name,
       deviceId: d.id,
@@ -960,32 +999,6 @@ class _RangeFields extends StatelessWidget {
       ),
     );
   }
-}
-
-/// The compact label-over-chips row the rest of this panel uses.
-class _Picker extends StatelessWidget {
-  const _Picker({
-    required this.label,
-    required this.value,
-    required this.options,
-    required this.onChanged,
-  });
-
-  final String label;
-  final String value;
-  final List<({String key, String label})> options;
-  final ValueChanged<String> onChanged;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(bottom: 4),
-        child: _StyleChoice(
-          label: label,
-          value: value,
-          options: options,
-          onChanged: onChanged,
-        ),
-      );
 }
 
 /// "When the house says this, look like that."
@@ -1343,9 +1356,16 @@ class _TapSection extends ConsumerWidget {
             onChanged: (v) {
               final kind = TapDo.fromWire(v);
               if (kind == null) return _write(null);
-              _write(action == null
-                  ? TapAction(action: kind)
-                  : action.with_(action: kind));
+              // **Start on the device this element already points at.** An
+              // icon bound to the Overhead light that is given a tap almost
+              // certainly wants to set the Overhead light, and making somebody
+              // find it again in a list of a hundred and eighty-nine is the
+              // panel forgetting what it already knows.
+              final own = config['device_id'];
+              final seed = kind == TapDo.set && own is String && own.isNotEmpty
+                  ? TapAction(action: kind, targetId: own, attribute: 'on')
+                  : TapAction(action: kind);
+              _write(action == null ? seed : action.with_(action: kind));
             },
           ),
           if (action != null) ...[
@@ -1375,6 +1395,140 @@ class _TapSection extends ConsumerWidget {
   }
 }
 
+/// A device field: what is chosen, and a way to change it.
+///
+/// One line, and the picker is the searchable sheet every other device field
+/// already uses. The panel is an inspector, not a form — a row says what it is
+/// and what it holds, and choosing is a surface of its own.
+class _DeviceButton extends StatelessWidget {
+  const _DeviceButton({
+    super.key,
+    required this.label,
+    required this.chosen,
+    required this.onPick,
+  });
+
+  final String label;
+  final DeviceState? chosen;
+  final VoidCallback onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: t.space.xs),
+      child: Row(children: [
+        SizedBox(
+          width: 62,
+          child: Text(label,
+              style:
+                  t.text.captionStyle.copyWith(color: t.surface.onBaseMuted)),
+        ),
+        Expanded(
+          child: InkWell(
+            onTap: onPick,
+            borderRadius: t.radius.smR,
+            child: Container(
+              padding: EdgeInsets.symmetric(
+                  horizontal: t.space.sm, vertical: t.space.sm),
+              decoration: BoxDecoration(
+                color: t.surface.raised,
+                border: Border.all(color: t.stroke.hairline),
+                borderRadius: t.radius.smR,
+              ),
+              child: Row(children: [
+                Expanded(
+                  child: Text(
+                    chosen?.displayName ?? 'Choose a device…',
+                    overflow: TextOverflow.ellipsis,
+                    style: t.text.bodySmallStyle.copyWith(
+                      color: chosen == null
+                          ? t.surface.onBaseMuted
+                          : t.surface.onBase,
+                    ),
+                  ),
+                ),
+                if ((chosen?.effectiveArea ?? '').isNotEmpty)
+                  Text(humanize(chosen!.effectiveArea),
+                      style: t.text.captionStyle
+                          .copyWith(color: t.surface.onBaseMuted)),
+                SizedBox(width: t.space.xs),
+                Icon(Icons.unfold_more, size: 14, color: t.surface.onBaseMuted),
+              ]),
+            ),
+          ),
+        ),
+      ]),
+    );
+  }
+}
+
+/// A short list, as a menu on one line.
+///
+/// A dropdown rather than a row of chips: a chip row grows with the house and
+/// reflows the whole panel when it does, and neither of those is true of a
+/// menu. Chips are for a fixed handful — the four things a tap can DO — and a
+/// list of the house's scenes is not that.
+class _MenuPick extends StatelessWidget {
+  const _MenuPick({
+    required this.label,
+    required this.value,
+    required this.options,
+    required this.empty,
+    required this.onChanged,
+  });
+
+  final String label;
+  final String? value;
+  final List<({String key, String label})> options;
+  final String empty;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    final known = options.any((o) => o.key == value);
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: t.space.xs),
+      child: Row(children: [
+        SizedBox(
+          width: 62,
+          child: Text(label,
+              style:
+                  t.text.captionStyle.copyWith(color: t.surface.onBaseMuted)),
+        ),
+        Expanded(
+          child: options.isEmpty
+              ? Text(empty,
+                  style: t.text.captionStyle
+                      .copyWith(color: t.surface.onBaseMuted))
+              : DropdownButtonFormField<String>(
+                  initialValue: known ? value : null,
+                  isExpanded: true,
+                  isDense: true,
+                  decoration: InputDecoration(
+                    isDense: true,
+                    border: const OutlineInputBorder(),
+                    contentPadding: EdgeInsets.symmetric(
+                        horizontal: t.space.sm, vertical: t.space.sm),
+                  ),
+                  items: [
+                    for (final o in options)
+                      DropdownMenuItem(
+                        value: o.key,
+                        child: Text(o.label, overflow: TextOverflow.ellipsis),
+                      ),
+                  ],
+                  onChanged: (v) {
+                    if (v != null) onChanged(v);
+                  },
+                ),
+        ),
+      ]),
+    );
+  }
+}
+
 /// The thing an action acts on: a scene, a mode, a device, or a page.
 class _TapTarget extends ConsumerWidget {
   const _TapTarget({required this.action, required this.onChanged});
@@ -1397,10 +1551,11 @@ class _TapTarget extends ConsumerWidget {
             if (isSceneDevice(d)) (id: d.id, label: d.displayName),
         ]..sort(
             (a, b) => a.label.toLowerCase().compareTo(b.label.toLowerCase()));
-        return _Picker(
+        return _MenuPick(
           label: 'Scene',
-          value: action.targetId ?? '',
+          value: action.targetId,
           options: choices.map((c) => (key: c.id, label: c.label)).toList(),
+          empty: 'This house has no scenes yet.',
           onChanged: (v) => onChanged(action.with_(targetId: v)),
         );
       case TapDo.mode:
@@ -1408,13 +1563,14 @@ class _TapTarget extends ConsumerWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _Picker(
+            _MenuPick(
               label: 'Mode',
-              value: action.targetId ?? '',
+              value: action.targetId,
               options: [
                 for (final m in modes)
                   (key: m.id, label: m.name ?? humanize(m.id))
               ],
+              empty: 'This house has no modes yet.',
               onChanged: (v) => onChanged(action.with_(targetId: v)),
             ),
             SizedBox(height: t.space.xs),
@@ -1438,6 +1594,9 @@ class _TapTarget extends ConsumerWidget {
         final devices = ref.watch(devicesProvider).value ?? const [];
         final device =
             devices.where((d) => d.id == action.targetId).firstOrNull;
+        // The searchable sheet, not a wall of chips. A hundred and eighty-nine
+        // devices as pills is a dump: you cannot search it, you cannot see the
+        // room a device is in, and finding one means reading all of them.
         // Only what the plugin registered, and only booleans while the action
         // flips: a tap that "toggles" a brightness has no second state to go
         // to. Same rule as the switch — see `attribute_policy.dart`.
@@ -1448,14 +1607,20 @@ class _TapTarget extends ConsumerWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _Picker(
+            _DeviceButton(
               label: 'Device',
-              value: action.targetId ?? '',
-              options: [
-                for (final d in devices)
-                  if (!isSceneDevice(d)) (key: d.id, label: d.displayName)
-              ],
-              onChanged: (v) => onChanged(action.with_(targetId: v)),
+              chosen: device,
+              onPick: () async {
+                final picked = await pickDevices(
+                  context,
+                  devices.where((d) => !isSceneDevice(d)).toList(),
+                  single: true,
+                  selected: {if (action.targetId != null) action.targetId!},
+                );
+                if (picked != null && picked.isNotEmpty) {
+                  onChanged(action.with_(targetId: picked.first));
+                }
+              },
             ),
             SizedBox(height: t.space.xs),
             if (device == null)
@@ -1470,22 +1635,24 @@ class _TapTarget extends ConsumerWidget {
                     t.text.captionStyle.copyWith(color: t.surface.onBaseMuted),
               )
             else
-              _Picker(
+              _MenuPick(
                 label: 'Flips',
-                value: action.attribute ?? '',
+                value: action.attribute,
                 options: [
                   for (final a in offered) (key: a, label: humanize(a))
                 ],
+                empty: 'Nothing here can be flipped.',
                 onChanged: (v) => onChanged(action.with_(attribute: v)),
               ),
           ],
         );
       case TapDo.page:
         final pages = ref.watch(dashboardsProvider).value ?? const [];
-        return _Picker(
+        return _MenuPick(
           label: 'Page',
-          value: action.targetId ?? '',
+          value: action.targetId,
           options: [for (final d in pages) (key: d.id, label: d.name)],
+          empty: 'There are no other pages yet.',
           onChanged: (v) => onChanged(action.with_(targetId: v)),
         );
     }

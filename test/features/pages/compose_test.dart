@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:hc_web/features/pages/page_background.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hc_web/core/dashboard/frame.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hc_web/core/dashboard/grid_engine.dart';
 import 'package:hc_web/core/models/dashboard.dart';
@@ -289,19 +290,29 @@ void main() {
   });
 
   group('the grid is still there', () {
-    testWidgets('a composed drag snaps to it by default', (tester) async {
-      // On by default, because the grid is what every existing arrangement
-      // lines up with — a composition that starts by drifting off it is a
-      // worse starting point than one that starts on it.
+    testWidgets('a composed drag snaps to the FINE grid, not the cells',
+        (tester) async {
+      // Snapping stays on by default — a composition that starts by drifting
+      // is a worse starting point than one that starts aligned. What changed
+      // is which grid. This test used to assert a cell edge, and using it
+      // showed why that is wrong: John, sizing a label, *"I should be able to
+      // size the box to near perfect width for the words."* A 120-pixel magnet
+      // gives a text box a choice of 120 or 240 and nothing between.
       await _open(tester);
       await _toggleCompose(tester);
       expect(_grid(tester).snapToGrid, isTrue);
+      expect(_grid(tester).composing, isTrue);
 
       await _dragCard(tester, 'a', const Offset(140, 0));
       final rect = _item(tester, 'a').rect!;
-      // Landed on a cell edge: a whole number of steps across.
+      expect(rect.x % FrameGeometry.fine, closeTo(0, 0.001),
+          reason: 'a whole number of fine steps across');
+
+      // And NOT constrained to the cells: 140 across from wherever it was is
+      // not a multiple of this canvas's cell step, so landing on one would
+      // mean the drag had been pulled somewhere it was not taken.
       const step = (1600 - 132) / 12 + 12;
-      expect(rect.x / step, closeTo((rect.x / step).roundToDouble(), 0.001));
+      expect(rect.x % step, isNot(closeTo(0, 0.001)));
     });
 
     testWidgets('and lets go of it when asked', (tester) async {

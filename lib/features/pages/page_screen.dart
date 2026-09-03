@@ -1791,6 +1791,41 @@ class _PageScreenState extends ConsumerState<PageScreen> {
     });
   }
 
+  /// Start this page from one somebody already composed.
+  ///
+  /// The template's own widgets and layouts land here rather than becoming a
+  /// separate dashboard, because this IS the new page — you asked for one and
+  /// then said what shape it should be. Its references are slots, so the
+  /// wiring panel opens with a list of what to point them at.
+  Future<void> _startFromTemplate(String templateId) async {
+    final template =
+        await ref.read(dashboardsProvider.notifier).fetchTemplate(templateId);
+    if (template == null || !mounted) return;
+    _pushUndo('Start from ${template.name}');
+    setState(() {
+      _draftWidgets = {for (final w in template.widgets) w.id: w};
+      // A template composes for the breakpoints it was drawn at, and this page
+      // may show one it never heard of. Keep what it drew and derive the rest
+      // from its widest, which is what a page does for its own breakpoints
+      // anyway — a wall that inherited nothing would be blank.
+      final drawn = {for (final l in template.layouts) l.breakpoint};
+      final widest = template.layouts.isEmpty
+          ? null
+          : template.layouts.reduce((a, b) => a.columns >= b.columns ? a : b);
+      _draftLayouts = [
+        ...template.layouts,
+        if (widest != null)
+          for (final breakpoint in DashboardBreakpoint.values)
+            if (!drawn.contains(breakpoint))
+              widest.copyWith(
+                breakpoint: breakpoint,
+                derivedFrom: widest.breakpoint,
+              ),
+      ];
+      _contentDirty = true;
+    });
+  }
+
   Future<void> _configureWidget(String id) async {
     final model = _draftWidgets?[id];
     if (model == null) return;
@@ -2027,7 +2062,7 @@ class _PageScreenState extends ConsumerState<PageScreen> {
                 widget.designer &&
                 layout.frame == null &&
                 !_dismissedStart
-            ? _EmptyPage(
+            ? EmptyPageStarts(
                 editing: true,
                 rooms: roomsBySize(
                   ref
@@ -2044,6 +2079,7 @@ class _PageScreenState extends ConsumerState<PageScreen> {
                 ),
                 onStart: (kind, {String? room, String? label}) =>
                     _startPage(kind, breakpoint, columns, room, label),
+                onTemplate: _startFromTemplate,
               )
             : null;
 
@@ -2060,7 +2096,7 @@ class _PageScreenState extends ConsumerState<PageScreen> {
         // The canvas, shared by both presentations. In the designer it is the
         // middle pane; in the page it is the whole body.
         Widget canvas() => items.isEmpty && !_editing
-            ? const _EmptyPage(editing: false)
+            ? const EmptyPageStarts(editing: false)
             // An empty page in the designer offers somewhere to start rather
             // than a grid of nothing — see `page_starts.dart`. Only while
             // genuinely empty: once there is one card on it, the page is the
@@ -2146,6 +2182,15 @@ class _PageScreenState extends ConsumerState<PageScreen> {
                   frame: layout.frame,
                   onCompose: (id, rect) => _composeCard(id, rect, columns),
                   snapToGrid: _snapToGrid,
+                  // Which magnet the drags use, and whether the fine grid is
+                  // drawn. A packed card can only sit on a cell edge; a
+                  // composed one can sit anywhere, so the cell is the wrong
+                  // thing to pull it to.
+                  composing: _draftLayouts
+                          ?.where((l) => l.breakpoint == breakpoint)
+                          .firstOrNull
+                          ?.isComposed ??
+                      false,
                   selectedIds: _selection,
                   onDropCard: (payload, x, y) {
                     if (payload is DashboardWidgetModel) {
@@ -2763,17 +2808,83 @@ class _PageLoadFailed extends StatelessWidget {
   }
 }
 
+/// The pages somebody already composed: the ones core ships, and the ones
+/// imported from another house.
+///
+/// A template arrives with slots rather than devices — that is what makes it a
+/// template rather than a copy of somebody's house — so picking one lands a
+/// page with gaps in it, and the wiring panel above the canvas is where you
+/// fill them. Said here, because a page of inert controls is a surprise
+/// otherwise.
+class _Templates extends ConsumerWidget {
+  const _Templates({required this.onPick});
+
+  final ValueChanged<String> onPick;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = HcTokens.of(context);
+    final templates = ref.watch(dashboardTemplatesProvider);
+
+    return templates.maybeWhen(
+      data: (list) {
+        if (list.isEmpty) return const SizedBox.shrink();
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(height: t.space.lg),
+            Row(children: [
+              Expanded(
+                  child: Divider(
+                      height: t.stroke.width, color: t.stroke.hairline)),
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: t.space.sm),
+                child: Text('Or start from a page',
+                    style: t.text.captionStyle
+                        .copyWith(color: t.surface.onBaseMuted)),
+              ),
+              Expanded(
+                  child: Divider(
+                      height: t.stroke.width, color: t.stroke.hairline)),
+            ]),
+            SizedBox(height: t.space.sm),
+            for (final template in list) ...[
+              _StartTile(
+                icon: Icons.auto_awesome_mosaic_outlined,
+                title: template.name,
+                blurb: template.description ??
+                    'A page somebody composed, ready to wire.',
+                trailing: GestureDetector(
+                  onTap: () => onPick(template.id),
+                  child: const _StartAction(label: 'Use it'),
+                ),
+              ),
+              SizedBox(height: t.space.sm),
+            ],
+          ],
+        );
+      },
+      // Silent while asking, and silent on an older core that has no
+      // templates to give: an error here would be a banner about a feature
+      // nobody asked for yet.
+      orElse: () => const SizedBox.shrink(),
+    );
+  }
+}
+
 /// A page with nothing on it — and, in the designer, somewhere to start.
 ///
 /// "Add a widget to get started" was the whole truth while a page could only
 /// ever be a mosaic of cells: there was one shape a template could have, so
 /// offering it would have been offering nothing. With a canvas underneath, the
 /// choice is real — see `page_starts.dart`.
-class _EmptyPage extends StatelessWidget {
-  const _EmptyPage({
+class EmptyPageStarts extends ConsumerWidget {
+  const EmptyPageStarts({
+    super.key,
     required this.editing,
     this.rooms = const [],
     this.onStart,
+    this.onTemplate,
   });
 
   final bool editing;
@@ -2785,8 +2896,12 @@ class _EmptyPage extends StatelessWidget {
   final void Function(PageStartKind kind, {String? room, String? label})?
       onStart;
 
+  /// Start from a page somebody already composed — one core ships, or one
+  /// imported from another house.
+  final ValueChanged<String>? onTemplate;
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final t = HcTokens.of(context);
     final onStart = this.onStart;
 
@@ -2895,6 +3010,21 @@ class _EmptyPage extends StatelessWidget {
                   child: const _StartAction(label: 'Just the grid'),
                 ),
               ),
+              // **The pages somebody already composed, in the same list.**
+              //
+              // They were behind a different button on the dashboards screen,
+              // which meant the natural path — New page — could not reach
+              // them: John, looking for the room template he had just been
+              // told about, found the three starts instead. Two lists of "how
+              // do I begin a page" is one too many, and the one you find is
+              // the one that gets used.
+              //
+              // Below the built-in starts rather than above: a start makes
+              // something you finish, and a template makes something you
+              // WIRE. That is more work, not less, and it should be the
+              // deliberate choice of the two.
+              if (onTemplate case final onTemplate?)
+                _Templates(onPick: onTemplate),
             ],
           ),
         ),

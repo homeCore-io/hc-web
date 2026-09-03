@@ -140,7 +140,6 @@ IconData toolIcon(String name) => switch (name) {
       'gauge' => Icons.speed_outlined,
       'code' => Icons.code_outlined,
       'ellipse' => Icons.circle_outlined,
-      'path' => Icons.gesture_outlined,
       'icon' => Icons.lightbulb_outline,
       'toggle' => Icons.toggle_on_outlined,
       'slider' => Icons.tune_outlined,

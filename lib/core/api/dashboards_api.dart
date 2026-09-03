@@ -2,8 +2,12 @@ import '../models/dashboard.dart';
 import 'homecore_client.dart';
 
 class DashboardsApi {
-  final HomecoreClient client;
+  late final HomecoreClient client;
   DashboardsApi(this.client);
+
+  /// For fakes that override the methods they need and never reach the wire —
+  /// the same arrangement, and the same reasoning, as [DevicesApi.fake].
+  DashboardsApi.fake();
 
   DashboardDefinition _parseDashboard(Map data) {
     final map = Map<String, dynamic>.from(data);
