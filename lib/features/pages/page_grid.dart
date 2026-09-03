@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -462,16 +463,33 @@ class _PageGridState extends State<PageGrid> {
   /// [items] in the order they should be painted: the grid, then whatever
   /// floats above it, lowest first.
   static List<GridItem> _stacked(List<GridItem> items) {
-    final grounded = [
-      for (final i in items)
-        if (!i.floating) i
-    ];
-    final floating = [
-      for (final i in items)
-        if (i.floating) i
-    ]..sort((a, b) => a.z.compareTo(b.z));
-    return [...grounded, ...floating];
+    // **A negative height means underneath, including underneath the grid.**
+    //
+    // This used to paint every grounded element first and every floating one
+    // after, sorted among themselves — so a shape lifted to `z: -50` and sent
+    // deliberately to the back came out *on top of the whole page*. Nothing
+    // said so; the panel simply covered its own contents, which is how a page
+    // of five filled panels renders as five empty ones.
+    //
+    // `zOf` has always clamped to −999…999, so a negative height is a thing the
+    // document can say, and there is only one thing it can mean. A grounded
+    // element sits at zero — the same number the free layer gives an element
+    // that has just been lifted — so the three cases order themselves: below
+    // the page, in it, above it.
+    //
+    // Stable, so grounded elements keep the order they arrived in: they cannot
+    // overlap each other on a packed layout, and on a composed one the document
+    // order is the only thing anybody has said about them.
+    final ordered = [...items];
+    mergeSort<GridItem>(
+      ordered,
+      compare: (a, b) => _height(a).compareTo(_height(b)),
+    );
+    return ordered;
   }
+
+  /// Where an element sits in the stack. Grounded is zero — see [_stacked].
+  static int _height(GridItem item) => item.floating ? item.z : 0;
 
   /// The cell under a point, clamped to the board.
   /// [child] cut to [box], which is in board units while the child's own
