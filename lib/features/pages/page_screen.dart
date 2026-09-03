@@ -38,6 +38,7 @@ import 'card_library.dart';
 import 'designer_shell.dart';
 import 'page_actions.dart';
 import 'page_grid.dart';
+import 'scaled_canvas.dart';
 import 'widget_config_form.dart';
 import 'widget_palette.dart';
 
@@ -2449,6 +2450,9 @@ class _PageScreenState extends ConsumerState<PageScreen> {
             // page and the starting points would be in the way.
             : _PreviewFrame(
                 width: _editing ? previewWidthFor(breakpoint) : null,
+                // What a composed page is *drawn at* when somebody is only
+                // looking at it. See [_PreviewFrame].
+                canvasWidth: _editing ? null : layout.frame?.width,
                 child: PageGrid(
                   // A card with a style variant asks about a device by id, so
                   // this is a map rather than a scan: a page of forty cards
@@ -3077,21 +3081,66 @@ class _UnplacedNotice extends StatelessWidget {
 
 /// Holds the canvas to a device-plausible width while editing a layout narrower
 /// than the screen, and gets out of the way entirely otherwise.
+/// How wide the board is laid out, and whether what is drawn is scaled.
+///
+/// Two jobs that look like one. **Editing** constrains the board to the
+/// breakpoint's own width, so a phone layout is composed at phone width. Only
+/// the designer does that, and it is a constraint rather than a scale — the
+/// shell has its own zoom on top.
+///
+/// **Viewing a composed page scales it**, and until now did not, which is the
+/// bug that made every composed page look broken on any screen that was not
+/// exactly the width it was drawn at. A composed layout states its rectangles
+/// in the frame's units — 1600 across, say — and `page_grid` lays the board out
+/// at whatever width it is given and then draws those rectangles one-for-one.
+/// Give it 1375 and the right two hundred pixels of the design are simply off
+/// the edge: no error, no scrollbar that helps, just a page with its right-hand
+/// side missing.
+///
+/// [ScaledCanvas] is the answer and already existed — the designer has used it
+/// for zoom since composition shipped. The board is laid out at the frame's
+/// width and *drawn* smaller, so a rectangle needs no conversion and a page
+/// looks the same on every screen.
+///
+/// **Never scaled up.** A 1200-wide design on a 2560 monitor at 2.1× is a page
+/// of enormous controls rather than a page that fits, so past 1:1 it is centred
+/// at its own size — which is what a fixed-width design means.
 class _PreviewFrame extends StatelessWidget {
-  const _PreviewFrame({required this.width, required this.child});
+  const _PreviewFrame({
+    required this.width,
+    required this.child,
+    this.canvasWidth,
+  });
 
   final double? width;
+  final double? canvasWidth;
   final Widget child;
 
   @override
   Widget build(BuildContext context) {
-    if (width == null) return child;
-    return Align(
-      alignment: Alignment.topCenter,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: width!),
-        child: child,
-      ),
+    if (width != null) {
+      return Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: width!),
+          child: child,
+        ),
+      );
+    }
+    final canvas = canvasWidth;
+    if (canvas == null || canvas <= 0) return child;
+    return LayoutBuilder(
+      builder: (context, c) {
+        if (!c.hasBoundedWidth || c.maxWidth <= 0) return child;
+        final scale = c.maxWidth / canvas;
+        if (scale >= 1) {
+          return Align(
+            alignment: Alignment.topCenter,
+            child: SizedBox(width: canvas, child: child),
+          );
+        }
+        return ScaledCanvas(scale: scale, child: child);
+      },
     );
   }
 }
