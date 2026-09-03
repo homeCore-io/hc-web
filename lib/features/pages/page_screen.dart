@@ -12,6 +12,7 @@ import '../../core/dashboard/clipboard.dart';
 import '../../core/dashboard/design_tools.dart';
 import '../../core/dashboard/device_slot.dart';
 import '../../core/dashboard/frame.dart';
+import '../../core/dashboard/frame_space.dart';
 import '../../core/dashboard/free_layer.dart';
 import '../../core/dashboard/grid_engine.dart';
 import '../../core/dashboard/group_frame.dart';
@@ -371,6 +372,142 @@ class _PageScreenState extends ConsumerState<PageScreen> {
     });
   }
 
+  /// Make the group in hand a frame, or stop it being one.
+  ///
+  /// The one edit in the designer that changes what the document's numbers
+  /// *mean* rather than what they are, and the whole requirement is that
+  /// **nothing moves**. Turning it on must leave every card exactly where it
+  /// was on screen; turning it off must put it back.
+  ///
+  /// Which is why almost nothing happens here. The draft holds page
+  /// coordinates — every gesture on the canvas produces them and always has —
+  /// and page coordinates are precisely what this edit does not change. So the
+  /// cards are not touched at all, and `_commit` writes them into whatever
+  /// space the frames then describe. The only rectangles that need restating
+  /// are the *boxes'* own, because a container nested inside the new frame is
+  /// measured from it too, and `rebase` does that arithmetic as a round trip
+  /// rather than as a shift — see `frame_space.dart` for why that distinction
+  /// is worth the words.
+  ///
+  /// **A frame has to state a rectangle**, so turning it on materialises one
+  /// from where the members currently are. That is the only geometry invented
+  /// here, and it is invented to sit exactly around what is already there.
+  void _setGroupFrame(String path, bool on) {
+    final layouts = _draftLayouts;
+    final items = _draftItems;
+    final selected = _editingBreakpoint;
+    if (layouts == null || items == null || selected == null) return;
+    final layout = layouts.where((l) => l.breakpoint == selected).firstOrNull;
+    if (layout == null) return;
+
+    final before = framesByPath(layout.groups);
+    final existing = layout.groups.where((g) => g.path == path).firstOrNull;
+
+    var rect = existing?.rect;
+    if (on && rect == null) {
+      final members = membersOf(_paths, path);
+      final bounds = boundsOfRects([
+        for (final i in items)
+          if (members.contains(i.id))
+            if (i.rect case final r?) r,
+      ]);
+      // Nothing composed to be around. A packed group has no rectangles of its
+      // own — its members are positioned by cells — so there is no honest box
+      // to invent and nothing to measure from. The panel does not offer this
+      // on such a layout; this is the guard for the case it is called anyway.
+      if (bounds == null) return;
+      // Materialised in the box's *parent's* space, which is where a box's
+      // rectangle lives. On an unnested group that is the page, and this is
+      // the identity.
+      rect = toLocal(bounds, spaceOfBox(path), before);
+    }
+
+    final next =
+        (existing ?? GroupBox(path: path)).copyWith(frame: on, rect: rect);
+    final rebased = rebase(
+      boxes: [
+        for (final g in layout.groups)
+          if (g.path != path) g,
+        if (!next.isPlain) next,
+      ],
+      before: before,
+      // The cards are already where they belong: see above.
+      paths: const {},
+      rects: const {},
+    );
+
+    _pushUndo(on ? 'Hold things inside the group' : 'Let the group go');
+    setState(() {
+      _draftLayouts = [
+        for (final l in layouts)
+          if (l.breakpoint != selected)
+            l
+          else
+            l.copyWith(groups: rebased.boxes),
+      ];
+      _contentDirty = true;
+    });
+  }
+
+  /// A frame dragged by its name, to [pageRect].
+  ///
+  /// Two things move, and only one of them is written down. The **box** gets a
+  /// new rectangle, restated in whatever space it sits in. The **members** are
+  /// not touched in the document at all — their rectangles are stated inside
+  /// this frame, and the frame is what moved — but the draft holds them
+  /// resolved to the page, so those resolved numbers are carried along here or
+  /// the next edit would localise stale positions and snap everything back to
+  /// where the frame used to be.
+  ///
+  /// The layout is updated *before* the commit, deliberately: `_commit`
+  /// localises against the frames it finds, and the frame it must find is the
+  /// one at its new position.
+  void _moveFrame(String path, DashboardRect pageRect) {
+    final layouts = _draftLayouts;
+    final items = _draftItems;
+    final selected = _editingBreakpoint;
+    if (layouts == null || items == null || selected == null) return;
+    final layout = layouts.where((l) => l.breakpoint == selected).firstOrNull;
+    if (layout == null) return;
+
+    final frames = framesByPath(layout.groups);
+    final box = layout.groups.where((g) => g.path == path).firstOrNull;
+    final was = box == null ? null : pageRectOf(box, frames);
+    if (box == null || was == null) return;
+
+    final dx = pageRect.x - was.x;
+    final dy = pageRect.y - was.y;
+    if (dx == 0 && dy == 0) return;
+
+    final carried = membersOf(_paths, path);
+    _pushUndo('Move ${nameOf(path)}', coalesce: 'frame:$path');
+    setState(() {
+      _draftLayouts = [
+        for (final l in layouts)
+          if (l.breakpoint != selected)
+            l
+          else
+            l.copyWith(groups: [
+              for (final g in l.groups)
+                if (g.path == path)
+                  // A box's own rectangle lives in its *parent's* space, which
+                  // for a frame at the top of the page is the page.
+                  g.copyWith(rect: toLocal(pageRect, spaceOfBox(path), frames))
+                else
+                  g,
+            ]),
+      ];
+      _commit([
+        for (final i in items)
+          if (carried.contains(i.id) && i.rect != null)
+            i.copyWith(
+                rect: i.rect!.copyWith(x: i.rect!.x + dx, y: i.rect!.y + dy))
+          else
+            i,
+      ]);
+    });
+  }
+
   /// Write a new path onto a set of elements, as one undoable edit.
   void _writePaths(String label, Map<String, String?> next) {
     final widgets = _draftWidgets;
@@ -540,6 +677,7 @@ class _PageScreenState extends ConsumerState<PageScreen> {
   }
 
   List<GridItem> _itemsFrom(DashboardDefinition d, DashboardLayout layout) {
+    final frames = framesByPath(layout.groups);
     return [
       for (final p in layout.placements)
         if (d.widgetById(p.widgetId) case final w?)
@@ -559,7 +697,10 @@ class _PageScreenState extends ConsumerState<PageScreen> {
             // The composition, the angle and the fade travel on the
             // *placement*, and every one of them has to be read back or the
             // next save writes over it with what the cells alone imply.
-            rect: p.rect,
+            // Stated in the element's frame's space, drawn in the page's —
+            // see `frame_space.dart`. One conversion here means no gesture
+            // downstream has to know what a frame is.
+            rect: placedRect(p.rect, groupOf(w.config), frames),
             rotation: p.rotation,
             opacity: p.opacity,
           ),
@@ -640,10 +781,29 @@ class _PageScreenState extends ConsumerState<PageScreen> {
     // notice row is what places it.
     _draftLayouts = writeArrangement(
       layouts: _draftLayouts!,
-      items: items,
+      // The draft holds page coordinates, because that is what every gesture
+      // on the canvas produces; the document holds each element's rectangle in
+      // its frame's space. This is the one place the two meet.
+      items: itemsToLocal(
+        items,
+        _paths,
+        framesByPath(_draftLayouts!
+                .where((l) => l.breakpoint == selected)
+                .firstOrNull
+                ?.groups ??
+            const []),
+      ),
       edited: selected,
     );
   }
+
+  /// Whether the layout being edited composes rather than packs.
+  bool get _composedHere =>
+      _draftLayouts
+          ?.where((l) => l.breakpoint == _editingBreakpoint)
+          .firstOrNull
+          ?.isComposed ??
+      false;
 
   /// The pixel shape of the layout being edited, in the units it is drawn in.
   CanvasGeometry _geometry(int columns) {
@@ -1029,6 +1189,7 @@ class _PageScreenState extends ConsumerState<PageScreen> {
   /// below a card's minimum.
   List<GridItem> _draftItemsFor(DashboardBreakpoint b) {
     final layout = _draftLayouts!.firstWhere((l) => l.breakpoint == b);
+    final frames = framesByPath(layout.groups);
     return [
       for (final p in layout.placements)
         if (_draftWidgets![p.widgetId] case final w?)
@@ -1048,7 +1209,7 @@ class _PageScreenState extends ConsumerState<PageScreen> {
             // The composition, the angle and the fade travel on the
             // *placement*, and every one of them has to be read back or the
             // next save writes over it with what the cells alone imply.
-            rect: p.rect,
+            rect: placedRect(p.rect, groupOf(w.config), frames),
             rotation: p.rotation,
             opacity: p.opacity,
           ),
@@ -2181,6 +2342,7 @@ class _PageScreenState extends ConsumerState<PageScreen> {
                   groupPaths: _pathsIn(widgetsById),
                   frame: layout.frame,
                   onCompose: (id, rect) => _composeCard(id, rect, columns),
+                  onFrameMove: widget.designer ? _moveFrame : null,
                   snapToGrid: _snapToGrid,
                   // Which magnet the drags use, and whether the fine grid is
                   // drawn. A packed card can only sit on a cell edge; a
@@ -2264,6 +2426,12 @@ class _PageScreenState extends ConsumerState<PageScreen> {
                     ? null
                     : layout.groupBox(_groupInHand!),
             onGroupBox: _groupInHand == null ? null : _setGroupBox,
+            // Only on a composed layout. A packed one positions by cells,
+            // and a cell is not measured from anything — offering to frame a
+            // group there would be a switch that could not do what it says.
+            onGroupFrame: _groupInHand == null || !_composedHere
+                ? null
+                : (on) => _setGroupFrame(_groupInHand!, on),
             onSave: () => _save(dashboard),
             canvas: canvas(),
             emptyStart: emptyStart(),

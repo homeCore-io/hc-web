@@ -22,6 +22,7 @@
 /// has sized stays where they put it. Neither needs a migration.
 library;
 
+import 'frame_space.dart';
 import 'grid_engine.dart';
 import 'groups.dart';
 
@@ -49,14 +50,20 @@ List<GroupContainer> resolveGroups(
   Map<String, String?> paths,
   DashboardRect? Function(String id) rectOf,
 ) {
+  final frames = framesByPath(boxes);
   final resolved = <GroupContainer>[];
   for (final box in boxes) {
-    final members = <DashboardRect>[];
-    for (final id in membersOf(paths, box.path)) {
-      final rect = rectOf(id);
-      if (rect != null) members.add(rect);
-    }
-    final bounds = groupBounds(box, members);
+    // **A frame does not ask where its members are.** It is the thing they are
+    // measured from, so its position is its own — `frame_space.dart` resolves
+    // it against whatever frames it is nested in. Fitting it to its contents
+    // would be the container chasing the things it defines, which is how an
+    // empty frame collapses to nothing and takes its coordinate space with it.
+    final bounds = box.isFrame
+        ? pageRectOf(box, frames)
+        : groupBounds(box, [
+            for (final id in membersOf(paths, box.path))
+              if (rectOf(id) case final rect?) rect,
+          ]);
     if (bounds == null) continue;
     resolved.add((path: box.path, box: box, rect: bounds));
   }

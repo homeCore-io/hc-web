@@ -155,9 +155,15 @@ DashboardLayout deriveLayout(
     // the placements make: an angle is stated against a canvas, and a cluster
     // turned eight degrees across a wide page is a mistake once its members
     // have been repacked into a phone's single column. A fade is not geometry.
+    // **And no frames.** A frame is a rectangle its members are measured
+    // from, and the rectangle has just been dropped for the reason above — so
+    // there is nothing left to measure from, and the members have been repacked
+    // into cells that were never in anybody's space anyway. `isFrame` would
+    // refuse the claim regardless; dropping the key means the derived layout
+    // does not *make* one.
     groups: [
       for (final g in sourceGroups)
-        if (!g.isPlain) g.copyWith(rect: null, rotation: null),
+        if (!g.isPlain) g.copyWith(rect: null, rotation: null, frame: false),
     ],
   );
 }

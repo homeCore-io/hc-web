@@ -386,6 +386,7 @@ class GroupBox {
     this.padding = 0,
     this.radius,
     this.clip = false,
+    this.frame = false,
     this.rotation,
     this.opacity,
   });
@@ -408,6 +409,32 @@ class GroupBox {
   /// not hide a card that was visible a moment ago.
   final bool clip;
 
+  /// Whether this box is a **coordinate space** rather than a decoration.
+  ///
+  /// The difference between a group and a frame, and the whole of it: a
+  /// group's members hold page coordinates and the box is drawn round wherever
+  /// they happen to be; a frame's members hold coordinates **relative to the
+  /// frame**, so moving it takes them with it and there is finally an *inside*
+  /// for something to be placed in.
+  ///
+  /// `groups.dart` said what this costs and why it was deferred — *"a tag that
+  /// several elements agree on… that needs the document to be a tree"*. It
+  /// turns out to need one key, because the tree was already there: the path
+  /// **is** the parent link, and has been since groups shipped.
+  ///
+  /// **A frame must state its rect.** [isFrame] insists on it, and not out of
+  /// tidiness: a fitted box is derived from where its members are, and a
+  /// frame's members are measured from the box. Allowing both would be asking
+  /// each to be computed from the other.
+  final bool frame;
+
+  /// True when this box gives its members a coordinate space.
+  ///
+  /// Every reader should ask this rather than [frame], so that a hand-edited
+  /// document claiming `frame: true` with nothing to measure from degrades to
+  /// an ordinary group instead of putting every child at the page origin.
+  bool get isFrame => frame && rect != null;
+
   /// The transform every member inherits.
   ///
   /// Composed with each member's own rather than replacing it: a card turned
@@ -429,6 +456,7 @@ class GroupBox {
       padding == 0 &&
       radius == null &&
       !clip &&
+      !frame &&
       rotation == null &&
       opacity == null;
 
@@ -438,6 +466,7 @@ class GroupBox {
     double? padding,
     Object? radius = _unchangedRect,
     bool? clip,
+    bool? frame,
     Object? rotation = _unchangedRect,
     Object? opacity = _unchangedRect,
   }) =>
@@ -453,6 +482,7 @@ class GroupBox {
         radius:
             identical(radius, _unchangedRect) ? this.radius : radius as double?,
         clip: clip ?? this.clip,
+        frame: frame ?? this.frame,
         rotation: identical(rotation, _unchangedRect)
             ? this.rotation
             : rotation as double?,
@@ -467,6 +497,7 @@ class GroupBox {
         if (padding != 0) 'padding': padding,
         if (radius != null) 'radius': radius,
         if (clip) 'clip': clip,
+        if (frame) 'frame': frame,
         if (rotation != null) 'rotation': rotation,
         if (opacity != null) 'opacity': opacity,
       };
@@ -486,6 +517,7 @@ class GroupBox {
       padding: padding < 0 ? 0 : padding,
       radius: radius == null || radius < 0 ? null : radius,
       clip: json['clip'] == true,
+      frame: json['frame'] == true,
       rotation: DashboardRect._finite(json['rotation']),
       opacity: DashboardRect._finite(json['opacity']),
     );
@@ -498,13 +530,14 @@ class GroupBox {
       other.rect == rect &&
       other.padding == padding &&
       other.radius == radius &&
+      other.frame == frame &&
       other.clip == clip &&
       other.rotation == rotation &&
       other.opacity == opacity;
 
   @override
   int get hashCode =>
-      Object.hash(path, rect, padding, radius, clip, rotation, opacity);
+      Object.hash(path, rect, padding, radius, clip, frame, rotation, opacity);
 }
 
 /// What empty space in a layout means. Mirrors core's `DashboardFlow`.

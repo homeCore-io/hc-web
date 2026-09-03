@@ -56,7 +56,14 @@ class PageGrid extends StatefulWidget {
     this.snapToGrid = true,
     this.composing = false,
     this.onCompose,
+    this.onFrameMove,
   });
+
+  /// A frame was dragged by its name, to [rect] in page units.
+  ///
+  /// The rectangle rather than a delta, so this seam takes a resize the day
+  /// one exists without changing shape.
+  final void Function(String path, DashboardRect rect)? onFrameMove;
 
   /// Whether this layout composes freely rather than packing.
   ///
@@ -297,7 +304,22 @@ class _DragBodyState extends State<_DragBody> {
       );
 }
 
+/// How tall a frame's name strip is, above its top-left corner.
+const double _frameLabel = 18;
+
 class _PageGridState extends State<PageGrid> {
+  /// The frame being dragged by its name, and how far it has come.
+  ///
+  /// A frame drag is previewed differently from a card's, and the difference
+  /// is the whole point of frames: the members' rectangles are stated *inside*
+  /// the frame, so moving it changes none of them. On this canvas they have
+  /// already been resolved to the page, though, so the preview has to carry
+  /// them by hand — see `frame_space.dart` for which of those two numbers the
+  /// document keeps.
+  String? _framePath;
+  DashboardRect? _frameFrom;
+  Offset _frameAccum = Offset.zero;
+
   /// The cell a dragged-in card is hovering over, in grid units.
   (int, int)? _dropCell;
 
@@ -572,12 +594,22 @@ class _PageGridState extends State<PageGrid> {
         // The one place the two representations are reconciled. Everything that
         // draws goes through here, so "the rectangle is the truth and the cells
         // are the fallback" is decided once.
-        DashboardRect boxOf(GridItem i) => rectFor(geometry, i, i.rect);
+        final dragging = _framePath;
+        final carried = dragging == null
+            ? const <String>{}
+            : membersOf(widget.groupPaths, dragging);
+        DashboardRect shifted(DashboardRect r) =>
+            r.copyWith(x: r.x + _frameAccum.dx, y: r.y + _frameAccum.dy);
+
+        DashboardRect boxOf(GridItem i) {
+          final base = rectFor(geometry, i, i.rect);
+          return carried.contains(i.id) ? shifted(base) : base;
+        }
 
         // The groups with a body, resolved against the very rectangles the
         // cards are about to be drawn from. Empty for every page that has not
         // styled a group, which is all of them until somebody does.
-        final containers = widget.groupStyles.isEmpty
+        final resolved = widget.groupStyles.isEmpty
             ? const <GroupContainer>[]
             : resolveGroups(widget.groupStyles, widget.groupPaths, (id) {
                 for (final i in items) {
@@ -585,6 +617,19 @@ class _PageGridState extends State<PageGrid> {
                 }
                 return null;
               });
+        // A frame in flight takes everything under it: its own box, and any
+        // container nested inside it. The members are already handled — they
+        // came through `boxOf` — but a frame's own rectangle is its own, so
+        // nothing else would move it.
+        final containers = dragging == null
+            ? resolved
+            : [
+                for (final c in resolved)
+                  if (isUnder(c.path, dragging))
+                    (path: c.path, box: c.box, rect: shifted(c.rect))
+                  else
+                    c,
+              ];
 
         // Only the members of a group that actually clips. A nested clip wins
         // over its ancestor's, because `resolveGroups` orders outermost first
@@ -1120,6 +1165,74 @@ class _PageGridState extends State<PageGrid> {
                     ),
                   ),
                 ),
+
+              // **A frame's name, and the handle you move it by.**
+              //
+              // Above the top-left corner rather than on the box, because the
+              // box is full of things you have to be able to press: a frame
+              // draggable by its own background would make every card inside
+              // it a place where the frame moves instead. Naming it there is
+              // the convention every design tool settled on, and it earns its
+              // pixels twice — a frame is the one element on this canvas whose
+              // identity you cannot read off what it draws.
+              if (widget.editing && widget.onFrameMove != null)
+                for (final container in containers)
+                  if (container.box.isFrame)
+                    Positioned(
+                      key: ValueKey('frame-handle:${container.path}'),
+                      left: container.rect.x,
+                      top: container.rect.y - _frameLabel,
+                      height: _frameLabel,
+                      child: _DragBody(
+                        onDragStart: () => setState(() {
+                          _framePath = container.path;
+                          // Captured before any shift is applied, so the
+                          // arithmetic at the end is against where it started
+                          // rather than against a preview of itself.
+                          _frameFrom = container.rect;
+                          _frameAccum = Offset.zero;
+                        }),
+                        onDragUpdate: (d) => setState(() => _frameAccum += d),
+                        onDragEnd: () {
+                          final path = _framePath;
+                          final from = _frameFrom;
+                          final moved = _frameAccum;
+                          setState(() {
+                            _framePath = null;
+                            _frameFrom = null;
+                            _frameAccum = Offset.zero;
+                          });
+                          if (path == null || from == null) return;
+                          // The same magnet the cards use, so a frame and the
+                          // things beside it land on the same lattice.
+                          widget.onFrameMove!(
+                            path,
+                            from.copyWith(
+                              x: geometry.snapX(from.x + moved.dx,
+                                  on: widget.snapToGrid,
+                                  coarse: !widget.composing),
+                              y: geometry.snapY(from.y + moved.dy,
+                                  on: widget.snapToGrid,
+                                  coarse: !widget.composing),
+                            ),
+                          );
+                        },
+                        child: MouseRegion(
+                          cursor: SystemMouseCursors.move,
+                          child: Padding(
+                            padding: EdgeInsets.only(right: t.space.sm),
+                            child: Text(
+                              nameOf(container.path),
+                              style: t.text.captionStyle.copyWith(
+                                color: _framePath == container.path
+                                    ? t.accent.primary
+                                    : t.surface.onBaseMuted,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
 
               // Paint order is stacking order. Grid items first — they cannot
               // be underneath each other, so their order among themselves does
