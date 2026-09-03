@@ -24,6 +24,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/devices/scene_state.dart';
 import '../../core/api/events_history_api.dart';
 import '../../core/api/history_api.dart';
 import '../../core/text/humanize.dart';
@@ -551,20 +552,49 @@ class _SceneRowWidget extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final scenes = ref.watch(scenesProvider).value ?? const <SceneModel>[];
+    // **Both kinds, or this element is empty in most houses.**
+    //
+    // It read `/scenes` and nothing else, and `/scenes` is core's own registry.
+    // A house whose scenes all arrive from plugins — Hue, Lutron, a hub — has
+    // an empty one, so this drew nothing at all on a house with fifty-eight
+    // scenes in it. Found by putting it on a page and looking: `SCENES`, and
+    // then blank space under it.
+    //
+    // `scene_button` has always known there are two kinds and applied each the
+    // way its own kind is applied. This is that knowledge, in the element whose
+    // whole job is to list them.
+    final native = ref.watch(scenesProvider).value ?? const <SceneModel>[];
+    final devices = ref.watch(devicesProvider).value ?? const <DeviceState>[];
     final t = HcTokens.of(context);
-    return Wrap(
-      spacing: t.space.sm,
-      runSpacing: t.space.sm,
-      children: scenes
-          .map((scene) => _TokenChip(
-                label: scene.name,
-                icon: HcIcons.play,
-                onTap: () =>
-                    ref.read(scenesApiProvider).activateScene(scene.id),
-              ))
-          .toList(),
-    );
+
+    final chips = <Widget>[
+      for (final scene in native)
+        _TokenChip(
+          label: scene.name,
+          icon: HcIcons.play,
+          onTap: () => ref.read(scenesApiProvider).activateScene(scene.id),
+        ),
+      for (final d in devices.where(isSceneDevice))
+        _TokenChip(
+          label: d.displayName,
+          icon: HcIcons.play,
+          // A plugin scene is a device, and applying it is a write to that
+          // device — not a POST to a registry it is not in. Sending it the
+          // other way is not a small bug: the request goes to the wrong place
+          // and the scene never runs.
+          onTap: () => ref
+              .read(devicesApiProvider)
+              .setDeviceState(d.id, {'activate': true}),
+        ),
+    ];
+
+    if (chips.isEmpty) {
+      return Text(
+        'No scenes yet.',
+        style: t.text.captionStyle.copyWith(color: t.surface.onBaseMuted),
+      );
+    }
+    return Wrap(spacing: t.space.sm, runSpacing: t.space.sm, children: chips);
   }
 }
 
