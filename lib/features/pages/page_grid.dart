@@ -1859,7 +1859,20 @@ class _Cell extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (style.titled && (model?.title ?? '').isNotEmpty)
+              // **A title that repeats the widget's own type says nothing.**
+              // A gauge titled "Gauge" is a word taking a band off the top of
+              // a card that already shows a dial, a number and what it is
+              // reading — John: *"Gauge word in the box should be hidable for
+              // all objects as they are meaningless on a dashboard."*
+              //
+              // Hidden rather than removed: it is still the card's name in the
+              // layer tree and in the wiring panel, where naming it is the
+              // whole point. Rename it to anything of your own and it appears.
+              // The Title switch still governs the rest.
+              if (style.titled &&
+                  (model?.title ?? '').isNotEmpty &&
+                  model!.title.trim().toLowerCase() !=
+                      (descriptor?.title ?? '').trim().toLowerCase())
                 Padding(
                   padding: EdgeInsets.only(bottom: t.space.sm),
                   child: Text(
@@ -1925,172 +1938,187 @@ class _Cell extends StatelessWidget {
 
     // Edit mode: a veil swallows the live widget's own taps, and the frame adds
     // the three things you do to a card — move it, size it, remove it.
-    return Stack(
-      children: [
-        Positioned.fill(child: IgnorePointer(child: card)),
-        // Drag anywhere on the body to move.
-        Positioned.fill(
-          child: _DragBody(
-            onDragStart: onDragStart,
-            onDragUpdate: onDragUpdate,
-            onDragEnd: onDragEnd,
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              // Click to select. It reads as too obvious to write down, and it
-              // was missing: the only way to put a card in the inspector was to
-              // find the small round options button in its corner. Everything
-              // else about the canvas said "direct manipulation" and the first
-              // gesture anyone tries did nothing at all.
-              onTap: onSelect,
-              onSecondaryTapDown: (d) => onMenu(d.globalPosition),
-              // A long press is the same gesture on a touchscreen, and the
-              // in-place editor runs there too.
-              onLongPressStart: (d) => onMenu(d.globalPosition),
-              child: MouseRegion(
-                cursor: SystemMouseCursors.move,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    borderRadius: t.radius.mdR,
-                    border: Border.all(
-                      color: t.accent.active.withValues(alpha: 0.5),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-        // Configure + remove.
-        Positioned(
-          top: 4,
-          right: 4,
-          child: Row(
-            children: [
-              // Only for a card that has something to do in place, and only
-              // where its edits have somewhere to go.
-              if (descriptor?.inPlaceLabel case final label?)
-                if (onConfigChanged != null) ...[
-                  _RoundButton(
-                      icon: HcIcons.pencil, onTap: onEnter, label: label),
-                  const SizedBox(width: 4),
-                ],
-              _RoundButton(
-                  icon: HcIcons.sliders,
-                  onTap: onConfigure,
-                  label: 'Card options'),
-              const SizedBox(width: 4),
-              _RoundButton(
-                  icon: HcIcons.x, onTap: onRemove, label: 'Remove card'),
-            ],
-          ),
-        ),
-        if (sizeLabel case final label?)
-          Positioned(
-            key: const Key('resize-readout'),
-            left: 6,
-            bottom: 6,
-            child: IgnorePointer(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: t.surface.overlay,
-                  borderRadius: BorderRadius.circular(t.radius.xs),
-                  border:
-                      Border.all(color: t.accent.active, width: t.stroke.width),
-                ),
-                child: Text(
-                  label,
-                  style: t.text.captionStyle.copyWith(
-                      color: t.surface.onBase,
-                      fontFeatures: t.numericFontFeatures),
-                ),
-              ),
-            ),
-          ),
-        // **What this element is wired to, on the element.**
-        //
-        // A binding was only ever visible by selecting the element and reading
-        // the inspector's Data section, which means a page's wiring could only
-        // be learned one element at a time. It is a fact about the thing, so it
-        // belongs on the thing — the way a layer name does.
-        //
-        // Only while editing, and only when there is something to say: a live
-        // page shows the house, not the plumbing.
-        if (editing && model != null)
-          Positioned(
-            left: 4,
-            top: 4,
-            child: _WireBadge(model: model!),
-          ),
-        // Resize. One grip on a cell card, eight on a composed one — see
-        // [ResizeHandle].
-        if (!composed)
-          Positioned(
-            right: 0,
-            bottom: 0,
-            child: _Grip(
-              handle: ResizeHandle.bottomRight,
-              onStart: onResizeStart,
-              onUpdate: onResizeUpdate,
-              onEnd: onResizeEnd,
-              child: Container(
-                width: 22,
-                height: 22,
-                alignment: Alignment.center,
-                child: Icon(HcIcons.grip,
-                    size: 13, color: t.accent.active.withValues(alpha: 0.8)),
-              ),
-            ),
-          )
-        // Only on the card in hand. Eight grips on every card at once is a
-        // board of dots rather than a page you can read.
-        else if (selected)
-          for (final handle in ResizeHandle.values)
-            Positioned(
-              // Inside the card's own bounds, never outside them: a Stack does
-              // not hit-test a child beyond its edges, so a handle hanging off
-              // the corner would be drawn and not grabbable.
-              //
-              // An edge handle spans its whole side *less the corners*, so the
-              // two never fight over the same pixel — the corner is the one
-              // that resizes both axes, and losing it to the edge lying on top
-              // of it would cost the gesture people reach for most.
-              // Pinned to the edges it moves, and stretched across the axis it
-              // does not.
-              left: handle.movesRight ? null : 0,
-              right: handle.movesLeft ? null : 0,
-              top: handle.movesBottom ? null : 0,
-              bottom: handle.movesTop ? null : 0,
-              width: handle.movesLeft || handle.movesRight ? _gripSize : null,
-              height: handle.movesTop || handle.movesBottom ? _gripSize : null,
-              child: Padding(
-                padding: EdgeInsets.symmetric(
-                  horizontal:
-                      handle.movesLeft || handle.movesRight ? 0 : _gripSize,
-                  vertical:
-                      handle.movesTop || handle.movesBottom ? 0 : _gripSize,
-                ),
-                child: _Grip(
-                  handle: handle,
-                  onStart: onResizeStart,
-                  onUpdate: onResizeUpdate,
-                  onEnd: onResizeEnd,
-                  child: Center(
-                    child: Container(
-                      width: 7,
-                      height: 7,
-                      decoration: BoxDecoration(
-                        color: t.surface.base,
-                        border: Border.all(color: t.accent.active),
-                        borderRadius: t.radius.xsR,
+    return LayoutBuilder(builder: (context, box) {
+      // A grip never takes more than a third of the side it is on, so a short
+      // element keeps a band in the middle that belongs to the drag.
+      final gripW = math.min(_gripSize, box.maxWidth / 3);
+      final gripH = math.min(_gripSize, box.maxHeight / 3);
+      return Stack(
+        children: [
+          Positioned.fill(child: IgnorePointer(child: card)),
+          // Drag anywhere on the body to move.
+          Positioned.fill(
+            child: _DragBody(
+              onDragStart: onDragStart,
+              onDragUpdate: onDragUpdate,
+              onDragEnd: onDragEnd,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                // Click to select. It reads as too obvious to write down, and it
+                // was missing: the only way to put a card in the inspector was to
+                // find the small round options button in its corner. Everything
+                // else about the canvas said "direct manipulation" and the first
+                // gesture anyone tries did nothing at all.
+                onTap: onSelect,
+                onSecondaryTapDown: (d) => onMenu(d.globalPosition),
+                // A long press is the same gesture on a touchscreen, and the
+                // in-place editor runs there too.
+                onLongPressStart: (d) => onMenu(d.globalPosition),
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.move,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      borderRadius: t.radius.mdR,
+                      border: Border.all(
+                        color: t.accent.active.withValues(alpha: 0.5),
                       ),
                     ),
                   ),
                 ),
               ),
             ),
-      ],
-    );
+          ),
+          // Configure + remove.
+          Positioned(
+            top: 4,
+            right: 4,
+            child: Row(
+              children: [
+                // Only for a card that has something to do in place, and only
+                // where its edits have somewhere to go.
+                if (descriptor?.inPlaceLabel case final label?)
+                  if (onConfigChanged != null) ...[
+                    _RoundButton(
+                        icon: HcIcons.pencil, onTap: onEnter, label: label),
+                    const SizedBox(width: 4),
+                  ],
+                _RoundButton(
+                    icon: HcIcons.sliders,
+                    onTap: onConfigure,
+                    label: 'Card options'),
+                const SizedBox(width: 4),
+                _RoundButton(
+                    icon: HcIcons.x, onTap: onRemove, label: 'Remove card'),
+              ],
+            ),
+          ),
+          if (sizeLabel case final label?)
+            Positioned(
+              key: const Key('resize-readout'),
+              left: 6,
+              bottom: 6,
+              child: IgnorePointer(
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: t.surface.overlay,
+                    borderRadius: BorderRadius.circular(t.radius.xs),
+                    border: Border.all(
+                        color: t.accent.active, width: t.stroke.width),
+                  ),
+                  child: Text(
+                    label,
+                    style: t.text.captionStyle.copyWith(
+                        color: t.surface.onBase,
+                        fontFeatures: t.numericFontFeatures),
+                  ),
+                ),
+              ),
+            ),
+          // **What this element is wired to, on the element.**
+          //
+          // A binding was only ever visible by selecting the element and reading
+          // the inspector's Data section, which means a page's wiring could only
+          // be learned one element at a time. It is a fact about the thing, so it
+          // belongs on the thing — the way a layer name does.
+          //
+          // Only while editing, and only when there is something to say: a live
+          // page shows the house, not the plumbing.
+          if (editing && model != null)
+            Positioned(
+              left: 4,
+              top: 4,
+              child: _WireBadge(model: model!),
+            ),
+          // Resize. One grip on a cell card, eight on a composed one — see
+          // [ResizeHandle].
+          if (!composed)
+            Positioned(
+              right: 0,
+              bottom: 0,
+              child: _Grip(
+                handle: ResizeHandle.bottomRight,
+                onStart: onResizeStart,
+                onUpdate: onResizeUpdate,
+                onEnd: onResizeEnd,
+                child: Container(
+                  width: 22,
+                  height: 22,
+                  alignment: Alignment.center,
+                  child: Icon(HcIcons.grip,
+                      size: 13, color: t.accent.active.withValues(alpha: 0.8)),
+                ),
+              ),
+            )
+          // Only on the card in hand. Eight grips on every card at once is a
+          // board of dots rather than a page you can read.
+          // **The handles have to leave something to hold.** At sixteen pixels
+          // a side they cover a 24-pixel-tall text box twice over, so the only
+          // gesture left is resizing it — John: *"Can't grab the text box to
+          // move it. Have to resize it before I can grab it."*
+          //
+          // A grip is never more than a third of the side it sits on. On a
+          // short element that leaves a band down the middle belonging to the
+          // drag, which is the gesture people reach for first; on anything
+          // normal-sized nothing changes.
+          else if (selected)
+            for (final handle in ResizeHandle.values)
+              Positioned(
+                // Inside the card's own bounds, never outside them: a Stack does
+                // not hit-test a child beyond its edges, so a handle hanging off
+                // the corner would be drawn and not grabbable.
+                //
+                // An edge handle spans its whole side *less the corners*, so the
+                // two never fight over the same pixel — the corner is the one
+                // that resizes both axes, and losing it to the edge lying on top
+                // of it would cost the gesture people reach for most.
+                // Pinned to the edges it moves, and stretched across the axis it
+                // does not.
+                left: handle.movesRight ? null : 0,
+                right: handle.movesLeft ? null : 0,
+                top: handle.movesBottom ? null : 0,
+                bottom: handle.movesTop ? null : 0,
+                width: handle.movesLeft || handle.movesRight ? gripW : null,
+                height: handle.movesTop || handle.movesBottom ? gripH : null,
+                child: Padding(
+                  padding: EdgeInsets.symmetric(
+                    horizontal:
+                        handle.movesLeft || handle.movesRight ? 0 : gripW,
+                    vertical: handle.movesTop || handle.movesBottom ? 0 : gripH,
+                  ),
+                  child: _Grip(
+                    handle: handle,
+                    onStart: onResizeStart,
+                    onUpdate: onResizeUpdate,
+                    onEnd: onResizeEnd,
+                    child: Center(
+                      child: Container(
+                        width: 7,
+                        height: 7,
+                        decoration: BoxDecoration(
+                          color: t.surface.base,
+                          border: Border.all(color: t.accent.active),
+                          borderRadius: t.radius.xsR,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+        ],
+      );
+    });
   }
 }
 

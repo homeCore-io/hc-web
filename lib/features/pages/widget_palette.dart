@@ -21,9 +21,13 @@ Future<DashboardWidgetModel?> showWidgetPalette(BuildContext context) {
   return showHcSheet<DashboardWidgetModel>(
     context,
     title: 'Add to this page',
+    // **As tall as the window allows, not a fixed 520.** The catalogue always
+    // has more to show than fits, so a fixed height left it ending partway
+    // down a tall panel with dead space beneath it. The sheet sizes to its
+    // child, so the child is the one that has to ask for the room.
     child: Builder(
       builder: (context) => SizedBox(
-        height: 520,
+        height: MediaQuery.sizeOf(context).height * 0.82,
         child: CardLibrary(
           onPick: (created) => Navigator.of(context).pop(created),
         ),
