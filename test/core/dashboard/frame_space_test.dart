@@ -247,6 +247,51 @@ void main() {
           reason: 'a document should not grow keys by being read');
     });
 
+    test('emits only keys core declares a field for', () {
+      // **A ratchet, and the bug it is here for already happened.**
+      //
+      // Everything else the designer invented — `group`, `layer`, `style`,
+      // `pin` — rides inside a widget's `config`, which core holds as an opaque
+      // value and hands back untouched. A group box does not: core's
+      // `DashboardGroupBox` is a *typed* struct, so a key it has no field for
+      // is not ignored on the way through, it is **dropped**.
+      //
+      // For `frame` that is not a lost decoration, it is a scrambled page. A
+      // frame's members hold rectangles stated inside it; strip the flag and
+      // the same numbers are read as page coordinates, so saving a page is
+      // what breaks it. Core grew the field the same day this test did.
+      //
+      // If you are here because you added a key: go and add it to
+      // `hc-types/src/dashboard.rs` too, then put it in this list.
+      const declaredInCore = {
+        'path',
+        'rect',
+        'padding',
+        'radius',
+        'clip',
+        'frame',
+        'rotation',
+        'opacity',
+        // Core also declares `background`, which this client does not write
+        // yet. That direction is harmless — an unknown key here would be
+        // ignored, not destructive — but it is the other half of the drift and
+        // worth naming rather than discovering.
+      };
+      final everything = const GroupBox(
+        path: 'Wall',
+        rect: DashboardRect(x: 1, y: 2, w: 3, h: 4),
+        padding: 5,
+        radius: 6,
+        clip: true,
+        frame: true,
+        rotation: 7,
+        opacity: 0.5,
+      ).toJson();
+
+      expect(everything.keys.toSet().difference(declaredInCore), isEmpty,
+          reason: 'core would drop these on the way back');
+    });
+
     test('a frame is never plain, so saving cannot prune it', () {
       // Pruning one would scatter everything it holds back to the page origin.
       expect(frame('Wall', 0, 0).isPlain, isFalse);
