@@ -32,6 +32,7 @@ class CardStyle {
     this.imageFit,
     this.imageOpacity = 1,
     this.variants = const [],
+    this.name,
   });
 
   /// The card's own background, and the elevation that goes with it.
@@ -109,6 +110,30 @@ class CardStyle {
   /// would mean scanning to the end to know what a card does.
   final List<StyleVariant> variants;
 
+  /// What this look is called, when somebody has bothered to call it
+  /// something.
+  ///
+  /// **The name is the whole of the library.** There is no registry of styles
+  /// anywhere and nothing to keep in step: a named style exists exactly as
+  /// long as some card is wearing it, which for a thing that is *applied* is
+  /// simply the truth. The picker offers every distinct name on your pages —
+  /// see [namedStylesIn] — so defining one is naming a card, and forgetting
+  /// one is renaming the last card that wore it. This is the argument
+  /// `groups.dart` makes about paths, and it holds for the same reason:
+  /// orphans cannot happen and nothing has to be cleaned up.
+  ///
+  /// **Applying is a copy.** Picking a saved style writes these nine values
+  /// onto the card and stops there — John: *"styles like templates should be
+  /// applied and then able to be customized. That is the whole point of a
+  /// custom designer"*. So the name travels with the values, and editing a
+  /// card afterwards is an ordinary edit that changes nothing anywhere else.
+  /// A style is never a link, at any distance.
+  ///
+  /// It is deliberately **not** part of [isDefault]: a card whose look is the
+  /// default look is still the default look, and a name should not be able to
+  /// make an empty style write itself into the document.
+  final String? name;
+
   bool get isDefault =>
       variants.isEmpty &&
       filled &&
@@ -169,7 +194,19 @@ class CardStyle {
         for (final v in (raw['variants'] as List? ?? const []))
           if (StyleVariant.fromJson(v) case final variant?) variant,
       ],
+      name: _cleanName(raw['name']),
     );
+  }
+
+  /// A name, or null for anything that is not one.
+  ///
+  /// Trimmed rather than trusted, and empty means unnamed: a style called `" "`
+  /// would otherwise appear in the picker as a row you cannot read and cannot
+  /// tell apart from the next one.
+  static String? _cleanName(Object? raw) {
+    if (raw is! String) return null;
+    final name = raw.trim();
+    return name.isEmpty ? null : name;
   }
 
   /// This style as the house currently makes it.
@@ -203,10 +240,14 @@ class CardStyle {
   /// keeps a page's JSON from accumulating a record of every idle click.
   Map<String, dynamic> toConfig(Map<String, dynamic> config) {
     final next = {...config};
+    // A name alone is not a style. A card whose look is the default look wears
+    // the default look, and naming it must not be able to write nine
+    // properties into a document that says nothing today.
     if (isDefault) {
       next.remove(key);
     } else {
       next[key] = {
+        if (name != null) 'name': name,
         'filled': filled,
         'bordered': bordered,
         'titled': titled,
@@ -236,6 +277,7 @@ class CardStyle {
     Object? imageFit = _keep,
     double? imageOpacity,
     List<StyleVariant>? variants,
+    Object? name = _keep,
   }) =>
       CardStyle(
         filled: filled ?? this.filled,
@@ -251,11 +293,22 @@ class CardStyle {
             identical(imageFit, _keep) ? this.imageFit : imageFit as String?,
         imageOpacity: imageOpacity ?? this.imageOpacity,
         variants: variants ?? this.variants,
+        name: identical(name, _keep) ? this.name : name as String?,
       );
+
+  /// This look, saved under [name] — or unnamed when it is null.
+  ///
+  /// Named separately from [copyWith] because it is the one edit here that is
+  /// not about how the card looks: it says *this arrangement of properties is
+  /// worth finding again*, and everything else on this class says what the
+  /// arrangement is.
+  CardStyle called(String? name) =>
+      copyWith(name: name?.trim().isEmpty ?? true ? null : name!.trim());
 
   @override
   bool operator ==(Object other) =>
       other is CardStyle &&
+      other.name == name &&
       other.filled == filled &&
       other.bordered == bordered &&
       other.titled == titled &&
@@ -270,8 +323,8 @@ class CardStyle {
       _sameVariants(other.variants, variants);
 
   @override
-  int get hashCode => Object.hash(filled, bordered, titled, tint, blur, corner,
-      image, imageFit, imageOpacity, Object.hashAll(variants));
+  int get hashCode => Object.hash(name, filled, bordered, titled, tint, blur,
+      corner, image, imageFit, imageOpacity, Object.hashAll(variants));
 
   /// Order matters — the first matching variant wins — so this compares as a
   /// list rather than as a set.

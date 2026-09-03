@@ -8,6 +8,7 @@ import '../../core/dashboard/card_style.dart';
 import '../../core/dashboard/constraints.dart';
 import '../../core/dashboard/grid_engine.dart' show DashboardRect;
 import '../../core/dashboard/free_layer.dart';
+import '../../core/dashboard/named_styles.dart';
 import '../../core/dashboard/transform.dart';
 import '../../core/dashboard/widget_registry.dart';
 import '../../core/devices/scene_state.dart';
@@ -238,6 +239,13 @@ class _CardInspectorState extends ConsumerState<CardInspector> {
                 _StyleSection(
                   cardId: model.id,
                   style: CardStyle.fromConfig(model.config),
+                  // Derived on every build rather than cached, and cheap
+                  // enough to be: it is a walk of the widgets already in
+                  // memory, and a cached library is one that can be wrong
+                  // about a style you named ten seconds ago. See
+                  // `named_styles.dart` for why there is nothing stored.
+                  saved: namedStylesIn(
+                      ref.watch(dashboardsProvider).value ?? const []),
                   onChanged: (style) => onChanged(style.toConfig(model.config)),
                 ),
                 _VariantsSection(
@@ -2174,10 +2182,14 @@ class _StyleSection extends StatelessWidget {
     required this.style,
     required this.onChanged,
     required this.cardId,
+    this.saved = const [],
   });
 
   final CardStyle style;
   final ValueChanged<CardStyle> onChanged;
+
+  /// Every look anybody has named, on any page. See `named_styles.dart`.
+  final List<NamedStyle> saved;
 
   /// Keys the picture field, so moving the selection to another card does not
   /// leave the previous card's address sitting in it.
@@ -2226,6 +2238,59 @@ class _StyleSection extends StatelessWidget {
               ),
             ],
           ),
+          if (saved.isNotEmpty || !style.isDefault) ...[
+            SizedBox(height: t.space.sm),
+            Text('SAVED LOOKS',
+                style: t.text.overlineStyle
+                    .copyWith(color: t.surface.onBaseMuted)),
+            SizedBox(height: t.space.xs),
+            Wrap(
+              spacing: t.space.xs,
+              runSpacing: t.space.xs,
+              children: [
+                for (final entry in saved)
+                  _StylePill(
+                    label: entry.name,
+                    count: entry.uses,
+                    on: entry.name == style.name,
+                    // **Applying copies.** The nine properties and the name go
+                    // onto this card and nothing links back — see
+                    // `named_styles.dart`. Editing it a second later is an
+                    // ordinary edit and reaches nothing else, on this page or
+                    // any other.
+                    onTap: () => onChanged(entry.style),
+                  ),
+                if (!style.isDefault)
+                  _StylePill(
+                    label: style.name == null ? 'Save this look…' : 'Rename…',
+                    on: false,
+                    onTap: () async {
+                      final name = await _promptStyleName(
+                        context,
+                        style.name ??
+                            freshStyleName([for (final e in saved) e.name]),
+                      );
+                      if (name == null) return;
+                      // An empty answer forgets the name and keeps the look,
+                      // which is the only way back out of the library — a
+                      // style stops existing when the last card wearing it is
+                      // unnamed.
+                      onChanged(style.called(name.isEmpty ? null : name));
+                    },
+                  ),
+              ],
+            ),
+            SizedBox(height: t.space.xs),
+            Text(
+              style.name == null
+                  ? 'A saved look is copied onto the card. Change it afterwards '
+                      'and nothing else moves.'
+                  : 'Wearing “${style.name}”. Editing it here changes this card '
+                      'only.',
+              style: t.text.captionStyle
+                  .copyWith(color: t.surface.onBaseMuted, height: 1.4),
+            ),
+          ],
           SizedBox(height: t.space.xs),
           _StyleSwitch(
             label: 'Background',
@@ -2463,6 +2528,91 @@ class _StackSection extends StatelessWidget {
       ],
     );
   }
+}
+
+/// One saved look, as something to press.
+///
+/// The count is what makes the list readable rather than a row of words: a look
+/// worn by four cards is a house style, and one worn once is something you
+/// named a minute ago and may have finished with.
+class _StylePill extends StatelessWidget {
+  const _StylePill({
+    required this.label,
+    required this.on,
+    required this.onTap,
+    this.count,
+  });
+
+  final String label;
+  final bool on;
+  final int? count;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Semantics(
+      button: true,
+      selected: on,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: EdgeInsets.symmetric(
+              horizontal: t.space.sm, vertical: t.space.xs / 2),
+          decoration: BoxDecoration(
+            color: on ? t.surface.raised : null,
+            borderRadius: BorderRadius.circular(t.radius.pill),
+            border: Border.all(
+              color: on ? t.accent.active : t.stroke.hairline,
+              width: t.stroke.width,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(label,
+                  style: t.text.captionStyle.copyWith(
+                      color: on ? t.surface.onBase : t.surface.onBaseMuted)),
+              if (count case final n?) ...[
+                SizedBox(width: t.space.xs / 2),
+                Text('$n',
+                    style: t.text.captionStyle
+                        .copyWith(color: t.surface.onBaseMuted)),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Name this look, or clear the name by answering with nothing.
+Future<String?> _promptStyleName(BuildContext context, String initial) {
+  final controller = TextEditingController(text: initial);
+  return showDialog<String>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Name this look'),
+      content: TextField(
+        controller: controller,
+        autofocus: true,
+        decoration: const InputDecoration(
+          helperText: 'Applying it elsewhere copies it. Nothing stays linked.',
+        ),
+        onSubmitted: (v) => Navigator.of(context).pop(v.trim()),
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel')),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(controller.text.trim()),
+          child: const Text('Save'),
+        ),
+      ],
+    ),
+  );
 }
 
 /// One end of the STYLE section, as a button that shows whether you are at it.
