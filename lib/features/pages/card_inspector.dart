@@ -860,6 +860,17 @@ class _BindingRow extends StatelessWidget {
               ),
             if (property.kind == BindKind.look)
               _LookTable(binding: b, onChanged: onChanged)
+            // **Words for an on and an off, the same table with words in it.**
+            //
+            // A binding that maps values already existed and the panel only
+            // ever offered it for *colour* — so "amber when it is on" was two
+            // taps and "say `on` when it is on" could not be said at all,
+            // though the document has always been able to carry it. It is the
+            // caption under every lamp in the Every Room mockup, and a page
+            // that needs a script to write it is a page this editor cannot
+            // make.
+            else if (property.kind == BindKind.text)
+              _WordTable(binding: b, onChanged: onChanged)
             else
               _RangeFields(
                 binding: b,
@@ -893,6 +904,127 @@ class _BindingRow extends StatelessWidget {
       map: property.kind == BindKind.look
           ? const {'true': 'accent', 'false': 'muted'}
           : const {},
+    );
+  }
+}
+
+/// The value → words table: what to say for an on and for an off.
+///
+/// The same `map` [_LookTable] writes, with words in it instead of colours.
+/// Empty is the default and means *show the reading itself*, which is what a
+/// temperature wants; filling it in is what a switch wants, because `true` is
+/// not a thing to put on a page.
+class _WordTable extends StatelessWidget {
+  const _WordTable({required this.binding, required this.onChanged});
+
+  final PropertyBinding binding;
+  final ValueChanged<PropertyBinding> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+
+    Widget slot(String forValue, String label) => Expanded(
+          child: _WordField(
+            label: label,
+            value: binding.map[forValue] ?? '',
+            onChanged: (next) {
+              final map = {...binding.map};
+              // Cleared means cleared: an empty word is not a word, and a map
+              // with one half of a pair in it would print `false` for the
+              // other.
+              if (next.trim().isEmpty) {
+                map.remove(forValue);
+              } else {
+                map[forValue] = next.trim();
+              }
+              onChanged(binding.copyWith(map: map));
+            },
+          ),
+        );
+
+    return Padding(
+      padding: EdgeInsets.only(top: t.space.xs),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(children: [
+            slot('true', 'When on'),
+            SizedBox(width: t.space.xs),
+            slot('false', 'When off'),
+          ]),
+          SizedBox(height: t.space.xs / 2),
+          Text(
+            binding.map.isEmpty
+                ? 'Left empty, it shows the reading itself.'
+                : 'Anything else shows the reading itself.',
+            style: t.text.captionStyle
+                .copyWith(color: t.surface.onBaseMuted, height: 1.4),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One word you can type, committed on Enter and on losing focus.
+///
+/// Never per keystroke, for the reason [_NumberBox] gives: a field that applied
+/// every character would put `o` on the page on the way to typing `on`, and
+/// each of those is an undo entry.
+class _WordField extends StatefulWidget {
+  const _WordField({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final String label;
+  final String value;
+  final ValueChanged<String> onChanged;
+
+  @override
+  State<_WordField> createState() => _WordFieldState();
+}
+
+class _WordFieldState extends State<_WordField> {
+  late final TextEditingController _controller =
+      TextEditingController(text: widget.value);
+  late final FocusNode _focus = FocusNode()..addListener(_onFocus);
+
+  void _onFocus() {
+    if (!_focus.hasFocus) widget.onChanged(_controller.text);
+  }
+
+  @override
+  void didUpdateWidget(_WordField old) {
+    super.didUpdateWidget(old);
+    if (widget.value != old.value && !_focus.hasFocus) {
+      _controller.text = widget.value;
+    }
+  }
+
+  @override
+  void dispose() {
+    _focus.dispose();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return TextField(
+      controller: _controller,
+      focusNode: _focus,
+      style: t.text.captionStyle.copyWith(color: t.surface.onBase),
+      decoration: InputDecoration(
+        labelText: widget.label,
+        isDense: true,
+        contentPadding:
+            EdgeInsets.symmetric(horizontal: t.space.sm, vertical: t.space.xs),
+      ),
+      onSubmitted: widget.onChanged,
     );
   }
 }
