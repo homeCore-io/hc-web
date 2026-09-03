@@ -2115,6 +2115,38 @@ class _StyleSection extends StatelessWidget {
               style:
                   t.text.overlineStyle.copyWith(color: t.surface.onBaseMuted)),
           SizedBox(height: t.space.xs),
+          // **The two ends of the three switches below, in one press each.**
+          //
+          // An element now arrives undecorated — see `CardStyle.undecorated`,
+          // and the reason there. Which is right for designing and wrong for
+          // the moment you actually want the card look, because the card look
+          // is three switches and nobody wants to find out that it is three.
+          //
+          // Not a mode: these set the same three booleans the rows below show,
+          // and the rows stay live. Whichever end you are at is marked, and
+          // anything in between is at neither.
+          Row(
+            children: [
+              Expanded(
+                child: _StylePreset(
+                  label: 'Plain',
+                  on: !style.filled && !style.bordered && !style.titled,
+                  onTap: () => onChanged(style.copyWith(
+                      filled: false, bordered: false, titled: false)),
+                ),
+              ),
+              SizedBox(width: t.space.xs),
+              Expanded(
+                child: _StylePreset(
+                  label: 'Card',
+                  on: style.filled && style.bordered && style.titled,
+                  onTap: () => onChanged(style.copyWith(
+                      filled: true, bordered: true, titled: true)),
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: t.space.xs),
           _StyleSwitch(
             label: 'Background',
             value: style.filled,
@@ -2202,8 +2234,8 @@ class _StyleSection extends StatelessWidget {
             Text(
               style.filled
                   ? 'No outline — it sits on the page without a frame.'
-                  : 'The page shows through. Useful for a heading strip or a '
-                      'row of controls that should not read as a card.',
+                  : 'The page shows through, and the contents reach the edges '
+                      'of the box you drew.',
               style: t.text.captionStyle
                   .copyWith(color: t.surface.onBaseMuted, height: 1.4),
             ),
@@ -2349,6 +2381,36 @@ class _StackSection extends StatelessWidget {
           ),
         ],
       ],
+    );
+  }
+}
+
+/// One end of the STYLE section, as a button that shows whether you are at it.
+class _StylePreset extends StatelessWidget {
+  const _StylePreset({
+    required this.label,
+    required this.on,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool on;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return OutlinedButton(
+      onPressed: onTap,
+      style: OutlinedButton.styleFrom(
+        visualDensity: VisualDensity.compact,
+        foregroundColor: on ? t.accent.primary : t.surface.onBaseMuted,
+        side: BorderSide(
+          color: on ? t.accent.primary : t.stroke.hairline,
+          width: t.stroke.width,
+        ),
+      ),
+      child: Text(label),
     );
   }
 }

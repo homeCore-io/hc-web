@@ -121,6 +121,27 @@ class CardStyle {
       imageFit == null &&
       imageOpacity == 1;
 
+  /// What a **newly created** element wears.
+  ///
+  /// Nothing. A design tool hands you the thing itself and lets you decorate
+  /// it; this one handed you a bordered, titled box and made undecorating it
+  /// the work — John, on sixteen real pages of them: *"everything is still a
+  /// 'card' with large outline borders that define it's space which isn't
+  /// designing it's just placing blocks."* He is describing two defaults:
+  /// `WidgetChrome.card` in the registry and these three booleans here.
+  ///
+  /// **Absent still means a card**, and that is not an oversight — it is the
+  /// whole reason this is safe. Every page ever saved has no `style` key on
+  /// anything, so every page ever saved looks precisely as it did. What
+  /// changes is what *new* work starts as: this gets written explicitly at the
+  /// moment an element is made, so the difference is between documents rather
+  /// than between versions of the reader.
+  ///
+  /// A card is one click away and says so — see the STYLE section of the
+  /// inspector.
+  static const undecorated =
+      CardStyle(filled: false, bordered: false, titled: false);
+
   static const key = 'style';
 
   factory CardStyle.fromConfig(Map<String, dynamic> config) {

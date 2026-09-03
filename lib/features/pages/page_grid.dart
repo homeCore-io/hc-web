@@ -1962,7 +1962,16 @@ class _Cell extends StatelessWidget {
       WidgetChrome.card => HcSurface(
           // Lifted OR chosen. Both mean "this is the one you are working on".
           selected: dragging || selected,
-          padding: EdgeInsets.all(t.space.md),
+          // **Padding is the surface's, so no surface means no padding.**
+          // Sixteen pixels of inset on every side of a card that draws nothing
+          // is a box thirty-two pixels bigger than the thing in it, for no
+          // visible reason — John, sizing a label: *"I should be able to size
+          // the box to near perfect width for the words."* `bleed` has always
+          // taken zero for exactly this reason; a card with its fill and its
+          // border both off *is* bleed, and now behaves like it.
+          padding: style.filled || style.bordered
+              ? EdgeInsets.all(t.space.md)
+              : EdgeInsets.zero,
           filled: style.filled,
           bordered: style.bordered,
           tint: tint,

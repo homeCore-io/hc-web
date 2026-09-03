@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import '../../core/dashboard/card_style.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/assets_api.dart';
@@ -120,7 +122,8 @@ class _AssetTile extends StatelessWidget {
         title: asset.name,
         type: 'image',
         refreshPolicy: DashboardRefreshPolicy.passive,
-        config: {'url': asset.url, 'fit': 'cover'},
+        config:
+            CardStyle.undecorated.toConfig({'url': asset.url, 'fit': 'cover'}),
       );
 
   @override

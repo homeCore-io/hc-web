@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import '../../core/dashboard/card_style.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/dashboard/widget_registry.dart';
@@ -123,7 +125,11 @@ class _CardLibraryState extends ConsumerState<CardLibrary> {
         type: type,
         title: title,
         refreshPolicy: DashboardRefreshPolicy.live,
-        config: config,
+        // Undecorated, like everything else made here — see
+        // `CardStyle.undecorated`. The catalogue's own preview still shows the
+        // card look, because that is what the entry *is*; what arrives on the
+        // page is the content, and the frame is a thing you ask for.
+        config: CardStyle.undecorated.toConfig(config),
       );
 
   @override
