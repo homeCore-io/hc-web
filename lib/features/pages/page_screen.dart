@@ -449,7 +449,7 @@ class _PageScreenState extends ConsumerState<PageScreen> {
     });
   }
 
-  /// A frame dragged by its name, to [pageRect].
+  /// A frame put somewhere new — dragged by its name, or pulled by an edge.
   ///
   /// Two things move, and only one of them is written down. The **box** gets a
   /// new rectangle, restated in whatever space it sits in. The **members** are
@@ -462,7 +462,7 @@ class _PageScreenState extends ConsumerState<PageScreen> {
   /// The layout is updated *before* the commit, deliberately: `_commit`
   /// localises against the frames it finds, and the frame it must find is the
   /// one at its new position.
-  void _moveFrame(String path, DashboardRect pageRect) {
+  void _setFrameRect(String path, DashboardRect pageRect) {
     final layouts = _draftLayouts;
     final items = _draftItems;
     final selected = _editingBreakpoint;
@@ -475,12 +475,32 @@ class _PageScreenState extends ConsumerState<PageScreen> {
     final was = box == null ? null : pageRectOf(box, frames);
     if (box == null || was == null) return;
 
+    // Bail on the whole rectangle, not on the corner: pulling the right edge
+    // moves nothing and resizes everything, and a guard that only watched the
+    // corner would drop it on the floor.
+    if (pageRect == was) return;
+
+    // **The corner decides what the contents do.** A member is stated from the
+    // frame's top-left, so it goes wherever that corner goes — the whole way
+    // on a move, the whole way when the left or top edge is pulled, and not at
+    // all when it is the right or bottom. No branch on which gesture it was,
+    // because there does not need to be: this is the same number `page_grid`
+    // previews the drag with, which is what keeps the frame landing where the
+    // preview showed it rather than near it.
+    //
+    // What a member does about the frame's *size* is a constraint, and that is
+    // the next arc. Until then it stays where it is stated, which is what
+    // every design tool does with a shape that has no constraint set.
     final dx = pageRect.x - was.x;
     final dy = pageRect.y - was.y;
-    if (dx == 0 && dy == 0) return;
 
     final carried = membersOf(_paths, path);
-    _pushUndo('Move ${nameOf(path)}', coalesce: 'frame:$path');
+    _pushUndo(
+      pageRect.w == was.w && pageRect.h == was.h
+          ? 'Move ${nameOf(path)}'
+          : 'Resize ${nameOf(path)}',
+      coalesce: 'frame:$path',
+    );
     setState(() {
       _draftLayouts = [
         for (final l in layouts)
@@ -2342,7 +2362,7 @@ class _PageScreenState extends ConsumerState<PageScreen> {
                   groupPaths: _pathsIn(widgetsById),
                   frame: layout.frame,
                   onCompose: (id, rect) => _composeCard(id, rect, columns),
-                  onFrameMove: widget.designer ? _moveFrame : null,
+                  onFrameMove: widget.designer ? _setFrameRect : null,
                   snapToGrid: _snapToGrid,
                   // Which magnet the drags use, and whether the fine grid is
                   // drawn. A packed card can only sit on a cell edge; a

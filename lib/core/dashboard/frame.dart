@@ -160,11 +160,18 @@ extension ResizeGeometry on CanvasGeometry {
   /// Snapping a width instead would put the far edge wherever the near edge's
   /// offset happened to leave it — so a card whose left side sits off-grid
   /// could never have a right side on it.
+  /// [coarse] picks the magnet, exactly as it does for a drag: a packed card
+  /// can only sit on a cell edge, a composed one lands on the fine grid.
+  ///
+  /// It defaulted to the cell here while dragging had already moved on, which
+  /// is why a box could be *moved* to the width of its words and not *sized* to
+  /// it — the two halves of one gesture pulling to grids 120 pixels apart.
   DashboardRect resizedBy(
     DashboardRect from,
     ResizeHandle handle,
     Offset by, {
     bool snap = true,
+    bool coarse = true,
     double min = minComposedSize,
   }) {
     var x = from.x;
@@ -173,21 +180,21 @@ extension ResizeGeometry on CanvasGeometry {
     var h = from.h;
 
     if (handle.movesLeft) {
-      final edge = snapX(from.x + by.dx, on: snap);
+      final edge = snapX(from.x + by.dx, on: snap, coarse: coarse);
       // Never past the edge being held still, or the card turns inside out.
       x = edge > from.right - min ? from.right - min : edge;
       w = from.right - x;
     } else if (handle.movesRight) {
-      final edge = snapX(from.right + by.dx, on: snap);
+      final edge = snapX(from.right + by.dx, on: snap, coarse: coarse);
       w = edge < from.x + min ? min : edge - from.x;
     }
 
     if (handle.movesTop) {
-      final edge = snapY(from.y + by.dy, on: snap);
+      final edge = snapY(from.y + by.dy, on: snap, coarse: coarse);
       y = edge > from.bottom - min ? from.bottom - min : edge;
       h = from.bottom - y;
     } else if (handle.movesBottom) {
-      final edge = snapY(from.bottom + by.dy, on: snap);
+      final edge = snapY(from.bottom + by.dy, on: snap, coarse: coarse);
       h = edge < from.y + min ? min : edge - from.y;
     }
 

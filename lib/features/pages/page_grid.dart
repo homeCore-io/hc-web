@@ -318,6 +318,17 @@ class _PageGridState extends State<PageGrid> {
   /// document keeps.
   String? _framePath;
   DashboardRect? _frameFrom;
+
+  /// Which edge of the frame is in hand, or null when the whole thing is.
+  ///
+  /// The one difference that matters between the two gestures: **moving takes
+  /// the contents and resizing does not.** A frame's members are stated inside
+  /// it, so moving it changes none of their numbers and every one of their
+  /// positions; growing it changes neither. What a member *should* do when the
+  /// frame around it changes size is a constraint, and constraints are the
+  /// next arc — until then a member stays where it is stated, pinned to the
+  /// top-left, which is what every design tool does with no constraint set.
+  ResizeHandle? _frameHandle;
   Offset _frameAccum = Offset.zero;
 
   /// The cell a dragged-in card is hovering over, in grid units.
@@ -595,11 +606,39 @@ class _PageGridState extends State<PageGrid> {
         // draws goes through here, so "the rectangle is the truth and the cells
         // are the fallback" is decided once.
         final dragging = _framePath;
+
+        /// The frame in hand, as it looks mid-gesture.
+        DashboardRect previewFrame(DashboardRect r) => switch (_frameHandle) {
+              null => r.copyWith(
+                  x: geometry.snapX(r.x + _frameAccum.dx,
+                      on: widget.snapToGrid, coarse: !widget.composing),
+                  y: geometry.snapY(r.y + _frameAccum.dy,
+                      on: widget.snapToGrid, coarse: !widget.composing)),
+              final handle => geometry.resizedBy(r, handle, _frameAccum,
+                  snap: widget.snapToGrid, coarse: !widget.composing),
+            };
+
+        // **What the contents do is decided by the origin, not by the
+        // gesture.** A member is stated from the frame's top-left, so it
+        // follows wherever that corner goes: all of the way on a move, all of
+        // the way on a left- or top-edge resize, and not at all when the
+        // corner being held is the one that does not move. Deriving the shift
+        // from the corner rather than branching on which gesture it was is
+        // what keeps this preview agreeing with what the commit writes — and
+        // the two disagreeing is exactly the bug that makes a page jump when
+        // you let go.
+        final frameFrom = _frameFrom;
+        final frameShift = dragging == null || frameFrom == null
+            ? Offset.zero
+            : () {
+                final now = previewFrame(frameFrom);
+                return Offset(now.x - frameFrom.x, now.y - frameFrom.y);
+              }();
         final carried = dragging == null
             ? const <String>{}
             : membersOf(widget.groupPaths, dragging);
         DashboardRect shifted(DashboardRect r) =>
-            r.copyWith(x: r.x + _frameAccum.dx, y: r.y + _frameAccum.dy);
+            r.copyWith(x: r.x + frameShift.dx, y: r.y + frameShift.dy);
 
         DashboardRect boxOf(GridItem i) {
           final base = rectFor(geometry, i, i.rect);
@@ -625,7 +664,9 @@ class _PageGridState extends State<PageGrid> {
             ? resolved
             : [
                 for (final c in resolved)
-                  if (isUnder(c.path, dragging))
+                  if (c.path == dragging)
+                    (path: c.path, box: c.box, rect: previewFrame(c.rect))
+                  else if (isUnder(c.path, dragging))
                     (path: c.path, box: c.box, rect: shifted(c.rect))
                   else
                     c,
@@ -787,7 +828,7 @@ class _PageGridState extends State<PageGrid> {
           _resizeAccum += delta;
           if (_gestureRect case final from?) {
             final rect = geometry.resizedBy(from, _handle, _resizeAccum,
-                snap: widget.snapToGrid);
+                snap: widget.snapToGrid, coarse: !widget.composing);
             setState(() => _preview = composedPreview(_resizeId!, rect));
             return;
           }
@@ -1186,6 +1227,7 @@ class _PageGridState extends State<PageGrid> {
                       child: _DragBody(
                         onDragStart: () => setState(() {
                           _framePath = container.path;
+                          _frameHandle = null;
                           // Captured before any shift is applied, so the
                           // arithmetic at the end is against where it started
                           // rather than against a preview of itself.
@@ -1200,6 +1242,7 @@ class _PageGridState extends State<PageGrid> {
                           setState(() {
                             _framePath = null;
                             _frameFrom = null;
+                            _frameHandle = null;
                             _frameAccum = Offset.zero;
                           });
                           if (path == null || from == null) return;
@@ -1216,6 +1259,9 @@ class _PageGridState extends State<PageGrid> {
                                   coarse: !widget.composing),
                             ),
                           );
+                          // Identical to what `previewFrame` drew, which is
+                          // the point: the frame lands where the preview
+                          // showed it rather than near it.
                         },
                         child: MouseRegion(
                           cursor: SystemMouseCursors.move,
@@ -1231,6 +1277,106 @@ class _PageGridState extends State<PageGrid> {
                             ),
                           ),
                         ),
+                      ),
+                    ),
+
+              // **And the edges, to size it by.**
+              //
+              // On the frame's own rectangle rather than on a selection,
+              // because a frame is not selected the way a card is — it is
+              // pointed at by its name, and its edges are always where its
+              // edges are. `IgnorePointer` is deliberately absent here and
+              // present on the box below: that box is a backdrop which has to
+              // let clicks through to the cards standing on it, and these
+              // eight bands are the exception that catches them.
+              if (widget.editing && widget.onFrameMove != null)
+                for (final container in containers)
+                  if (container.box.isFrame)
+                    Positioned(
+                      key: ValueKey('frame-grips:${container.path}'),
+                      left: container.rect.x,
+                      top: container.rect.y,
+                      width: container.rect.w,
+                      height: container.rect.h,
+                      child: Stack(
+                        children: [
+                          for (final handle in ResizeHandle.values)
+                            Positioned(
+                              // Inside the frame's bounds and never outside
+                              // them, and each edge less the corners, for the
+                              // reasons the cards' own grips give.
+                              left: handle.movesRight ? null : 0,
+                              right: handle.movesLeft ? null : 0,
+                              top: handle.movesBottom ? null : 0,
+                              bottom: handle.movesTop ? null : 0,
+                              width: handle.movesLeft || handle.movesRight
+                                  ? math.min(_gripSize, container.rect.w / 3)
+                                  : null,
+                              height: handle.movesTop || handle.movesBottom
+                                  ? math.min(_gripSize, container.rect.h / 3)
+                                  : null,
+                              child: Padding(
+                                padding: EdgeInsets.symmetric(
+                                  horizontal:
+                                      handle.movesLeft || handle.movesRight
+                                          ? 0
+                                          : math.min(
+                                              _gripSize, container.rect.w / 3),
+                                  vertical:
+                                      handle.movesTop || handle.movesBottom
+                                          ? 0
+                                          : math.min(
+                                              _gripSize, container.rect.h / 3),
+                                ),
+                                child: _Grip(
+                                  handle: handle,
+                                  onStart: (h) => setState(() {
+                                    _framePath = container.path;
+                                    _frameHandle = h;
+                                    _frameFrom = container.rect;
+                                    _frameAccum = Offset.zero;
+                                  }),
+                                  onUpdate: (d) =>
+                                      setState(() => _frameAccum += d),
+                                  onEnd: () {
+                                    final path = _framePath;
+                                    final from = _frameFrom;
+                                    final handle = _frameHandle;
+                                    final by = _frameAccum;
+                                    setState(() {
+                                      _framePath = null;
+                                      _frameFrom = null;
+                                      _frameHandle = null;
+                                      _frameAccum = Offset.zero;
+                                    });
+                                    if (path == null ||
+                                        from == null ||
+                                        handle == null) {
+                                      return;
+                                    }
+                                    widget.onFrameMove!(
+                                      path,
+                                      geometry.resizedBy(from, handle, by,
+                                          snap: widget.snapToGrid,
+                                          coarse: !widget.composing),
+                                    );
+                                  },
+                                  child: Center(
+                                    child: Container(
+                                      width: 7,
+                                      height: 7,
+                                      decoration: BoxDecoration(
+                                        color: t.surface.base,
+                                        border: Border.all(
+                                            color: t.surface.onBaseMuted),
+                                        borderRadius: t.radius.xsR,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                     ),
 
