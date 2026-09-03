@@ -71,13 +71,32 @@ final appBootProvider = FutureProvider<String>((ref) async {
   return prefs.getString(kLandingRouteKey) ?? '/';
 });
 
+/// Where the app opens, for a link written before paths were paths.
+///
+/// `main.dart` switched the web strategy so `/pages/<id>` is a real URL. Every
+/// link anybody has bookmarked or pasted so far is `/#/pages/<id>`, which under
+/// the new strategy is the *root* with a fragment nobody reads — so those links
+/// would all quietly land on the house, which is the failure being fixed.
+///
+/// `initialLocation` is only consulted when the platform hands the router the
+/// root, which for one of those links is exactly what happens. A real path goes
+/// straight through and never reaches this.
+///
+/// Only a fragment that looks like a route: `#section` is a fragment about a
+/// document, and treating one as a path would send somebody somewhere they did
+/// not ask for.
+String _startAt() {
+  final fragment = Uri.base.fragment;
+  return fragment.startsWith('/') ? fragment : '/';
+}
+
 GoRouter _buildRouter(Ref ref) {
   final notifier = _RouterNotifier(ref);
   // Honour the user's chosen Home page once, on the first landing — after that
   // '/' is the house again, always reachable from the rail.
   var honouredLanding = false;
   return GoRouter(
-    initialLocation: '/',
+    initialLocation: _startAt(),
     refreshListenable: notifier,
     // SYNCHRONOUS, and it has to stay that way.
     //

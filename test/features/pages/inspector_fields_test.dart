@@ -108,10 +108,16 @@ void main() {
     testWidgets('the unit is beside the number, not folded into the name',
         (tester) async {
       // "Rotation°" reads as a typo and cannot be aligned down the panel.
+      //
+      // The rule is that the unit is its own label, not that there is one of
+      // them: a shape has two angles now — how far it is turned, and which way
+      // its fill fades — and both wear the degree sign separately.
       await _pump(tester, 'shape');
       expect(find.text('Rotation'), findsOneWidget);
-      expect(find.text('°'), findsOneWidget);
+      expect(find.text('Angle'), findsOneWidget);
+      expect(find.text('°'), findsNWidgets(2));
       expect(find.text('Rotation°'), findsNothing);
+      expect(find.text('Angle°'), findsNothing);
     });
   });
 
