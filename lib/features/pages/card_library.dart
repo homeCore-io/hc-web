@@ -220,8 +220,6 @@ class _CardLibraryState extends ConsumerState<CardLibrary> {
       _Entry('Ellipse', 'shape', 'or O for a circle',
           {'shape': 'circle', 'fill': 'accent', 'opacity': 20}),
       _Entry('Line', 'line', 'a rule at an angle', {'ink': 'muted'}),
-      _Entry('Path', 'shape', 'an outline you write',
-          {'shape': 'path', 'stroke': 'accent', 'stroke_width': 2}),
       _Entry('Text', 'text', 'words, at any size',
           {'text': 'Text', 'size': 'title', 'align': 'start'}),
       _Entry('Heading', 'heading', 'a section title',

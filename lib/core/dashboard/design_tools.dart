@@ -102,17 +102,16 @@ enum DesignTool {
     band: ToolBand.draw,
   ),
 
-  /// A shape whose outline you write. Starts as a rectangle's box with the
-  /// outline already set to `path`, so the inspector's path field is the next
-  /// thing you touch rather than something to go looking for.
-  path(
-    label: 'Path',
-    shortcut: 'P',
-    icon: 'path',
-    type: 'shape',
-    defaults: {'shape': 'path', 'stroke': 'accent', 'stroke_width': 2},
-    band: ToolBand.draw,
-  ),
+  // **There is no Path tool, and there was no pen behind the one there was.**
+  // It dragged out a shape with `outline: path` and then expected somebody to
+  // type SVG path data into a text field — no click-to-place, no curve drag,
+  // no editing on the canvas. John: *"Path? how does this work even?"* It did
+  // not. A tool that produces something you cannot edit is not a tool, so it
+  // is off the rail until there is a pen behind it.
+  //
+  // The `path` OUTLINE stays: a document can still carry one, an imported page
+  // that uses one still draws, and the SVG element covers real vector work
+  // today. What is gone is the pretence that you can draw one here.
 
   /// Words. The first tool anyone reaches for on an empty page.
   text(

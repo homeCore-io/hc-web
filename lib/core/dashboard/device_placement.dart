@@ -102,7 +102,6 @@ DevicePlacement placementFor(DesignTool tool, DeviceState device) {
     case DesignTool.shape:
     case DesignTool.ellipse:
     case DesignTool.line:
-    case DesignTool.path:
     case DesignTool.image:
     case DesignTool.code:
     case DesignTool.card:
