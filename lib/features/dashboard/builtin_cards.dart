@@ -2536,6 +2536,22 @@ void registerBuiltinDashboardWidgets() {
             options: ['rectangle', 'circle', 'pill', 'octagon', 'path']),
         WidgetConfigField('fill', WidgetConfigKind.ink,
             group: 'Fill', label: 'Colour'),
+        // The same idea `line` has had since it shipped, on the shape that
+        // needed it more: every hero in every mockup is a wash of colour, and
+        // without this the only way to draw one was a big circle at low alpha
+        // — which has a hard edge however large you make it.
+        WidgetConfigField('fill_to', WidgetConfigKind.ink,
+            group: 'Fill',
+            label: 'Fades to',
+            help: 'Leave unset for a flat fill.'),
+        WidgetConfigField('fill_angle', WidgetConfigKind.integer,
+            group: 'Fill',
+            label: 'Angle',
+            unit: '°',
+            defaultValue: 90,
+            min: -360,
+            max: 360,
+            help: 'Which way the fade runs. 90° is down the shape.'),
         WidgetConfigField('opacity', WidgetConfigKind.integer,
             group: 'Fill',
             label: 'Opacity',
@@ -2571,6 +2587,7 @@ void registerBuiltinDashboardWidgets() {
       // reads and `ShapePrimitiveCard` is untouched.
       bindable: const [
         BindableProperty('fill', 'Fill', BindKind.look),
+        BindableProperty('fill_to', 'Fades to', BindKind.look),
         BindableProperty('stroke', 'Stroke', BindKind.look),
         BindableProperty('rotation', 'Turn', BindKind.number, unit: '°'),
         BindableProperty('opacity', 'Fade', BindKind.number, unit: '%'),

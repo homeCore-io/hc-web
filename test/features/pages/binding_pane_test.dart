@@ -100,7 +100,11 @@ void main() {
     await _pump(tester, type: 'shape', config: const {'shape': 'rectangle'});
     expect(find.text('Fill'), findsWidgets);
     expect(find.text('Turn'), findsWidgets);
-    expect(find.text('follow a device…'), findsNWidgets(4));
+    // Fill, Fades to, Stroke, Turn, Fade. The count is here to catch a
+    // property that quietly stops being offered, not to pin the number — a
+    // shape that grows a look worth binding should grow a row here too.
+    expect(find.text('follow a device…'),
+        findsNWidgets(WidgetRegistry.lookup('shape')!.bindable.length));
   });
 
   testWidgets('a card that has not thought about it offers nothing',
@@ -108,7 +112,12 @@ void main() {
     registerBuiltinDashboardWidgets();
     expect(WidgetRegistry.lookup('markdown')!.bindable, isEmpty);
     expect(WidgetRegistry.lookup('icon')!.bindable, hasLength(1));
-    expect(WidgetRegistry.lookup('shape')!.bindable, hasLength(4));
+    // A shape's whole look is bindable: both ends of its fill, its stroke,
+    // its angle and its fade.
+    expect(
+      {for (final b in WidgetRegistry.lookup('shape')!.bindable) b.name},
+      {'fill', 'fill_to', 'stroke', 'rotation', 'opacity'},
+    );
     // Every bindable name is a real config key — that rule is what lets a
     // binding resolve INTO the config the element already reads.
     for (final type in ['icon', 'shape', 'text']) {
@@ -142,8 +151,13 @@ void main() {
     final config = await _pump(tester,
         type: 'shape', config: const {'shape': 'rectangle'});
 
-    // Fill, Stroke, Turn, Fade — the third is the first number.
-    await tester.tap(find.text('follow a device…').at(2));
+    // The first number property, wherever the looks happen to sit around it.
+    // Counting rows by hand meant that adding a colour to the shape moved this
+    // tap onto a different property and failed a test about ranges.
+    final turn = WidgetRegistry.lookup('shape')!
+        .bindable
+        .indexWhere((b) => b.name == 'rotation');
+    await tester.tap(find.text('follow a device…').at(turn));
     await tester.pumpAndSettle();
 
     final b = Bindings.fromConfig(config).forProperty('rotation')!;

@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
@@ -145,6 +146,9 @@ class ShapePrimitiveCard extends StatelessWidget {
     final fill = resolveInk(t, config['fill'] as String?) ??
         t.accent.active.withValues(alpha: 0.18);
     final stroke = resolveInk(t, config['stroke'] as String?);
+    // **A second colour makes it a gradient.** Absent, nothing changes and the
+    // shape is the flat fill it has always been — see [_ShapePainter.fillTo].
+    final fillTo = resolveInk(t, config['fill_to'] as String?);
     return CustomPaint(
       // The painter's own hit test is the shape's, so an octagon is grabbable
       // where it is drawn and nowhere else. Without this a shape would be a
@@ -152,6 +156,8 @@ class ShapePrimitiveCard extends StatelessWidget {
       painter: _ShapePainter(
         kind: ShapeKind.from(config['shape']),
         fill: fill,
+        fillTo: fillTo,
+        fillAngle: _number(config['fill_angle'], 90),
         stroke: stroke,
         strokeWidth: _number(config['stroke_width'], 0) == 0
             ? t.stroke.width
@@ -183,6 +189,8 @@ class _ShapePainter extends CustomPainter {
   _ShapePainter({
     required this.kind,
     required this.fill,
+    required this.fillTo,
+    required this.fillAngle,
     required this.stroke,
     required this.strokeWidth,
     required this.corner,
@@ -193,6 +201,22 @@ class _ShapePainter extends CustomPainter {
 
   final ShapeKind kind;
   final Color fill;
+
+  /// The colour at the far end, or null for a flat fill.
+  ///
+  /// **The primitive the mockups needed and the page could not draw.** A shape
+  /// is a flat colour with a hard boundary, so a soft wash behind a room's name
+  /// had to be faked with big circles at low alpha — and a circle's edge is a
+  /// hard line however large you make it. Every hero in every mockup was a
+  /// gradient, and this is the one thing standing between them and the page.
+  ///
+  /// Absent means flat, so nothing drawn before this changes.
+  final Color? fillTo;
+
+  /// Degrees clockwise from "left to right". 90 runs down the shape, which is
+  /// what a person means by a gradient without saying anything else.
+  final double fillAngle;
+
   final Color? stroke;
   final double strokeWidth;
   final double corner;
@@ -216,6 +240,32 @@ class _ShapePainter extends CustomPainter {
         .storage);
   }
 
+  /// The fill, flat or graded.
+  ///
+  /// The angle is turned into two points on the shape's own box rather than
+  /// into `Alignment`s, so 37° means 37° — the eight named alignments cannot
+  /// say it, and a gradient you can only point in eight directions is a
+  /// gradient that decides your design for you.
+  Paint _fillPaint(Size size) {
+    final from = fill.withValues(alpha: fill.a * opacity);
+    final to = fillTo;
+    if (to == null) return Paint()..color = from;
+
+    final radians = fillAngle * math.pi / 180;
+    // Half the diagonal, so the run covers the shape at any angle rather than
+    // stopping short on the diagonal and banding at the corners.
+    final reach =
+        math.sqrt(size.width * size.width + size.height * size.height) / 2;
+    final centre = Offset(size.width / 2, size.height / 2);
+    final along = Offset(math.cos(radians), math.sin(radians)) * reach;
+    return Paint()
+      ..shader = ui.Gradient.linear(
+        centre - along,
+        centre + along,
+        [from, to.withValues(alpha: to.a * opacity)],
+      );
+  }
+
   /// The last size painted, so [hitTest] can ask the same path the fill used.
   ///
   /// `CustomPainter.hitTest` is handed a position and nothing else, and the
@@ -229,8 +279,7 @@ class _ShapePainter extends CustomPainter {
     if (size.isEmpty) return;
     _painted = size;
     final p = _path(size);
-    canvas.drawPath(
-        p, Paint()..color = fill.withValues(alpha: fill.a * opacity));
+    canvas.drawPath(p, _fillPaint(size));
     if (stroke case final s?) {
       canvas.drawPath(
         p,
@@ -260,6 +309,8 @@ class _ShapePainter extends CustomPainter {
   bool shouldRepaint(_ShapePainter old) =>
       old.kind != kind ||
       old.fill != fill ||
+      old.fillTo != fillTo ||
+      old.fillAngle != fillAngle ||
       old.stroke != stroke ||
       old.strokeWidth != strokeWidth ||
       old.corner != corner ||
