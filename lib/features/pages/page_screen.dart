@@ -26,6 +26,7 @@ import '../../core/dashboard/widget_registry.dart';
 import '../../core/models/dashboard.dart';
 import '../../core/models/device_state.dart';
 import '../../core/providers/dashboards_provider.dart';
+import '../../core/devices/breakdown.dart' show prettyGroup;
 import '../../core/providers/page_room_provider.dart';
 import '../../core/providers/devices_provider.dart';
 import '../../design/components/hc_controls.dart';
@@ -2914,7 +2915,14 @@ class _Header extends ConsumerWidget {
         children: [
           Expanded(
             child: Text(
-              dashboard.name,
+              // The room, when the page is about one. One room page serving
+              // fifteen rooms is called "Room", and a title bar saying that
+              // over a page full of the Office's things tells you nothing you
+              // could not already see and loses the one fact you wanted.
+              switch (ref.watch(pageRoomProvider)) {
+                final room? when room.isNotEmpty => prettyGroup(room),
+                _ => dashboard.name,
+              },
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: t.text.displayStyle.copyWith(

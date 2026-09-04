@@ -349,6 +349,16 @@ enum WidgetConfigKind {
   image,
   stringList,
 
+  /// Some of a fixed set, chosen from [WidgetConfigField.options].
+  ///
+  /// [stringList] is a comma-separated text box, which is the right control for
+  /// an open vocabulary — a list of event types, a set of tags — and the wrong
+  /// one for a closed one. A page of mine asked `stat_summary` for
+  /// `lights_on, devices, rooms, scenes`; three of those four are not metrics
+  /// and it drew one tile, correctly. Nothing was broken except that the field
+  /// let me invent names for a set the element already knows.
+  choices,
+
   /// A drawing the author brings, and the wires from it to the house.
   ///
   /// Two kinds rather than one because they are two questions asked in two

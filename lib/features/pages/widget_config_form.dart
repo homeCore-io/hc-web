@@ -253,6 +253,7 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
         WidgetConfigKind.image => _image(f),
         WidgetConfigKind.homePlan => _homePlan(f),
         WidgetConfigKind.stringList => _stringList(f),
+        WidgetConfigKind.choices => _choices(f),
         WidgetConfigKind.areaName => _area(f),
         WidgetConfigKind.facet => _facet(f),
         WidgetConfigKind.deviceRef => _deviceRef(f),
@@ -707,6 +708,48 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
               hint: 'Choose',
               onChanged: (v) => _set(f.name, v),
             ),
+    );
+  }
+
+  /// Some of a fixed set, as chips you toggle.
+  ///
+  /// An empty selection means *all of them* rather than none: a watch list
+  /// nobody has touched should watch everything, and an element that went blank
+  /// the moment you cleared the last chip would be a trap.
+  Widget _choices(WidgetConfigField f) {
+    final options = f.options ?? const <String>[];
+    final chosen =
+        ((_config[f.name] as List?) ?? const []).map((e) => '$e').toSet();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _label(f),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            for (final o in options)
+              FilterChip(
+                label: Text(humanize(o)),
+                selected: chosen.contains(o),
+                onSelected: (on) {
+                  final next = {...chosen};
+                  if (on) {
+                    next.add(o);
+                  } else {
+                    next.remove(o);
+                  }
+                  _set(f.name, [
+                    for (final o in options)
+                      if (next.contains(o)) o
+                  ]);
+                },
+              ),
+          ],
+        ),
+        if (chosen.isEmpty) _hint('Nothing picked — all of them.'),
+        _help(f),
+      ],
     );
   }
 

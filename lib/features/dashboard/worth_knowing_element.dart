@@ -44,8 +44,13 @@ class WorthKnowingElement extends ConsumerWidget {
           style: t.text.captionStyle.copyWith(color: t.surface.onBaseMuted));
     }
 
-    var items = worthKnowing(devices,
-        room: (config['area_name'] as String? ?? '').trim());
+    final low = config['low_battery'];
+    var items = worthKnowing(
+      devices,
+      room: (config['area_name'] as String? ?? '').trim(),
+      watch: Watch.from(config['watch']),
+      lowBattery: low is num ? low.toDouble().clamp(1, 100) : 50,
+    );
     if (_quietWhenWell) {
       items = items.where((i) => i.level != Attention.good).toList();
     }
