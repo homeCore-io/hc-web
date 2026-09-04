@@ -173,6 +173,16 @@ class PropertyBinding {
   Bound resolve(DeviceState? Function(String id) lookup) {
     final device = lookup(deviceId);
     if (device == null) return null;
+
+    // **What a device *is*, not only what it reports.** A panel of controls
+    // aimed at whichever light you picked has to be able to say which one that
+    // is, and a name is not a reading — it is not in `state` and never will be.
+    // Two pseudo-keys rather than a second kind of binding, because the whole
+    // point of the model is that a property follows a device and the author
+    // should not have to know which shelf the value came off.
+    if (key == 'name') return device.displayName;
+    if (key == 'room') return device.effectiveArea ?? '';
+
     final raw = device.state[key];
     if (raw == null) return null;
 

@@ -16,7 +16,7 @@
 library;
 
 import '../models/device_state.dart';
-import 'presentation.dart' show normalizeAreaName;
+import 'presentation.dart' show labelInRoom, normalizeAreaName;
 
 /// How loudly one line asks to be read.
 enum Attention {
@@ -104,7 +104,17 @@ List<Knowing> worthKnowing(
   var locksLocked = 0;
 
   for (final d in devices) {
-    final name = d.displayName;
+    // The room's own name off the front, when the panel is about one room: on
+    // a Living Room page every device is called "Living Room something", and
+    // the prefix is the half that survives a narrow column.
+    final name = labelInRoom(d.displayName, room);
+
+    // **One line per device.** A lock that is unlocked AND nearly flat is one
+    // thing to go and look at, and printing it twice spends two of six lines
+    // saying the same name — which is what the Living Room page did.
+    final says = <({Attention level, String what})>[];
+    void note(Attention level, String what) =>
+        says.add((level: level, what: what));
 
     // Unreachable first: a device that is not answering makes every other
     // reading about it stale, so its battery is not also reported.
@@ -112,6 +122,7 @@ List<Knowing> worthKnowing(
       if (watching.contains(Watch.offline)) {
         out.add((level: Attention.warn, what: name, state: 'offline'));
       }
+      // (Nothing to merge: an unreachable device reports once and only once.)
       // Still skipped when offline is not being watched: every other reading
       // about a device that is not answering is stale, and reporting a stale
       // battery is worse than reporting nothing.
@@ -121,7 +132,7 @@ List<Knowing> worthKnowing(
     if (!watching.contains(Watch.water)) {
       // Nothing.
     } else if (_isTrue(d.state['water_detected'])) {
-      out.add((level: Attention.danger, what: name, state: 'water'));
+      note(Attention.danger, 'water');
     } else if (_isFalse(d.state['water_detected'])) {
       sensorsDry++;
     }
@@ -129,7 +140,7 @@ List<Knowing> worthKnowing(
     if (!watching.contains(Watch.doors)) {
       // Nothing.
     } else if (_isTrue(d.state['open'])) {
-      out.add((level: Attention.warn, what: name, state: 'open'));
+      note(Attention.warn, 'open');
     } else if (_isFalse(d.state['open'])) {
       doorsClosed++;
     }
@@ -137,17 +148,23 @@ List<Knowing> worthKnowing(
     if (!watching.contains(Watch.locks)) {
       // Nothing.
     } else if (_isFalse(d.state['locked'])) {
-      out.add((level: Attention.warn, what: name, state: 'unlocked'));
+      note(Attention.warn, 'unlocked');
     } else if (_isTrue(d.state['locked'])) {
       locksLocked++;
     }
 
     final pct = watching.contains(Watch.batteries) ? batteryPercent(d) : null;
     if (pct != null && pct <= lowBattery) {
+      note(Attention.danger, '${pct.round()}% battery');
+    }
+
+    if (says.isNotEmpty) {
+      // Loudest first, so the reason the line is red is the reason you read.
+      says.sort((a, b) => a.level.index.compareTo(b.level.index));
       out.add((
-        level: Attention.danger,
+        level: says.first.level,
         what: name,
-        state: '${pct.round()}% battery',
+        state: [for (final s in says) s.what].join(' · '),
       ));
     }
   }

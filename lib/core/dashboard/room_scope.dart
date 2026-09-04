@@ -22,6 +22,24 @@ import '../devices/presentation.dart' show normalizeAreaName;
 /// What a page writes where it would otherwise name a room or a device.
 const roomToken = '@room';
 
+/// What a page writes where the device is *whichever one the viewer picked*.
+///
+/// A room has four lamps and one set of controls. Which lamp they point at is a
+/// decision the viewer makes on the page rather than one the author makes in
+/// the designer — so the controls name this, and a tile above them sets it.
+///
+/// Before anything is picked it means exactly what [roomToken] means: whatever
+/// here reports the thing being asked for. A control panel that is blank until
+/// you touch something looks broken, and the first lamp is a better guess than
+/// nothing.
+const pickedToken = '@picked';
+
+/// Keys every device answers, so no device is picked out by asking for one.
+///
+/// They are the pseudo-keys `binding.dart` resolves off the device itself
+/// rather than out of its state — see there for why a name is not a reading.
+const _everyDeviceAnswers = {'name', 'room'};
+
 /// The keys whose value may be `@room` meaning *this page's room*.
 const _areaKeys = {'area_name', 'room'};
 
@@ -30,17 +48,18 @@ const _areaKeys = {'area_name', 'room'};
 /// Cheap enough to run on every element every build, and it keeps a page that
 /// never says `@room` byte-identical to what it was before.
 bool mentionsRoom(Map<String, dynamic> config) {
+  bool ours(Object? v) => v == roomToken || v == pickedToken;
   for (final key in _areaKeys) {
     if (config[key] == roomToken) return true;
   }
-  if (config['device_id'] == roomToken) return true;
+  if (ours(config['device_id'])) return true;
   if (config['text'] == roomToken) return true;
   final tap = config['on_tap'];
-  if (tap is Map && tap['target'] == roomToken) return true;
+  if (tap is Map && ours(tap['target'])) return true;
   final bindings = config['bindings'];
   if (bindings is List) {
     for (final b in bindings) {
-      if (b is Map && b['device_id'] == roomToken) return true;
+      if (b is Map && ours(b['device_id'])) return true;
     }
   }
   return false;
@@ -89,11 +108,41 @@ Map<String, dynamic> resolveRoomRefs(
   Map<String, dynamic> config, {
   required String? room,
   required List<DeviceState> devices,
+  String? picked,
 }) {
   if (room == null || room.isEmpty) return config;
   if (!mentionsRoom(config)) return config;
 
   final out = Map<String, dynamic>.from(config);
+
+  /// The device a reference points at, or null when nothing here answers.
+  ///
+  /// A pick only wins where it can: aiming a warmth bar at a lamp with no
+  /// colour temperature would be a control pointed at a device that cannot
+  /// take it, so an unanswerable pick falls back to whatever here can.
+  String? found(Object? token, String reporting) {
+    // A reference that names no key asks nothing of the device — a row of a
+    // light's scenes wants *that light*, not whichever one reports something.
+    if (token == pickedToken && picked != null && reporting.isEmpty) {
+      return picked;
+    }
+    if (token == pickedToken && picked != null) {
+      for (final d in devices) {
+        if (d.id == picked &&
+            (_everyDeviceAnswers.contains(reporting) ||
+                d.state.containsKey(reporting))) {
+          return d.id;
+        }
+      }
+    }
+    // **A pseudo-key cannot choose a device.** `deviceInRoom` picks whatever
+    // here reports the thing being asked for, which is exactly right for
+    // `temperature` and meaningless for `name` — every device has one, so the
+    // first alphabetically wins and a heading meant to say which light you
+    // picked said "Arctic aurora", a scene that happened to sort first.
+    if (_everyDeviceAnswers.contains(reporting)) return null;
+    return deviceInRoom(devices, room, reporting: reporting)?.id;
+  }
 
   for (final key in _areaKeys) {
     if (out[key] == roomToken) out[key] = room;
@@ -107,19 +156,21 @@ Map<String, dynamic> resolveRoomRefs(
   // A device reference asks for whatever here reports the thing being read.
   // The sibling key IS the question: a chart names its `attribute`, a binding
   // names its `key`, and either is enough to pick.
-  if (out['device_id'] == roomToken) {
+  final ownRef = out['device_id'];
+  if (ownRef == roomToken || ownRef == pickedToken) {
     final wants = (out['attribute'] as String? ?? '').trim();
-    final found = deviceInRoom(devices, room, reporting: wants);
-    if (found != null) out['device_id'] = found.id;
+    final id = found(ownRef, wants);
+    if (id != null) out['device_id'] = id;
   }
 
   final tap = out['on_tap'];
-  if (tap is Map && tap['target'] == roomToken) {
+  if (tap is Map &&
+      (tap['target'] == roomToken || tap['target'] == pickedToken)) {
     final next = Map<String, dynamic>.from(tap);
     final wants = (next['attribute'] as String? ?? 'on').trim();
-    final found = deviceInRoom(devices, room, reporting: wants);
-    if (found != null) {
-      next['target'] = found.id;
+    final id = found(tap['target'], wants);
+    if (id != null) {
+      next['target'] = id;
       out['on_tap'] = next;
     }
   }
@@ -128,12 +179,13 @@ Map<String, dynamic> resolveRoomRefs(
   if (bindings is List) {
     out['bindings'] = [
       for (final b in bindings)
-        if (b is Map && b['device_id'] == roomToken)
+        if (b is Map &&
+            (b['device_id'] == roomToken || b['device_id'] == pickedToken))
           () {
             final next = Map<String, dynamic>.from(b);
             final wants = (next['key'] as String? ?? '').trim();
-            final found = deviceInRoom(devices, room, reporting: wants);
-            if (found != null) next['device_id'] = found.id;
+            final id = found(b['device_id'], wants);
+            if (id != null) next['device_id'] = id;
             return next;
           }()
         else

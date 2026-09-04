@@ -19,9 +19,12 @@ import 'home_edit_button.dart';
 /// and a name on the left, its control or reading on the right, hairlines
 /// between. It scans like a list because it is one, which is the whole point.
 class HomeEntityRow extends ConsumerStatefulWidget {
-  const HomeEntityRow({super.key, required this.device});
+  const HomeEntityRow({super.key, required this.device, this.label});
 
   final DeviceState device;
+
+  /// What to call it, when that is not its full name. See [HcTile.label].
+  final String? label;
 
   @override
   ConsumerState<HomeEntityRow> createState() => _HomeEntityRowState();
@@ -33,6 +36,7 @@ class _HomeEntityRowState extends ConsumerState<HomeEntityRow> {
   bool _hover = false;
 
   DeviceState get device => widget.device;
+  String? get label => widget.label;
 
   @override
   Widget build(BuildContext context) {
@@ -72,7 +76,7 @@ class _HomeEntityRowState extends ConsumerState<HomeEntityRow> {
               SizedBox(width: t.space.md),
               Expanded(
                 child: Text(
-                  device.displayName,
+                  label ?? device.displayName,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: t.text.bodyStyle.copyWith(
