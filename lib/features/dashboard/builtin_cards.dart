@@ -2001,6 +2001,7 @@ void registerBuiltinDashboardWidgets() {
       validate: (c) => (c['url'] as String?)?.isNotEmpty == true
           ? null
           : 'Give it an image address.',
+      passesTaps: true,
       builder: (context, a) => _ImageWidget(config: a.config),
     ),
     WidgetDescriptor(
@@ -2262,6 +2263,7 @@ void registerBuiltinDashboardWidgets() {
       validate: (c) => (c['text'] as String?)?.trim().isNotEmpty == true
           ? null
           : 'Give the heading some words.',
+      passesTaps: true,
       builder: (context, a) => _HeadingWidget(config: a.config),
     ),
     WidgetDescriptor(
@@ -2274,6 +2276,7 @@ void registerBuiltinDashboardWidgets() {
           minW: 1, minH: 1, recommendedW: 12, recommendedH: 1),
       // No options at all. Which way it runs is answered by the shape you
       // dragged it to — see _DividerWidget.
+      passesTaps: true,
       builder: (context, a) => const _DividerWidget(),
     ),
     WidgetDescriptor(
@@ -2284,6 +2287,7 @@ void registerBuiltinDashboardWidgets() {
       chrome: WidgetChrome.bare,
       sizeHint: const WidgetSizeHint(
           minW: 1, minH: 1, recommendedW: 4, recommendedH: 1),
+      passesTaps: true,
       builder: (context, a) => _SpacerWidget(editing: a.editing),
     ),
     // ----- the primitives ----------------------------------------------
@@ -2364,6 +2368,7 @@ void registerBuiltinDashboardWidgets() {
         BindableProperty('text', 'Words', BindKind.text),
         BindableProperty('ink', 'Colour', BindKind.look),
       ],
+      passesTaps: true,
       builder: (context, a) => BoundElement(
         type: 'text',
         config: a.config,
@@ -2755,6 +2760,7 @@ void registerBuiltinDashboardWidgets() {
       // placement — offering them again here would be two controls writing
       // different keys for one visible result.
       bindable: const [BindableProperty('ink', 'Colour', BindKind.look)],
+      passesTaps: true,
       builder: (context, a) => BoundElement(
         type: 'icon',
         config: a.config,
@@ -2832,6 +2838,7 @@ void registerBuiltinDashboardWidgets() {
         BindableProperty('rotation', 'Turn', BindKind.number, unit: '°'),
         BindableProperty('opacity', 'Fade', BindKind.number, unit: '%'),
       ],
+      passesTaps: true,
       builder: (context, a) => BoundElement(
         type: 'shape',
         config: a.config,
@@ -2875,6 +2882,7 @@ void registerBuiltinDashboardWidgets() {
             defaultValue: 'flat',
             options: ['flat', 'round']),
       ],
+      passesTaps: true,
       builder: (context, a) => LinePrimitiveCard(config: a.config),
     ),
   ]);

@@ -14,6 +14,30 @@ class DevicesNotifier extends AsyncNotifier<List<DeviceState>> {
   // arrive before the first refetch completes.
   bool _refetching = false;
 
+  /// What we have told a device to be, and how long we will hold that belief.
+  ///
+  /// **Why a toggle bounced.** The optimistic patch lands instantly, then the
+  /// write goes out — and a plugin poll that *started before the write* lands
+  /// after it, carrying the old value. The tile flips on, flips back off, then
+  /// flips on again when the next poll finally sees the change. John: *"toggling
+  /// these causes the toggles to bounce on/off a couple times before settling
+  /// which is wrong."*
+  ///
+  /// It is not enough to apply the optimistic patch and hope; a frame that
+  /// contradicts a write still in flight is stale by definition, and the only
+  /// thing that knows it is stale is the write. So we remember what we asked
+  /// for and ignore contradictions of exactly those keys until the house
+  /// agrees or the window closes.
+  final _expecting = <String, _Expectation>{};
+
+  /// How long a write is allowed to outrank what the house says.
+  ///
+  /// Long enough to cover a poll cycle and a slow bridge; short enough that a
+  /// command the device genuinely refused shows the truth while the finger is
+  /// still near the tile. Suppressing forever would be the older bug — a tile
+  /// insisting a light is on — pointed the other way.
+  static const _holdFor = Duration(seconds: 4);
+
   @override
   Future<List<DeviceState>> build() async {
     // Listen for WebSocket events and update devices in-place
@@ -37,12 +61,13 @@ class DevicesNotifier extends AsyncNotifier<List<DeviceState>> {
           // on every state change — and state changes are constant — so
           // schema-driven controls degraded to heuristics within seconds of the
           // app loading. It dropped ui_hint, status_icon and last_seen too.
+          final incoming = _settled(event.deviceId!, event.current!);
           final updated = current
               .map((d) => d.id == event.deviceId
                   ? d.copyWith(
                       available: true,
                       state: Map<String, dynamic>.from(d.state)
-                        ..addAll(event.current!),
+                        ..addAll(incoming),
                       lastSeen: DateTime.now(),
                     )
                   : d)
@@ -96,7 +121,12 @@ class DevicesNotifier extends AsyncNotifier<List<DeviceState>> {
     _refetching = true;
     try {
       final raw = await ref.read(devicesApiProvider).listDevices();
-      state = AsyncData(raw.map(DeviceState.fromJson).toList());
+      // A full reload is a snapshot like any other, and just as able to be
+      // older than a write still in flight.
+      state = AsyncData([
+        for (final d in raw.map(DeviceState.fromJson))
+          d.copyWith(state: _settled(d.id, d.state, whole: true)),
+      ]);
     } catch (_) {
       // Keep the current list on a transient failure; the next frame retries.
     } finally {
@@ -138,10 +168,17 @@ class DevicesNotifier extends AsyncNotifier<List<DeviceState>> {
           d,
     ]);
 
+    _expecting[id] = _Expectation(
+      patch: Map<String, dynamic>.from(patch),
+      until: DateTime.now().add(_holdFor),
+    );
+
     try {
       await ref.read(devicesApiProvider).setDeviceState(id, patch);
       ref.read(commandFailureProvider.notifier).clear();
     } catch (e) {
+      // The write never landed, so there is nothing to hold out for.
+      _expecting.remove(id);
       _revert(id, optimistic, before);
       ref.read(commandFailureProvider.notifier).report(CommandFailure(
             deviceId: id,
@@ -150,6 +187,52 @@ class DevicesNotifier extends AsyncNotifier<List<DeviceState>> {
             at: DateTime.now(),
           ));
     }
+  }
+
+  /// An incoming reading with the stale contradictions of a live write removed.
+  ///
+  /// Only the keys we wrote are ever touched, and only while the write is still
+  /// young: everything else in the frame is applied as it arrived, because a
+  /// command about `on` says nothing about a temperature. The moment the house
+  /// reports what we asked for, the expectation has done its job and goes.
+  ///
+  /// [whole] is for a full reload, where a missing key means *this device does
+  /// not report it* rather than *this frame did not mention it* — so the
+  /// expected value has to be put back rather than merely left alone.
+  Map<String, dynamic> _settled(
+    String id,
+    Map<String, dynamic> incoming, {
+    bool whole = false,
+  }) {
+    final held = _expecting[id];
+    if (held == null) return incoming;
+    if (DateTime.now().isAfter(held.until)) {
+      _expecting.remove(id);
+      return incoming;
+    }
+
+    final out = Map<String, dynamic>.from(incoming);
+    var agreed = true;
+    held.patch.forEach((key, want) {
+      if (!incoming.containsKey(key)) {
+        // A frame that is silent about the key neither confirms nor denies it.
+        if (whole) out[key] = want;
+        agreed = false;
+        return;
+      }
+      if (_same(incoming[key], want)) return;
+      out[key] = want;
+      agreed = false;
+    });
+
+    if (agreed) _expecting.remove(id);
+    return out;
+  }
+
+  /// Value equality that does not mind `25` arriving where `25.0` was sent.
+  static bool _same(Object? a, Object? b) {
+    if (a is num && b is num) return a.toDouble() == b.toDouble();
+    return a == b;
   }
 
   /// Undoes an optimistic patch — but only if nothing has touched the device
@@ -213,3 +296,11 @@ final devicesProvider =
     AsyncNotifierProvider<DevicesNotifier, List<DeviceState>>(
   DevicesNotifier.new,
 );
+
+/// What we told one device to be, and how long we will hold that belief.
+class _Expectation {
+  const _Expectation({required this.patch, required this.until});
+
+  final Map<String, dynamic> patch;
+  final DateTime until;
+}

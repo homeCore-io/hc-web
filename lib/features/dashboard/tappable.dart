@@ -9,6 +9,7 @@ import '../../core/providers/devices_provider.dart';
 import '../../core/providers/modes_provider.dart';
 import '../../core/providers/scenes_provider.dart';
 import '../../core/schema/device_schema.dart';
+import '../devices/device_sheet.dart';
 
 /// Makes any drawn element do something when it is touched.
 ///
@@ -96,6 +97,13 @@ class Tappable extends ConsumerWidget {
             .cast<DeviceState?>()
             .firstOrNull;
         return device != null && device.available && _accepts(device, action);
+      case TapDo.device:
+        // Only that the device is here. The sheet is a *view* of whatever it
+        // can do, so unlike `set` there is no particular attribute to promise
+        // — and it stays worth opening on a device that is offline, which is
+        // often when you most want to look at one.
+        return ref.watch(devicesProvider).value?.any((d) => d.id == id) ??
+            false;
       case TapDo.page:
         // Not checked against the dashboard list: a page can be created after
         // this one was drawn, and refusing to navigate because this client has
@@ -165,6 +173,9 @@ class Tappable extends ConsumerWidget {
         await ref
             .read(devicesProvider.notifier)
             .command(id, {action.attribute!: value});
+      case TapDo.device:
+        if (!context.mounted) return;
+        showDeviceSheet(context, id);
       case TapDo.page:
         if (!context.mounted) return;
         context.go('/dashboards/$id');

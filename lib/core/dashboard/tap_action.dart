@@ -37,7 +37,17 @@ enum TapDo {
   set('set'),
 
   /// Open another dashboard.
-  page('page');
+  page('page'),
+
+  /// Open the device's own controls.
+  ///
+  /// **A toggle is not enough for a dimmer.** `set` writes one attribute, which
+  /// is the whole of what a switch needs and a fraction of what a lamp has.
+  /// John, on a chip standing for a dimmer: *"Click it should provides fancy
+  /// controls for on/off and controlling brightness."* The sheet the device
+  /// tile has always opened is that, and until now only the device tile could
+  /// reach it — so a composed chip could flip a light and never dim one.
+  device('device');
 
   const TapDo(this.wire);
   final String wire;
@@ -90,7 +100,11 @@ class TapAction {
   /// it. It simply does nothing until it is finished, and the inspector says
   /// which part is missing.
   bool get isComplete => switch (action) {
-        TapDo.scene || TapDo.mode || TapDo.page => (targetId ?? '').isNotEmpty,
+        TapDo.scene ||
+        TapDo.mode ||
+        TapDo.page ||
+        TapDo.device =>
+          (targetId ?? '').isNotEmpty,
         TapDo.set =>
           (targetId ?? '').isNotEmpty && (attribute ?? '').isNotEmpty,
       };

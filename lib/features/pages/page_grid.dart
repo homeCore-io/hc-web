@@ -12,6 +12,7 @@ import '../../core/dashboard/grid_engine.dart';
 import '../../core/models/device_state.dart';
 import '../../core/dashboard/group_frame.dart';
 import '../../core/dashboard/groups.dart';
+import '../../core/dashboard/tap_action.dart';
 import '../../core/dashboard/widget_registry.dart';
 import '../../core/dashboard/wiring.dart';
 import '../../core/models/dashboard.dart';
@@ -2078,22 +2079,26 @@ class _Cell extends StatelessWidget {
                 // label, an icon and a photograph all become live without any
                 // of them knowing the property exists — the same reason the
                 // binding model wraps rather than threads.
-                : Tappable(
-                    config: model!.config,
-                    editing: editing,
-                    child: descriptor.builder(
-                      context,
-                      WidgetRenderArgs(
-                        id: model!.id,
-                        title: model!.title,
-                        subtitle: model!.subtitle,
-                        config: model!.config,
-                        w: item.w,
-                        h: item.h,
-                        sizeHint: descriptor.sizeHint,
-                        editing: editing,
-                        entered: entered,
-                        onConfigChanged: onConfigChanged,
+                : _maybeTransparent(
+                    descriptor,
+                    model!.config,
+                    Tappable(
+                      config: model!.config,
+                      editing: editing,
+                      child: descriptor.builder(
+                        context,
+                        WidgetRenderArgs(
+                          id: model!.id,
+                          title: model!.title,
+                          subtitle: model!.subtitle,
+                          config: model!.config,
+                          w: item.w,
+                          h: item.h,
+                          sizeHint: descriptor.sizeHint,
+                          editing: editing,
+                          entered: entered,
+                          onConfigChanged: onConfigChanged,
+                        ),
                       ),
                     ),
                   );
@@ -2624,4 +2629,19 @@ class _WireBadge extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Lets a tap fall through a decoration that has no action of its own.
+///
+/// Only ever *removes* a hit target, and only from an element whose descriptor
+/// says it is something you decorate with and which is carrying no `on_tap`.
+/// A shape with an action of its own keeps it; so does every control.
+Widget _maybeTransparent(
+  WidgetDescriptor descriptor,
+  Map<String, dynamic> config,
+  Widget child,
+) {
+  if (!descriptor.passesTaps) return child;
+  if (TapAction.fromConfig(config) != null) return child;
+  return IgnorePointer(child: child);
 }
