@@ -104,6 +104,7 @@ List<Wire> wiresOf(
           TapDo.scene => 'run',
           TapDo.mode => 'mode',
           TapDo.set => 'set',
+          TapDo.device => 'open',
           TapDo.page => 'go',
         },
         property: switch (action.action) {

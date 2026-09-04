@@ -90,6 +90,7 @@ Future<_StubDevices> _pump(
 }
 
 void main() {
+  _whyItIsInert();
   test('the element is registered and needs both a device and a number', () {
     registerBuiltinDashboardWidgets();
     final d = WidgetRegistry.lookup('slider')!;
@@ -216,5 +217,66 @@ void main() {
     expect(node.label, 'Hall lamp');
     expect(node.value, '120');
     handle.dispose();
+  });
+}
+
+/// **A dimmed slider that says nothing is a puzzle, not a control.**
+///
+/// The office page carried a Brightness slider reading `—` with its handle at
+/// the minimum. Three different mistakes produce exactly that picture — a
+/// misspelled attribute, an attribute the plugin never marked writable, and a
+/// plugin that registered no range — and the element told them apart for
+/// nobody. Found by looking at the page, then spending twenty minutes in the
+/// API working out which of the three it was.
+void _whyItIsInert() {
+  group('why it cannot be dragged', () {
+    testWidgets('an attribute this device does not have is named', (t) async {
+      await _pump(
+        t,
+        device: _lamp(schema: _promised),
+        config: const {'device_id': 'lamp', 'attribute': 'brightness_pct'},
+      );
+      expect(find.text('no brightness_pct'), findsOneWidget);
+      expect(find.text('—'), findsNothing);
+    });
+
+    testWidgets('a device that is not in the house is named', (t) async {
+      await _pump(
+        t,
+        device: _lamp(schema: _promised),
+        config: const {'device_id': 'nope', 'attribute': 'brightness'},
+      );
+      expect(find.text('no such device'), findsOneWidget);
+    });
+
+    testWidgets('an attribute the plugin never promised is named', (t) async {
+      await _pump(
+        t,
+        device: DeviceState(
+          id: 'lamp',
+          pluginId: 'p',
+          name: 'Hall lamp',
+          available: true,
+          state: const {},
+          schema: const DeviceSchema({
+            'brightness': AttributeSchema(
+              kind: AttributeKind.integer,
+              writable: false,
+              min: 0,
+              max: 255,
+            ),
+          }),
+        ),
+      );
+      expect(find.text('read-only'), findsOneWidget);
+    });
+
+    testWidgets('a reading beats the reason, when there is one', (t) async {
+      // The words fill the dash; they do not replace a number. A read-only
+      // attribute that is reporting is still worth reading.
+      await _pump(t, device: _lamp(schema: _promised));
+      expect(find.text('50 %'), findsOneWidget);
+      expect(find.text('read-only'), findsNothing);
+    });
   });
 }

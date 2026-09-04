@@ -95,17 +95,40 @@ class TextPrimitiveCard extends StatelessWidget {
       );
     }
 
-    return Align(
-      alignment: _align(align, config['vertical'] as String?),
-      child: Text(
-        text,
-        textAlign: switch (align) {
-          TextAlignChoice.center => TextAlign.center,
-          TextAlignChoice.end => TextAlign.end,
-          TextAlignChoice.start => TextAlign.start,
-        },
-        style: style,
-      ),
+    final textAlign = switch (align) {
+      TextAlignChoice.center => TextAlign.center,
+      TextAlignChoice.end => TextAlign.end,
+      TextAlignChoice.start => TextAlign.start,
+    };
+
+    // **A box you dragged is a box, and words do not leak out of it.**
+    //
+    // Without a line limit a long label wraps and the fixed height clips the
+    // last line through the middle of the letters — which reads as a smudge
+    // above the line below it, not as text. Two chips on the office page had
+    // one: "Office Humidifier Plug" and "YoLink Plug Power Meter", the only
+    // two names too long for their row.
+    //
+    // So the element fills the height it was given and ellipsizes at the last
+    // line that fits. Nothing is hidden that was not already invisible; the
+    // difference is that a person can see it happened.
+    return LayoutBuilder(
+      builder: (context, box) {
+        final leading = size * (style.height ?? 1.25);
+        final lines = box.maxHeight.isFinite
+            ? (box.maxHeight / leading).floor().clamp(1, 200)
+            : null;
+        return Align(
+          alignment: _align(align, config['vertical'] as String?),
+          child: Text(
+            text,
+            textAlign: textAlign,
+            style: style,
+            maxLines: lines,
+            overflow: TextOverflow.ellipsis,
+          ),
+        );
+      },
     );
   }
 

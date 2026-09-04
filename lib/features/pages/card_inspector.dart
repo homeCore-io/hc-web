@@ -1507,6 +1507,7 @@ class _TapSection extends ConsumerWidget {
               (key: 'scene', label: 'Run a scene'),
               (key: 'mode', label: 'Set a mode'),
               (key: 'set', label: 'Set a device'),
+              (key: 'device', label: 'Open a device'),
               (key: 'page', label: 'Go to a page'),
             ],
             onChanged: (v) {
@@ -1518,8 +1519,13 @@ class _TapSection extends ConsumerWidget {
               // find it again in a list of a hundred and eighty-nine is the
               // panel forgetting what it already knows.
               final own = config['device_id'];
-              final seed = kind == TapDo.set && own is String && own.isNotEmpty
-                  ? TapAction(action: kind, targetId: own, attribute: 'on')
+              final seed = own is String && own.isNotEmpty
+                  ? switch (kind) {
+                      TapDo.set =>
+                        TapAction(action: kind, targetId: own, attribute: 'on'),
+                      TapDo.device => TapAction(action: kind, targetId: own),
+                      _ => TapAction(action: kind),
+                    }
                   : TapAction(action: kind);
               _write(action == null ? seed : action.with_(action: kind));
             },
@@ -1801,6 +1807,17 @@ class _TapTarget extends ConsumerWidget {
                 onChanged: (v) => onChanged(action.with_(attribute: v)),
               ),
           ],
+        );
+      case TapDo.device:
+        final devices = ref.watch(devicesProvider).value ?? const [];
+        return _MenuPick(
+          label: 'Device',
+          value: action.targetId,
+          options: [
+            for (final d in devices) (key: d.id, label: d.displayName),
+          ],
+          empty: 'No devices yet.',
+          onChanged: (v) => onChanged(action.with_(targetId: v)),
         );
       case TapDo.page:
         final pages = ref.watch(dashboardsProvider).value ?? const [];

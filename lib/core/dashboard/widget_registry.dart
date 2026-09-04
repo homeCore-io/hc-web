@@ -25,6 +25,7 @@ class WidgetDescriptor {
     this.validate,
     this.description,
     this.chrome = WidgetChrome.card,
+    this.passesTaps = false,
     this.inPlaceLabel,
     this.bindable = const [],
   });
@@ -51,6 +52,22 @@ class WidgetDescriptor {
 
   /// How much of a card this element is. See [WidgetChrome].
   final WidgetChrome chrome;
+
+  /// Whether a tap goes *through* this element when it has no action of its own.
+  ///
+  /// **A composed control is layers, and only one of them carries the action.**
+  /// The office page's light chips are four elements each — a ground shape with
+  /// `on_tap`, a wash over it, an icon and two labels — and the ground is the
+  /// bottom one. Flutter's `RenderCustomPaint.hitTestSelf` returns *true* by
+  /// default, so the wash sitting on top ate every tap and the chips did
+  /// nothing at all. John: *"These look like buttons but don't do anything."*
+  ///
+  /// A person who stacks a label on a button expects to press the button. That
+  /// only works if the label declines the pointer, so the primitives you
+  /// decorate with — a shape, a rule, a word, an icon, a picture — do. Anything
+  /// with its own behaviour does not, and an element carrying `on_tap` keeps
+  /// its tap regardless of what it says here.
+  final bool passesTaps;
 
   /// What entering this card lets you do — `Place markers` — or null for the
   /// cards you cannot enter, which is nearly all of them.
