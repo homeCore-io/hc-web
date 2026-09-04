@@ -105,6 +105,7 @@ List<Wire> wiresOf(
           TapDo.mode => 'mode',
           TapDo.set => 'set',
           TapDo.device => 'open',
+          TapDo.pick => 'aim at',
           TapDo.page => 'go',
         },
         property: switch (action.action) {

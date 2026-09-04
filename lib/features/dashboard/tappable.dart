@@ -7,6 +7,8 @@ import '../../core/devices/scene_state.dart';
 import '../../core/models/device_state.dart';
 import '../../core/providers/devices_provider.dart';
 import '../../core/providers/modes_provider.dart';
+import '../../core/providers/page_room_provider.dart';
+import '../../core/providers/picked_device_provider.dart';
 import '../../core/providers/scenes_provider.dart';
 import '../../core/schema/device_schema.dart';
 import '../devices/device_sheet.dart';
@@ -97,6 +99,11 @@ class Tappable extends ConsumerWidget {
             .cast<DeviceState?>()
             .firstOrNull;
         return device != null && device.available && _accepts(device, action);
+      case TapDo.pick:
+        // Only that it is here. Aiming is a page-local act — nothing is sent,
+        // so nothing can be refused.
+        return ref.watch(devicesProvider).value?.any((d) => d.id == id) ??
+            false;
       case TapDo.device:
         // Only that the device is here. The sheet is a *view* of whatever it
         // can do, so unlike `set` there is no particular attribute to promise
@@ -173,6 +180,10 @@ class Tappable extends ConsumerWidget {
         await ref
             .read(devicesProvider.notifier)
             .command(id, {action.attribute!: value});
+      case TapDo.pick:
+        ref
+            .read(pickedDeviceProvider.notifier)
+            .pick(ref.read(pageRoomProvider), id);
       case TapDo.device:
         if (!context.mounted) return;
         showDeviceSheet(context, id);

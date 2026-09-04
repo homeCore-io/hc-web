@@ -27,6 +27,7 @@ List<String> lines(List<Knowing> items) =>
     [for (final i in items) '${i.level.name}:${i.what}:${i.state}'];
 
 void main() {
+  _oneLinePerDevice();
   _watching();
   group('what is wrong', () {
     test('water on the floor is the loudest thing in a house', () {
@@ -183,6 +184,65 @@ void _watching() {
       expect(
           lines(worthKnowing(devices)), contains('danger:Sensor:40% battery'));
       expect(worthKnowing(devices, lowBattery: 20), isEmpty);
+    });
+  });
+}
+
+/// **One line per device.**
+///
+/// A lock that is unlocked AND nearly flat is one thing to go and look at.
+/// Printing it twice spends two of six lines saying the same name, which is
+/// what the Living Room page did: *Lock - Living Room* once for its battery and
+/// again for being unlocked.
+void _oneLinePerDevice() {
+  group('a device with two things wrong', () {
+    test('is one line, and as loud as its loudest fault', () {
+      final out = worthKnowing([
+        device('Front lock', state: const {'locked': false, 'battery': 50}),
+      ]);
+      expect(out, hasLength(1));
+      expect(out.single.state, '50% battery · unlocked');
+      expect(out.single.level, Attention.danger,
+          reason: 'a flat battery is the louder of the two');
+    });
+
+    test('and the reassurances still count it once, on their own line', () {
+      final out = worthKnowing([
+        device('Front lock', state: const {'locked': false, 'battery': 9}),
+        device('Back lock', state: const {'locked': true}),
+      ]);
+      expect(lines(out), contains('danger:Front lock:9% battery · unlocked'));
+      expect(lines(out), contains('good:1 lock:locked'));
+    });
+  });
+
+  group('the room is not repeated on every line', () {
+    test('because the panel already says which room it is', () {
+      final out = worthKnowing([
+        DeviceState(
+          id: 'lock',
+          pluginId: 'p',
+          name: 'Living Room Lock',
+          area: 'living_room',
+          available: true,
+          state: const {'locked': false},
+        ),
+      ], room: 'living_room');
+      expect(out.single.what, 'Lock');
+    });
+
+    test('and a whole-house panel keeps the full name', () {
+      final out = worthKnowing([
+        DeviceState(
+          id: 'lock',
+          pluginId: 'p',
+          name: 'Living Room Lock',
+          area: 'living_room',
+          available: true,
+          state: const {'locked': false},
+        ),
+      ]);
+      expect(out.single.what, 'Living Room Lock');
     });
   });
 }

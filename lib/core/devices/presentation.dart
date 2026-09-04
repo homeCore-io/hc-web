@@ -490,3 +490,57 @@ extension DeviceFacetIconKey on DeviceFacet {
       : name.replaceAllMapped(
           RegExp('[A-Z]'), (m) => '_${m[0]!.toLowerCase()}');
 }
+
+/// A device's name with the room's own name taken off the front.
+///
+/// **On a room page the room is the one word every device shares.** The Living
+/// Room's lamps are *Living Room Floor Lamp*, *Living Room Tower Lamp* and
+/// *Living Room Arch Lamp*, so on a page that already says Living Room in its
+/// title and its crumb, the prefix is the only part that survives a narrow tile
+/// and *Floor*, *Tower* and *Arch* — the whole of what tells them apart — is
+/// what gets ellipsised away. Three tiles reading "Living Room …".
+///
+/// Returns [name] unchanged when the room is not a prefix, and when stripping
+/// it would leave nothing: the Hue group *is* called "Living Room", and a tile
+/// labelled with the empty string is worse than a repeated word.
+String labelInRoom(String name, String? room) {
+  if (room == null || room.isEmpty) return name;
+
+  // Matched word by word rather than character by character, so "Living Room",
+  // "living_room" and "Living  Room" are the same prefix and "Offices" is not
+  // "Office". The first attempt walked characters through
+  // `normalizeAreaName`, which *drops* separators rather than emitting one —
+  // so the space in "Living Room" never lined up with the underscore it
+  // becomes, and nothing ever matched.
+  final wanted = RegExp(r'[A-Za-z0-9]+')
+      .allMatches(room)
+      .map((m) => m.group(0)!.toLowerCase())
+      .toList();
+  if (wanted.isEmpty) return name;
+
+  final words = RegExp(r'[A-Za-z0-9]+').allMatches(name).toList();
+  // Not longer than the room is not a prefix with something left over: the Hue
+  // group IS called "Living Room", and a tile labelled with the empty string is
+  // worse than a repeated word.
+  if (words.length <= wanted.length) return name;
+
+  var matches = true;
+  for (var i = 0; i < wanted.length; i++) {
+    if (words[i].group(0)!.toLowerCase() != wanted[i]) matches = false;
+  }
+  if (matches) return name.substring(words[wanted.length].start);
+
+  // **Either end.** This house names things both ways round — "Living Room
+  // Floor Lamp" and "Lock - Living Room" — and a rule that only knew about
+  // prefixes left half the labels saying the room and nothing else once a
+  // narrow tile had finished with them.
+  final tail = words.length - wanted.length;
+  for (var i = 0; i < wanted.length; i++) {
+    if (words[tail + i].group(0)!.toLowerCase() != wanted[i]) return name;
+  }
+  // Back through the separator, so "Lock - Living Room" gives "Lock" rather
+  // than "Lock - ".
+  return name
+      .substring(0, words[tail - 1].end)
+      .replaceFirst(RegExp(r'[\s\-–—:_·]+$'), '');
+}

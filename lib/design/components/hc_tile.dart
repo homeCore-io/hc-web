@@ -31,9 +31,25 @@ class HcTile extends StatelessWidget {
     this.onToggle,
     this.onLevel,
     this.pulse = 0,
+    this.label,
+    this.selected = false,
   });
 
   final DeviceState device;
+
+  /// What to call it, when that is not its full name.
+  ///
+  /// A room page hands over the name with the room's own name taken off the
+  /// front: every device in the Living Room is called "Living Room something",
+  /// and in a tile this narrow the prefix is the half that survives.
+  final String? label;
+
+  /// Whether this is the tile the page's controls are currently aimed at.
+  ///
+  /// Said with a ring rather than with the lit treatment a device already uses
+  /// for being *on*: a lamp that is off can be the one you are adjusting, and
+  /// two meanings sharing one colour would make both unreadable.
+  final bool selected;
   final VoidCallback? onTap;
   final VoidCallback? onToggle;
 
@@ -74,6 +90,7 @@ class HcTile extends StatelessWidget {
       pulse: pulse,
       child: HcSurface(
         onTap: onTap,
+        selected: selected,
         glowColor: active,
         // The halo is the level. Not a fixed "on" glow — a dim lamp must look
         // dim, or the wall panel lies about the room.
@@ -111,7 +128,7 @@ class HcTile extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            device.displayName,
+            label ?? device.displayName,
             // Two lines. "Bathroom Occupancy" and "Dining Room Door Sensor" are
             // ordinary names in this house and were being cut to "Bathroom
             // Occupan…" — a device you cannot read is a device you cannot use.

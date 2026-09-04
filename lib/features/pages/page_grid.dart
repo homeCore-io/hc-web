@@ -18,6 +18,7 @@ import '../../core/dashboard/widget_registry.dart';
 import '../../core/dashboard/room_scope.dart';
 import '../../core/providers/devices_provider.dart';
 import '../../core/providers/page_room_provider.dart';
+import '../../core/providers/picked_device_provider.dart';
 import '../../core/dashboard/wiring.dart';
 import '../../core/models/dashboard.dart';
 import '../../design/components/hc_surface.dart';
@@ -2125,12 +2126,17 @@ class _Cell extends StatelessWidget {
                         builder: (context, ref, _) => _element(
                           context,
                           descriptor,
-                          resolveRoomRefs(
-                            model!.config,
-                            room: ref.watch(pageRoomProvider),
-                            devices:
-                                ref.watch(devicesProvider).value ?? const [],
-                          ),
+                          () {
+                            final room = ref.watch(pageRoomProvider);
+                            return resolveRoomRefs(
+                              model!.config,
+                              room: room,
+                              devices:
+                                  ref.watch(devicesProvider).value ?? const [],
+                              picked: pickedIn(
+                                  ref.watch(pickedDeviceProvider), room),
+                            );
+                          }(),
                         ),
                       );
 

@@ -21,6 +21,7 @@ DeviceState? Function(String) _house(List<DeviceState> ds) =>
     (id) => ds.where((d) => d.id == id).cast<DeviceState?>().firstOrNull;
 
 void main() {
+  _pseudoKeys();
   final house = _house([
     _d('hob', const {'on': true, 'temperature': 21.4, 'level': '62'}),
     _d('lamp', const {'on': 'off'}),
@@ -191,6 +192,52 @@ void main() {
       expect(set.all, hasLength(1));
       expect(set.all.single.deviceId, 'lamp');
       expect(set.without('color').all, isEmpty);
+    });
+  });
+}
+
+/// **What a device *is*, not only what it reports.**
+///
+/// A panel of controls aimed at whichever light you picked has to be able to
+/// say which one that is — and a name is not a reading. It is not in `state`
+/// and never will be, so a binding that only ever read `state` could not
+/// answer the one question the panel's own heading asks.
+void _pseudoKeys() {
+  final house = _house([
+    DeviceState(
+      id: 'lamp',
+      pluginId: 'p',
+      name: 'Office Desk Lamp',
+      area: 'office',
+      available: true,
+      state: const {'on': true},
+    ),
+  ]);
+
+  group('a name is a binding like any other', () {
+    test('the device says what it is called', () {
+      const b =
+          PropertyBinding(property: 'text', deviceId: 'lamp', key: 'name');
+      expect(b.resolve(house), 'Office Desk Lamp');
+    });
+
+    test('and which room it is in', () {
+      const b =
+          PropertyBinding(property: 'text', deviceId: 'lamp', key: 'room');
+      expect(b.resolve(house), 'office');
+    });
+
+    test('a device that is not here answers nothing, as always', () {
+      const b =
+          PropertyBinding(property: 'text', deviceId: 'gone', key: 'name');
+      expect(b.resolve(house), isNull);
+    });
+
+    test('a real reading is still read from state', () {
+      // The pseudo-keys are two names, not a new mode: everything else about
+      // the binding is untouched.
+      const b = PropertyBinding(property: 'text', deviceId: 'lamp', key: 'on');
+      expect(b.resolve(house), isNotNull);
     });
   });
 }

@@ -1508,6 +1508,7 @@ class _TapSection extends ConsumerWidget {
               (key: 'mode', label: 'Set a mode'),
               (key: 'set', label: 'Set a device'),
               (key: 'device', label: 'Open a device'),
+              (key: 'pick', label: 'Aim this page at it'),
               (key: 'page', label: 'Go to a page'),
             ],
             onChanged: (v) {
@@ -1523,7 +1524,9 @@ class _TapSection extends ConsumerWidget {
                   ? switch (kind) {
                       TapDo.set =>
                         TapAction(action: kind, targetId: own, attribute: 'on'),
-                      TapDo.device => TapAction(action: kind, targetId: own),
+                      TapDo.device ||
+                      TapDo.pick =>
+                        TapAction(action: kind, targetId: own),
                       _ => TapAction(action: kind),
                     }
                   : TapAction(action: kind);
@@ -1808,6 +1811,7 @@ class _TapTarget extends ConsumerWidget {
               ),
           ],
         );
+      case TapDo.pick:
       case TapDo.device:
         final devices = ref.watch(devicesProvider).value ?? const [];
         return _MenuPick(

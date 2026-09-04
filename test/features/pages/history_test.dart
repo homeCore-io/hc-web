@@ -110,10 +110,16 @@ Future<void> _tap(WidgetTester tester, String title) async {
 }
 
 /// Where the selected card sits, which is what every edit here changes.
+///
+/// Matched on the *shape* of a position rather than on the word 'at': the
+/// first Text containing ' at ' turned out to be an inspector menu item the
+/// day one was added that reads 'Aim this page at it', and five tests failed
+/// for a reason that had nothing to do with undo.
 String _where(WidgetTester tester) => tester
     .widgetList<Text>(find.byType(Text))
     .map((t) => t.data ?? '')
-    .firstWhere((t) => t.contains(' at '), orElse: () => '');
+    .firstWhere((t) => RegExp(r' at -?\d+,-?\d+').hasMatch(t),
+        orElse: () => '');
 
 Future<void> _nudge(WidgetTester tester, {int times = 1}) async {
   for (var i = 0; i < times; i++) {

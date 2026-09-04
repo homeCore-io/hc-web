@@ -38,11 +38,12 @@ import '../../core/dashboard/widget_registry.dart';
 import 'camera_card.dart';
 import '../../core/devices/metrics.dart';
 import '../../core/devices/presentation.dart';
-import '../../design/hc_icons.dart';
 import '../../design/components/hc_surface.dart';
 import '../../design/components/hc_tile.dart';
 import '../../design/tokens.dart';
 import 'floor_plan_card.dart';
+import '../devices/device_scenes.dart';
+import '../../design/components/hc_scene_chip.dart';
 import '../devices/device_sheet.dart';
 import '../home/home_entity_row.dart';
 import '../home/home_rich_cards.dart';
@@ -55,6 +56,8 @@ import '../../core/models/mode_state.dart';
 import '../../core/models/scene.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/providers/dashboards_provider.dart';
+import '../../core/providers/page_room_provider.dart';
+import '../../core/providers/picked_device_provider.dart';
 import '../../core/providers/devices_provider.dart';
 import '../../core/providers/events_provider.dart';
 import '../../core/providers/modes_provider.dart';
@@ -392,6 +395,20 @@ class _DeviceGridWidget extends ConsumerWidget {
     if (async.value == null) return const _LoadingContents();
     final selection = selectDevicesWithCount(async.value!, widgetModel.config);
     final devices = selection.shown;
+    final room = ref.watch(pageRoomProvider);
+    final picks = widgetModel.config['picks'] == true;
+    final picked = pickedIn(ref.watch(pickedDeviceProvider), room);
+    // **Aimed at something from the first frame.** A panel of controls that is
+    // blank until you touch a tile reads as broken, and the first light is a
+    // better guess than none. After a frame, because a build may not write.
+    if (picks && picked == null && devices.isNotEmpty) {
+      final first = devices.first.id;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (pickedIn(ref.read(pickedDeviceProvider), room) == null) {
+          ref.read(pickedDeviceProvider.notifier).pick(room, first);
+        }
+      });
+    }
     return LayoutBuilder(
       builder: (context, constraints) {
         final targetWidth = veryCompact
@@ -433,7 +450,18 @@ class _DeviceGridWidget extends ConsumerWidget {
                   final notifier = ref.read(devicesProvider.notifier);
                   return HcTile(
                     device: device,
-                    onTap: () => showDeviceSheet(context, device.id),
+                    label: labelInRoom(device.displayName, room),
+                    // **The tile is the picker.** With `picks` set, tapping one
+                    // aims the page's controls at it rather than opening the
+                    // sheet — which is the whole idea: one set of condensed
+                    // controls under a row of lamps, instead of a panel that
+                    // slides over the page for each of them in turn.
+                    selected: picks && device.id == picked,
+                    onTap: picks
+                        ? () => ref
+                            .read(pickedDeviceProvider.notifier)
+                            .pick(room, device.id)
+                        : () => showDeviceSheet(context, device.id),
                     // Media players open their sheet for transport controls; a bare
                     // on/off would be wrong for a speaker.
                     onToggle: device.isMediaPlayer
@@ -547,6 +575,7 @@ class _DeviceListWidget extends ConsumerWidget {
     if (async.value == null) return const _LoadingContents();
     final selection = selectDevicesWithCount(async.value!, widgetModel.config);
     final devices = selection.shown;
+    final room = ref.watch(pageRoomProvider);
     final t = HcTokens.of(context);
     return _WithSelectionSummary(
       selection: selection,
@@ -555,7 +584,10 @@ class _DeviceListWidget extends ConsumerWidget {
           for (var i = 0; i < devices.length; i++) ...[
             if (i > 0)
               Divider(height: 1, thickness: 1, color: t.stroke.hairline),
-            HomeEntityRow(device: devices[i]),
+            HomeEntityRow(
+              device: devices[i],
+              label: labelInRoom(devices[i].displayName, room),
+            ),
           ],
         ],
       ),
@@ -581,6 +613,7 @@ class _DeviceTileWidget extends ConsumerWidget {
     final notifier = ref.read(devicesProvider.notifier);
     return HcTile(
       device: device,
+      label: labelInRoom(device.displayName, ref.watch(pageRoomProvider)),
       onTap: () => showDeviceSheet(context, device.id),
       onToggle: device.isMediaPlayer
           ? null
@@ -651,30 +684,65 @@ class _SceneRowWidget extends ConsumerWidget {
     // else keeps them all, which is what every page built before this got.
     final scope = config['scope'] as String? ?? 'all';
     final room = (config['room'] as String? ?? '').trim();
+
+    // **A device's scenes belong with the device.** A Hue scene is a property
+    // of a room's *group*, so a room page that lists them beside its lights
+    // says them twice — once as the room's, once as the picked light's. John:
+    // *"Device scenes should be shown as part of the device details and only
+    // group/room scenes shown on the main room page."*
+    if (scope == 'device') {
+      final id = (config['device_id'] as String? ?? '').trim();
+      final owner =
+          devices.where((d) => d.id == id).cast<DeviceState?>().firstOrNull;
+      final mine = owner == null
+          ? const <DeviceState>[]
+          : scenesForDevice(owner, devices);
+      if (mine.isEmpty) {
+        return Text(
+          owner == null ? 'Pick a light to see its scenes.' : 'No scenes here.',
+          style: t.text.captionStyle.copyWith(color: t.surface.onBaseMuted),
+        );
+      }
+      return Wrap(
+        spacing: t.space.sm,
+        runSpacing: t.space.sm,
+        children: [
+          for (final sc in mine)
+            HcSceneChip(
+              name: sc.displayName,
+              onRun: () => ref
+                  .read(devicesProvider.notifier)
+                  .command(sc.id, {'action': 'activate_scene'}),
+            ),
+        ],
+      );
+    }
+
     bool wanted(String? area) => switch (scope) {
           'house' => area == null || area.isEmpty,
           'room' => room.isEmpty || area == room,
           _ => true,
         };
 
+    // The same chip the device panel uses. Two different-looking scene chips in
+    // one product is the tell that they were built by different hands — and
+    // this one paints itself the colour of the light it makes.
     final chips = <Widget>[
       for (final scene in native.where((s) => wanted(null)))
-        _TokenChip(
-          label: scene.name,
-          icon: HcIcons.play,
-          onTap: () => ref.read(scenesApiProvider).activateScene(scene.id),
+        HcSceneChip(
+          name: scene.name,
+          onRun: () => ref.read(scenesApiProvider).activateScene(scene.id),
         ),
       for (final d in devices.where(isSceneDevice).where(
             (d) => wanted(d.effectiveArea),
           ))
-        _TokenChip(
-          label: d.displayName,
-          icon: HcIcons.play,
+        HcSceneChip(
+          name: d.displayName,
           // A plugin scene is a device, and applying it is a write to that
           // device — not a POST to a registry it is not in. Sending it the
           // other way is not a small bug: the request goes to the wrong place
           // and the scene never runs.
-          onTap: () => ref
+          onRun: () => ref
               .read(devicesApiProvider)
               .setDeviceState(d.id, {'activate': true}),
         ),
@@ -702,13 +770,11 @@ class _TokenChip extends StatelessWidget {
   const _TokenChip({
     required this.label,
     this.selected = false,
-    this.icon,
     this.onTap,
   });
 
   final String label;
   final bool selected;
-  final IconData? icon;
   final VoidCallback? onTap;
 
   @override
@@ -739,10 +805,6 @@ class _TokenChip extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (icon != null) ...[
-                Icon(icon, size: 13, color: fg),
-                SizedBox(width: t.space.xs),
-              ],
               Text(label,
                   style: t.text.bodySmallStyle
                       .copyWith(fontWeight: FontWeight.w600, color: fg)),
@@ -1743,7 +1805,13 @@ void registerBuiltinDashboardWidgets() {
       icon: Icons.grid_view_outlined,
       sizeHint: const WidgetSizeHint(
           minW: 4, minH: 2, recommendedW: 8, recommendedH: 2),
-      configFields: _selectionFields,
+      configFields: const [
+        ..._selectionFields,
+        WidgetConfigField('picks', WidgetConfigKind.boolean,
+            label: 'Tapping aims this page',
+            help: 'Instead of opening the device. Controls set to “the picked '
+                'device” follow whichever tile you touch.'),
+      ],
       validate: _validateSelection,
       builder: (context, a) => _DeviceGridWidget(
         widgetModel: _modelOf(a, 'device_grid'),
@@ -1858,12 +1926,16 @@ void registerBuiltinDashboardWidgets() {
       configFields: const [
         WidgetConfigField('scope', WidgetConfigKind.choice,
             label: 'Which scenes',
-            options: ['all', 'house', 'room'],
+            options: ['all', 'house', 'room', 'device'],
             defaultValue: 'all',
             help: 'A whole-house footer that lists every room\u2019s scenes '
                 'prints the same name three times.'),
         WidgetConfigField('room', WidgetConfigKind.areaName,
             label: 'Room', help: 'Only when Which scenes is “room”.'),
+        WidgetConfigField('device_id', WidgetConfigKind.deviceRef,
+            label: 'Light',
+            help: 'Only when Which scenes is “device”. Set it to the picked '
+                'device and the scenes follow whichever light you tap.'),
       ],
       builder: (context, a) => _SceneRowWidget(config: a.config),
     ),

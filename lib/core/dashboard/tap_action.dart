@@ -39,6 +39,15 @@ enum TapDo {
   /// Open another dashboard.
   page('page'),
 
+  /// Aim this page's controls at a device.
+  ///
+  /// **The one action that changes the page rather than the house.** A room has
+  /// four lamps and one set of controls; tapping a lamp points them at it. The
+  /// controls say `@picked`, this is what sets it, and nothing is sent to
+  /// anything — which is why it is its own verb rather than a `set` of
+  /// something invisible.
+  pick('pick'),
+
   /// Open the device's own controls.
   ///
   /// **A toggle is not enough for a dimmer.** `set` writes one attribute, which
@@ -103,7 +112,8 @@ class TapAction {
         TapDo.scene ||
         TapDo.mode ||
         TapDo.page ||
-        TapDo.device =>
+        TapDo.device ||
+        TapDo.pick =>
           (targetId ?? '').isNotEmpty,
         TapDo.set =>
           (targetId ?? '').isNotEmpty && (attribute ?? '').isNotEmpty,
