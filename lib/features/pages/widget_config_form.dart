@@ -191,6 +191,8 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
       'area_name' => mode == 'area' || mode == 'facet' || mode == 'query',
       'query' => mode == 'query',
       'facet' => mode == 'facet',
+      // Whatever the rule, you can take a kind back out of it.
+      'except' => true,
       _ => true,
     };
   }
@@ -851,7 +853,14 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
     }
     final present = counts.keys.toList()
       ..sort((a, b) => a.label.compareTo(b.label));
-    final value = _config[f.name] as String?;
+    // One or several: the stored value is a bare string when there is one kind
+    // and a list when there are more, so every card written before this reads
+    // unchanged.
+    final raw = _config[f.name];
+    final value = <String>{
+      for (final k in raw is List ? raw : [raw])
+        if (k is String && k.isNotEmpty) k,
+    };
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -860,20 +869,36 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
         if (present.isEmpty)
           _hint('No devices yet, so there are no kinds to pick from.')
         else
-          DropdownButtonFormField<String>(
-            initialValue: present.any((g) => g.key == value) ? value : null,
-            isExpanded: true,
-            decoration: const InputDecoration(
-                isDense: true, border: OutlineInputBorder()),
-            items: [
+          // Chips rather than a dropdown, because a panel can want more than
+          // one kind: a room's "Lights" wants the lamps and the switches that
+          // are lights in everything but their `device_type`.
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
               for (final g in present)
-                DropdownMenuItem(
-                  value: g.key,
-                  child: Text('${g.label} · ${counts[g]}'),
+                FilterChip(
+                  label: Text('${g.label} · ${counts[g]}'),
+                  selected: value.contains(g.key),
+                  onSelected: (on) {
+                    final next = {...value};
+                    if (on) {
+                      next.add(g.key);
+                    } else {
+                      next.remove(g.key);
+                    }
+                    // One kind stays a bare string, so a card edited here and
+                    // read by an older build still means what it says.
+                    final picked = [
+                      for (final g in present)
+                        if (next.contains(g.key)) g.key,
+                    ];
+                    _set(f.name, picked.length == 1 ? picked.first : picked);
+                  },
                 ),
             ],
-            onChanged: (v) => _set(f.name, v),
           ),
+        if (value.isEmpty) _hint('Nothing picked — this shows nothing.'),
         _help(f),
       ],
     );

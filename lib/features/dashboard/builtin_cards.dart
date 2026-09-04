@@ -114,6 +114,14 @@ List<DeviceState> selectDevicesForConfig(
       }
       break;
     case 'facet':
+      // **More than one kind, because a room is not one kind.**
+      //
+      // A "Lights" panel on a room page wants the lamps AND the switches that
+      // are lights in everything but their `device_type` — a Lutron switch
+      // called *Holiday Lights* is a light to the person looking at it and a
+      // `switch` to the house. One kind per panel made that unsayable.
+      //
+      // A single key still works: every card written before this has one.
       // "Every light in the house", as a kind rather than as a search.
       //
       // Matched on the *group* a device's facet belongs to, which is the same
@@ -121,8 +129,12 @@ List<DeviceState> selectDevicesForConfig(
       // facet instead would select `light` and quietly leave out the dimmable
       // and colour ones — the same off-by-five this mode exists to fix, in a
       // new costume.
-      final group = DeviceFacetGroup.fromKey(config['facet'] as String?);
-      selected = group == null
+      final raw = config['facet'];
+      final wanted = <DeviceFacetGroup>{
+        for (final key in raw is List ? raw : [raw])
+          if (DeviceFacetGroup.fromKey(key as String?) case final g?) g,
+      };
+      selected = wanted.isEmpty
           // An unknown kind selects nothing, rather than everything. Core does
           // not police the vocabulary (it cannot compute facets), so a card
           // written by a newer client can arrive here naming a kind this build
@@ -131,7 +143,7 @@ List<DeviceState> selectDevicesForConfig(
           ? const []
           : base
               .where((device) =>
-                  facetGroupOf(facetOf(device, device.schema)) == group)
+                  wanted.contains(facetGroupOf(facetOf(device, device.schema))))
               .toList();
       break;
     case 'query':
@@ -180,6 +192,23 @@ List<DeviceState> selectDevicesForConfig(
           .where((device) => normalizeAreaName(device.effectiveArea) == within)
           .toList();
     }
+  }
+
+  // **"Everything else here" has to mean else.**
+  //
+  // The room page's list asked for everything in the room, and the lights
+  // panel above it asked for the room's lights, so every lamp was drawn twice
+  // under a heading promising it would not be. Nothing let a selection say
+  // *except the kinds already shown*.
+  final except = <DeviceFacetGroup>{
+    for (final key in (config['except'] as List?) ?? const [])
+      if (DeviceFacetGroup.fromKey(key as String?) case final g?) g,
+  };
+  if (except.isNotEmpty) {
+    selected = selected
+        .where((device) =>
+            !except.contains(facetGroupOf(facetOf(device, device.schema))))
+        .toList();
   }
 
   // Exceptions, applied after the rule and before everything else.
@@ -2961,6 +2990,34 @@ const _selectionFields = [
   WidgetConfigField('area_name', WidgetConfigKind.areaName),
   WidgetConfigField('facet', WidgetConfigKind.facet, label: 'Kind'),
   WidgetConfigField('query', WidgetConfigKind.text),
+  // Whatever the rule selects, minus these. "Everything else here" on the room
+  // page meant everything, so every lamp appeared under it AND in the lights
+  // panel above it — under a heading that promised otherwise.
+  WidgetConfigField('except', WidgetConfigKind.choices,
+      label: 'Except',
+      options: [
+        'lights',
+        'switches',
+        'outlets',
+        'fans',
+        'media',
+        'scenes',
+        'buttons',
+        'covers',
+        'locks',
+        'doors_windows',
+        'garage',
+        'motion',
+        'environment',
+        'power',
+        'safety',
+        'climate',
+        'timers',
+        'sirens',
+        'sensors',
+        'other',
+      ],
+      help: 'Kinds another panel is already showing.'),
   WidgetConfigField('limit', WidgetConfigKind.integer),
   WidgetConfigField('show_offline', WidgetConfigKind.boolean),
 ];
@@ -2977,7 +3034,13 @@ String? _validateSelection(Map<String, dynamic> c) {
   }
   // And `facet` the same way. Core rejects the whole dashboard on the first
   // invalid widget, so this has to mirror it exactly.
-  if (mode == 'facet' && (c['facet'] as String?)?.trim().isNotEmpty != true) {
+  // One kind or several: the stored value is a bare string for one and a list
+  // for more, so a card written before this reads unchanged.
+  final facet = c['facet'];
+  final hasFacet = facet is List
+      ? facet.any((f) => f is String && f.trim().isNotEmpty)
+      : (facet as String?)?.trim().isNotEmpty == true;
+  if (mode == 'facet' && !hasFacet) {
     return 'Pick a kind.';
   }
   // NOTE: manual mode with an empty device_ids is intentionally allowed — core

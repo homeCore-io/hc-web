@@ -47,6 +47,7 @@ List<DeviceState> _select(Map<String, dynamic> config) =>
     selectDevicesForConfig(_house, config);
 
 void main() {
+  _kindsAndExceptions();
   _narrowing();
   group('area selection', () {
     test('a normalized area name matches', () {
@@ -253,5 +254,89 @@ void _narrowing() {
       'area_name': 'attic',
     });
     expect(out, isEmpty);
+  });
+}
+
+/// **"Everything else here" has to mean else.**
+///
+/// The room page's list asked for everything in the room and the lights panel
+/// above it asked for the room's lights, so every lamp was drawn twice — under
+/// a heading promising it would not be. And a Lutron switch called *Holiday
+/// Lights* is a light to the person looking at it and a `switch` to the house,
+/// which one kind per panel could not express. John: *"Lights area shows some
+/// lights but not all and then they are duplicated in everything else here."*
+void _kindsAndExceptions() {
+  DeviceState make(String id, String type, Map<String, dynamic> state) =>
+      DeviceState(
+        id: id,
+        pluginId: 'plugin.test',
+        name: id,
+        area: 'living_room',
+        deviceType: type,
+        available: true,
+        state: state,
+      );
+
+  final room = [
+    make('lamp', 'light', const {'on': true, 'brightness_pct': 80}),
+    make('holiday', 'switch', const {'on': false}),
+    make('lock', 'lock', const {'locked': true}),
+  ];
+
+  group('more than one kind', () {
+    test('a list takes all of them', () {
+      final out = selectDevicesForConfig(room, const {
+        'selection_mode': 'facet',
+        'facet': ['lights', 'switches'],
+      });
+      expect(out.map((d) => d.id), ['lamp', 'holiday']);
+    });
+
+    test('and a bare string still means the one', () {
+      // Every card written before this stores a string.
+      final out = selectDevicesForConfig(room, const {
+        'selection_mode': 'facet',
+        'facet': 'lights',
+      });
+      expect(out.map((d) => d.id), ['lamp']);
+    });
+
+    test('a kind nothing knows selects nothing, not everything', () {
+      final out = selectDevicesForConfig(room, const {
+        'selection_mode': 'facet',
+        'facet': ['nonsense'],
+      });
+      expect(out, isEmpty);
+    });
+  });
+
+  group('except', () {
+    test('takes a kind back out of whatever the rule selected', () {
+      final out = selectDevicesForConfig(room, const {
+        'selection_mode': 'area',
+        'area_name': 'living_room',
+        'except': ['lights', 'switches'],
+      });
+      expect(out.map((d) => d.id), ['lock']);
+    });
+
+    test('applies to a facet rule too, and to no rule at all', () {
+      expect(
+        selectDevicesForConfig(room, const {
+          'selection_mode': 'facet',
+          'facet': ['lights', 'switches'],
+          'except': ['switches'],
+        }).map((d) => d.id),
+        ['lamp'],
+      );
+      expect(
+        selectDevicesForConfig(room, const {
+          'selection_mode': 'area',
+          'area_name': 'living_room',
+        }).length,
+        3,
+        reason: 'no `except` changes nothing, as on every card before this',
+      );
+    });
   });
 }
