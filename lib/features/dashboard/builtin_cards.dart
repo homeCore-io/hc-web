@@ -21,6 +21,7 @@ import 'toggle_element.dart';
 import 'worth_knowing_element.dart';
 import 'plugin_render_view.dart';
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
@@ -32,6 +33,7 @@ import '../../core/api/history_api.dart';
 import '../../core/text/humanize.dart';
 import '../../core/dashboard/gauge_spec.dart';
 import '../../core/providers/dashboard_vocabulary_provider.dart';
+import '../../core/dashboard/room_scope.dart';
 import '../../core/dashboard/widget_registry.dart';
 import 'camera_card.dart';
 import '../../core/devices/metrics.dart';
@@ -159,6 +161,25 @@ List<DeviceState> selectDevicesForConfig(
             .toList();
       }
       break;
+  }
+
+  // **A room is a narrowing, not only a mode.**
+  //
+  // The modes were exclusive: *every light in the house* or *everything in the
+  // kitchen*, never *the lights in the kitchen*. One room page serving fifteen
+  // rooms wants exactly that combination for every panel on it, and a page
+  // cannot say it by picking one mode.
+  //
+  // So `area_name` narrows a facet or a query when it is set. `area` mode is
+  // untouched — there the room IS the rule — and a card that names no room
+  // behaves exactly as it did, which is every card written before this.
+  if (selectionMode == 'facet' || selectionMode == 'query') {
+    final within = normalizeAreaName(config['area_name'] as String?);
+    if (within.isNotEmpty) {
+      selected = selected
+          .where((device) => normalizeAreaName(device.effectiveArea) == within)
+          .toList();
+    }
   }
 
   // Exceptions, applied after the rule and before everything else.
@@ -349,37 +370,55 @@ class _DeviceGridWidget extends ConsumerWidget {
             : compact
                 ? 160.0
                 : 180.0;
-        final columns =
-            (constraints.maxWidth / targetWidth).floor().clamp(1, 4);
+        final fits = (constraints.maxWidth / targetWidth).floor().clamp(1, 4);
+        // **Never more columns than there are things to put in them.**
+        //
+        // The count came from the box alone, so one device in a wide box was
+        // given a quarter of it — 168px, in which "Overhead" broke across two
+        // lines mid-word. Found on the room page, where a room with one light
+        // is the ordinary case rather than the edge one.
+        final columns = devices.isEmpty ? fits : math.min(fits, devices.length);
+        // And a tile does not grow without limit to fill the room it was given:
+        // one device across 723px would be a card, not a tile.
+        final widest = columns * targetWidth * 1.6 + (columns - 1) * 12;
         return _WithSelectionSummary(
           selection: selection,
-          child: GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: devices.length,
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: columns,
-              mainAxisSpacing: 12,
-              crossAxisSpacing: 12,
-              childAspectRatio: veryCompact ? 1.9 : 1.7,
+          child: Align(
+            alignment: Alignment.topLeft,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: math.min(constraints.maxWidth, widest),
+              ),
+              child: GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: devices.length,
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: columns,
+                  mainAxisSpacing: 12,
+                  crossAxisSpacing: 12,
+                  childAspectRatio: veryCompact ? 1.9 : 1.7,
+                ),
+                itemBuilder: (context, index) {
+                  final device = devices[index];
+                  final notifier = ref.read(devicesProvider.notifier);
+                  return HcTile(
+                    device: device,
+                    onTap: () => showDeviceSheet(context, device.id),
+                    // Media players open their sheet for transport controls; a bare
+                    // on/off would be wrong for a speaker.
+                    onToggle: device.isMediaPlayer
+                        ? null
+                        : () =>
+                            notifier.command(device.id, {'on': !isOn(device)}),
+                    onLevel: device.isMediaPlayer
+                        ? null
+                        : (v) => notifier.command(
+                            device.id, {'brightness_pct': (v * 100).round()}),
+                  );
+                },
+              ),
             ),
-            itemBuilder: (context, index) {
-              final device = devices[index];
-              final notifier = ref.read(devicesProvider.notifier);
-              return HcTile(
-                device: device,
-                onTap: () => showDeviceSheet(context, device.id),
-                // Media players open their sheet for transport controls; a bare
-                // on/off would be wrong for a speaker.
-                onToggle: device.isMediaPlayer
-                    ? null
-                    : () => notifier.command(device.id, {'on': !isOn(device)}),
-                onLevel: device.isMediaPlayer
-                    ? null
-                    : (v) => notifier.command(
-                        device.id, {'brightness_pct': (v * 100).round()}),
-              );
-            },
           ),
         );
       },
@@ -1364,6 +1403,15 @@ class _HistoryChartWidget extends ConsumerWidget {
         message: 'Choose a device and attribute for this history chart.',
       );
     }
+    // A room reference that survived resolution means this room has nothing
+    // reporting the attribute — the kitchen has no thermometer. Saying that is
+    // the point; printing "No temperature history found for @room" is the page
+    // leaking its own notation at somebody who never typed it.
+    if (deviceId == roomToken) {
+      return _PlaceholderWidget(
+        message: 'Nothing in this room reports $attribute.',
+      );
+    }
 
     final historyAsync = ref
         .watch(_dashboardHistoryProvider((deviceId: deviceId, limit: limit)));
@@ -1837,6 +1885,8 @@ void registerBuiltinDashboardWidgets() {
             min: 1,
             max: 40,
             help: 'The rest are counted under the list rather than hidden.'),
+        WidgetConfigField('area_name', WidgetConfigKind.areaName,
+            label: 'Only in', help: 'Leave unset for the whole house.'),
         WidgetConfigField('faults_only', WidgetConfigKind.boolean,
             label: 'Only what is wrong',
             help: 'Off shows the good news too — a panel that goes blank when '

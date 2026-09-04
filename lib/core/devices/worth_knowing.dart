@@ -16,6 +16,7 @@
 library;
 
 import '../models/device_state.dart';
+import 'presentation.dart' show normalizeAreaName;
 
 /// How loudly one line asks to be read.
 enum Attention {
@@ -57,7 +58,17 @@ bool _isFalse(Object? v) => v == false;
 List<Knowing> worthKnowing(
   Iterable<DeviceState> devices, {
   double lowBattery = 50,
+  String? room,
 }) {
+  // Narrowed to one room when asked. The room page wants what needs attention
+  // *here*; the house page wants all of it, and the same rules answer both.
+  if (room != null && room.isNotEmpty) {
+    final want = normalizeAreaName(room);
+    devices = devices
+        .where((d) => normalizeAreaName(d.effectiveArea) == want)
+        .toList();
+  }
+
   final out = <Knowing>[];
   var doorsClosed = 0;
   var sensorsDry = 0;

@@ -47,6 +47,7 @@ List<DeviceState> _select(Map<String, dynamic> config) =>
     selectDevicesForConfig(_house, config);
 
 void main() {
+  _narrowing();
   group('area selection', () {
     test('a normalized area name matches', () {
       final got =
@@ -169,5 +170,88 @@ void main() {
       expect(normalizeAreaName(null), '');
       expect(normalizeAreaName('---'), '');
     });
+  });
+}
+
+/// **A room narrows, it does not only rule.**
+///
+/// The modes were exclusive — *every light in the house*, or *everything in
+/// the kitchen*, never *the lights in the kitchen*. One room page serving
+/// fifteen rooms wants that combination on every panel, and no page could say
+/// it. Found building the room page John asked for: *"All room pages should
+/// have that."*
+void _narrowing() {
+  DeviceState light(String id, String area) => DeviceState(
+        id: id,
+        pluginId: 'plugin.test',
+        name: id,
+        area: area,
+        deviceType: 'light',
+        available: true,
+        state: const {'on': true},
+      );
+  DeviceState lock(String id, String area) => DeviceState(
+        id: id,
+        pluginId: 'plugin.test',
+        name: id,
+        area: area,
+        deviceType: 'lock',
+        available: true,
+        state: const {'locked': true},
+      );
+
+  final house = [
+    light('kitchen_a', 'kitchen'),
+    light('kitchen_b', 'kitchen'),
+    light('office_a', 'office'),
+    lock('kitchen_lock', 'kitchen'),
+  ];
+
+  group('a room narrowing a facet', () {
+    test('keeps only that kind, in only that room', () {
+      final out = selectDevicesForConfig(house, const {
+        'selection_mode': 'facet',
+        'facet': 'lights',
+        'area_name': 'kitchen',
+      });
+      expect(out.map((d) => d.id), ['kitchen_a', 'kitchen_b']);
+    });
+
+    test('and a facet with no room is the whole house, as it always was', () {
+      final out = selectDevicesForConfig(house, const {
+        'selection_mode': 'facet',
+        'facet': 'lights',
+      });
+      expect(out.map((d) => d.id), ['kitchen_a', 'kitchen_b', 'office_a']);
+    });
+  });
+
+  group('a room narrowing a query', () {
+    test('applies after the search, not instead of it', () {
+      final out = selectDevicesForConfig(house, const {
+        'selection_mode': 'query',
+        'query': 'lock',
+        'area_name': 'kitchen',
+      });
+      expect(out.map((d) => d.id), ['kitchen_lock']);
+    });
+  });
+
+  test('area mode is untouched — there the room is the rule', () {
+    final out = selectDevicesForConfig(house, const {
+      'selection_mode': 'area',
+      'area_name': 'kitchen',
+    });
+    expect(out.map((d) => d.id).toSet(),
+        {'kitchen_a', 'kitchen_b', 'kitchen_lock'});
+  });
+
+  test('a room nothing is in selects nothing, not everything', () {
+    final out = selectDevicesForConfig(house, const {
+      'selection_mode': 'facet',
+      'facet': 'lights',
+      'area_name': 'attic',
+    });
+    expect(out, isEmpty);
   });
 }

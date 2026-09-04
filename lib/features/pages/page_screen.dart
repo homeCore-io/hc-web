@@ -26,6 +26,7 @@ import '../../core/dashboard/widget_registry.dart';
 import '../../core/models/dashboard.dart';
 import '../../core/models/device_state.dart';
 import '../../core/providers/dashboards_provider.dart';
+import '../../core/providers/page_room_provider.dart';
 import '../../core/providers/devices_provider.dart';
 import '../../design/components/hc_controls.dart';
 import '../../design/components/hc_dialog.dart';
@@ -50,9 +51,17 @@ import 'widget_palette.dart';
 /// are one surface with a mode, which is the whole difference.
 class PageScreen extends ConsumerStatefulWidget {
   const PageScreen(
-      {super.key, required this.dashboardId, this.designer = false});
+      {super.key, required this.dashboardId, this.designer = false, this.room});
 
   final String dashboardId;
+
+  /// The room this page is being shown for, from the route's `?room=`.
+  ///
+  /// One room page serves every room — `room_field` sends the room rather than
+  /// opening one of fifteen copies — so everything on the page that says
+  /// `@room` resolves against this. Null on a page opened without one, where
+  /// `@room` stays unresolved rather than guessing a room.
+  final String? room;
 
   /// The full-page design surface rather than the house.
   ///
@@ -2303,6 +2312,20 @@ class _PageScreenState extends ConsumerState<PageScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // The room the page is about, put where everything under it can read it.
+    // Overridden here rather than passed down: the config that mentions `@room`
+    // is resolved at the placement seam, several widgets deep, and a parameter
+    // threaded through all of them is a parameter somebody eventually forgets.
+    final body = _build(context);
+    return widget.room == null || widget.room!.isEmpty
+        ? body
+        : ProviderScope(
+            overrides: [pageRoomProvider.overrideWithValue(widget.room)],
+            child: body,
+          );
+  }
+
+  Widget _build(BuildContext context) {
     final t = HcTokens.of(context);
     final async = ref.watch(dashboardsProvider);
     // A page that cannot load must SAY so. `async.value == null` used to cover
