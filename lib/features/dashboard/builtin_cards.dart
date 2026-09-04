@@ -14,9 +14,11 @@ library;
 import 'rooms_card.dart';
 import 'primitive_cards.dart';
 import 'bound_element.dart';
+import 'breakdown_element.dart';
 import 'icon_element.dart';
 import 'slider_element.dart';
 import 'toggle_element.dart';
+import 'worth_knowing_element.dart';
 import 'plugin_render_view.dart';
 import 'dart:async';
 
@@ -1363,10 +1365,23 @@ class _HistoryChartWidget extends ConsumerWidget {
           entries: limited,
           compact: compact,
           timeframeHours: timeframeHours,
+          bare: widgetModel.config['bare'] == true,
         );
       },
     );
   }
+}
+
+/// Whether an axis value sits on the very edge of the plot.
+///
+/// fl_chart draws a label at each interval stop *and* at the data's own min
+/// and max, which on a short range stacks two labels on the same pixels — and
+/// at the ends of the time axis clips the last one against the frame.
+bool _atEdge(double value, TitleMeta meta) {
+  final span = meta.max - meta.min;
+  if (span <= 0) return false;
+  final margin = span * 0.02;
+  return value <= meta.min + margin || value >= meta.max - margin;
 }
 
 class _HistoryChartContent extends ConsumerWidget {
@@ -1376,12 +1391,21 @@ class _HistoryChartContent extends ConsumerWidget {
   final bool compact;
   final int timeframeHours;
 
+  /// Chart only — no chip row above it.
+  ///
+  /// The chips name the device, the attribute and the timeframe you picked in
+  /// the inspector two seconds ago. As a panel on its own that is a caption;
+  /// tucked beside a big reading, as the catalogue's own Sparkline entry does,
+  /// it is four Material chips sitting on a header that already says all of it.
+  final bool bare;
+
   const _HistoryChartContent({
     required this.deviceId,
     required this.attribute,
     required this.entries,
     required this.compact,
     required this.timeframeHours,
+    required this.bare,
   });
 
   @override
@@ -1425,13 +1449,95 @@ class _HistoryChartContent extends ConsumerWidget {
     final minY = values.reduce((a, b) => a < b ? a : b);
     final maxY = values.reduce((a, b) => a > b ? a : b);
     final yPad = (maxY - minY) == 0 ? 1.0 : (maxY - minY) * 0.1;
+    final yRange = (maxY + yPad) - (minY - yPad);
     final latestLabel = latest.value is bool
         ? ((latest.value as bool) ? 'On' : 'Off')
         : latest.value.toString();
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
+    final chart = LineChart(
+      LineChartData(
+        minX: minX,
+        maxX: maxX,
+        minY: isBool ? -0.1 : minY - yPad,
+        maxY: isBool ? 1.1 : maxY + yPad,
+        gridData: FlGridData(
+          show: true,
+          // fl_chart's default grid is a full box with vertical rules, which on
+          // a header band is more ink than the line it frames. Bare gets what
+          // the mockup has: a couple of faint horizontals.
+          drawVerticalLine: !bare,
+          getDrawingHorizontalLine: (_) =>
+              FlLine(color: t.stroke.hairline, strokeWidth: 1),
+          getDrawingVerticalLine: (_) =>
+              FlLine(color: t.stroke.hairline, strokeWidth: 1),
+        ),
+        borderData: FlBorderData(show: !bare),
+        titlesData: FlTitlesData(
+          topTitles:
+              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles:
+              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: isBool ? 36 : 44,
+              // Without an interval fl_chart labels both the axis stops and
+              // the data edge, which on a narrow range prints 70.9 on top of
+              // 71.9. Three gaps is what a header band has room for.
+              interval: isBool ? 1 : (yRange / 3).clamp(0.1, 1e9),
+              getTitlesWidget: (value, meta) {
+                if (isBool) {
+                  if (value == 1) {
+                    return Text('ON', style: t.text.overlineStyle);
+                  }
+                  if (value == 0) {
+                    return Text('OFF', style: t.text.overlineStyle);
+                  }
+                  return const SizedBox.shrink();
+                }
+                // fl_chart labels the axis stops AND the data edge, so a
+                // narrow range printed 70.9 on top of 71.9. The edges are the
+                // two the eye can infer from the line itself.
+                if (_atEdge(value, meta)) return const SizedBox.shrink();
+                return Text(
+                  value.toStringAsFixed(1),
+                  style: t.text.overlineStyle,
+                );
+              },
+            ),
+          ),
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 24,
+              interval: ((maxX - minX) / 3).clamp(1, double.infinity),
+              getTitlesWidget: (value, meta) {
+                if (_atEdge(value, meta)) return const SizedBox.shrink();
+                final dt = DateTime.fromMillisecondsSinceEpoch(value.toInt());
+                final shown = isUtc ? dt.toUtc() : dt.toLocal();
+                return Text(
+                  '${shown.hour.toString().padLeft(2, '0')}:${shown.minute.toString().padLeft(2, '0')}',
+                  style: t.text.overlineStyle,
+                );
+              },
+            ),
+          ),
+        ),
+        lineBarsData: [
+          LineChartBarData(
+            spots: spots,
+            isCurved: !isBool,
+            isStepLineChart: isBool,
+            color: Theme.of(context).colorScheme.primary,
+            barWidth: 2,
+            dotData: FlDotData(show: spots.length <= 24),
+          ),
+        ],
+      ),
+    );
+
+    final head = [
+      if (!bare) ...[
         Wrap(
           spacing: 8,
           runSpacing: 8,
@@ -1443,73 +1549,24 @@ class _HistoryChartContent extends ConsumerWidget {
           ],
         ),
         const SizedBox(height: 8),
-        SizedBox(
-          height: compact ? 180 : 220,
-          child: LineChart(
-            LineChartData(
-              minX: minX,
-              maxX: maxX,
-              minY: isBool ? -0.1 : minY - yPad,
-              maxY: isBool ? 1.1 : maxY + yPad,
-              gridData: const FlGridData(show: true),
-              borderData: FlBorderData(show: true),
-              titlesData: FlTitlesData(
-                topTitles:
-                    const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                rightTitles:
-                    const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                leftTitles: AxisTitles(
-                  sideTitles: SideTitles(
-                    showTitles: true,
-                    reservedSize: isBool ? 36 : 44,
-                    getTitlesWidget: (value, meta) {
-                      if (isBool) {
-                        if (value == 1) {
-                          return Text('ON', style: t.text.overlineStyle);
-                        }
-                        if (value == 0) {
-                          return Text('OFF', style: t.text.overlineStyle);
-                        }
-                        return const SizedBox.shrink();
-                      }
-                      return Text(
-                        value.toStringAsFixed(1),
-                        style: t.text.overlineStyle,
-                      );
-                    },
-                  ),
-                ),
-                bottomTitles: AxisTitles(
-                  sideTitles: SideTitles(
-                    showTitles: true,
-                    reservedSize: 24,
-                    interval: ((maxX - minX) / 3).clamp(1, double.infinity),
-                    getTitlesWidget: (value, meta) {
-                      final dt =
-                          DateTime.fromMillisecondsSinceEpoch(value.toInt());
-                      final shown = isUtc ? dt.toUtc() : dt.toLocal();
-                      return Text(
-                        '${shown.hour.toString().padLeft(2, '0')}:${shown.minute.toString().padLeft(2, '0')}',
-                        style: t.text.overlineStyle,
-                      );
-                    },
-                  ),
-                ),
-              ),
-              lineBarsData: [
-                LineChartBarData(
-                  spots: spots,
-                  isCurved: !isBool,
-                  isStepLineChart: isBool,
-                  color: Theme.of(context).colorScheme.primary,
-                  barWidth: 2,
-                  dotData: FlDotData(show: spots.length <= 24),
-                ),
-              ],
-            ),
-          ),
-        ),
       ],
+    ];
+
+    // The plot took a fixed 180/220px whatever box it was placed in, so a
+    // chart in a header band drew straight through the rule under it. Where
+    // the height is known the chart takes what is left; the fixed height is
+    // the fallback for an unbounded column, not the rule.
+    return LayoutBuilder(
+      builder: (context, box) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ...head,
+          if (box.maxHeight.isFinite)
+            Expanded(child: chart)
+          else
+            SizedBox(height: compact ? 180 : 220, child: chart),
+        ],
+      ),
     );
   }
 }
@@ -1694,6 +1751,62 @@ void registerBuiltinDashboardWidgets() {
       builder: (context, a) => const _SceneRowWidget(),
     ),
     WidgetDescriptor(
+      type: 'device_breakdown',
+      title: 'Made of',
+      description: 'What a house is made of — the commonest kinds, rooms or '
+          'plugins as bars you can compare at a glance.',
+      icon: Icons.bar_chart_outlined,
+      sizeHint: const WidgetSizeHint(
+          minW: 3,
+          minH: 2,
+          recommendedW: 4,
+          recommendedH: 2,
+          minWidth: 220,
+          minHeight: 80),
+      configFields: const [
+        WidgetConfigField('group_by', WidgetConfigKind.choice,
+            label: 'Count by',
+            options: ['kind', 'room', 'plugin'],
+            defaultValue: 'kind'),
+        WidgetConfigField('limit', WidgetConfigKind.integer,
+            label: 'Bars',
+            defaultValue: 8,
+            min: 1,
+            max: 40,
+            help: 'The biggest groups. The tail is left off rather than drawn '
+                'as slivers.'),
+        WidgetConfigField('ink', WidgetConfigKind.ink, label: 'Bar colour'),
+      ],
+      builder: (context, a) => BreakdownElement(config: a.config),
+    ),
+    WidgetDescriptor(
+      type: 'worth_knowing',
+      title: 'Worth knowing',
+      description: 'What wants attention — open doors, unlocked locks, water, '
+          'flat batteries — and the reassurance that the rest is fine.',
+      icon: Icons.checklist_outlined,
+      sizeHint: const WidgetSizeHint(
+          minW: 3,
+          minH: 2,
+          recommendedW: 4,
+          recommendedH: 2,
+          minWidth: 220,
+          minHeight: 80),
+      configFields: const [
+        WidgetConfigField('limit', WidgetConfigKind.integer,
+            label: 'Lines',
+            defaultValue: 6,
+            min: 1,
+            max: 40,
+            help: 'The rest are counted under the list rather than hidden.'),
+        WidgetConfigField('faults_only', WidgetConfigKind.boolean,
+            label: 'Only what is wrong',
+            help: 'Off shows the good news too — a panel that goes blank when '
+                'the house is fine looks broken.'),
+      ],
+      builder: (context, a) => WorthKnowingElement(config: a.config),
+    ),
+    WidgetDescriptor(
       type: 'event_feed',
       title: 'Event feed',
       icon: Icons.event_note_outlined,
@@ -1817,6 +1930,10 @@ void registerBuiltinDashboardWidgets() {
         WidgetConfigField('attribute', WidgetConfigKind.attribute,
             required: true),
         WidgetConfigField('timeframe_hours', WidgetConfigKind.integer),
+        WidgetConfigField('bare', WidgetConfigKind.boolean,
+            label: 'Chart only',
+            help: 'Drops the chips naming the device and attribute — they '
+                'repeat what you just chose here.'),
       ],
       // Core requires both; a chart missing either 400s the whole dashboard.
       validate: (c) => (c['device_id'] as String?)?.isNotEmpty == true &&

@@ -334,7 +334,10 @@ final dashboardTemplatesProvider =
       currentUser?['username'] as String? ??
       'local_user';
   try {
-    return ref.read(dashboardsApiProvider).listTemplates();
+    // Awaited inside the try on purpose: without it the future escapes before
+    // it fails, the catch never runs, and the 404 fallback to the built-in
+    // templates below is dead code on exactly the servers it exists for.
+    return await ref.read(dashboardsApiProvider).listTemplates();
   } on DioException catch (error) {
     if (error.response?.statusCode == 404) {
       return DashboardTemplateFactory.templates(ownerUserId: owner);

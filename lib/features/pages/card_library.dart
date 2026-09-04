@@ -292,7 +292,7 @@ class _CardLibraryState extends ConsumerState<CardLibrary> {
       // beside a number rather than the panel you hang on a wall. The same
       // element, as the arc and the bar are the same gauge.
       _Entry('Sparkline', 'history_chart', 'a line to tuck beside a value',
-          {'timeframe_hours': 6, ..._bareCard}),
+          {'timeframe_hours': 6, 'bare': true, ..._bareCard}),
       _Entry('Chart', 'history_chart', 'a value over time',
           {'timeframe_hours': 24}),
       _Entry('Numbers', 'stat_summary', 'counts of things', {
@@ -331,8 +331,19 @@ class _CardLibraryState extends ConsumerState<CardLibrary> {
     _Group('The house', [
       _Entry(
           'At a glance', 'house_status_hero', 'lights, climate, security', {}),
+      // A feed answers *what just happened* — endless, mostly nothing, untrue
+      // by the time you read it. This answers *is anything wrong*, which has
+      // an end. A house page usually wants the second and I had given it the
+      // first.
+      _Entry('Worth knowing', 'worth_knowing', 'what wants attention',
+          {'limit': 6}),
       _Entry('Activity', 'event_feed', 'what just happened',
           {'limit': 20, 'group_by': 'none'}),
+      // Bars rather than counters: `stat_summary` gives you the numbers and
+      // leaves the comparing undone, which is the only thing a breakdown is
+      // for.
+      _Entry('Made of', 'device_breakdown', 'the commonest kinds, as bars',
+          {'group_by': 'kind', 'limit': 8}),
       _Entry('Modes', 'mode_chips', 'day, night, away', {}),
       _Entry('Scenes', 'scene_row', 'one tap each', {}),
       _Entry('Now playing', 'media_player', 'speakers and TVs',
