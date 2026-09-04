@@ -420,7 +420,14 @@ class _Toggle extends StatelessWidget {
           ),
           child: AnimatedAlign(
             duration: t.motion.d(t.motion.fast),
-            curve: t.motion.emphasized,
+            // **A switch knob does not overshoot.** `emphasized` is
+            // `easeOutBack` on three of the four skins, so the knob sprang past
+            // the end of its track and settled back — at this size it reads as
+            // a glitch rather than as physics, and in a list of twenty rows it
+            // is twenty of them. John: *"the 'bouncing' effect in the list
+            // views in everything else and even the home page. I don't like
+            // it."*
+            curve: t.motion.curve,
             alignment: on ? Alignment.centerRight : Alignment.centerLeft,
             child: Container(
               width: h - 6,
