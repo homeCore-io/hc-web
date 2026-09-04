@@ -177,8 +177,10 @@ GoRouter _buildRouter(Ref ref) {
           // for the old /dashboards CMS. Same document, same grid engine.
           GoRoute(
             path: '/pages/:id',
-            builder: (_, state) =>
-                PageScreen(dashboardId: state.pathParameters['id']!),
+            builder: (_, state) => PageScreen(
+              dashboardId: state.pathParameters['id']!,
+              room: state.uri.queryParameters['room'],
+            ),
           ),
           // The old top-level paths for what are now Administration sections.
           // Kept as redirects rather than deleted: they were live, they are in
@@ -215,15 +217,18 @@ GoRouter _buildRouter(Ref ref) {
           // goes to the list, which is where you would have been heading.
           GoRoute(
             path: '/dashboards/new/edit',
-            redirect: (_, state) => retiredDashboardRoute(state.uri.path),
+            redirect: (_, state) =>
+                retiredDashboardRoute(state.uri.path, query: state.uri.query),
           ),
           GoRoute(
             path: '/dashboards/:id',
-            redirect: (_, state) => retiredDashboardRoute(state.uri.path),
+            redirect: (_, state) =>
+                retiredDashboardRoute(state.uri.path, query: state.uri.query),
           ),
           GoRoute(
             path: '/dashboards/:id/edit',
-            redirect: (_, state) => retiredDashboardRoute(state.uri.path),
+            redirect: (_, state) =>
+                retiredDashboardRoute(state.uri.path, query: state.uri.query),
           ),
           GoRoute(
               path: '/automations/groups',

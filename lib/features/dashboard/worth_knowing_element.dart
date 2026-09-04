@@ -44,12 +44,16 @@ class WorthKnowingElement extends ConsumerWidget {
           style: t.text.captionStyle.copyWith(color: t.surface.onBaseMuted));
     }
 
-    var items = worthKnowing(devices);
+    var items = worthKnowing(devices,
+        room: (config['area_name'] as String? ?? '').trim());
     if (_quietWhenWell) {
       items = items.where((i) => i.level != Attention.good).toList();
     }
     if (items.isEmpty) {
-      return Text('Nothing needs you.',
+      return Text(
+          (config['area_name'] as String? ?? '').trim().isEmpty
+              ? 'Nothing needs you.'
+              : 'Nothing needs you in here.',
           style: t.text.captionStyle.copyWith(color: t.accent.success));
     }
 

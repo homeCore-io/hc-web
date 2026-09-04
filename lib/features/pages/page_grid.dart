@@ -4,6 +4,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/dashboard/canvas_view.dart';
 import '../../core/dashboard/card_style.dart';
@@ -14,6 +15,9 @@ import '../../core/dashboard/group_frame.dart';
 import '../../core/dashboard/groups.dart';
 import '../../core/dashboard/tap_action.dart';
 import '../../core/dashboard/widget_registry.dart';
+import '../../core/dashboard/room_scope.dart';
+import '../../core/providers/devices_provider.dart';
+import '../../core/providers/page_room_provider.dart';
 import '../../core/dashboard/wiring.dart';
 import '../../core/models/dashboard.dart';
 import '../../design/components/hc_surface.dart';
@@ -2054,6 +2058,33 @@ class _Cell extends StatelessWidget {
   final ValueChanged<Offset> onResizeUpdate;
   final VoidCallback onResizeEnd;
 
+  /// One element, drawn from the config it should actually be given.
+  Widget _element(BuildContext context, WidgetDescriptor descriptor,
+          Map<String, dynamic> config) =>
+      _maybeTransparent(
+        descriptor,
+        config,
+        Tappable(
+          config: config,
+          editing: editing,
+          child: descriptor.builder(
+            context,
+            WidgetRenderArgs(
+              id: model!.id,
+              title: model!.title,
+              subtitle: model!.subtitle,
+              config: config,
+              w: item.w,
+              h: item.h,
+              sizeHint: descriptor.sizeHint,
+              editing: editing,
+              entered: entered,
+              onConfigChanged: onConfigChanged,
+            ),
+          ),
+        ),
+      );
+
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
@@ -2079,29 +2110,29 @@ class _Cell extends StatelessWidget {
                 // label, an icon and a photograph all become live without any
                 // of them knowing the property exists — the same reason the
                 // binding model wraps rather than threads.
-                : _maybeTransparent(
-                    descriptor,
-                    model!.config,
-                    Tappable(
-                      config: model!.config,
-                      editing: editing,
-                      child: descriptor.builder(
-                        context,
-                        WidgetRenderArgs(
-                          id: model!.id,
-                          title: model!.title,
-                          subtitle: model!.subtitle,
-                          config: model!.config,
-                          w: item.w,
-                          h: item.h,
-                          sizeHint: descriptor.sizeHint,
-                          editing: editing,
-                          entered: entered,
-                          onConfigChanged: onConfigChanged,
+                //
+                // `@room` is resolved at this same seam, and for the same
+                // reason: one room page is about whichever room you opened it
+                // for, and every element on it should receive a real device id
+                // and a real area exactly as if somebody had typed them.
+                //
+                // The cheap check first. An element that never says `@room`
+                // takes the path it always took and does not watch the device
+                // list, so a page without a room costs precisely nothing.
+                : !mentionsRoom(model!.config)
+                    ? _element(context, descriptor, model!.config)
+                    : Consumer(
+                        builder: (context, ref, _) => _element(
+                          context,
+                          descriptor,
+                          resolveRoomRefs(
+                            model!.config,
+                            room: ref.watch(pageRoomProvider),
+                            devices:
+                                ref.watch(devicesProvider).value ?? const [],
+                          ),
                         ),
-                      ),
-                    ),
-                  );
+                      );
 
     // How much frame the element asked for. A watermarked stand-in during a
     // drag always takes the full card, whatever it is the rest of the time —

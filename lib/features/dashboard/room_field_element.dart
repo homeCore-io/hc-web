@@ -23,8 +23,10 @@ import '../../design/tokens.dart';
 /// as fill. A room with no lights stays dark rather than being drawn as though
 /// its lights were off, because those are different facts.
 ///
-/// Tapping a room opens a page. Which page is the author's choice and is the
-/// same for every room — a house has one room page, not fifteen — so the room
+/// Tapping a room opens a page, with the room in the query. Which page is the
+/// author's choice and is the same for every room — a house has one room page,
+/// not fifteen, and everything on it that says `@room` resolves against what is
+/// sent here. So the room
 /// travels as a query rather than as fifteen separate links.
 class RoomFieldElement extends ConsumerWidget {
   const RoomFieldElement({super.key, required this.config});
@@ -82,7 +84,9 @@ class RoomFieldElement extends ConsumerWidget {
                 compact: cell.w < 150 || cell.h < 84,
                 onTap: page.isEmpty
                     ? null
-                    : () => context.go('/dashboards/$page?room=${cell.key}'),
+                    // `/pages` directly: `/dashboards/:id` is a redirect, and
+                    // one more hop is one more place the room can be dropped.
+                    : () => context.go('/pages/$page?room=${cell.key}'),
               ),
             ),
         ],

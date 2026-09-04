@@ -12,6 +12,7 @@ import '../../core/models/scene.dart';
 import '../../core/providers/areas_provider.dart';
 import '../../core/providers/scenes_provider.dart';
 import '../../core/providers/dashboards_provider.dart';
+import '../../core/dashboard/room_scope.dart';
 import '../../core/providers/devices_provider.dart';
 import '../../core/text/humanize.dart';
 import '../../design/tokens.dart';
@@ -184,7 +185,10 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
     if (mode == null) return true;
     return switch (f.name) {
       'device_ids' => mode == 'manual',
-      'area_name' => mode == 'area',
+      // Shown for all three, because a room narrows a facet or a query as well
+      // as being a rule of its own — "the lights in this room" is a thing a
+      // page needs to say and could not.
+      'area_name' => mode == 'area' || mode == 'facet' || mode == 'query',
       'query' => mode == 'query',
       'facet' => mode == 'facet',
       _ => true,
@@ -761,16 +765,25 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
                   'Manual/Query instead.')
         else
           DropdownButtonFormField<String>(
-            initialValue: names.contains(value) ? value : null,
+            initialValue:
+                value == roomToken || names.contains(value) ? value : null,
             isExpanded: true,
             decoration: const InputDecoration(
                 isDense: true, border: OutlineInputBorder()),
             items: [
+              // First, because it is the answer a room page wants and naming
+              // one of fifteen rooms on the page that serves all fifteen is
+              // the mistake this exists to prevent.
+              const DropdownMenuItem(
+                  value: roomToken, child: Text('This room')),
               for (final n in names)
                 DropdownMenuItem(value: n, child: Text(humanize(n))),
             ],
             onChanged: (v) => _set(f.name, v),
           ),
+        if (value == roomToken)
+          _hint('Whichever room the page was opened for. Room cards pass it; '
+              'a page opened without one leaves this unresolved.'),
         _help(f),
       ],
     );

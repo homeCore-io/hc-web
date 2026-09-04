@@ -9,7 +9,7 @@
 library;
 
 /// Where a retired `/dashboards…` URL should land, or null to carry on.
-String? retiredDashboardRoute(String path) {
+String? retiredDashboardRoute(String path, {String? query}) {
   final parts = path.split('/').where((p) => p.isNotEmpty).toList();
   if (parts.isEmpty || parts.first != 'dashboards') return null;
 
@@ -25,5 +25,10 @@ String? retiredDashboardRoute(String path) {
   // `/dashboards/:id` and `/dashboards/:id/edit` both land on the one surface:
   // /pages is view and edit in a mode, so the distinction has no target left.
   // Arriving in view mode is the safe half of that.
-  return '/pages/${parts[1]}';
+  //
+  // The query rides along. `room_field` sends `?room=` so one room page can be
+  // about the room you opened it for, and a redirect that dropped it turned
+  // every room cell into the same page about the same room.
+  final tail = (query == null || query.isEmpty) ? '' : '?$query';
+  return '/pages/${parts[1]}$tail';
 }
