@@ -187,6 +187,17 @@ class _Bulb extends StatelessWidget {
     final t = HcTokens.of(context);
     final size = (t.density.controlHeight * 0.78).clamp(30.0, 42.0);
 
+    // **The glyph, not a block with a glyph in it.**
+    //
+    // A filled disc behind every icon put a second shape inside a tile that is
+    // already a shape, and a row of them reads as a row of blocks rather than
+    // as a row of lights. John: *"The block icons in lights and switches could
+    // be done differently I don't like blocks."*
+    //
+    // What the disc was carrying is kept where it belongs: a lit device gets a
+    // soft halo of its own colour — the light, not a container for it — and an
+    // unreachable one keeps its ring, because offline is a state that has to be
+    // visible and a dimmed glyph alone is not enough.
     return AnimatedContainer(
       duration: t.motion.d(t.motion.base),
       curve: t.motion.curve,
@@ -194,15 +205,21 @@ class _Bulb extends StatelessWidget {
       height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: on ? accent.withValues(alpha: 0.22) : t.surface.sunken,
         border: offline
             ? Border.all(color: t.accent.offline.withValues(alpha: 0.5))
+            : null,
+        // Through the skin's own glow, not a hand-picked shadow: Control Room
+        // says *near-black, hairlines, no bloom* by setting strength to 0, and
+        // a widget with its own BoxShadow overrides that silently.
+        boxShadow: on
+            ? t.glow.halo(accent,
+                blur: size * 0.5, alpha: 0.45, spread: -size * 0.14)
             : null,
       ),
       // The glyph itself changes weight with state — see HcIcons.
       child: Icon(
         HcIcons.forFacet(iconFacet, on: on),
-        size: size * 0.5,
+        size: size * 0.62,
         color: colour,
       ),
     );
@@ -440,7 +457,14 @@ String summarise(DeviceState d) {
     };
     bits.add('${tmp.toStringAsFixed(1)}°$unit');
   }
-  if (s['humidity'] case final num h) bits.add('${h.round()}%');
+  // Both spellings. YoLink publishes `humidity_pct` and declares it in its
+  // schema; reading only `humidity` dropped the reading from every one of
+  // them, so a sensor that plainly reports humidity showed none. John: *"The
+  // yolink temperature sensors report humidity but I don't see a humidity
+  // device listed."*
+  if ((s['humidity'] ?? s['humidity_pct']) case final num h) {
+    bits.add('${h.round()}%');
+  }
   if (s['position'] case final num p) bits.add('${p.round()}% open');
 
   // A fan's speed is the reading. `speed_pct` is deliberately not shown: it is

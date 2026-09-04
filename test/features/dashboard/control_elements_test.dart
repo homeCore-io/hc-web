@@ -138,16 +138,31 @@ void main() {
           reason: 'bytes, not floats');
     });
 
-    testWidgets('a bulb that registered nothing cannot be spun',
+    testWidgets('a bulb that registered nothing is not drawn at all',
         (tester) async {
+      // It used to draw an inert wheel. On the room page's details panel that
+      // meant a colour wheel under a heading naming a light with no colour —
+      // John: *"color wheel and warmth are showing for lights that don't
+      // support those features."* A control for something this light cannot
+      // do is not a control.
       final stub = await _pump(
         tester,
         const ColourWheelElement(config: {'device_id': 'bulb'}),
         device: _bulb(),
       );
-      final box = tester.getRect(find.byType(ColourWheel));
-      await _spinTo(tester, Offset(box.right - 2, box.center.dy));
+      expect(find.byType(ColourWheel), findsNothing);
       expect(stub.sent, isEmpty);
+    });
+
+    testWidgets('but it is drawn in the designer, where it is placed',
+        (tester) async {
+      // A placement you cannot see is a placement you cannot arrange.
+      await _pump(
+        tester,
+        const ColourWheelElement(config: {'device_id': 'bulb'}, editing: true),
+        device: _bulb(),
+      );
+      expect(find.byType(ColourWheel), findsOneWidget);
     });
 
     testWidgets('an unavailable bulb cannot be spun, and says so',
@@ -242,19 +257,25 @@ void main() {
       expect(find.text('4000 K'), findsOneWidget);
     });
 
-    testWidgets('a bulb with no tunable white cannot be dragged',
+    testWidgets('a bulb with no tunable white is not drawn at all',
         (tester) async {
       final stub = await _pump(
         tester,
         const WarmthElement(config: {'device_id': 'bulb'}),
         device: _bulb(schema: _xyBulb),
       );
-      final box = tester.getRect(find.byType(WarmthBar));
-      final gesture = await tester.startGesture(box.center);
-      await gesture.moveTo(Offset(box.center.dx, box.bottom - 1));
-      await gesture.up();
-      await tester.pumpAndSettle();
+      expect(find.byType(WarmthBar), findsNothing);
       expect(stub.sent, isEmpty);
+    });
+
+    testWidgets('and is drawn in the designer, where it is placed',
+        (tester) async {
+      await _pump(
+        tester,
+        const WarmthElement(config: {'device_id': 'bulb'}, editing: true),
+        device: _bulb(schema: _xyBulb),
+      );
+      expect(find.byType(WarmthBar), findsOneWidget);
     });
   });
 

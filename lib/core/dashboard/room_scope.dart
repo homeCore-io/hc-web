@@ -121,20 +121,27 @@ Map<String, dynamic> resolveRoomRefs(
   /// colour temperature would be a control pointed at a device that cannot
   /// take it, so an unanswerable pick falls back to whatever here can.
   String? found(Object? token, String reporting) {
-    // A reference that names no key asks nothing of the device — a row of a
-    // light's scenes wants *that light*, not whichever one reports something.
-    if (token == pickedToken && picked != null && reporting.isEmpty) {
-      return picked;
-    }
+    // **A pick is an answer, even when the answer is "it cannot do that".**
+    //
+    // Falling back to another device here was a silent lie: the Office's
+    // Overhead has no colour and no colour temperature, so a wheel aimed at
+    // the picked light quietly re-aimed at the Desk Lamp — under a heading
+    // that said Overhead. A control driving a device other than the one named
+    // above it is worse than a control that does nothing.
     if (token == pickedToken && picked != null) {
+      // A reference that names no key asks nothing of the device: a row of a
+      // light's scenes wants *that light*, whatever it reports.
+      if (reporting.isEmpty || _everyDeviceAnswers.contains(reporting)) {
+        return picked;
+      }
       for (final d in devices) {
-        if (d.id == picked &&
-            (_everyDeviceAnswers.contains(reporting) ||
-                d.state.containsKey(reporting))) {
-          return d.id;
+        if (d.id == picked) {
+          return d.state.containsKey(reporting) ? d.id : null;
         }
       }
+      return null;
     }
+
     // **A pseudo-key cannot choose a device.** `deviceInRoom` picks whatever
     // here reports the thing being asked for, which is exactly right for
     // `temperature` and meaningless for `name` — every device has one, so the

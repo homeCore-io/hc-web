@@ -28,9 +28,14 @@ import '../../design/tokens.dart';
 /// **It sends when you let go**, for the reason the slider does: a wheel that
 /// commanded on every frame would put sixty writes a second onto a bridge.
 class ColourWheelElement extends ConsumerStatefulWidget {
-  const ColourWheelElement({super.key, required this.config});
+  const ColourWheelElement(
+      {super.key, required this.config, this.editing = false});
 
   final Map<String, dynamic> config;
+
+  /// True in the designer, where an element that takes itself away is an
+  /// element you cannot arrange.
+  final bool editing;
 
   @override
   ConsumerState<ColourWheelElement> createState() => _ColourWheelElementState();
@@ -59,6 +64,18 @@ class _ColourWheelElementState extends ConsumerState<ColourWheelElement> {
         spec.writable &&
         (kind == AttributeKind.colorXy || kind == AttributeKind.colorRgb);
     final live = device != null && device.available && promised;
+
+    // **A control for something this light cannot do is not a control.**
+    //
+    // The Office's Overhead has no colour and no colour temperature, so a
+    // panel aimed at it drew a wheel and a warmth bar that could never move.
+    // John: *"color wheel and warmth are showing for lights that don't
+    // support those features."* On a page it takes itself away; in the
+    // designer it stays, because a placement you cannot see is a placement
+    // you cannot arrange.
+    if (!promised && !widget.editing) {
+      return const SizedBox.shrink();
+    }
 
     // The bulb's own colour, read the same way every other surface reads it.
     final shown = device == null ? null : lightColorOf(device);
