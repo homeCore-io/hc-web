@@ -14,9 +14,11 @@ library;
 import 'rooms_card.dart';
 import 'primitive_cards.dart';
 import 'bound_element.dart';
+import 'breakdown_element.dart';
 import 'icon_element.dart';
 import 'slider_element.dart';
 import 'toggle_element.dart';
+import 'worth_knowing_element.dart';
 import 'plugin_render_view.dart';
 import 'dart:async';
 
@@ -24,6 +26,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/devices/scene_state.dart';
 import '../../core/api/events_history_api.dart';
 import '../../core/api/history_api.dart';
 import '../../core/text/humanize.dart';
@@ -551,20 +554,49 @@ class _SceneRowWidget extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final scenes = ref.watch(scenesProvider).value ?? const <SceneModel>[];
+    // **Both kinds, or this element is empty in most houses.**
+    //
+    // It read `/scenes` and nothing else, and `/scenes` is core's own registry.
+    // A house whose scenes all arrive from plugins — Hue, Lutron, a hub — has
+    // an empty one, so this drew nothing at all on a house with fifty-eight
+    // scenes in it. Found by putting it on a page and looking: `SCENES`, and
+    // then blank space under it.
+    //
+    // `scene_button` has always known there are two kinds and applied each the
+    // way its own kind is applied. This is that knowledge, in the element whose
+    // whole job is to list them.
+    final native = ref.watch(scenesProvider).value ?? const <SceneModel>[];
+    final devices = ref.watch(devicesProvider).value ?? const <DeviceState>[];
     final t = HcTokens.of(context);
-    return Wrap(
-      spacing: t.space.sm,
-      runSpacing: t.space.sm,
-      children: scenes
-          .map((scene) => _TokenChip(
-                label: scene.name,
-                icon: HcIcons.play,
-                onTap: () =>
-                    ref.read(scenesApiProvider).activateScene(scene.id),
-              ))
-          .toList(),
-    );
+
+    final chips = <Widget>[
+      for (final scene in native)
+        _TokenChip(
+          label: scene.name,
+          icon: HcIcons.play,
+          onTap: () => ref.read(scenesApiProvider).activateScene(scene.id),
+        ),
+      for (final d in devices.where(isSceneDevice))
+        _TokenChip(
+          label: d.displayName,
+          icon: HcIcons.play,
+          // A plugin scene is a device, and applying it is a write to that
+          // device — not a POST to a registry it is not in. Sending it the
+          // other way is not a small bug: the request goes to the wrong place
+          // and the scene never runs.
+          onTap: () => ref
+              .read(devicesApiProvider)
+              .setDeviceState(d.id, {'activate': true}),
+        ),
+    ];
+
+    if (chips.isEmpty) {
+      return Text(
+        'No scenes yet.',
+        style: t.text.captionStyle.copyWith(color: t.surface.onBaseMuted),
+      );
+    }
+    return Wrap(spacing: t.space.sm, runSpacing: t.space.sm, children: chips);
   }
 }
 
@@ -1333,10 +1365,23 @@ class _HistoryChartWidget extends ConsumerWidget {
           entries: limited,
           compact: compact,
           timeframeHours: timeframeHours,
+          bare: widgetModel.config['bare'] == true,
         );
       },
     );
   }
+}
+
+/// Whether an axis value sits on the very edge of the plot.
+///
+/// fl_chart draws a label at each interval stop *and* at the data's own min
+/// and max, which on a short range stacks two labels on the same pixels — and
+/// at the ends of the time axis clips the last one against the frame.
+bool _atEdge(double value, TitleMeta meta) {
+  final span = meta.max - meta.min;
+  if (span <= 0) return false;
+  final margin = span * 0.02;
+  return value <= meta.min + margin || value >= meta.max - margin;
 }
 
 class _HistoryChartContent extends ConsumerWidget {
@@ -1346,12 +1391,21 @@ class _HistoryChartContent extends ConsumerWidget {
   final bool compact;
   final int timeframeHours;
 
+  /// Chart only — no chip row above it.
+  ///
+  /// The chips name the device, the attribute and the timeframe you picked in
+  /// the inspector two seconds ago. As a panel on its own that is a caption;
+  /// tucked beside a big reading, as the catalogue's own Sparkline entry does,
+  /// it is four Material chips sitting on a header that already says all of it.
+  final bool bare;
+
   const _HistoryChartContent({
     required this.deviceId,
     required this.attribute,
     required this.entries,
     required this.compact,
     required this.timeframeHours,
+    required this.bare,
   });
 
   @override
@@ -1395,13 +1449,95 @@ class _HistoryChartContent extends ConsumerWidget {
     final minY = values.reduce((a, b) => a < b ? a : b);
     final maxY = values.reduce((a, b) => a > b ? a : b);
     final yPad = (maxY - minY) == 0 ? 1.0 : (maxY - minY) * 0.1;
+    final yRange = (maxY + yPad) - (minY - yPad);
     final latestLabel = latest.value is bool
         ? ((latest.value as bool) ? 'On' : 'Off')
         : latest.value.toString();
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
+    final chart = LineChart(
+      LineChartData(
+        minX: minX,
+        maxX: maxX,
+        minY: isBool ? -0.1 : minY - yPad,
+        maxY: isBool ? 1.1 : maxY + yPad,
+        gridData: FlGridData(
+          show: true,
+          // fl_chart's default grid is a full box with vertical rules, which on
+          // a header band is more ink than the line it frames. Bare gets what
+          // the mockup has: a couple of faint horizontals.
+          drawVerticalLine: !bare,
+          getDrawingHorizontalLine: (_) =>
+              FlLine(color: t.stroke.hairline, strokeWidth: 1),
+          getDrawingVerticalLine: (_) =>
+              FlLine(color: t.stroke.hairline, strokeWidth: 1),
+        ),
+        borderData: FlBorderData(show: !bare),
+        titlesData: FlTitlesData(
+          topTitles:
+              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles:
+              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: isBool ? 36 : 44,
+              // Without an interval fl_chart labels both the axis stops and
+              // the data edge, which on a narrow range prints 70.9 on top of
+              // 71.9. Three gaps is what a header band has room for.
+              interval: isBool ? 1 : (yRange / 3).clamp(0.1, 1e9),
+              getTitlesWidget: (value, meta) {
+                if (isBool) {
+                  if (value == 1) {
+                    return Text('ON', style: t.text.overlineStyle);
+                  }
+                  if (value == 0) {
+                    return Text('OFF', style: t.text.overlineStyle);
+                  }
+                  return const SizedBox.shrink();
+                }
+                // fl_chart labels the axis stops AND the data edge, so a
+                // narrow range printed 70.9 on top of 71.9. The edges are the
+                // two the eye can infer from the line itself.
+                if (_atEdge(value, meta)) return const SizedBox.shrink();
+                return Text(
+                  value.toStringAsFixed(1),
+                  style: t.text.overlineStyle,
+                );
+              },
+            ),
+          ),
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 24,
+              interval: ((maxX - minX) / 3).clamp(1, double.infinity),
+              getTitlesWidget: (value, meta) {
+                if (_atEdge(value, meta)) return const SizedBox.shrink();
+                final dt = DateTime.fromMillisecondsSinceEpoch(value.toInt());
+                final shown = isUtc ? dt.toUtc() : dt.toLocal();
+                return Text(
+                  '${shown.hour.toString().padLeft(2, '0')}:${shown.minute.toString().padLeft(2, '0')}',
+                  style: t.text.overlineStyle,
+                );
+              },
+            ),
+          ),
+        ),
+        lineBarsData: [
+          LineChartBarData(
+            spots: spots,
+            isCurved: !isBool,
+            isStepLineChart: isBool,
+            color: Theme.of(context).colorScheme.primary,
+            barWidth: 2,
+            dotData: FlDotData(show: spots.length <= 24),
+          ),
+        ],
+      ),
+    );
+
+    final head = [
+      if (!bare) ...[
         Wrap(
           spacing: 8,
           runSpacing: 8,
@@ -1413,73 +1549,24 @@ class _HistoryChartContent extends ConsumerWidget {
           ],
         ),
         const SizedBox(height: 8),
-        SizedBox(
-          height: compact ? 180 : 220,
-          child: LineChart(
-            LineChartData(
-              minX: minX,
-              maxX: maxX,
-              minY: isBool ? -0.1 : minY - yPad,
-              maxY: isBool ? 1.1 : maxY + yPad,
-              gridData: const FlGridData(show: true),
-              borderData: FlBorderData(show: true),
-              titlesData: FlTitlesData(
-                topTitles:
-                    const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                rightTitles:
-                    const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                leftTitles: AxisTitles(
-                  sideTitles: SideTitles(
-                    showTitles: true,
-                    reservedSize: isBool ? 36 : 44,
-                    getTitlesWidget: (value, meta) {
-                      if (isBool) {
-                        if (value == 1) {
-                          return Text('ON', style: t.text.overlineStyle);
-                        }
-                        if (value == 0) {
-                          return Text('OFF', style: t.text.overlineStyle);
-                        }
-                        return const SizedBox.shrink();
-                      }
-                      return Text(
-                        value.toStringAsFixed(1),
-                        style: t.text.overlineStyle,
-                      );
-                    },
-                  ),
-                ),
-                bottomTitles: AxisTitles(
-                  sideTitles: SideTitles(
-                    showTitles: true,
-                    reservedSize: 24,
-                    interval: ((maxX - minX) / 3).clamp(1, double.infinity),
-                    getTitlesWidget: (value, meta) {
-                      final dt =
-                          DateTime.fromMillisecondsSinceEpoch(value.toInt());
-                      final shown = isUtc ? dt.toUtc() : dt.toLocal();
-                      return Text(
-                        '${shown.hour.toString().padLeft(2, '0')}:${shown.minute.toString().padLeft(2, '0')}',
-                        style: t.text.overlineStyle,
-                      );
-                    },
-                  ),
-                ),
-              ),
-              lineBarsData: [
-                LineChartBarData(
-                  spots: spots,
-                  isCurved: !isBool,
-                  isStepLineChart: isBool,
-                  color: Theme.of(context).colorScheme.primary,
-                  barWidth: 2,
-                  dotData: FlDotData(show: spots.length <= 24),
-                ),
-              ],
-            ),
-          ),
-        ),
       ],
+    ];
+
+    // The plot took a fixed 180/220px whatever box it was placed in, so a
+    // chart in a header band drew straight through the rule under it. Where
+    // the height is known the chart takes what is left; the fixed height is
+    // the fallback for an unbounded column, not the rule.
+    return LayoutBuilder(
+      builder: (context, box) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ...head,
+          if (box.maxHeight.isFinite)
+            Expanded(child: chart)
+          else
+            SizedBox(height: compact ? 180 : 220, child: chart),
+        ],
+      ),
     );
   }
 }
@@ -1606,7 +1693,12 @@ void registerBuiltinDashboardWidgets() {
       title: 'Device list',
       icon: Icons.list_alt_outlined,
       sizeHint: const WidgetSizeHint(
-          minW: 3, minH: 2, recommendedW: 6, recommendedH: 2),
+          minW: 3,
+          minH: 2,
+          recommendedW: 6,
+          recommendedH: 2,
+          minWidth: 220,
+          minHeight: 96),
       configFields: _selectionFields,
       validate: _validateSelection,
       builder: (context, a) => _DeviceListWidget(
@@ -1630,7 +1722,12 @@ void registerBuiltinDashboardWidgets() {
       title: 'Media player',
       icon: Icons.speaker_outlined,
       sizeHint: const WidgetSizeHint(
-          minW: 4, minH: 2, recommendedW: 6, recommendedH: 2),
+          minW: 4,
+          minH: 2,
+          recommendedW: 6,
+          recommendedH: 2,
+          minWidth: 280,
+          minHeight: 150),
       configFields: _selectionFields,
       validate: _validateSelection,
       builder: (context, a) => _MediaPlayerDashboardWidget(
@@ -1652,6 +1749,62 @@ void registerBuiltinDashboardWidgets() {
       sizeHint: const WidgetSizeHint(
           minW: 3, minH: 1, recommendedW: 6, recommendedH: 1),
       builder: (context, a) => const _SceneRowWidget(),
+    ),
+    WidgetDescriptor(
+      type: 'device_breakdown',
+      title: 'Made of',
+      description: 'What a house is made of — the commonest kinds, rooms or '
+          'plugins as bars you can compare at a glance.',
+      icon: Icons.bar_chart_outlined,
+      sizeHint: const WidgetSizeHint(
+          minW: 3,
+          minH: 2,
+          recommendedW: 4,
+          recommendedH: 2,
+          minWidth: 220,
+          minHeight: 80),
+      configFields: const [
+        WidgetConfigField('group_by', WidgetConfigKind.choice,
+            label: 'Count by',
+            options: ['kind', 'room', 'plugin'],
+            defaultValue: 'kind'),
+        WidgetConfigField('limit', WidgetConfigKind.integer,
+            label: 'Bars',
+            defaultValue: 8,
+            min: 1,
+            max: 40,
+            help: 'The biggest groups. The tail is left off rather than drawn '
+                'as slivers.'),
+        WidgetConfigField('ink', WidgetConfigKind.ink, label: 'Bar colour'),
+      ],
+      builder: (context, a) => BreakdownElement(config: a.config),
+    ),
+    WidgetDescriptor(
+      type: 'worth_knowing',
+      title: 'Worth knowing',
+      description: 'What wants attention — open doors, unlocked locks, water, '
+          'flat batteries — and the reassurance that the rest is fine.',
+      icon: Icons.checklist_outlined,
+      sizeHint: const WidgetSizeHint(
+          minW: 3,
+          minH: 2,
+          recommendedW: 4,
+          recommendedH: 2,
+          minWidth: 220,
+          minHeight: 80),
+      configFields: const [
+        WidgetConfigField('limit', WidgetConfigKind.integer,
+            label: 'Lines',
+            defaultValue: 6,
+            min: 1,
+            max: 40,
+            help: 'The rest are counted under the list rather than hidden.'),
+        WidgetConfigField('faults_only', WidgetConfigKind.boolean,
+            label: 'Only what is wrong',
+            help: 'Off shows the good news too — a panel that goes blank when '
+                'the house is fine looks broken.'),
+      ],
+      builder: (context, a) => WorthKnowingElement(config: a.config),
     ),
     WidgetDescriptor(
       type: 'event_feed',
@@ -1748,7 +1901,12 @@ void registerBuiltinDashboardWidgets() {
       description: 'One number, large.',
       icon: Icons.speed_outlined,
       sizeHint: const WidgetSizeHint(
-          minW: 2, minH: 1, recommendedW: 3, recommendedH: 1),
+          minW: 2,
+          minH: 1,
+          recommendedW: 3,
+          recommendedH: 1,
+          minWidth: 80,
+          minHeight: 44),
       configFields: const [
         WidgetConfigField('device_id', WidgetConfigKind.deviceRef,
             required: true),
@@ -1772,6 +1930,10 @@ void registerBuiltinDashboardWidgets() {
         WidgetConfigField('attribute', WidgetConfigKind.attribute,
             required: true),
         WidgetConfigField('timeframe_hours', WidgetConfigKind.integer),
+        WidgetConfigField('bare', WidgetConfigKind.boolean,
+            label: 'Chart only',
+            help: 'Drops the chips naming the device and attribute — they '
+                'repeat what you just chose here.'),
       ],
       // Core requires both; a chart missing either 400s the whole dashboard.
       validate: (c) => (c['device_id'] as String?)?.isNotEmpty == true &&
@@ -2180,7 +2342,12 @@ void registerBuiltinDashboardWidgets() {
       icon: Icons.toggle_on_outlined,
       chrome: WidgetChrome.bare,
       sizeHint: const WidgetSizeHint(
-          minW: 2, minH: 1, recommendedW: 3, recommendedH: 1),
+          minW: 2,
+          minH: 1,
+          recommendedW: 3,
+          recommendedH: 1,
+          minWidth: 56,
+          minHeight: 28),
       configFields: const [
         WidgetConfigField('device_id', WidgetConfigKind.deviceRef,
             label: 'Device', required: true),
@@ -2211,7 +2378,12 @@ void registerBuiltinDashboardWidgets() {
       icon: Icons.tune_outlined,
       chrome: WidgetChrome.bare,
       sizeHint: const WidgetSizeHint(
-          minW: 3, minH: 1, recommendedW: 4, recommendedH: 1),
+          minW: 3,
+          minH: 1,
+          recommendedW: 4,
+          recommendedH: 1,
+          minWidth: 180,
+          minHeight: 64),
       configFields: const [
         WidgetConfigField('device_id', WidgetConfigKind.deviceRef,
             label: 'Device', required: true),
@@ -2259,7 +2431,12 @@ void registerBuiltinDashboardWidgets() {
       icon: Icons.play_circle_outline,
       chrome: WidgetChrome.bare,
       sizeHint: const WidgetSizeHint(
-          minW: 2, minH: 1, recommendedW: 3, recommendedH: 1),
+          minW: 2,
+          minH: 1,
+          recommendedW: 3,
+          recommendedH: 1,
+          minWidth: 96,
+          minHeight: 40),
       configFields: const [
         WidgetConfigField('scene_id', WidgetConfigKind.sceneRef,
             label: 'Scene', required: true),
@@ -2290,7 +2467,12 @@ void registerBuiltinDashboardWidgets() {
       icon: Icons.dialpad_outlined,
       chrome: WidgetChrome.bare,
       sizeHint: const WidgetSizeHint(
-          minW: 2, minH: 2, recommendedW: 4, recommendedH: 3),
+          minW: 2,
+          minH: 2,
+          recommendedW: 4,
+          recommendedH: 3,
+          minWidth: 180,
+          minHeight: 120),
       configFields: const [
         WidgetConfigField('device_id', WidgetConfigKind.deviceRef,
             label: 'Keypad',
@@ -2314,7 +2496,12 @@ void registerBuiltinDashboardWidgets() {
       icon: Icons.thermostat_outlined,
       chrome: WidgetChrome.bare,
       sizeHint: const WidgetSizeHint(
-          minW: 2, minH: 2, recommendedW: 3, recommendedH: 4),
+          minW: 2,
+          minH: 2,
+          recommendedW: 3,
+          recommendedH: 4,
+          minWidth: 180,
+          minHeight: 180),
       configFields: const [
         WidgetConfigField('device_id', WidgetConfigKind.deviceRef,
             label: 'Device', required: true),
@@ -2366,7 +2553,12 @@ void registerBuiltinDashboardWidgets() {
       icon: Icons.palette_outlined,
       chrome: WidgetChrome.bare,
       sizeHint: const WidgetSizeHint(
-          minW: 2, minH: 2, recommendedW: 3, recommendedH: 3),
+          minW: 2,
+          minH: 2,
+          recommendedW: 3,
+          recommendedH: 3,
+          minWidth: 96,
+          minHeight: 96),
       configFields: const [
         WidgetConfigField('device_id', WidgetConfigKind.deviceRef,
             label: 'Device', required: true),
@@ -2395,7 +2587,12 @@ void registerBuiltinDashboardWidgets() {
       icon: Icons.wb_incandescent_outlined,
       chrome: WidgetChrome.bare,
       sizeHint: const WidgetSizeHint(
-          minW: 1, minH: 2, recommendedW: 1, recommendedH: 3),
+          minW: 1,
+          minH: 2,
+          recommendedW: 1,
+          recommendedH: 3,
+          minWidth: 56,
+          minHeight: 96),
       configFields: const [
         WidgetConfigField('device_id', WidgetConfigKind.deviceRef,
             label: 'Device', required: true),
@@ -2430,7 +2627,12 @@ void registerBuiltinDashboardWidgets() {
       icon: Icons.exposure_outlined,
       chrome: WidgetChrome.bare,
       sizeHint: const WidgetSizeHint(
-          minW: 2, minH: 1, recommendedW: 3, recommendedH: 1),
+          minW: 2,
+          minH: 1,
+          recommendedW: 3,
+          recommendedH: 1,
+          minWidth: 140,
+          minHeight: 56),
       configFields: const [
         WidgetConfigField('device_id', WidgetConfigKind.deviceRef,
             label: 'Device', required: true),

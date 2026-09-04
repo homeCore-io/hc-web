@@ -175,12 +175,30 @@ class WidgetSizeHint {
     this.minH = 1,
     this.recommendedW = 4,
     this.recommendedH = 2,
+    this.minWidth,
+    this.minHeight,
   });
 
   final int minW;
   final int minH;
   final int recommendedW;
   final int recommendedH;
+
+  /// The smallest this element can be **drawn** at, in frame units.
+  ///
+  /// [minW] and [minH] are cells, and a composed layout has none — so on the
+  /// canvas where people actually design, nothing stopped a box being pulled
+  /// smaller than the thing inside it. The failure is quiet and specific: a
+  /// slider at 48 keeps its label and its track and loses its *knob*, which
+  /// comes out as a half-disc sitting on the bottom edge and reads as a broken
+  /// control rather than as a short box. Three elements on one page were found
+  /// that way, one at a time, by looking closely at a screenshot.
+  ///
+  /// Null means [minComposedSize] — the flat 24 that everything had. These are
+  /// only worth stating for an element that needs more than that, and the
+  /// number is what it needs to draw itself whole.
+  final double? minWidth;
+  final double? minHeight;
 }
 
 /// One option on a card, rendered as a form field by the editor.
