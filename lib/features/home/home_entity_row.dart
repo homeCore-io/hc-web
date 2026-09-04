@@ -85,7 +85,20 @@ class _HomeEntityRowState extends ConsumerState<HomeEntityRow> {
                           offline ? t.surface.onBaseMuted : t.surface.onBase),
                 ),
               ),
-              if (_hover) HomeEditButton(deviceId: device.id),
+              // **Hidden, not absent.** Inserting the pencil on hover made the
+              // row re-lay out under the pointer, so the name and the reading
+              // jumped sideways every time the mouse crossed a row — and in a
+              // list of twenty, that is twenty jumps on the way down. John:
+              // *"the mouse over effect that causing shifting of items is
+              // annoying."* It keeps its space and fades instead.
+              IgnorePointer(
+                ignoring: !_hover,
+                child: AnimatedOpacity(
+                  duration: t.motion.d(t.motion.fast),
+                  opacity: _hover ? 1 : 0,
+                  child: HomeEditButton(deviceId: device.id),
+                ),
+              ),
               SizedBox(width: t.space.sm),
               _trailing(context, t, notifier, facet, offline, on, alert),
             ],

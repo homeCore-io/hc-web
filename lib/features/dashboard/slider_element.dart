@@ -156,33 +156,48 @@ class _SliderElementState extends ConsumerState<SliderElement> {
                     ],
                   ),
                 ),
-              SliderTheme(
-                data: SliderThemeData(
-                  activeTrackColor: ink,
-                  inactiveTrackColor: t.accent.inactive,
-                  thumbColor: t.surface.onBase,
-                  overlayColor: ink.withValues(alpha: .12),
-                  trackHeight: 4,
-                ),
-                child: Slider(
-                  value: value.toDouble(),
-                  min: (min ?? 0).toDouble(),
-                  max: (max ?? 1).toDouble(),
-                  // The plugin's step when it named one. Without it a 0–255
-                  // brightness would send fractions no device wants.
-                  divisions: _divisions(min, max, spec?.step),
-                  onChanged: live ? (v) => setState(() => _dragging = v) : null,
-                  onChangeEnd: live
-                      ? (v) {
-                          setState(() => _dragging = null);
-                          ref.read(devicesProvider.notifier).command(id, {
-                            // Whole numbers for an integer attribute: a
-                            // brightness of 61.7 is a value no bridge accepts
-                            // and some reject outright.
-                            attribute: isInteger ? v.round() : v,
-                          });
-                        }
-                      : null,
+              // **Room for the handle at both ends.**
+              //
+              // A slider's track runs the full width it is given and the thumb
+              // is centred on the value, so at 0 and at 100 half the ball sits
+              // outside the track — and outside the element's box, where the
+              // card's own clip takes it off. John: *"slides are still being
+              // clipped at the ends, the round control ball."* The inset is the
+              // thumb's radius, so the ball is inside the box wherever it is.
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: SliderTheme(
+                  data: SliderThemeData(
+                    activeTrackColor: ink,
+                    inactiveTrackColor: t.accent.inactive,
+                    thumbColor: t.surface.onBase,
+                    overlayColor: ink.withValues(alpha: .12),
+                    trackHeight: 4,
+                    // The track already starts and ends inside the padding, so
+                    // the slider must not add its own or the two compound.
+                    padding: EdgeInsets.zero,
+                  ),
+                  child: Slider(
+                    value: value.toDouble(),
+                    min: (min ?? 0).toDouble(),
+                    max: (max ?? 1).toDouble(),
+                    // The plugin's step when it named one. Without it a 0–255
+                    // brightness would send fractions no device wants.
+                    divisions: _divisions(min, max, spec?.step),
+                    onChanged:
+                        live ? (v) => setState(() => _dragging = v) : null,
+                    onChangeEnd: live
+                        ? (v) {
+                            setState(() => _dragging = null);
+                            ref.read(devicesProvider.notifier).command(id, {
+                              // Whole numbers for an integer attribute: a
+                              // brightness of 61.7 is a value no bridge accepts
+                              // and some reject outright.
+                              attribute: isInteger ? v.round() : v,
+                            });
+                          }
+                        : null,
+                  ),
                 ),
               ),
             ],

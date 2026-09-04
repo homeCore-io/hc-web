@@ -58,8 +58,11 @@ class DevicePill extends StatelessWidget {
     return HcSurface(
       onTap: onTap,
       selected: selected,
-      glowColor: accent,
-      glowIntensity: on ? (levelOf(device) ?? 1.0) : 0,
+      // **No halo.** The bloom was meant to say *this lamp is on and this
+      // bright*, but at a pill's radius it is a soft rectangle behind a
+      // rounded one and the two edges do not agree — John: *"the glow around
+      // the pills and boxes is not smooth. just remove the glow."* The colour
+      // is already on the glyph and on the state, which is where it reads.
       borderRadius: t.radius.pillR,
       padding:
           EdgeInsets.symmetric(horizontal: t.space.md, vertical: t.space.sm),

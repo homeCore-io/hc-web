@@ -712,6 +712,14 @@ class _PageGridState extends State<PageGrid> {
         //
         // Not while editing: a rectangle you are dragging has to be the
         // rectangle, or the handle you are holding is not where the card is.
+        // **Not while editing**, and it was worth trying the other way to
+        // find out why. A rectangle you are dragging has to be the rectangle;
+        // beyond that, the editing chrome wraps every card in a Stack of
+        // `Positioned.fill` overlays — the grips, the entered-card label — and
+        // those require a bounded height, which is the one thing a growing
+        // element does not have. So the designer shows what you arranged and
+        // the page shows what it needs; the room picker beside this is what
+        // makes the first of those worth looking at.
         final grown = widget.editing
             ? const <String, DashboardRect>{}
             : reflow(

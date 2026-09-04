@@ -91,10 +91,11 @@ class HcTile extends StatelessWidget {
       child: HcSurface(
         onTap: onTap,
         selected: selected,
-        glowColor: active,
-        // The halo is the level. Not a fixed "on" glow — a dim lamp must look
-        // dim, or the wall panel lies about the room.
-        glowIntensity: on ? (level ?? 1.0) : 0,
+        // **No halo.** The bloom was meant to say *this lamp is on and this
+        // bright*, but at a pill's radius it is a soft rectangle behind a
+        // rounded one and the two edges do not agree — John: *"the glow around
+        // the pills and boxes is not smooth. just remove the glow."* The colour
+        // is already on the glyph and on the state, which is where it reads.
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
@@ -207,13 +208,6 @@ class _Bulb extends StatelessWidget {
         shape: BoxShape.circle,
         border: offline
             ? Border.all(color: t.accent.offline.withValues(alpha: 0.5))
-            : null,
-        // Through the skin's own glow, not a hand-picked shadow: Control Room
-        // says *near-black, hairlines, no bloom* by setting strength to 0, and
-        // a widget with its own BoxShadow overrides that silently.
-        boxShadow: on
-            ? t.glow.halo(accent,
-                blur: size * 0.5, alpha: 0.45, spread: -size * 0.14)
             : null,
       ),
       // The glyph itself changes weight with state — see HcIcons.

@@ -1,7 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/dashboard/grid_engine.dart';
+import '../../core/dashboard/room_scope.dart';
+import '../../core/devices/breakdown.dart' show prettyGroup;
 import '../../core/models/dashboard.dart';
+import '../../core/models/device_state.dart';
+import '../../core/providers/devices_provider.dart';
+import '../../core/providers/page_room_provider.dart';
 import '../../design/tokens.dart';
 import '../assets/asset_field.dart';
 import 'inspector_controls.dart';
@@ -72,6 +79,15 @@ class _PageInspectorState extends State<PageInspector> {
   /// so a pane with more in it than fits says nothing about the fact.
   final _scroll = ScrollController();
 
+  /// Whether anything on this page is written about *the room it is opened
+  /// for* rather than about a named one.
+  ///
+  /// Only then is there a room to pick: offering the control on every page
+  /// would be offering a setting that does nothing on all but one of them.
+  bool get _saysRoom => widget.dashboard.widgets.any(
+        (w) => mentionsRoom(w.config),
+      );
+
   @override
   void dispose() {
     _scroll.dispose();
@@ -121,6 +137,27 @@ class _PageInspectorState extends State<PageInspector> {
                 DashboardBreakpoint.tv => 'Wall',
               },
             ),
+            // **A page about a room has to be designable as one.**
+            //
+            // Everything on the room page that says `@room` resolves against
+            // the room it was opened for, and the designer opened it without
+            // one — so the canvas was a set of empty boxes reading "No devices
+            // match" and you were arranging a layout you could not see.
+            if (_saysRoom) ...[
+              SizedBox(height: t.space.md),
+              Text('SEE IT AS',
+                  style: t.text.overlineStyle
+                      .copyWith(color: t.surface.onBaseMuted)),
+              SizedBox(height: t.space.xs),
+              _RoomPreviewPicker(dashboardId: widget.dashboard.id),
+              SizedBox(height: t.space.xs),
+              Text(
+                'This page is about whichever room it is opened for. Pick one '
+                'to arrange it against real devices.',
+                style:
+                    t.text.captionStyle.copyWith(color: t.surface.onBaseMuted),
+              ),
+            ],
             SizedBox(height: t.space.md),
             Text('SPACE',
                 style: t.text.overlineStyle
@@ -576,6 +613,49 @@ class _Choice extends StatelessWidget {
             ),
           ),
       ],
+    );
+  }
+}
+
+/// Which room the designer draws this page as.
+///
+/// A navigation rather than a setting: the room lives in the page's address,
+/// the same `?room=` a room card sends, so the canvas you arrange is the page
+/// somebody will actually open — and the link is shareable.
+class _RoomPreviewPicker extends ConsumerWidget {
+  const _RoomPreviewPicker({required this.dashboardId});
+
+  final String dashboardId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = HcTokens.of(context);
+    final rooms = {
+      for (final d in ref.watch(devicesProvider).value ?? const <DeviceState>[])
+        if ((d.effectiveArea ?? '').isNotEmpty) d.effectiveArea!,
+    }.toList()
+      ..sort();
+    final current = ref.watch(pageRoomProvider);
+
+    if (rooms.isEmpty) {
+      return Text('No rooms yet.',
+          style: t.text.captionStyle.copyWith(color: t.surface.onBaseMuted));
+    }
+
+    return DropdownButtonFormField<String>(
+      initialValue: rooms.contains(current) ? current : null,
+      isExpanded: true,
+      decoration:
+          const InputDecoration(isDense: true, border: OutlineInputBorder()),
+      hint: const Text('No room'),
+      items: [
+        for (final r in rooms)
+          DropdownMenuItem(value: r, child: Text(prettyGroup(r))),
+      ],
+      onChanged: (v) {
+        if (v == null) return;
+        context.go('/pages/$dashboardId/design?room=$v');
+      },
     );
   }
 }
