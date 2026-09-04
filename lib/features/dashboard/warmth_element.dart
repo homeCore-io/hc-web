@@ -24,9 +24,13 @@ import '../../design/tokens.dart';
 /// device panel, so a temperature picked here and one picked there mean the
 /// same thing.
 class WarmthElement extends ConsumerStatefulWidget {
-  const WarmthElement({super.key, required this.config});
+  const WarmthElement({super.key, required this.config, this.editing = false});
 
   final Map<String, dynamic> config;
+
+  /// True in the designer, where an element that takes itself away is an
+  /// element you cannot arrange.
+  final bool editing;
 
   @override
   ConsumerState<WarmthElement> createState() => _WarmthElementState();
@@ -52,6 +56,18 @@ class _WarmthElementState extends ConsumerState<WarmthElement> {
     final promised =
         spec != null && spec.writable && spec.kind == AttributeKind.colorTemp;
     final live = device != null && device.available && promised;
+
+    // **A control for something this light cannot do is not a control.**
+    //
+    // The Office's Overhead has no colour and no colour temperature, so a
+    // panel aimed at it drew a wheel and a warmth bar that could never move.
+    // John: *"color wheel and warmth are showing for lights that don't
+    // support those features."* On a page it takes itself away; in the
+    // designer it stays, because a placement you cannot see is a placement
+    // you cannot arrange.
+    if (!promised && !widget.editing) {
+      return const SizedBox.shrink();
+    }
 
     final min = spec?.hasRange == true ? spec!.min! : kWarmKelvin;
     final max = spec?.hasRange == true ? spec!.max! : kCoolKelvin;

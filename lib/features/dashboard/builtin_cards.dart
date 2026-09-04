@@ -2784,7 +2784,8 @@ void registerBuiltinDashboardWidgets() {
         }
         return null;
       },
-      builder: (context, a) => ColourWheelElement(config: a.config),
+      builder: (context, a) =>
+          ColourWheelElement(config: a.config, editing: a.editing),
     ),
     WidgetDescriptor(
       type: 'warmth',
@@ -2821,7 +2822,8 @@ void registerBuiltinDashboardWidgets() {
         }
         return null;
       },
-      builder: (context, a) => WarmthElement(config: a.config),
+      builder: (context, a) =>
+          WarmthElement(config: a.config, editing: a.editing),
     ),
     // The control for a number with no range — where a slider cannot go, since
     // its ends are its whole vocabulary. Also the right control for a setpoint,

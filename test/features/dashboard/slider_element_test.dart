@@ -90,6 +90,7 @@ Future<_StubDevices> _pump(
 }
 
 void main() {
+  _noRangeNoPosition();
   _whyItIsInert();
   test('the element is registered and needs both a device and a number', () {
     registerBuiltinDashboardWidgets();
@@ -277,6 +278,58 @@ void _whyItIsInert() {
       await _pump(t, device: _lamp(schema: _promised));
       expect(find.text('50 %'), findsOneWidget);
       expect(find.text('read-only'), findsNothing);
+    });
+  });
+}
+
+/// **A handle at the end of a range that is not this device's range.**
+///
+/// A Lutron dimmer registers no schema, so the slider falls back to 0–1 — and
+/// a brightness of 25 clamps to 1, which is the far right. John, looking at the
+/// Office's Overhead: *"the brightness shows 25% but there's no visible bar."*
+/// The number was real and the handle was nonsense.
+void _noRangeNoPosition() {
+  group('a reading with no range to put it in', () {
+    testWidgets('leaves the handle at the start rather than at the end',
+        (t) async {
+      await _pump(
+        t,
+        device: DeviceState(
+          id: 'lamp',
+          pluginId: 'p',
+          name: 'Overhead',
+          available: true,
+          // No schema at all, which is what a Lutron dimmer arrives as.
+          state: const {'brightness': 25},
+        ),
+      );
+      final slider = t.widget<Slider>(find.byType(Slider));
+      expect(slider.value, slider.min,
+          reason: 'the handle claimed a position the device never gave it');
+      expect(slider.onChanged, isNull, reason: 'and it is not draggable');
+    });
+
+    testWidgets('and says both halves: the reading, and why it is inert',
+        (t) async {
+      await _pump(
+        t,
+        device: DeviceState(
+          id: 'lamp',
+          pluginId: 'p',
+          name: 'Overhead',
+          available: true,
+          state: const {'brightness': 25},
+        ),
+      );
+      expect(find.textContaining('25'), findsOneWidget);
+      expect(find.textContaining('no brightness'), findsOneWidget);
+    });
+
+    testWidgets('a properly ranged one still places its handle', (t) async {
+      await _pump(t, device: _lamp(brightness: 128, schema: _promised));
+      final slider = t.widget<Slider>(find.byType(Slider));
+      expect(slider.value, 128);
+      expect(slider.max, 255);
     });
   });
 }

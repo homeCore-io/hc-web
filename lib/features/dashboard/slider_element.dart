@@ -69,7 +69,14 @@ class _SliderElementState extends ConsumerState<SliderElement> {
     final live = device != null && device.available && promised && ranged;
 
     final reading = _asNumber(device?.state[attribute]);
-    final value = (_dragging ?? reading ?? min ?? 0).clamp(min ?? 0, max ?? 1);
+    // **A handle at the end of a range that is not this device's range is a
+    // lie about the reading.** With no registered range the fallback is 0–1,
+    // and a brightness of 25 clamps to 1 — the far right — under a label
+    // saying 25. John: *"the brightness shows 25% but there's no visible
+    // bar."* Where there is no range there is no position, so the handle sits
+    // at the start and the readout carries the truth.
+    final value =
+        ranged ? (_dragging ?? reading ?? min).clamp(min, max) : (min ?? 0);
 
     final ink = resolveInk(t, config['ink'] as String?) ?? t.accent.active;
     final label = (config['label'] as String? ?? '').trim();
@@ -138,7 +145,11 @@ class _SliderElementState extends ConsumerState<SliderElement> {
                             // words are for one that never will.
                             ? (why ?? '—')
                             : '${_trim(_dragging ?? reading!)}'
-                                '${unit == null ? '' : ' $unit'}',
+                                '${unit == null ? '' : ' $unit'}'
+                                // A reading this control cannot act on says
+                                // both halves: the number is real, and the
+                                // handle beside it means nothing.
+                                '${why == null ? '' : ' · $why'}',
                         style: t.text.captionStyle
                             .copyWith(color: t.surface.onBaseMuted),
                       ),
