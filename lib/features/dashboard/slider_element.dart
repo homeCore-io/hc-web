@@ -74,6 +74,29 @@ class _SliderElementState extends ConsumerState<SliderElement> {
     final ink = resolveInk(t, config['ink'] as String?) ?? t.accent.active;
     final label = (config['label'] as String? ?? '').trim();
 
+    // Why this slider cannot be dragged, in the fewest words that name the
+    // mistake. A dimmed control showing `—` is honest about having no reading
+    // and silent about the reason, so a slider pointed at an attribute the
+    // device does not have looks exactly like one whose device is slow — and
+    // the person who has to tell them apart is holding the inspector.
+    final why = devices == null
+        ? null
+        : device == null
+            ? (id.isEmpty ? 'no device' : 'no such device')
+            : attribute.isEmpty
+                ? 'no attribute'
+                : !device.available
+                    ? 'offline'
+                    : spec == null
+                        ? 'no $attribute'
+                        : !spec.kind.isNumeric
+                            ? 'not a number'
+                            : !spec.writable
+                                ? 'read-only'
+                                : !ranged
+                                    ? 'no range'
+                                    : null;
+
     return Semantics(
       slider: true,
       enabled: live,
@@ -110,7 +133,10 @@ class _SliderElementState extends ConsumerState<SliderElement> {
                         // showing it is to aim, and the device's own value has
                         // not heard about the drag yet.
                         reading == null && _dragging == null
-                            ? '—'
+                            // The dash stays for a control that is wired
+                            // correctly and simply has no reading yet; the
+                            // words are for one that never will.
+                            ? (why ?? '—')
                             : '${_trim(_dragging ?? reading!)}'
                                 '${unit == null ? '' : ' $unit'}',
                         style: t.text.captionStyle

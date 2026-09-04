@@ -550,7 +550,9 @@ class _ModeChipsWidget extends ConsumerWidget {
 }
 
 class _SceneRowWidget extends ConsumerWidget {
-  const _SceneRowWidget();
+  const _SceneRowWidget({this.config = const {}});
+
+  final Map<String, dynamic> config;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -569,14 +571,34 @@ class _SceneRowWidget extends ConsumerWidget {
     final devices = ref.watch(devicesProvider).value ?? const <DeviceState>[];
     final t = HcTokens.of(context);
 
+    // **Where a scene belongs.**
+    //
+    // A house-wide footer listing all fifty-eight scenes prints *Nightlight*
+    // three times, because three rooms each have one — and none of the three
+    // is a house-wide scene at all. The mockup states the rule in its own
+    // footer: whole-house only; a scene that belongs to a room is on that
+    // room's page. Until now the element could not say it.
+    //
+    // `house` keeps the scenes with no room. `room` keeps one room's. Anything
+    // else keeps them all, which is what every page built before this got.
+    final scope = config['scope'] as String? ?? 'all';
+    final room = (config['room'] as String? ?? '').trim();
+    bool wanted(String? area) => switch (scope) {
+          'house' => area == null || area.isEmpty,
+          'room' => room.isEmpty || area == room,
+          _ => true,
+        };
+
     final chips = <Widget>[
-      for (final scene in native)
+      for (final scene in native.where((s) => wanted(null)))
         _TokenChip(
           label: scene.name,
           icon: HcIcons.play,
           onTap: () => ref.read(scenesApiProvider).activateScene(scene.id),
         ),
-      for (final d in devices.where(isSceneDevice))
+      for (final d in devices.where(isSceneDevice).where(
+            (d) => wanted(d.effectiveArea),
+          ))
         _TokenChip(
           label: d.displayName,
           icon: HcIcons.play,
@@ -592,7 +614,13 @@ class _SceneRowWidget extends ConsumerWidget {
 
     if (chips.isEmpty) {
       return Text(
-        'No scenes yet.',
+        // Which is a different fact from having none at all, and the one a
+        // person staring at an empty footer needs.
+        switch (scope) {
+          'house' => 'No whole-house scenes.',
+          'room' => 'No scenes in this room.',
+          _ => 'No scenes yet.',
+        },
         style: t.text.captionStyle.copyWith(color: t.surface.onBaseMuted),
       );
     }
@@ -1748,7 +1776,17 @@ void registerBuiltinDashboardWidgets() {
       icon: Icons.movie_outlined,
       sizeHint: const WidgetSizeHint(
           minW: 3, minH: 1, recommendedW: 6, recommendedH: 1),
-      builder: (context, a) => const _SceneRowWidget(),
+      configFields: const [
+        WidgetConfigField('scope', WidgetConfigKind.choice,
+            label: 'Which scenes',
+            options: ['all', 'house', 'room'],
+            defaultValue: 'all',
+            help: 'A whole-house footer that lists every room\u2019s scenes '
+                'prints the same name three times.'),
+        WidgetConfigField('room', WidgetConfigKind.areaName,
+            label: 'Room', help: 'Only when Which scenes is “room”.'),
+      ],
+      builder: (context, a) => _SceneRowWidget(config: a.config),
     ),
     WidgetDescriptor(
       type: 'device_breakdown',

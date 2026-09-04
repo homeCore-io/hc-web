@@ -50,6 +50,7 @@ Future<void> pump(
   WidgetTester tester, {
   List<SceneModel> native = const [],
   List<DeviceState> devices = const [],
+  Map<String, dynamic> config = const {},
 }) async {
   registerBuiltinDashboardWidgets();
   await tester.binding.setSurfaceSize(const Size(600, 400));
@@ -67,14 +68,14 @@ Future<void> pump(
         body: Builder(
           builder: (context) => descriptor.builder(
             context,
-            const WidgetRenderArgs(
+            WidgetRenderArgs(
               id: 'row',
               title: 'Scenes',
-              config: {},
+              config: config,
               w: 6,
               h: 1,
               subtitle: null,
-              sizeHint: WidgetSizeHint(),
+              sizeHint: const WidgetSizeHint(),
             ),
           ),
         ),
@@ -85,6 +86,7 @@ Future<void> pump(
 }
 
 void main() {
+  _scoping();
   testWidgets('a plugin scene is a scene', (tester) async {
     // The house this was found on: every scene arrives as a device and
     // `/scenes` is empty.
@@ -120,5 +122,83 @@ void main() {
     // how the original bug looked.
     await pump(tester);
     expect(find.text('No scenes yet.'), findsOneWidget);
+  });
+}
+
+/// **Where a scene belongs.**
+///
+/// The house page's footer listed all fifty-eight scenes, which printed
+/// *Nightlight* three times — one per room that has one — and not one of the
+/// three was a house-wide scene. The mockup states the rule in its own footer:
+/// whole-house only; a scene that belongs to a room is on that room's page.
+/// The element had no way to say it.
+void _scoping() {
+  DeviceState roomScene(String id, String name, String area) => DeviceState(
+        id: id,
+        pluginId: 'plugin.hue',
+        name: name,
+        deviceType: 'scene',
+        area: area,
+        available: true,
+        state: const {},
+      );
+
+  group('scope', () {
+    testWidgets('house keeps the scenes that belong to no room', (t) async {
+      await pump(
+        t,
+        devices: [
+          sceneDevice('goodnight', 'Goodnight'),
+          roomScene('hue_night_office', 'Nightlight', 'office'),
+          roomScene('hue_night_attic', 'Nightlight', 'attic'),
+        ],
+        config: const {'scope': 'house'},
+      );
+      expect(find.text('Goodnight'), findsOneWidget);
+      expect(find.text('Nightlight'), findsNothing);
+    });
+
+    testWidgets('room keeps one room and says which when empty', (t) async {
+      await pump(
+        t,
+        devices: [
+          sceneDevice('goodnight', 'Goodnight'),
+          roomScene('hue_night_office', 'Nightlight', 'office'),
+        ],
+        config: const {'scope': 'room', 'room': 'office'},
+      );
+      expect(find.text('Nightlight'), findsOneWidget);
+      expect(find.text('Goodnight'), findsNothing);
+    });
+
+    testWidgets('a native scene is house-wide, because it has no room',
+        (t) async {
+      await pump(
+        t,
+        native: [SceneModel(id: 's1', name: 'Away', states: const {})],
+        config: const {'scope': 'house'},
+      );
+      expect(find.text('Away'), findsOneWidget);
+    });
+
+    testWidgets('an empty scope says which emptiness it is', (t) async {
+      // "No scenes yet." on a house with fifty-eight of them would be a lie.
+      await pump(
+        t,
+        devices: [roomScene('hue_night_office', 'Nightlight', 'office')],
+        config: const {'scope': 'house'},
+      );
+      expect(find.text('No whole-house scenes.'), findsOneWidget);
+    });
+
+    testWidgets('no scope keeps everything, as every page before this got',
+        (t) async {
+      await pump(t, devices: [
+        sceneDevice('goodnight', 'Goodnight'),
+        roomScene('hue_night_office', 'Nightlight', 'office'),
+      ]);
+      expect(find.text('Goodnight'), findsOneWidget);
+      expect(find.text('Nightlight'), findsOneWidget);
+    });
   });
 }
