@@ -27,6 +27,7 @@ List<String> lines(List<Knowing> items) =>
     [for (final i in items) '${i.level.name}:${i.what}:${i.state}'];
 
 void main() {
+  _watching();
   group('what is wrong', () {
     test('water on the floor is the loudest thing in a house', () {
       final out = worthKnowing([
@@ -130,6 +131,58 @@ void main() {
           ]),
           isEmpty);
       expect(worthKnowing(const []), isEmpty);
+    });
+  });
+}
+
+/// **Not everything true is worth a line.**
+///
+/// John, on a room page: *"a closed door like in Living Room is not
+/// important."* Which of these matter is a property of the panel, not of the
+/// house — a front door is worth watching and a bedroom door is not — so it is
+/// a setting, picked from a closed list rather than typed into one.
+void _watching() {
+  group('what this panel watches', () {
+    test('a kind left out is not reported, either way round', () {
+      final out = worthKnowing([
+        device('Front door', state: const {'open': true}),
+        device('Back door', state: const {'open': false}),
+        device('Sensor', state: const {'battery': 9}),
+      ], watch: {
+        Watch.batteries
+      });
+
+      expect(lines(out), contains('danger:Sensor:9% battery'));
+      expect(lines(out), isNot(contains(contains('door'))));
+    });
+
+    test('nothing chosen means everything, not nothing', () {
+      // A watch list nobody has touched should watch the house. Going blank
+      // would look exactly like the panel being broken.
+      final out = Watch.from(null);
+      expect(out, Watch.values.toSet());
+      expect(Watch.from(const <String>[]), Watch.values.toSet());
+      expect(Watch.from(const ['doors', 'nonsense']), {Watch.doors});
+    });
+
+    test('an unwatched offline device still reports nothing else', () {
+      // Its battery reading is stale whether or not anyone is watching for
+      // offline, so it must not fall through to the checks below.
+      final out = worthKnowing([
+        device('Attic', available: false, state: const {'battery': 4}),
+      ], watch: {
+        Watch.batteries
+      });
+      expect(out, isEmpty);
+    });
+
+    test('the low-battery line is where you put it', () {
+      final devices = [
+        device('Sensor', state: const {'battery': 40})
+      ];
+      expect(
+          lines(worthKnowing(devices)), contains('danger:Sensor:40% battery'));
+      expect(worthKnowing(devices, lowBattery: 20), isEmpty);
     });
   });
 }

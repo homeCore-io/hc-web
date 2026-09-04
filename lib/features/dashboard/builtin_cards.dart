@@ -1695,8 +1695,10 @@ void registerBuiltinDashboardWidgets() {
       sizeHint: const WidgetSizeHint(
           minW: 3, minH: 2, recommendedW: 6, recommendedH: 2),
       configFields: const [
-        WidgetConfigField('metrics', WidgetConfigKind.stringList,
-            required: true, help: 'At least one metric.'),
+        WidgetConfigField('metrics', WidgetConfigKind.choices,
+            required: true,
+            options: ['devices', 'on', 'offline', 'media_playing'],
+            help: 'The four this element knows how to count.'),
       ],
       validate: (c) => (c['metrics'] as List?)?.isNotEmpty == true
           ? null
@@ -1887,6 +1889,16 @@ void registerBuiltinDashboardWidgets() {
             help: 'The rest are counted under the list rather than hidden.'),
         WidgetConfigField('area_name', WidgetConfigKind.areaName,
             label: 'Only in', help: 'Leave unset for the whole house.'),
+        WidgetConfigField('watch', WidgetConfigKind.choices,
+            label: 'Watch for',
+            options: ['batteries', 'doors', 'locks', 'water', 'offline'],
+            help: 'Which of these are worth knowing about on this panel.'),
+        WidgetConfigField('low_battery', WidgetConfigKind.integer,
+            label: 'Low battery under',
+            defaultValue: 50,
+            min: 1,
+            max: 100,
+            unit: '%'),
         WidgetConfigField('faults_only', WidgetConfigKind.boolean,
             label: 'Only what is wrong',
             help: 'Off shows the good news too — a panel that goes blank when '

@@ -33,6 +33,33 @@ enum Attention {
 /// One line: a thing, what about it, and how loudly.
 typedef Knowing = ({Attention level, String what, String state});
 
+/// A kind of thing this digest can be asked to watch.
+///
+/// **Because not everything worth reporting is worth reporting here.** John, on
+/// a room page: *"a closed door like in Living Room is not important."* Which
+/// of these matter is a property of the panel, not of the house, so it is a
+/// setting rather than a rule — and one you pick from a list, because the list
+/// is closed and typing into a closed list is how you get a page that watches
+/// nothing and says nothing about why.
+enum Watch {
+  batteries,
+  doors,
+  locks,
+  water,
+  offline;
+
+  static Set<Watch> from(Object? raw) {
+    if (raw is! List) return Watch.values.toSet();
+    final picked = {
+      for (final w in Watch.values)
+        if (raw.contains(w.name)) w,
+    };
+    // Nothing picked means everything: a watch list nobody has touched should
+    // watch the house, not go blank.
+    return picked.isEmpty ? Watch.values.toSet() : picked;
+  }
+}
+
 /// A battery reading as a percentage, or null when this device has none.
 ///
 /// Not every `battery` is a percentage — some plugins send `ok`/`low`, some
@@ -59,7 +86,9 @@ List<Knowing> worthKnowing(
   Iterable<DeviceState> devices, {
   double lowBattery = 50,
   String? room,
+  Set<Watch>? watch,
 }) {
+  final watching = watch ?? Watch.values.toSet();
   // Narrowed to one room when asked. The room page wants what needs attention
   // *here*; the house page wants all of it, and the same rules answer both.
   if (room != null && room.isNotEmpty) {
@@ -80,29 +109,41 @@ List<Knowing> worthKnowing(
     // Unreachable first: a device that is not answering makes every other
     // reading about it stale, so its battery is not also reported.
     if (!d.available) {
-      out.add((level: Attention.warn, what: name, state: 'offline'));
+      if (watching.contains(Watch.offline)) {
+        out.add((level: Attention.warn, what: name, state: 'offline'));
+      }
+      // Still skipped when offline is not being watched: every other reading
+      // about a device that is not answering is stale, and reporting a stale
+      // battery is worse than reporting nothing.
       continue;
     }
 
-    if (_isTrue(d.state['water_detected'])) {
+    if (!watching.contains(Watch.water)) {
+      // Nothing.
+    } else if (_isTrue(d.state['water_detected'])) {
       out.add((level: Attention.danger, what: name, state: 'water'));
     } else if (_isFalse(d.state['water_detected'])) {
       sensorsDry++;
     }
 
-    if (_isTrue(d.state['open'])) {
+    if (!watching.contains(Watch.doors)) {
+      // Nothing.
+    } else if (_isTrue(d.state['open'])) {
       out.add((level: Attention.warn, what: name, state: 'open'));
     } else if (_isFalse(d.state['open'])) {
       doorsClosed++;
     }
 
-    if (_isFalse(d.state['locked'])) {
+    if (!watching.contains(Watch.locks)) {
+      // Nothing.
+    } else if (_isFalse(d.state['locked'])) {
       out.add((level: Attention.warn, what: name, state: 'unlocked'));
     } else if (_isTrue(d.state['locked'])) {
       locksLocked++;
     }
 
-    if (batteryPercent(d) case final pct? when pct <= lowBattery) {
+    final pct = watching.contains(Watch.batteries) ? batteryPercent(d) : null;
+    if (pct != null && pct <= lowBattery) {
       out.add((
         level: Attention.danger,
         what: name,
