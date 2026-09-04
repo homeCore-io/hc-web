@@ -42,6 +42,7 @@ import '../../design/components/hc_surface.dart';
 import '../../design/components/hc_tile.dart';
 import '../../design/tokens.dart';
 import 'floor_plan_card.dart';
+import 'device_pill.dart';
 import '../devices/device_scenes.dart';
 import '../../design/components/hc_scene_chip.dart';
 import '../devices/device_sheet.dart';
@@ -397,6 +398,14 @@ class _DeviceGridWidget extends ConsumerWidget {
     final devices = selection.shown;
     final room = ref.watch(pageRoomProvider);
     final picks = widgetModel.config['picks'] == true;
+    // **Pills, where a tile is more box than it needs to be.**
+    //
+    // A tile is a card with a glyph, a name, a state and a control in it, and a
+    // row of them under a heading reads as a row of blocks with the names cut
+    // off — the name is the part that gives way when the box is fixed and the
+    // contents are not. John: *"I don't like the box look for devices and they
+    // look contorted with names cut off."* A pill is as wide as its name.
+    final pills = widgetModel.config['layout'] == 'pills';
     final picked = pickedIn(ref.watch(pickedDeviceProvider), room);
     // **Aimed at something from the first frame.** A panel of controls that is
     // blank until you touch a tile reads as broken, and the first light is a
@@ -409,6 +418,32 @@ class _DeviceGridWidget extends ConsumerWidget {
         }
       });
     }
+    if (pills) {
+      final t = HcTokens.of(context);
+      return Wrap(
+        spacing: t.space.sm,
+        runSpacing: t.space.sm,
+        children: [
+          for (final device in devices)
+            DevicePill(
+              device: device,
+              label: labelInRoom(device.displayName, room),
+              selected: picks && device.id == picked,
+              onTap: picks
+                  ? () => ref
+                      .read(pickedDeviceProvider.notifier)
+                      .pick(room, device.id)
+                  : () => showDeviceSheet(context, device.id),
+              onToggle: device.isMediaPlayer
+                  ? null
+                  : () => ref
+                      .read(devicesProvider.notifier)
+                      .command(device.id, {'on': !isOn(device)}),
+            ),
+        ],
+      );
+    }
+
     return LayoutBuilder(
       builder: (context, constraints) {
         final targetWidth = veryCompact
@@ -1807,12 +1842,18 @@ void registerBuiltinDashboardWidgets() {
           minW: 4, minH: 2, recommendedW: 8, recommendedH: 2),
       configFields: const [
         ..._selectionFields,
+        WidgetConfigField('layout', WidgetConfigKind.choice,
+            label: 'As',
+            options: ['tiles', 'pills'],
+            defaultValue: 'tiles',
+            help: 'A pill is as wide as its name, and wraps.'),
         WidgetConfigField('picks', WidgetConfigKind.boolean,
             label: 'Tapping aims this page',
             help: 'Instead of opening the device. Controls set to “the picked '
                 'device” follow whichever tile you touch.'),
       ],
       validate: _validateSelection,
+      growsToFit: true,
       builder: (context, a) => _DeviceGridWidget(
         widgetModel: _modelOf(a, 'device_grid'),
         compact: a.isCompact,
@@ -1858,6 +1899,7 @@ void registerBuiltinDashboardWidgets() {
       // No validator. A Rooms element with nothing configured is the useful
       // one — it is the whole house, by room, which is what most people want
       // and what the home page does.
+      growsToFit: true,
       builder: (context, a) => RoomsCard(
         widgetModel: _modelOf(a, 'rooms'),
         compact: a.isCompact,
@@ -1876,6 +1918,7 @@ void registerBuiltinDashboardWidgets() {
           minHeight: 96),
       configFields: _selectionFields,
       validate: _validateSelection,
+      growsToFit: true,
       builder: (context, a) => _DeviceListWidget(
         widgetModel: _modelOf(a, 'device_list'),
         compact: a.isCompact,
@@ -1905,6 +1948,7 @@ void registerBuiltinDashboardWidgets() {
           minHeight: 150),
       configFields: _selectionFields,
       validate: _validateSelection,
+      growsToFit: true,
       builder: (context, a) => _MediaPlayerDashboardWidget(
         widgetModel: _modelOf(a, 'media_player'),
       ),
@@ -1937,6 +1981,7 @@ void registerBuiltinDashboardWidgets() {
             help: 'Only when Which scenes is “device”. Set it to the picked '
                 'device and the scenes follow whichever light you tap.'),
       ],
+      growsToFit: true,
       builder: (context, a) => _SceneRowWidget(config: a.config),
     ),
     WidgetDescriptor(
@@ -1966,6 +2011,7 @@ void registerBuiltinDashboardWidgets() {
                 'as slivers.'),
         WidgetConfigField('ink', WidgetConfigKind.ink, label: 'Bar colour'),
       ],
+      growsToFit: true,
       builder: (context, a) => BreakdownElement(config: a.config),
     ),
     WidgetDescriptor(
@@ -2005,6 +2051,7 @@ void registerBuiltinDashboardWidgets() {
             help: 'Off shows the good news too — a panel that goes blank when '
                 'the house is fine looks broken.'),
       ],
+      growsToFit: true,
       builder: (context, a) => WorthKnowingElement(config: a.config),
     ),
     WidgetDescriptor(
@@ -2019,6 +2066,7 @@ void registerBuiltinDashboardWidgets() {
             options: ['none', 'type', 'device', 'area']),
         WidgetConfigField('area_name', WidgetConfigKind.areaName),
       ],
+      growsToFit: true,
       builder: (context, a) => _EventFeedWidget(
         widgetModel: _modelOf(a, 'event_feed'),
         compact: a.isCompact,

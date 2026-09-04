@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -15,6 +16,7 @@ import '../../core/dashboard/group_frame.dart';
 import '../../core/dashboard/groups.dart';
 import '../../core/dashboard/tap_action.dart';
 import '../../core/dashboard/widget_registry.dart';
+import '../../core/dashboard/reflow.dart';
 import '../../core/dashboard/room_scope.dart';
 import '../../core/providers/devices_provider.dart';
 import '../../core/providers/page_room_provider.dart';
@@ -371,6 +373,40 @@ class _PageGridState extends State<PageGrid> {
     _lastTapAt = now;
   }
 
+  /// What each growable element turned out to need, by id.
+  ///
+  /// Filled after a frame, because a natural height is not knowable before
+  /// something has laid itself out. Only ever grows within a page's life —
+  /// see [_reportNeeds] for why a shrink is not worth a rebuild.
+  final Map<String, double> _needs = {};
+
+  /// [child], reporting what it takes when this element is one that grows.
+  ///
+  /// A plain pass-through otherwise, so a page where nothing grows builds the
+  /// tree it always built.
+  Widget _measured(String id, bool growable, double floor, Widget child) =>
+      growable
+          ? _MeasuredHeight(
+              onHeight: (h) => _reportNeeds(id, h),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: floor),
+                child: child,
+              ),
+            )
+          : child;
+
+  /// One element's measured height, kept if it is news.
+  ///
+  /// The tolerance is what stops a measure/lay-out/measure loop: a sub-pixel
+  /// difference between what a thing asked for and what it got is not a
+  /// reason to lay the page out again.
+  void _reportNeeds(String id, double height) {
+    final had = _needs[id];
+    if (had != null && (had - height).abs() < 1) return;
+    if (!mounted) return;
+    setState(() => _needs[id] = height);
+  }
+
   /// The rectangle a composed gesture started from, so a drag depends only on
   /// how far the pointer has moved and not on the path it took.
   DashboardRect? _gestureRect;
@@ -664,9 +700,33 @@ class _PageGridState extends State<PageGrid> {
         DashboardRect shifted(DashboardRect r) =>
             r.copyWith(x: r.x + frameShift.dx, y: r.y + frameShift.dy);
 
-        DashboardRect boxOf(GridItem i) {
+        DashboardRect placedOf(GridItem i) {
           final base = rectFor(geometry, i, i.rect);
           return carried.contains(i.id) ? shifted(base) : base;
+        }
+
+        // **Room for what an element actually needs.** A list cannot know its
+        // own length when the page is written — a room page serves fifteen
+        // rooms and each has a different number of everything — so the ones
+        // that declare they grow are measured here and the page makes room.
+        //
+        // Not while editing: a rectangle you are dragging has to be the
+        // rectangle, or the handle you are holding is not where the card is.
+        final grown = widget.editing
+            ? const <String, DashboardRect>{}
+            : reflow(
+                {for (final i in items) i.id: placedOf(i)},
+                _needs,
+              );
+
+        DashboardRect boxOf(GridItem i) => grown[i.id] ?? placedOf(i);
+
+        /// Whether this element is measured rather than told.
+        bool growable(GridItem i) {
+          if (widget.editing) return false;
+          final type = widget.widgetsById[i.id]?.type;
+          if (type == null) return false;
+          return WidgetRegistry.lookup(type)?.growsToFit ?? false;
         }
 
         // The groups with a body, resolved against the very rectangles the
@@ -1427,66 +1487,85 @@ class _PageGridState extends State<PageGrid> {
                   left: _dragId == item.id ? draggedLeft(item) : leftOf(item),
                   top: _dragId == item.id ? draggedTop(item) : topOf(item),
                   width: widthOf(item),
-                  height: heightOf(item),
-                  child: _clipped(
+                  // **A growable element is not given a height, it is asked
+                  // for one.**
+                  //
+                  // Pinning it to its rectangle is what clipped the third
+                  // speaker and the second row of switches — and measuring it
+                  // inside that pin was worse than useless, because a child
+                  // laid out in a fixed box reports the box. Left free in this
+                  // axis it takes what it needs, says so, and `reflow` moves
+                  // whatever was under it on the next frame.
+                  height: growable(item) ? null : heightOf(item),
+                  child: _measured(
                     item.id,
-                    clipTo[item.id],
-                    _dragId == item.id ? draggedLeft(item) : leftOf(item),
-                    _dragId == item.id ? draggedTop(item) : topOf(item),
-                    _inherited(
-                      inheritedTransform[item.id],
-                      inheritedOpacity[item.id],
-                      leftOf(item),
-                      topOf(item),
-                      _transformed(
-                        item,
-                        RepaintBoundary(
-                          child: _Cell(
-                            onConfigChanged: widget.onWidgetConfig == null
-                                ? null
-                                : (next) =>
-                                    widget.onWidgetConfig!(item.id, next),
-                            deviceLookup: widget.deviceLookup,
-                            item: item,
-                            model: widget.widgetsById[item.id],
-                            editing: widget.editing,
-                            simplified: gesturing,
-                            dragging:
-                                _dragId == item.id || _resizeId == item.id,
-                            selected: widget.selectedIds.contains(item.id),
-                            entered: _entered == item.id,
-                            enteredFocus: _enteredFocus,
-                            onEnter: () => _enter(item.id),
-                            onLeave: _leave,
-                            // Only while resizing. During a move the position is
-                            // already legible from where the card is; during a
-                            // resize the number of cells is exactly what you are
-                            // aiming at and the only thing you cannot read off the
-                            // screen.
-                            sizeLabel: _resizeId == item.id
-                                ? '${item.w}×${item.h}'
-                                : null,
-                            onRemove: () => widget.onRemove?.call(item.id),
-                            onConfigure: () =>
-                                widget.onConfigure?.call(item.id),
-                            onMenu: (pos) => widget.onMenu?.call(item.id, pos),
-                            onSelect: widget.onSelect == null
-                                ? null
-                                // Shift is read at the moment of the tap rather than
-                                // tracked as state: a modifier held while the pointer
-                                // was elsewhere is not a modifier held for this click.
-                                : () => _tapped(
-                                      item.id,
-                                      HardwareKeyboard.instance.isShiftPressed,
-                                    ),
-                            onDragStart: () => startDrag(item),
-                            onDragUpdate: updateDrag,
-                            onDragEnd: endDrag,
-                            onResizeStart: (handle) =>
-                                startResize(item, handle),
-                            composed: item.isComposed,
-                            onResizeUpdate: updateResize,
-                            onResizeEnd: endResize,
+                    growable(item),
+                    // Never *less* than the rectangle it was drawn at: a short
+                    // list should still fill the space somebody gave it.
+                    placedOf(item).h,
+                    _clipped(
+                      item.id,
+                      clipTo[item.id],
+                      _dragId == item.id ? draggedLeft(item) : leftOf(item),
+                      _dragId == item.id ? draggedTop(item) : topOf(item),
+                      _inherited(
+                        inheritedTransform[item.id],
+                        inheritedOpacity[item.id],
+                        leftOf(item),
+                        topOf(item),
+                        _transformed(
+                          item,
+                          RepaintBoundary(
+                            child: _Cell(
+                              grows: growable(item),
+                              onConfigChanged: widget.onWidgetConfig == null
+                                  ? null
+                                  : (next) =>
+                                      widget.onWidgetConfig!(item.id, next),
+                              deviceLookup: widget.deviceLookup,
+                              item: item,
+                              model: widget.widgetsById[item.id],
+                              editing: widget.editing,
+                              simplified: gesturing,
+                              dragging:
+                                  _dragId == item.id || _resizeId == item.id,
+                              selected: widget.selectedIds.contains(item.id),
+                              entered: _entered == item.id,
+                              enteredFocus: _enteredFocus,
+                              onEnter: () => _enter(item.id),
+                              onLeave: _leave,
+                              // Only while resizing. During a move the position is
+                              // already legible from where the card is; during a
+                              // resize the number of cells is exactly what you are
+                              // aiming at and the only thing you cannot read off the
+                              // screen.
+                              sizeLabel: _resizeId == item.id
+                                  ? '${item.w}×${item.h}'
+                                  : null,
+                              onRemove: () => widget.onRemove?.call(item.id),
+                              onConfigure: () =>
+                                  widget.onConfigure?.call(item.id),
+                              onMenu: (pos) =>
+                                  widget.onMenu?.call(item.id, pos),
+                              onSelect: widget.onSelect == null
+                                  ? null
+                                  // Shift is read at the moment of the tap rather than
+                                  // tracked as state: a modifier held while the pointer
+                                  // was elsewhere is not a modifier held for this click.
+                                  : () => _tapped(
+                                        item.id,
+                                        HardwareKeyboard
+                                            .instance.isShiftPressed,
+                                      ),
+                              onDragStart: () => startDrag(item),
+                              onDragUpdate: updateDrag,
+                              onDragEnd: endDrag,
+                              onResizeStart: (handle) =>
+                                  startResize(item, handle),
+                              composed: item.isComposed,
+                              onResizeUpdate: updateResize,
+                              onResizeEnd: endResize,
+                            ),
                           ),
                         ),
                       ),
@@ -1991,6 +2070,7 @@ class Point {
 class _Cell extends StatelessWidget {
   const _Cell({
     this.deviceLookup,
+    required this.grows,
     required this.item,
     required this.model,
     required this.editing,
@@ -2018,6 +2098,13 @@ class _Cell extends StatelessWidget {
 
   final GridItem item;
   final DashboardWidgetModel? model;
+
+  /// Whether this element is being sized by what is in it.
+  ///
+  /// The chrome has to stop insisting on the full height when it is:
+  /// `Expanded` and `SizedBox.expand` both mean *fill what you were given*,
+  /// which cannot be obeyed while the height is the thing being worked out.
+  final bool grows;
   final bool editing;
   final bool simplified;
   final bool dragging;
@@ -2161,7 +2248,14 @@ class _Cell extends StatelessWidget {
 
     final Widget card = switch (chrome) {
       // Draws itself onto the page, and nothing is drawn around it.
-      WidgetChrome.bare => SizedBox.expand(child: ClipRect(child: body)),
+      // **A growing element is sized by what is in it, not by its box.**
+      // `SizedBox.expand` and `Expanded` both mean *fill the height you were
+      // given*, which is exactly the instruction that cannot be followed when
+      // the height is the thing being worked out — a Flex with a flex child
+      // under an unbounded constraint asserts outright.
+      WidgetChrome.bare => grows
+          ? ClipRect(child: body)
+          : SizedBox.expand(child: ClipRect(child: body)),
       // The surface, but the body reaches its edges.
       WidgetChrome.bleed => HcSurface(
           selected: dragging || selected,
@@ -2195,6 +2289,7 @@ class _Cell extends StatelessWidget {
           image: image,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: grows ? MainAxisSize.min : MainAxisSize.max,
             children: [
               // **A title that repeats the widget's own type says nothing.**
               // A gauge titled "Gauge" is a word taking a band off the top of
@@ -2220,7 +2315,10 @@ class _Cell extends StatelessWidget {
                         fontWeight: FontWeight.w600, color: t.surface.onBase),
                   ),
                 ),
-              Expanded(child: ClipRect(child: body)),
+              if (grows)
+                ClipRect(child: body)
+              else
+                Expanded(child: ClipRect(child: body)),
             ],
           ),
         ),
@@ -2681,4 +2779,45 @@ Widget _maybeTransparent(
   if (!descriptor.passesTaps) return child;
   if (TapAction.fromConfig(config) != null) return child;
   return IgnorePointer(child: child);
+}
+
+/// Tells its parent how tall its child turned out to be.
+///
+/// Measured after layout rather than during it: a natural height is not
+/// knowable until something has laid itself out, and reporting from inside a
+/// layout would mean laying the page out again from within a layout — the one
+/// thing this must not do.
+class _MeasuredHeight extends SingleChildRenderObjectWidget {
+  const _MeasuredHeight({required this.onHeight, required super.child});
+
+  final ValueChanged<double> onHeight;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _RenderMeasuredHeight(onHeight);
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    _RenderMeasuredHeight renderObject,
+  ) =>
+      renderObject.onHeight = onHeight;
+}
+
+class _RenderMeasuredHeight extends RenderProxyBox {
+  _RenderMeasuredHeight(this.onHeight);
+
+  ValueChanged<double> onHeight;
+  double? _last;
+
+  @override
+  void performLayout() {
+    super.performLayout();
+    final h = size.height;
+    // The tolerance is what stops a measure/lay-out/measure loop: a sub-pixel
+    // difference is not news.
+    if (_last != null && (_last! - h).abs() < 1) return;
+    _last = h;
+    WidgetsBinding.instance.addPostFrameCallback((_) => onHeight(h));
+  }
 }

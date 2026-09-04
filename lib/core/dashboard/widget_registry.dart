@@ -26,6 +26,7 @@ class WidgetDescriptor {
     this.description,
     this.chrome = WidgetChrome.card,
     this.passesTaps = false,
+    this.growsToFit = false,
     this.inPlaceLabel,
     this.bindable = const [],
   });
@@ -68,6 +69,19 @@ class WidgetDescriptor {
   /// with its own behaviour does not, and an element carrying `on_tap` keeps
   /// its tap regardless of what it says here.
   final bool passesTaps;
+
+  /// Whether this element is given the height it turns out to need.
+  ///
+  /// **A rectangle is a promise about where a thing starts, not how much there
+  /// is of it.** A media panel sized for two speakers clips the third; a row of
+  /// switches sized for one line clips the second. The elements that draw a
+  /// *list* cannot know their own length when the page is written — a room page
+  /// serves fifteen rooms and each has a different number of everything — so
+  /// they are measured on the page and the page makes room.
+  ///
+  /// Off for the rest, deliberately: a shape used as a background slab has no
+  /// natural height, and a fixed canvas is a fixed canvas.
+  final bool growsToFit;
 
   /// What entering this card lets you do — `Place markers` — or null for the
   /// cards you cannot enter, which is nearly all of them.
