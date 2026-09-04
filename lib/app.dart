@@ -151,7 +151,14 @@ GoRouter _buildRouter(Ref ref) {
       GoRoute(
         path: '/pages/:id/design',
         builder: (_, state) => PageScreen(
-            dashboardId: state.pathParameters['id']!, designer: true),
+          dashboardId: state.pathParameters['id']!,
+          designer: true,
+          // The designer needs the room as much as the page does. Without it a
+          // room page is undesignable: every element that says `@room` resolves
+          // to nothing, so the canvas is a set of empty boxes reading "No
+          // devices match" and you are arranging a layout you cannot see.
+          room: state.uri.queryParameters['room'],
+        ),
       ),
       ShellRoute(
         // One scope for every route: it resolves which shell the location
