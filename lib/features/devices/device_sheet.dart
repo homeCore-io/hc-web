@@ -18,7 +18,6 @@ import '../../design/components/hc_history_chart.dart';
 import '../../design/hc_icons.dart';
 import '../../design/tokens.dart';
 import '../dashboard/keypad_element.dart' show buttonsOf;
-import 'device_query.dart' show DeviceFacetLabel;
 import '../../shell/hc_sheet.dart';
 import '../automations/rule_phrasing.dart';
 import 'device_actions.dart';
@@ -952,7 +951,8 @@ class _InfoTabState extends ConsumerState<_InfoTab> {
               border: const OutlineInputBorder(),
               // What it would be if nobody said, which is what clearing gives
               // back — named, so the empty choice is not a mystery.
-              hintText: 'As the plugin says · ${facetOf(_d, _d.schema).label}',
+              hintText:
+                  'As the plugin says · ${facetOf(_d, _d.schema).pickerLabel}',
             ),
             items: [
               const DropdownMenuItem(
@@ -961,7 +961,7 @@ class _InfoTabState extends ConsumerState<_InfoTab> {
                       'says')),
               for (final f in DeviceFacet.values)
                 if (f != DeviceFacet.unknown)
-                  DropdownMenuItem(value: f.token, child: Text(f.label)),
+                  DropdownMenuItem(value: f.token, child: Text(f.pickerLabel)),
             ],
             onChanged: _busy
                 ? null
