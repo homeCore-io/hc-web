@@ -446,6 +446,19 @@ String summarise(DeviceState d) {
   // device_readings.dart for the full evidence.
   if (s['vibration'] case final bool v) bits.add(v ? 'vibration' : 'still');
 
+  // **A keypad's news is which button was pressed.** `button_N` accumulates
+  // the last action per button, so the state says which buttons have ever
+  // fired and in no order — a Pico summarised as "—", which is a device the
+  // house has nothing to say about. The plugin publishes the one fact that
+  // was missing; this is where it gets read.
+  if (s['last_button'] case final num b) {
+    // The override first, then the engraving the plugin sent, then the number.
+    bits.add(
+        buttonLabel(d, b.toInt(), engraved: s['last_button_name'] as String?));
+  } else if (s['last_button_name'] case final String b when b.isNotEmpty) {
+    bits.add(b);
+  }
+
   if (s['state'] case final String st when d.isMediaPlayer) bits.add(st);
   if (s['volume'] case final num v when d.isMediaPlayer) bits.add('vol $v');
 

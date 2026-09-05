@@ -25,6 +25,14 @@ class DeviceState {
   /// wrong often enough that this field exists — see `devices/presentation.dart`.
   final String? uiHint;
 
+  /// Names somebody gave this device's buttons, by button number.
+  ///
+  /// The paired override for the engravings the bridge delivers — the same
+  /// contract `nameOverride` has, and for the same reason: a keypad's names
+  /// arrive again on every re-registration, so a rename written where the
+  /// plugin publishes would be wiped the next time it reconnected.
+  final Map<String, String>? buttonNames;
+
   /// A user-chosen icon name, overriding the one the facet would pick.
   final String? statusIcon;
 
@@ -69,6 +77,7 @@ class DeviceState {
     this.swVersion,
     this.parentDeviceId,
     this.uiHint,
+    this.buttonNames,
     this.statusIcon,
     required this.available,
     required this.state,
@@ -90,6 +99,13 @@ class DeviceState {
         swVersion: json['sw_version'] as String?,
         parentDeviceId: json['parent_device_id'] as String?,
         uiHint: json['ui_hint'] as String?,
+        buttonNames: switch (json['button_names']) {
+          final Map<String, dynamic> m => {
+              for (final e in m.entries)
+                if (e.value is String) e.key: e.value as String,
+            },
+          _ => null,
+        },
         statusIcon: json['status_icon'] as String?,
         available: json['available'] as bool? ?? false,
         state: Map<String, dynamic>.from(json['attributes'] as Map? ?? {}),
@@ -116,6 +132,7 @@ class DeviceState {
     String? swVersion,
     String? parentDeviceId,
     String? uiHint,
+    Map<String, String>? buttonNames,
     String? statusIcon,
     bool? available,
     Map<String, dynamic>? state,
@@ -136,6 +153,7 @@ class DeviceState {
         swVersion: swVersion ?? this.swVersion,
         parentDeviceId: parentDeviceId ?? this.parentDeviceId,
         uiHint: uiHint ?? this.uiHint,
+        buttonNames: buttonNames ?? this.buttonNames,
         statusIcon: statusIcon ?? this.statusIcon,
         available: available ?? this.available,
         state: state ?? this.state,

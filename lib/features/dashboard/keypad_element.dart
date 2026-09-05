@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/dashboard/card_style.dart';
+import '../../core/devices/presentation.dart';
 import '../../core/models/device_state.dart';
 import '../../core/providers/devices_provider.dart';
 import '../../design/tokens.dart';
@@ -127,7 +128,7 @@ List<KeypadButton> buttonsOf(DeviceState? device) {
     final led = device!.state['led_$number'];
     out.add((
       number: number,
-      label: name ?? 'Button $number',
+      label: buttonLabel(device, number, engraved: name),
       lit: led == true || led == 'on',
       was: device.state['button_$number'] as String?,
     ));
