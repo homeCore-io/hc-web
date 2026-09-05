@@ -120,6 +120,14 @@ Map<String, DashboardRect> reflow(
     final rect = rects[id]!;
     final grew = height[id]! - rect.h;
     if (grew.abs() <= 0.5) continue;
+    // **What is gone is already accounted for.** An element that drew nothing
+    // vacates its space, and `freed` above hands that space to everything
+    // below it exactly once, as the union of the vacated stretches. An exact
+    // height — a stack's — may also shrink, and a stack that collapses to
+    // nothing is both at once: subtracting its height here as well took the
+    // Garage's switches six hundred pixels up, into the chart at the top of
+    // the page.
+    if (height[id]! < 0.5) continue;
     // A shrink is a push upward, and only an exact height may shrink.
     if (grew < 0 && !exact.contains(id)) continue;
 
