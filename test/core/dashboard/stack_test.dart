@@ -25,6 +25,27 @@ const paths = {'a': 'sets', 'b': 'sets', 'c': 'sets', 'outside': null};
 
 void main() {
   _rows();
+  test('a band that goes away frees its space exactly once', () {
+    // **A collapsed band is one hole, not two.** It is *gone*, so the space it
+    // held is vacated and everything below climbs by that much; it is also
+    // *exact*, so the same rectangle shrinking by its whole height was
+    // shifting them a second time. The Garage collapses its band, and its
+    // switches climbed six hundred pixels into the chart at the top of the
+    // page. John: *"header is a program on garage page but not others."*
+    final out = layoutPage(
+      {
+        'a': r(0, 110, 200, 20),
+        'b': r(0, 150, 200, 100),
+        'outside': r(0, 500, 200, 60),
+      },
+      const {'a': 0, 'b': 0},
+      boxes: [band()],
+      paths: paths,
+    );
+    expect(out['outside']!.y, closeTo(200, 0.5),
+        reason: 'the band was 300 tall, and it is not freed twice');
+  });
+
   test('members sit one under another from the group\'s top', () {
     final out = stackGroups(
       {'a': r(0, 500, 200, 20), 'b': r(0, 900, 200, 40)},
