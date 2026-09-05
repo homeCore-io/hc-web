@@ -407,6 +407,16 @@ class _PageGridState extends State<PageGrid> {
     setState(() => _needs[id] = height);
   }
 
+  /// Forgets what an element needed, when it is drawing again.
+  ///
+  /// A hidden element reports nothing so the page closes the gap; when it comes
+  /// back it must stop reporting nothing, or it would keep its rectangle
+  /// collapsed while drawing at full height inside it.
+  void _forgetNeeds(String id) {
+    if (!_needs.containsKey(id) || !mounted) return;
+    setState(() => _needs.remove(id));
+  }
+
   /// The rectangle a composed gesture started from, so a drag depends only on
   /// how far the pointer has moved and not on the path it took.
   DashboardRect? _gestureRect;
@@ -720,11 +730,17 @@ class _PageGridState extends State<PageGrid> {
         // element does not have. So the designer shows what you arranged and
         // the page shows what it needs; the room picker beside this is what
         // makes the first of those worth looking at.
+        // **Stack first, then reflow.** A stacked band settles its own members
+        // — order, gaps, and the ones that drew nothing costing neither — and
+        // comes out with a height. Everything else on the page then moves
+        // around that height the way it moves around any other.
         final grown = widget.editing
             ? const <String, DashboardRect>{}
-            : reflow(
+            : layoutPage(
                 {for (final i in items) i.id: placedOf(i)},
                 _needs,
+                boxes: widget.groupStyles,
+                paths: widget.groupPaths,
               );
 
         DashboardRect boxOf(GridItem i) => grown[i.id] ?? placedOf(i);
@@ -1526,6 +1542,19 @@ class _PageGridState extends State<PageGrid> {
                           RepaintBoundary(
                             child: _Cell(
                               grows: growable(item),
+                              // **Forget it whatever kind it is.** A
+                              // growable element was left reporting nothing
+                              // for ever: on the first paint no light is
+                              // picked yet — the grid aims itself a frame
+                              // later — so everything tied to the pick says it
+                              // drew nothing, and the ones that measure their
+                              // own height never took it back. The page then
+                              // held the collapsed layout with the elements
+                              // drawn full-size inside it, and the scenes ran
+                              // over the section below.
+                              onHidden: (gone) => gone
+                                  ? _reportNeeds(item.id, 0)
+                                  : _forgetNeeds(item.id),
                               onConfigChanged: widget.onWidgetConfig == null
                                   ? null
                                   : (next) =>
@@ -2078,6 +2107,7 @@ class Point {
 class _Cell extends StatelessWidget {
   const _Cell({
     this.deviceLookup,
+    this.onHidden,
     required this.grows,
     required this.item,
     required this.model,
@@ -2106,6 +2136,13 @@ class _Cell extends StatelessWidget {
 
   final GridItem item;
   final DashboardWidgetModel? model;
+
+  /// Told when this element decides it is not there, and when it is again.
+  ///
+  /// The page closes the gap a hidden element leaves, and it can only do that
+  /// if it hears about it: whether an element draws is a question about a
+  /// device, answered here, several widgets below the thing that arranges them.
+  final ValueChanged<bool>? onHidden;
 
   /// Whether this element is being sized by what is in it.
   ///
@@ -2234,9 +2271,15 @@ class _Cell extends StatelessWidget {
                           // page can be about something that is not here and
                           // simply not be there. Kept in the designer, where a
                           // placement you cannot see cannot be arranged.
-                          if (!editing && hiddenFor(config, devices)) {
-                            return const SizedBox.shrink();
-                          }
+                          final gone = !editing && hiddenFor(config, devices);
+                          // Said out loud, so the page can close the gap. Only
+                          // the growable elements are measured, and the band
+                          // that hides is mostly labels and sliders that are
+                          // not — so a hidden one reports its nothing rather
+                          // than being measured for it.
+                          WidgetsBinding.instance.addPostFrameCallback(
+                              (_) => onHidden?.call(gone));
+                          if (gone) return const SizedBox.shrink();
                           return _element(context, descriptor, config);
                         },
                       );

@@ -717,19 +717,14 @@ class _PageScreenState extends ConsumerState<PageScreen> {
   /// The layout for [wanted], falling back through [availableBreakpoint] and
   /// finally to an empty desktop layout for a dashboard that has none.
   DashboardLayout _layoutFor(
-      DashboardDefinition d, DashboardBreakpoint wanted) {
-    final available = availableBreakpoint(d, wanted);
-    if (available == null) {
-      return DashboardLayout(
-        breakpoint: wanted,
-        columns: wanted == DashboardBreakpoint.mobile ? 4 : _defaultColumns,
-        rowHeight: _defaultRowHeight,
-        gap: _defaultGap,
-        placements: const [],
+          DashboardDefinition d, DashboardBreakpoint wanted) =>
+      layoutToEdit(
+        d,
+        wanted,
+        defaultColumns: _defaultColumns,
+        defaultRowHeight: _defaultRowHeight,
+        defaultGap: _defaultGap,
       );
-    }
-    return d.layoutFor(available);
-  }
 
   List<GridItem> _itemsFrom(DashboardDefinition d, DashboardLayout layout) {
     final frames = framesByPath(layout.groups);

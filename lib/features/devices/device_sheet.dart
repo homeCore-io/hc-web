@@ -1508,14 +1508,23 @@ class _IconPicker extends StatelessWidget {
       );
     }
 
+    // **One cell per picture, not one per facet.** This is a picker of
+    // *pictures*, and several facets wear the same one — a light, a dimmable
+    // light and a colour light are all a bulb, a door and a window are both a
+    // door. Iterating the facets put three identical bulbs in a row with
+    // nothing to tell them apart. John: *"Why are there 3 light bulb icons?"*
+    //
+    // The first facet to claim a glyph keeps it, so the name under it is the
+    // plainest one — "Light" rather than "Colour light".
+    final seen = <IconData>{HcIcons.forFacet(fallback)};
     return Wrap(
       spacing: t.space.xs,
       runSpacing: t.space.xs,
       children: [
         cell(null, HcIcons.forFacet(fallback), 'Automatic'),
         for (final facet in DeviceFacet.values)
-          if (facet != DeviceFacet.unknown)
-            cell(facet, HcIcons.forFacet(facet), humanize(facet.iconKey)),
+          if (facet != DeviceFacet.unknown && seen.add(HcIcons.forFacet(facet)))
+            cell(facet, HcIcons.forFacet(facet), facet.pickerLabel),
       ],
     );
   }

@@ -54,6 +54,18 @@ const _everyDeviceAnswers = {'name', 'room'};
 /// page can be about something the room has not got, and simply not be there.
 const hideWithKey = 'hide_with';
 
+/// Attributes the [hideWithKey] device must actually be able to take.
+///
+/// **A light on a switch is still a light — it just has nothing to set.** With
+/// the Garage's Overhead typed as a light it became pickable, and the control
+/// band appeared for it: a brightness slider and a warmth slider for a relay
+/// that can only be on or off. Being *there* is not the same as being able to
+/// do the thing, and `hide_with` only ever asked the first question.
+///
+/// A list, because a panel is worth showing when the device can take any one of
+/// what it offers: a lamp that dims but has no colour still wants the panel.
+const hideUnlessKey = 'hide_unless';
+
 /// The keys whose value may be `@room` meaning *this page's room*.
 const _areaKeys = {'area_name', 'room'};
 
@@ -235,5 +247,24 @@ bool hiddenFor(Map<String, dynamic> config, List<DeviceState> devices) {
   final ref = config[hideWithKey];
   if (ref is! String) return false;
   if (ref.isEmpty) return true;
-  return !devices.any((d) => d.id == ref);
+
+  DeviceState? found;
+  for (final d in devices) {
+    if (d.id == ref) found = d;
+  }
+  if (found == null) return true;
+
+  final wants = config[hideUnlessKey];
+  if (wants is! List || wants.isEmpty) return false;
+  // The plugin's own promise, not a reading: a lamp that is off still has a
+  // brightness to set, and a relay that reports `on` has nothing more whether
+  // it is on or not. `attribute_policy.dart` spells out why an inferred
+  // writable is this app's opinion rather than the device's.
+  final schema = found.schema?.attributes;
+  if (schema == null) return true;
+  for (final want in wants) {
+    if (want is! String) continue;
+    if (schema[want]?.writable == true) return false;
+  }
+  return true;
 }

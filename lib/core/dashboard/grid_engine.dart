@@ -387,6 +387,8 @@ class GroupBox {
     this.radius,
     this.clip = false,
     this.frame = false,
+    this.stack = false,
+    this.stackGap = 12,
     this.rotation,
     this.opacity,
   });
@@ -435,6 +437,28 @@ class GroupBox {
   /// an ordinary group instead of putting every child at the page origin.
   bool get isFrame => frame && rect != null;
 
+  /// Whether this box lays its members out one under another.
+  ///
+  /// **A rectangle is where a thing starts; a stack is an order.** Everything
+  /// else on a composed page is placed absolutely, which is what makes it a
+  /// design surface — and it is also why a band that hides leaves a hole. The
+  /// space its elements occupied can be reclaimed by measuring them, but the
+  /// *padding between them* was never occupied by anything, so hiding cannot
+  /// free it. Only laying them out can.
+  ///
+  /// So a stacked box takes its members in the order they were placed, puts
+  /// each under the last with [stackGap] between, and skips the ones that drew
+  /// nothing — gap and all. Its own height is what that comes to.
+  final bool stack;
+
+  /// The space between members of a stack, in page units.
+  final double stackGap;
+
+  /// True when this box arranges its members rather than merely surrounding
+  /// them. A stack needs a rect for the same reason a frame does: it is where
+  /// the first member goes.
+  bool get isStack => stack && rect != null;
+
   /// The transform every member inherits.
   ///
   /// Composed with each member's own rather than replacing it: a card turned
@@ -457,6 +481,7 @@ class GroupBox {
       radius == null &&
       !clip &&
       !frame &&
+      !stack &&
       rotation == null &&
       opacity == null;
 
@@ -467,6 +492,8 @@ class GroupBox {
     Object? radius = _unchangedRect,
     bool? clip,
     bool? frame,
+    bool? stack,
+    double? stackGap,
     Object? rotation = _unchangedRect,
     Object? opacity = _unchangedRect,
   }) =>
@@ -483,6 +510,8 @@ class GroupBox {
             identical(radius, _unchangedRect) ? this.radius : radius as double?,
         clip: clip ?? this.clip,
         frame: frame ?? this.frame,
+        stack: stack ?? this.stack,
+        stackGap: stackGap ?? this.stackGap,
         rotation: identical(rotation, _unchangedRect)
             ? this.rotation
             : rotation as double?,
@@ -498,6 +527,8 @@ class GroupBox {
         if (radius != null) 'radius': radius,
         if (clip) 'clip': clip,
         if (frame) 'frame': frame,
+        if (stack) 'stack': stack,
+        if (stack && stackGap != 12) 'stack_gap': stackGap,
         if (rotation != null) 'rotation': rotation,
         if (opacity != null) 'opacity': opacity,
       };
@@ -518,6 +549,8 @@ class GroupBox {
       radius: radius == null || radius < 0 ? null : radius,
       clip: json['clip'] == true,
       frame: json['frame'] == true,
+      stack: json['stack'] == true,
+      stackGap: DashboardRect._finite(json['stack_gap']) ?? 12,
       rotation: DashboardRect._finite(json['rotation']),
       opacity: DashboardRect._finite(json['opacity']),
     );
@@ -531,13 +564,15 @@ class GroupBox {
       other.padding == padding &&
       other.radius == radius &&
       other.frame == frame &&
+      other.stack == stack &&
+      other.stackGap == stackGap &&
       other.clip == clip &&
       other.rotation == rotation &&
       other.opacity == opacity;
 
   @override
-  int get hashCode =>
-      Object.hash(path, rect, padding, radius, clip, frame, rotation, opacity);
+  int get hashCode => Object.hash(path, rect, padding, radius, clip, frame,
+      stack, stackGap, rotation, opacity);
 }
 
 /// What empty space in a layout means. Mirrors core's `DashboardFlow`.
