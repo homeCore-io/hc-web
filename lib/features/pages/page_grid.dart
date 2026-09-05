@@ -407,15 +407,33 @@ class _PageGridState extends State<PageGrid> {
     setState(() => _needs[id] = height);
   }
 
-  /// Forgets what an element needed, when it is drawing again.
+  /// Which elements drew nothing at all.
   ///
-  /// A hidden element reports nothing so the page closes the gap; when it comes
-  /// back it must stop reporting nothing, or it would keep its rectangle
-  /// collapsed while drawing at full height inside it.
-  void _forgetNeeds(String id) {
-    if (!_needs.containsKey(id) || !mounted) return;
-    setState(() => _needs.remove(id));
+  /// **Kept apart from what an element measured, because they are different
+  /// facts and one must not erase the other.** Folding both into [_needs] —
+  /// a hidden element reporting nothing, a drawn one forgetting — has the two
+  /// fighting every frame: the measurement arrives, the still-visible element
+  /// says it is not hidden, the measurement is dropped, and the page lays out
+  /// with no idea how tall anything is. That is a list overrunning the section
+  /// below it, and it is a rebuild loop besides.
+  final Set<String> _hidden = {};
+
+  /// Said out loud by an element that drew nothing, and taken back when it
+  /// draws again.
+  void _setHidden(String id, bool gone) {
+    if (gone == _hidden.contains(id) || !mounted) return;
+    setState(() => gone ? _hidden.add(id) : _hidden.remove(id));
   }
+
+  /// What the page lays out against: what each element measured, and nothing
+  /// at all for the ones that are not there.
+  ///
+  /// Hidden wins, and has to: an element keeps its measuring wrapper while it
+  /// is away, and a wrapper with a floor under it measures the floor.
+  Map<String, double> get _wanted => {
+        for (final e in _needs.entries) e.key: e.value,
+        for (final id in _hidden) id: 0,
+      };
 
   /// The rectangle a composed gesture started from, so a drag depends only on
   /// how far the pointer has moved and not on the path it took.
@@ -738,7 +756,7 @@ class _PageGridState extends State<PageGrid> {
             ? const <String, DashboardRect>{}
             : layoutPage(
                 {for (final i in items) i.id: placedOf(i)},
-                _needs,
+                _wanted,
                 boxes: widget.groupStyles,
                 paths: widget.groupPaths,
               );
@@ -1542,19 +1560,14 @@ class _PageGridState extends State<PageGrid> {
                           RepaintBoundary(
                             child: _Cell(
                               grows: growable(item),
-                              // **Forget it whatever kind it is.** A
-                              // growable element was left reporting nothing
-                              // for ever: on the first paint no light is
-                              // picked yet — the grid aims itself a frame
-                              // later — so everything tied to the pick says it
-                              // drew nothing, and the ones that measure their
-                              // own height never took it back. The page then
-                              // held the collapsed layout with the elements
-                              // drawn full-size inside it, and the scenes ran
-                              // over the section below.
-                              onHidden: (gone) => gone
-                                  ? _reportNeeds(item.id, 0)
-                                  : _forgetNeeds(item.id),
+                              // **Whether it is there, not how tall it
+                              // is.** On the first paint no light is picked
+                              // yet — the grid aims itself a frame later — so
+                              // everything tied to the pick says it drew
+                              // nothing, and it has to be able to take that
+                              // back when the pick lands. What it must not do
+                              // is take back the measurement with it.
+                              onHidden: (gone) => _setHidden(item.id, gone),
                               onConfigChanged: widget.onWidgetConfig == null
                                   ? null
                                   : (next) =>
