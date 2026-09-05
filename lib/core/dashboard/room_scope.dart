@@ -40,6 +40,20 @@ const pickedToken = '@picked';
 /// rather than out of its state — see there for why a name is not a reading.
 const _everyDeviceAnswers = {'name', 'room'};
 
+/// The key that ties an element's presence to a device's.
+///
+/// **A control for a device that is not there is not a control, and a heading
+/// over three of them is worse.** The Garage's lights are switches, so the room
+/// page's light picker had nothing to pick and the panel below it drew a name
+/// of "—", two sliders reading *no such device*, and "Pick a light to see its
+/// scenes" — under a heading announcing it. John: *"nothing shows in lights but
+/// a broken control set is displayed."*
+///
+/// Any element may name a device here, `@picked` and `@room` included. When it
+/// does not resolve, the element is not drawn — which is how a whole band of a
+/// page can be about something the room has not got, and simply not be there.
+const hideWithKey = 'hide_with';
+
 /// The keys whose value may be `@room` meaning *this page's room*.
 const _areaKeys = {'area_name', 'room'};
 
@@ -53,6 +67,7 @@ bool mentionsRoom(Map<String, dynamic> config) {
     if (config[key] == roomToken) return true;
   }
   if (ours(config['device_id'])) return true;
+  if (ours(config[hideWithKey])) return true;
   if (config['text'] == roomToken) return true;
   final tap = config['on_tap'];
   if (tap is Map && ours(tap['target'])) return true;
@@ -163,6 +178,14 @@ Map<String, dynamic> resolveRoomRefs(
   // A device reference asks for whatever here reports the thing being read.
   // The sibling key IS the question: a chart names its `attribute`, a binding
   // names its `key`, and either is enough to pick.
+  // The reference an element's presence hangs on asks nothing of the device —
+  // only that it is there.
+  final hideRef = out[hideWithKey];
+  if (hideRef == roomToken || hideRef == pickedToken) {
+    final id = found(hideRef, '');
+    out[hideWithKey] = id ?? '';
+  }
+
   final ownRef = out['device_id'];
   if (ownRef == roomToken || ownRef == pickedToken) {
     final wants = (out['attribute'] as String? ?? '').trim();
@@ -201,4 +224,16 @@ Map<String, dynamic> resolveRoomRefs(
   }
 
   return out;
+}
+
+/// Whether [config] says this element should not be drawn.
+///
+/// True only when it named a device and that device is not in [devices] — an
+/// element that says nothing about a device is always drawn, which is every
+/// element written before this.
+bool hiddenFor(Map<String, dynamic> config, List<DeviceState> devices) {
+  final ref = config[hideWithKey];
+  if (ref is! String) return false;
+  if (ref.isEmpty) return true;
+  return !devices.any((d) => d.id == ref);
 }

@@ -2218,21 +2218,27 @@ class _Cell extends StatelessWidget {
                 : !mentionsRoom(model!.config)
                     ? _element(context, descriptor, model!.config)
                     : Consumer(
-                        builder: (context, ref, _) => _element(
-                          context,
-                          descriptor,
-                          () {
-                            final room = ref.watch(pageRoomProvider);
-                            return resolveRoomRefs(
-                              model!.config,
-                              room: room,
-                              devices:
-                                  ref.watch(devicesProvider).value ?? const [],
-                              picked: pickedIn(
-                                  ref.watch(pickedDeviceProvider), room),
-                            );
-                          }(),
-                        ),
+                        builder: (context, ref, _) {
+                          final room = ref.watch(pageRoomProvider);
+                          final devices =
+                              ref.watch(devicesProvider).value ?? const [];
+                          final config = resolveRoomRefs(
+                            model!.config,
+                            room: room,
+                            devices: devices,
+                            picked:
+                                pickedIn(ref.watch(pickedDeviceProvider), room),
+                          );
+                          // An element about a device this room has not got is
+                          // not drawn at all — which is how a whole band of a
+                          // page can be about something that is not here and
+                          // simply not be there. Kept in the designer, where a
+                          // placement you cannot see cannot be arranged.
+                          if (!editing && hiddenFor(config, devices)) {
+                            return const SizedBox.shrink();
+                          }
+                          return _element(context, descriptor, config);
+                        },
                       );
 
     // How much frame the element asked for. A watermarked stand-in during a

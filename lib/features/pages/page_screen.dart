@@ -27,6 +27,7 @@ import '../../core/models/dashboard.dart';
 import '../../core/models/device_state.dart';
 import '../../core/providers/dashboards_provider.dart';
 import '../../core/devices/breakdown.dart' show prettyGroup;
+import '../../core/dashboard/room_scope.dart';
 import '../../core/providers/page_room_provider.dart';
 import '../../core/providers/devices_provider.dart';
 import '../../design/components/hc_controls.dart';
@@ -2318,12 +2319,42 @@ class _PageScreenState extends ConsumerState<PageScreen> {
     // is resolved at the placement seam, several widgets deep, and a parameter
     // threaded through all of them is a parameter somebody eventually forgets.
     final body = _build(context);
-    return widget.room == null || widget.room!.isEmpty
+    final room = widget.room?.isNotEmpty == true ? widget.room : _designerRoom;
+    return room == null
         ? body
         : ProviderScope(
-            overrides: [pageRoomProvider.overrideWithValue(widget.room)],
+            overrides: [pageRoomProvider.overrideWithValue(room)],
             child: body,
           );
+  }
+
+  /// A room to draw against while designing a page that is about one.
+  ///
+  /// **A designer opened on an empty page is a designer you cannot use.** A
+  /// room page names no room — that is the point of it — so without one every
+  /// element resolves to nothing and the canvas is a grid of boxes reading "No
+  /// devices match". The address still decides when it says so; this is only
+  /// what the designer falls back to, and the picker beside the canvas is how
+  /// you change it.
+  ///
+  /// Null everywhere else: a *page* opened without a room is not about a room,
+  /// and guessing one there would be the app inventing a fact about the house.
+  String? get _designerRoom {
+    if (!widget.designer) return null;
+    final page = ref
+        .watch(dashboardsProvider)
+        .value
+        ?.where((d) => d.id == widget.dashboardId)
+        .firstOrNull;
+    if (page == null || !page.widgets.any((w) => mentionsRoom(w.config))) {
+      return null;
+    }
+    final rooms = {
+      for (final d in ref.watch(devicesProvider).value ?? const <DeviceState>[])
+        if ((d.effectiveArea ?? '').isNotEmpty) d.effectiveArea!,
+    }.toList()
+      ..sort();
+    return rooms.isEmpty ? null : rooms.first;
   }
 
   Widget _build(BuildContext context) {

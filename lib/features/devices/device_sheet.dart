@@ -17,6 +17,8 @@ import '../../design/components/hc_dialog.dart';
 import '../../design/components/hc_history_chart.dart';
 import '../../design/hc_icons.dart';
 import '../../design/tokens.dart';
+import '../dashboard/keypad_element.dart' show buttonsOf;
+import 'device_query.dart' show DeviceFacetLabel;
 import '../../shell/hc_sheet.dart';
 import '../automations/rule_phrasing.dart';
 import 'device_actions.dart';
@@ -585,12 +587,33 @@ class _InfoTabState extends ConsumerState<_InfoTab> {
   String get _currentArea =>
       _d.effectiveArea != null ? humanize(_d.effectiveArea!) : '';
 
+  /// The kind this device is treated as, when somebody has said.
+  DeviceFacet? _kind;
+
+  /// A field per button, for a device that has any.
+  final _buttons = <int, TextEditingController>{};
+
   void _start() => setState(() {
         _editing = true;
         _error = null;
         _name.text = _d.displayName;
         _area.text = _currentArea;
         _icon = deviceIconOverride(_d);
+        _kind = hintedFacet(_d);
+        for (final c in _buttons.values) {
+          c.dispose();
+        }
+        _buttons
+          ..clear()
+          ..addEntries(buttonsOf(_d).map((b) => MapEntry(
+                b.number,
+                TextEditingController(
+                  // The override only. The engraving is the hint underneath,
+                  // so an empty field means *whatever the bridge calls it*
+                  // rather than *no name*, and clearing one reverts it.
+                  text: _d.buttonNames?['${b.number}'] ?? '',
+                ),
+              )));
       });
 
   Future<void> _save() async {
@@ -608,6 +631,28 @@ class _InfoTabState extends ConsumerState<_InfoTab> {
     // Null clears it, which is how you get back to the device's own icon.
     if (_icon != deviceIconOverride(_d)) {
       body['status_icon'] = _icon?.iconKey;
+    }
+    // **What a device IS, when the plugin has it wrong.**
+    //
+    // `ui_hint` has been the first thing `facetOf` consults since it was
+    // written — it exists precisely because a plugin's type is often wrong —
+    // and nothing in this app has ever set it. A Lutron switch wired to the
+    // ceiling lights is a light to the person looking at it and a `switch` to
+    // the house, so a room page's Lights panel had nothing in it. John:
+    // *"Appears to be no way of changing the device type anymore?"*
+    //
+    // Null clears it, back to whatever the plugin says.
+    if (_kind != hintedFacet(_d)) body['ui_hint'] = _kind?.token;
+    // Sent whole, so a name cleared here is cleared there: the handler removes
+    // an entry whose value is blank, which is how one button goes back to the
+    // wall's own engraving while the others keep their names.
+    if (_buttons.isNotEmpty) {
+      final names = <String, String>{
+        for (final e in _buttons.entries) '${e.key}': e.value.text.trim(),
+      };
+      final had = _d.buttonNames ?? const <String, String>{};
+      final changed = names.entries.any((e) => (had[e.key] ?? '') != e.value);
+      if (changed) body['button_names'] = names;
     }
     if (body.isEmpty) {
       setState(() => _editing = false);
@@ -675,7 +720,13 @@ class _InfoTabState extends ConsumerState<_InfoTab> {
           _kv(t, 'Name', _d.displayName, onEdit: _start),
           _kv(t, 'Room', _currentArea.isEmpty ? 'No room' : _currentArea,
               onEdit: _start, actionLabel: 'change'),
-          if (_d.deviceType != null) _kv(t, 'Type', humanize(_d.deviceType!)),
+          _kv(
+            t,
+            'Type',
+            humanize((hintedFacet(_d) ?? facetOf(_d, _d.schema)).name),
+            onEdit: _start,
+            actionLabel: 'change',
+          ),
           _kv(t, 'Source', source),
 
           // What the thing actually is, when its plugin says. Above the
@@ -841,6 +892,83 @@ class _InfoTabState extends ConsumerState<_InfoTab> {
               ],
             ),
           ],
+          // **The engravings, when the wall is wrong about them.**
+          //
+          // A keypad's names arrive from the bridge and arrive again on every
+          // re-registration, so this writes the paired override — the field
+          // registration never touches, the same contract the device's own
+          // name has. Empty means *whatever the bridge calls it*, which is how
+          // one button reverts while the rest keep their names.
+          if (_buttons.isNotEmpty) ...[
+            SizedBox(height: t.space.md),
+            Text('BUTTONS',
+                style: t.text.overlineStyle
+                    .copyWith(color: t.surface.onBaseMuted)),
+            SizedBox(height: t.space.xs),
+            Text(
+              'What is printed on the wall, or what you would rather call it. '
+              'Leave one empty to use the name the bridge sends.',
+              style: t.text.captionStyle
+                  .copyWith(color: t.surface.onBaseMuted, height: 1.4),
+            ),
+            SizedBox(height: t.space.xs),
+            for (final b in buttonsOf(_d))
+              Padding(
+                padding: EdgeInsets.only(bottom: t.space.xs),
+                child: TextField(
+                  controller: _buttons[b.number],
+                  enabled: !_busy,
+                  decoration: InputDecoration(
+                    isDense: true,
+                    border: const OutlineInputBorder(),
+                    labelText: 'Button ${b.number}',
+                    // The bridge's own word, shown as the hint: it is what you
+                    // get back by clearing the field.
+                    hintText: b.label,
+                  ),
+                  onSubmitted: (_) => _save(),
+                ),
+              ),
+          ],
+          SizedBox(height: t.space.md),
+          Text('TYPE',
+              style:
+                  t.text.overlineStyle.copyWith(color: t.surface.onBaseMuted)),
+          SizedBox(height: t.space.xs),
+          Text(
+            'What this device *is*, and so what it lets you do. A switch '
+            'wired to the ceiling lights is a light to you and a switch to '
+            'the house — this is how you say so. Leave it as the plugin says '
+            'unless the plugin is wrong.',
+            style: t.text.captionStyle
+                .copyWith(color: t.surface.onBaseMuted, height: 1.4),
+          ),
+          SizedBox(height: t.space.xs),
+          DropdownButtonFormField<String>(
+            initialValue: _kind?.token,
+            isExpanded: true,
+            decoration: InputDecoration(
+              isDense: true,
+              border: const OutlineInputBorder(),
+              // What it would be if nobody said, which is what clearing gives
+              // back — named, so the empty choice is not a mystery.
+              hintText: 'As the plugin says · ${facetOf(_d, _d.schema).label}',
+            ),
+            items: [
+              const DropdownMenuItem(
+                  value: '',
+                  child: Text('As the plugin '
+                      'says')),
+              for (final f in DeviceFacet.values)
+                if (f != DeviceFacet.unknown)
+                  DropdownMenuItem(value: f.token, child: Text(f.label)),
+            ],
+            onChanged: _busy
+                ? null
+                : (v) => setState(() => _kind = (v == null || v.isEmpty)
+                    ? null
+                    : DeviceFacet.values.firstWhere((f) => f.token == v)),
+          ),
           SizedBox(height: t.space.md),
           Text('ICON',
               style:

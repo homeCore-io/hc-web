@@ -544,3 +544,71 @@ String labelInRoom(String name, String? room) {
       .substring(0, words[tail - 1].end)
       .replaceFirst(RegExp(r'[\s\-–—:_·]+$'), '');
 }
+
+/// The facet somebody has explicitly said this device is, or null.
+///
+/// `ui_hint` is the first thing [facetOf] consults, for the reason stated
+/// there: a plugin's own type is often wrong. This reads the same value back,
+/// so an editor can show what was chosen rather than what was inferred.
+DeviceFacet? hintedFacet(DeviceState d) {
+  final hint = d.uiHint?.trim().toLowerCase();
+  if (hint == null || hint.isEmpty) return null;
+  return _fromToken(hint);
+}
+
+/// The token to WRITE for a facet, and the words to show for it.
+///
+/// The map [_fromToken] reads has several spellings per facet — the ones
+/// integrators type by hand — so writing needs one of them chosen. These are
+/// the canonical spellings, and every one of them round-trips: see the test.
+extension DeviceFacetToken on DeviceFacet {
+  String get token => switch (this) {
+        DeviceFacet.light => 'light',
+        DeviceFacet.dimmableLight => 'dimmer_light',
+        DeviceFacet.colorLight => 'light_color',
+        DeviceFacet.outlet => 'outlet',
+        DeviceFacet.switch_ => 'switch',
+        DeviceFacet.cover => 'cover',
+        DeviceFacet.lock => 'lock',
+        DeviceFacet.door => 'door',
+        DeviceFacet.window => 'window',
+        DeviceFacet.garage => 'garage',
+        DeviceFacet.motion => 'motion_sensor',
+        DeviceFacet.occupancy => 'occupancy_sensor',
+        DeviceFacet.contact => 'contact_sensor',
+        DeviceFacet.temperature => 'temperature_sensor',
+        DeviceFacet.humidity => 'humidity_sensor',
+        DeviceFacet.illuminance => 'illuminance_sensor',
+        DeviceFacet.power => 'power_monitor',
+        DeviceFacet.smoke => 'smoke_sensor',
+        DeviceFacet.water => 'water_sensor',
+        DeviceFacet.vibration => 'vibration_sensor',
+        DeviceFacet.climate => 'climate',
+        DeviceFacet.fan => 'fan',
+        DeviceFacet.mediaPlayer => 'media_player',
+        DeviceFacet.scene => 'scene',
+        DeviceFacet.button => 'button',
+        DeviceFacet.timer => 'timer',
+        DeviceFacet.siren => 'siren',
+        DeviceFacet.sensor => 'sensor',
+        DeviceFacet.unknown => 'unknown',
+      };
+}
+
+/// What to call one of a device's buttons.
+///
+/// **A rename wins over the wall.** The engraving arrives from the bridge and
+/// arrives again on every re-registration; the override is the field
+/// registration never touches, so it is asked first — the same order
+/// `displayName` uses for the device's own name.
+///
+/// [engraved] is what the plugin said, when it said anything. Falling back to
+/// "Button 3" rather than to nothing, because that is a thing you can look for
+/// on a wall and an unlabelled square is not.
+String buttonLabel(DeviceState? device, int number, {String? engraved}) {
+  final own = device?.buttonNames?['$number']?.trim();
+  if (own != null && own.isNotEmpty) return own;
+  final fromBridge = engraved?.trim();
+  if (fromBridge != null && fromBridge.isNotEmpty) return fromBridge;
+  return 'Button $number';
+}
