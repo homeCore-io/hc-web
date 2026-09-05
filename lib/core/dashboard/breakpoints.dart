@@ -89,3 +89,41 @@ DashboardBreakpoint? availableBreakpoint(
   }
   return d.layouts.first.breakpoint;
 }
+
+/// The layout to edit [wanted] with, borrowing from another breakpoint when
+/// this page has none of its own.
+///
+/// **The borrowed layout has to become the breakpoint it was asked for.**
+/// [availableBreakpoint] answers *which layout to borrow from*, and returning
+/// that layout as it stands hands back one still stamped with the breakpoint it
+/// came from. The caller appends it to a list it has just checked for [wanted]
+/// — so opening the designer on a page with only a desktop layout added a
+/// **second desktop layout**, and core refused the save with "duplicate layout
+/// breakpoint 'Desktop'". The page could not be saved at all, and nothing said
+/// why until the save did.
+///
+/// Marked as derived from where it was borrowed, which is what it is, and what
+/// makes the bar offer to follow that breakpoint again.
+DashboardLayout layoutToEdit(
+  DashboardDefinition d,
+  DashboardBreakpoint wanted, {
+  required int defaultColumns,
+  required double defaultRowHeight,
+  required double defaultGap,
+}) {
+  final available = availableBreakpoint(d, wanted);
+  if (available == null) {
+    return DashboardLayout(
+      breakpoint: wanted,
+      columns: wanted == DashboardBreakpoint.mobile ? 4 : defaultColumns,
+      rowHeight: defaultRowHeight,
+      gap: defaultGap,
+      placements: const [],
+    );
+  }
+  if (available == wanted) return d.layoutFor(available);
+  return d.layoutFor(available).copyWith(
+        breakpoint: wanted,
+        derivedFrom: available,
+      );
+}

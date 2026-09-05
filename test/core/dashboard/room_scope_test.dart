@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hc_web/core/dashboard/room_scope.dart';
 import 'package:hc_web/core/models/device_state.dart';
+import 'package:hc_web/core/schema/device_schema.dart';
 
 /// **One room page, fifteen rooms.**
 ///
@@ -37,6 +38,7 @@ final _house = [
 ];
 
 void main() {
+  _capability();
   group('a device reference', () {
     test('finds whatever in this room reports the thing being asked for', () {
       final out = resolveRoomRefs(
@@ -180,5 +182,83 @@ void main() {
           isTrue);
       expect(mentionsRoom(const {'device_id': 'lamp'}), isFalse);
     });
+  });
+}
+
+/// **Being there is not the same as being able to do the thing.**
+///
+/// With the Garage's Overhead typed as a light it became pickable, and the
+/// control band appeared for it: a brightness slider and a warmth slider for a
+/// relay that can only be on or off. John: *"Brightness/warmth sliders are now
+/// showing even though that capability does not exist for a switched light
+/// that is not a dimmer… A light can be attached to a switch."*
+void _capability() {
+  DeviceState lamp({Map<String, AttributeSchema>? can}) => DeviceState(
+        id: 'lamp',
+        pluginId: 'p',
+        name: 'Overhead',
+        area: 'garage',
+        available: true,
+        state: const {'on': false},
+        schema: can == null ? null : DeviceSchema(can),
+      );
+
+  const dims = AttributeSchema(
+      kind: AttributeKind.integer, writable: true, min: 0, max: 100);
+  const onOff = AttributeSchema(kind: AttributeKind.bool_, writable: true);
+
+  test('a device that can take none of them hides the element', () {
+    expect(
+      hiddenFor(
+        const {
+          'hide_with': 'lamp',
+          'hide_unless': ['brightness_pct']
+        },
+        [
+          lamp(can: const {'on': onOff})
+        ],
+      ),
+      isTrue,
+    );
+  });
+
+  test('and one that can take any of them keeps it', () {
+    expect(
+      hiddenFor(
+        const {
+          'hide_with': 'lamp',
+          'hide_unless': ['brightness_pct', 'color_xy'],
+        },
+        [
+          lamp(can: const {'on': onOff, 'brightness_pct': dims})
+        ],
+      ),
+      isFalse,
+      reason: 'a lamp that dims but has no colour still wants the panel',
+    );
+  });
+
+  test('a device that promised nothing at all hides it', () {
+    // No schema is not the same as an empty one, but it means the same here:
+    // an inferred writable is this app's opinion rather than the device's.
+    expect(
+      hiddenFor(
+        const {
+          'hide_with': 'lamp',
+          'hide_unless': ['brightness_pct']
+        },
+        [lamp()],
+      ),
+      isTrue,
+    );
+  });
+
+  test('naming no capability still only asks whether it is there', () {
+    expect(hiddenFor(const {'hide_with': 'lamp'}, [lamp()]), isFalse);
+    expect(hiddenFor(const {'hide_with': 'gone'}, [lamp()]), isTrue);
+  });
+
+  test('and an element that names no device is always drawn', () {
+    expect(hiddenFor(const {'text': 'hello'}, [lamp()]), isFalse);
   });
 }
