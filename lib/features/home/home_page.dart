@@ -1,3 +1,4 @@
+import '../../core/api/api_error.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -149,8 +150,8 @@ class _HomePageState extends ConsumerState<HomePage> {
           );
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Could not save order: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Could not save order: ${apiMessage(e)}')));
       }
     }
   }
@@ -188,8 +189,8 @@ class _HomePageState extends ConsumerState<HomePage> {
       if (mounted) setState(() => _draft = null);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Could not save: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Could not save: ${apiMessage(e)}')));
       }
     } finally {
       if (mounted) setState(() => _saving = false);

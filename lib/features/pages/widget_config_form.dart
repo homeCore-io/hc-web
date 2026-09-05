@@ -472,15 +472,25 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
     );
   }
 
-  Widget _label(WidgetConfigField f) {
+  Widget _label(WidgetConfigField f, {bool section = false}) {
     final t = HcTokens.of(context);
     return Padding(
       padding: EdgeInsets.only(bottom: t.space.xs),
       child: Row(
         children: [
-          Text(_title(f),
-              style: t.text.bodySmallStyle.copyWith(
-                  fontWeight: FontWeight.w600, color: t.surface.onBase)),
+          // **A block of chips needs a heading, not a label.** Kind and Except
+          // are two walls of pills one under the other, and their names were
+          // set in the same body size as every other field's — so the eye read
+          // one long list and the second block went unnoticed. John: *"the
+          // kind/except are smaller and can go unnoticed."*
+          Text(section ? _title(f).toUpperCase() : _title(f),
+              style: section
+                  ? t.text.overlineStyle.copyWith(
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.1,
+                      color: t.surface.onBaseMuted)
+                  : t.text.bodySmallStyle.copyWith(
+                      fontWeight: FontWeight.w600, color: t.surface.onBase)),
           if (f.required) Text(' *', style: TextStyle(color: t.accent.danger)),
         ],
       ),
@@ -718,14 +728,46 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
   /// An empty selection means *all of them* rather than none: a watch list
   /// nobody has touched should watch everything, and an element that went blank
   /// the moment you cleared the last chip would be a trap.
+  /// Which chip blocks the person has opened. See [_choices].
+  final _opened = <String>{};
+
   Widget _choices(WidgetConfigField f) {
+    final t = HcTokens.of(context);
     final options = f.options ?? const <String>[];
     final chosen =
         ((_config[f.name] as List?) ?? const []).map((e) => '$e').toSet();
+
+    // **An exception nobody has made should not cost twenty chips.** Except is
+    // usually empty and always secondary — it takes back out of a rule what
+    // the rule already chose — so folded it is one line that says its own name,
+    // and open only when there is something in it or somebody asks.
+    final open = _opened.contains(f.name) || chosen.isNotEmpty;
+    if (!open) {
+      return Padding(
+        padding: EdgeInsets.only(bottom: t.space.xs),
+        child: InkWell(
+          onTap: () => setState(() => _opened.add(f.name)),
+          borderRadius: t.radius.smR,
+          child: Padding(
+            padding: EdgeInsets.symmetric(vertical: t.space.xs),
+            child: Row(
+              children: [
+                Text('${_title(f)} — none',
+                    style: t.text.bodySmallStyle
+                        .copyWith(color: t.surface.onBaseMuted)),
+                const Spacer(),
+                Icon(Icons.expand_more, size: 16, color: t.surface.onBaseMuted),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _label(f),
+        _label(f, section: true),
         Wrap(
           spacing: 6,
           runSpacing: 6,
@@ -802,7 +844,7 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _label(f),
+        _label(f, section: true),
         if (names.isEmpty)
           _hint(areasAsync.isLoading
               ? 'Loading areas…'

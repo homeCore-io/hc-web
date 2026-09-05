@@ -593,6 +593,47 @@ extension DeviceFacetToken on DeviceFacet {
         DeviceFacet.sensor => 'sensor',
         DeviceFacet.unknown => 'unknown',
       };
+
+  /// What to call this facet when a person is choosing between them.
+  ///
+  /// **Not [DeviceFacetLabel.label], which is the group's heading.** That one
+  /// delegates to `facetGroupOf` on purpose — a card filed under "Lights"
+  /// should say Lights whether it holds a plain bulb, a dimmer or a colour
+  /// lamp. In a *picker* the same delegation makes three different choices
+  /// read as one word: the type list offered "Lights" three times, "Doors &
+  /// windows" three times and "Safety" three times, and nothing on screen said
+  /// which was which.
+  String get pickerLabel => switch (this) {
+        DeviceFacet.light => 'Light',
+        DeviceFacet.dimmableLight => 'Dimmable light',
+        DeviceFacet.colorLight => 'Colour light',
+        DeviceFacet.outlet => 'Outlet',
+        DeviceFacet.switch_ => 'Switch',
+        DeviceFacet.cover => 'Cover',
+        DeviceFacet.lock => 'Lock',
+        DeviceFacet.door => 'Door',
+        DeviceFacet.window => 'Window',
+        DeviceFacet.garage => 'Garage door',
+        DeviceFacet.motion => 'Motion sensor',
+        DeviceFacet.occupancy => 'Occupancy sensor',
+        DeviceFacet.contact => 'Contact sensor',
+        DeviceFacet.temperature => 'Temperature sensor',
+        DeviceFacet.humidity => 'Humidity sensor',
+        DeviceFacet.illuminance => 'Light-level sensor',
+        DeviceFacet.power => 'Power monitor',
+        DeviceFacet.smoke => 'Smoke sensor',
+        DeviceFacet.water => 'Leak sensor',
+        DeviceFacet.vibration => 'Vibration sensor',
+        DeviceFacet.climate => 'Thermostat',
+        DeviceFacet.fan => 'Fan',
+        DeviceFacet.mediaPlayer => 'Media player',
+        DeviceFacet.scene => 'Scene',
+        DeviceFacet.button => 'Keypad or remote',
+        DeviceFacet.timer => 'Timer',
+        DeviceFacet.siren => 'Siren',
+        DeviceFacet.sensor => 'Sensor',
+        DeviceFacet.unknown => 'Unknown',
+      };
 }
 
 /// What to call one of a device's buttons.
