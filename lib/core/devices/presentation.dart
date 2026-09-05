@@ -84,6 +84,22 @@ enum DeviceFacet {
         DeviceFacet.sensor || DeviceFacet.unknown => Icons.memory_outlined,
       };
 
+  /// Whether this is a light, whatever it can be dimmed or coloured to.
+  ///
+  /// **Asked of the facet, never of `device_type`.** A light is a light
+  /// because of what it is wired to, not because a plugin said so: a Lutron
+  /// dimmer publishes `switch`, and a relay somebody has told this house is a
+  /// light carries that only in `ui_hint`. Counting the literal type left the
+  /// Garage and the Laundry Room dark on the house page after exactly that
+  /// edit, saying they had no lights at all.
+  bool get isLight => switch (this) {
+        DeviceFacet.light ||
+        DeviceFacet.dimmableLight ||
+        DeviceFacet.colorLight =>
+          true,
+        _ => false,
+      };
+
   /// Whether the facet is something you *do* something to, rather than merely
   /// read. Sensors get no toggle, however many writable attributes drift in.
   bool get isActuator => switch (this) {

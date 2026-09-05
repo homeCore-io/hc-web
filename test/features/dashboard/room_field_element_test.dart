@@ -108,10 +108,57 @@ void main() {
     expect(rooms.single.on, 1);
   });
 
+  test('a switch somebody has retyped as a light counts as one', () {
+    // **The house has to agree with the device sheet.** Retyping a relay
+    // writes `ui_hint`, because `device_type` belongs to the plugin and
+    // registration would only overwrite it — so a room field that counted the
+    // literal type left the Garage and the Laundry Room dark after exactly
+    // that edit, saying they held no lights at all. John: *"the every room
+    // page did not update the garage or laundry room boxes when I changed
+    // switches to be lights."*
+    final rooms = roomsOf([
+      _d('relay', area: 'garage', on: true).copyHint('light'),
+      _d('plain', area: 'garage', on: true),
+    ]);
+    expect(rooms.single.lights, 1);
+    expect(rooms.single.on, 1, reason: 'and it is on');
+  });
+
+  test('a dimmer that publishes itself as a switch is a light too', () {
+    // Lutron's dimmers do exactly this, which is why the room page reads the
+    // facet rather than the type everywhere else.
+    final rooms = roomsOf([
+      DeviceState(
+        id: 'dimmer',
+        pluginId: 'plugin.lutron',
+        name: 'Overhead',
+        area: 'laundry_room',
+        deviceType: 'switch',
+        available: true,
+        state: const {'on': true, 'brightness_pct': 40},
+      ),
+    ]);
+    expect(rooms.single.lights, 1);
+  });
+
   test('the biggest room is first', () {
     final rooms = roomsOf(_house);
     expect(rooms.first.area, 'living_room');
     expect(rooms.first.total, 3);
     expect(rooms.last.total, 1);
   });
+}
+
+extension on DeviceState {
+  /// The same device, retyped in the web interface.
+  DeviceState copyHint(String hint) => DeviceState(
+        id: id,
+        pluginId: pluginId,
+        name: name,
+        area: area,
+        deviceType: deviceType,
+        available: available,
+        state: state,
+        uiHint: hint,
+      );
 }
