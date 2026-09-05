@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/dashboard/treemap.dart';
-import '../../core/devices/scene_state.dart';
+import '../../core/devices/presentation.dart';
 import '../../core/models/device_state.dart';
 import '../../core/providers/devices_provider.dart';
 import '../../core/text/humanize.dart';
@@ -124,7 +124,10 @@ List<RoomTally> roomsOf(List<DeviceState> devices) {
   return out;
 }
 
-bool _isLight(DeviceState d) => d.deviceType == 'light' && !isSceneDevice(d);
+/// **What the house calls a light, not what the plugin called it.** A dimmer
+/// that publishes `switch`, and a relay somebody has retyped, are both lights
+/// here — and a scene device never is, which `facetOf` already settles.
+bool _isLight(DeviceState d) => facetOf(d).isLight;
 
 class _Cell extends StatelessWidget {
   const _Cell({required this.room, required this.compact, required this.onTap});
