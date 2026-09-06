@@ -739,12 +739,24 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
     final chosen =
         ((_config[f.name] as List?) ?? const []).map((e) => '$e').toSet();
 
-    // **An exception nobody has made should not cost twenty chips.** Except is
-    // usually empty and always secondary — it takes back out of a rule what
-    // the rule already chose — so folded it is one line that says its own name,
-    // and open only when there is something in it or somebody asks.
-    final open = _opened.contains(f.name) || chosen.isNotEmpty;
+    // **Twenty chips for a setting nobody is editing.** Except is secondary —
+    // it takes back out of a rule what the rule already chose — and it was a
+    // wall of pills whenever it held anything, which on a room card is six of
+    // them and most of the panel. John: *"all device pickers are still using
+    // rounded block selectors."*
+    //
+    // So it is one line that says what it holds, and the wall only while
+    // somebody is working on it. Folded reads as a sentence; open is a set of
+    // switches, and the two are the same setting.
+    final open = _opened.contains(f.name);
     if (!open) {
+      final names = [
+        for (final o in options)
+          if (chosen.contains(o)) humanize(o)
+      ];
+      final shown = names.length > 3
+          ? '${names.take(3).join(', ')} +${names.length - 3}'
+          : names.join(', ');
       return Padding(
         padding: EdgeInsets.only(bottom: t.space.xs),
         child: InkWell(
@@ -754,10 +766,16 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
             padding: EdgeInsets.symmetric(vertical: t.space.xs),
             child: Row(
               children: [
-                Text('${_title(f)} — none',
-                    style: t.text.bodySmallStyle
-                        .copyWith(color: t.surface.onBaseMuted)),
-                const Spacer(),
+                Expanded(
+                  child: Text(
+                      '${_title(f)} — ${names.isEmpty ? 'none' : shown}',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: t.text.bodySmallStyle.copyWith(
+                          color: names.isEmpty
+                              ? t.surface.onBaseMuted
+                              : t.surface.onBase)),
+                ),
                 Icon(Icons.expand_more, size: 16, color: t.surface.onBaseMuted),
               ],
             ),
@@ -769,7 +787,16 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _label(f, section: true),
+        InkWell(
+          onTap: () => setState(() => _opened.remove(f.name)),
+          borderRadius: t.radius.smR,
+          child: Row(
+            children: [
+              Expanded(child: _label(f, section: true)),
+              Icon(Icons.expand_less, size: 16, color: t.surface.onBaseMuted),
+            ],
+          ),
+        ),
         Wrap(
           spacing: 6,
           runSpacing: 6,
