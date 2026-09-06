@@ -49,6 +49,7 @@ List<DeviceState> _select(Map<String, dynamic> config) =>
 void main() {
   _kindsAndExceptions();
   _narrowing();
+  _helpers();
   group('area selection', () {
     test('a normalized area name matches', () {
       final got =
@@ -337,6 +338,85 @@ void _kindsAndExceptions() {
         3,
         reason: 'no `except` changes nothing, as on every card before this',
       );
+    });
+  });
+}
+
+/// **A helper somebody put in a room is in that room.**
+///
+/// The exclusion was written for the modes — `Day Mode`, `Night Mode` — which
+/// have no room and would otherwise fill any broad card. It read `core.*` as
+/// *never belongs anywhere*, which is wrong about the rest of them: a garage's
+/// auto-close timer and its virtual door switch are the garage's, because
+/// somebody said so in the device sheet. John: *"There are glue/helper devices
+/// in the system group but have room assignments. they do not show up in the
+/// rooms."*
+void _helpers() {
+  DeviceState system(String id, {String? area, String type = 'timer'}) =>
+      DeviceState(
+        id: id,
+        pluginId: 'core.glue',
+        name: id,
+        areaOverride: area,
+        deviceType: type,
+        available: true,
+        state: const {},
+      );
+
+  final house = [
+    _d('lamp', area: 'garage', type: 'light'),
+    system('timer_garage_close', area: 'garage'),
+    system('switch_auto_garage_door', area: 'garage', type: 'switch'),
+    // The device this exclusion exists for: a mode, with no room at all.
+    DeviceState(
+      id: 'mode_day',
+      pluginId: 'core.mode',
+      name: 'Day Mode',
+      deviceType: 'switch',
+      available: true,
+      state: const {},
+    ),
+  ];
+
+  group('helpers with a room', () {
+    test('a room asked for by name includes them', () {
+      final got = selectDevicesForConfig(
+          house, const {'selection_mode': 'area', 'area_name': 'garage'});
+      expect(got.map((d) => d.id),
+          ['lamp', 'timer_garage_close', 'switch_auto_garage_door']);
+    });
+
+    test('and so does a kind narrowed to that room', () {
+      // The Garage's switches section, which is where the virtual door switch
+      // belongs and where it was not.
+      final got = selectDevicesForConfig(house, const {
+        'selection_mode': 'facet',
+        'facet': ['switches'],
+        'area_name': 'garage',
+      });
+      expect(got.map((d) => d.id), ['switch_auto_garage_door']);
+    });
+
+    test('a broad query still keeps every pseudo-entry out', () {
+      // What the rule was written for: an empty query is the whole house, and
+      // "Day Mode" in a device list is the bug it prevents.
+      final got =
+          selectDevicesForConfig(house, const {'selection_mode': 'query'});
+      expect(got.map((d) => d.id), ['lamp']);
+    });
+
+    test('and naming one outright is enough on its own', () {
+      final got = selectDevicesForConfig(house, const {
+        'selection_mode': 'manual',
+        'device_ids': ['mode_day', 'timer_garage_close'],
+      });
+      expect(got.map((d) => d.id), ['timer_garage_close', 'mode_day']);
+    });
+
+    test('a mode is still not in a room, because it has none', () {
+      final got = selectDevicesForConfig(
+          house, const {'selection_mode': 'area', 'area_name': 'garage'});
+      expect(got.map((d) => d.id), isNot(contains('mode_day')));
     });
   });
 }
