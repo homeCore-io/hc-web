@@ -48,6 +48,7 @@ List<DeviceState> _select(Map<String, dynamic> config) =>
 
 void main() {
   _kindsAndExceptions();
+  _arranging();
   _narrowing();
   _helpers();
   group('area selection', () {
@@ -417,6 +418,70 @@ void _helpers() {
       final got = selectDevicesForConfig(
           house, const {'selection_mode': 'area', 'area_name': 'garage'});
       expect(got.map((d) => d.id), isNot(contains('mode_day')));
+    });
+  });
+}
+
+/// **A rule says which devices, never in what order.**
+///
+/// A list took whatever the selection happened to return, so somebody who
+/// wanted the door sensor at the top had no way to say so. John: *"All
+/// sections need to be easily arranged like what was done for scenes in the
+/// house view."*
+void _arranging() {
+  final room = [
+    _d('lamp', area: 'living_room', type: 'light'),
+    _d('tv', area: 'living_room', type: 'media_player'),
+    _d('lock', area: 'living_room', type: 'lock'),
+  ];
+
+  group('arranging', () {
+    test('named ids come first, in the order they were named', () {
+      final got = selectDevicesForConfig(room, const {
+        'selection_mode': 'area',
+        'area_name': 'living_room',
+        'order': ['lock', 'lamp'],
+      });
+      expect(got.map((d) => d.id), ['lock', 'lamp', 'tv']);
+    });
+
+    test('and anything the arrangement does not name follows it', () {
+      // What keeps an arranged card from breaking when a device is added to
+      // the house: the new one appears at the end rather than the card losing
+      // what somebody arranged.
+      final got = selectDevicesForConfig(room, const {
+        'selection_mode': 'area',
+        'area_name': 'living_room',
+        'order': ['tv'],
+      });
+      expect(got.map((d) => d.id), ['tv', 'lamp', 'lock']);
+    });
+
+    test('an id the rule no longer matches is simply not there', () {
+      final got = selectDevicesForConfig(room, const {
+        'selection_mode': 'facet',
+        'facet': ['lights'],
+        'order': ['lock', 'lamp'],
+      });
+      expect(got.map((d) => d.id), ['lamp']);
+    });
+
+    test('the arrangement decides which ones the limit keeps', () {
+      // Ordering after the cut would let a card show two devices and then
+      // rearrange those two, rather than choosing which two.
+      final got = selectDevicesForConfig(room, const {
+        'selection_mode': 'area',
+        'area_name': 'living_room',
+        'order': ['lock'],
+        'limit': 1,
+      });
+      expect(got.map((d) => d.id), ['lock']);
+    });
+
+    test('no arrangement leaves the order exactly as it was', () {
+      final got = selectDevicesForConfig(
+          room, const {'selection_mode': 'area', 'area_name': 'living_room'});
+      expect(got.map((d) => d.id), ['lamp', 'tv', 'lock']);
     });
   });
 }

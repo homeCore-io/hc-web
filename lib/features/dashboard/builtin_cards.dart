@@ -254,6 +254,11 @@ List<DeviceState> selectDevicesForConfig(
     selected = selected.where((device) => device.available).toList();
   }
 
+  // **Arranged before it is cut.** The limit keeps the first N, so ordering
+  // after it would let a card show ten devices and then rearrange those ten,
+  // rather than choosing which ten by what the author put first.
+  selected = applyOrder(selected, config);
+
   final limit = config['limit'] as int?;
   if (limit != null && selected.length > limit) {
     selected = selected.take(limit).toList();
@@ -288,6 +293,34 @@ class DeviceSelection {
     if (!truncated) return null;
     return 'showing ${shown.length} of $matched';
   }
+}
+
+/// [selected] in the order the author arranged, or in the order it came.
+///
+/// **A rule answers *which* devices and says nothing about their order.** A
+/// list took whatever the selection happened to return — alphabetical, or the
+/// house's own order — so somebody who wanted the door sensor at the top had
+/// no way to say so. John: *"All sections need to be easily arranged like what
+/// was done for scenes in the house view."*
+///
+/// Ids named in `order` come first and in that order; anything the rule
+/// matched and the order does not name follows in the order it always had.
+/// That is what keeps an arranged card from breaking when a device is added to
+/// the house or the rule widens: the new one appears at the end rather than
+/// the card losing its arrangement.
+List<DeviceState> applyOrder(
+    List<DeviceState> selected, Map<String, dynamic> config) {
+  final order =
+      ((config['order'] as List?) ?? const []).whereType<String>().toList();
+  if (order.isEmpty) return selected;
+  final rank = {for (var i = 0; i < order.length; i++) order[i]: i};
+  final named = <DeviceState>[];
+  final rest = <DeviceState>[];
+  for (final d in selected) {
+    (rank.containsKey(d.id) ? named : rest).add(d);
+  }
+  named.sort((a, b) => rank[a.id]!.compareTo(rank[b.id]!));
+  return [...named, ...rest];
 }
 
 /// [selectDevicesForConfig], with the pre-limit count kept.
@@ -783,6 +816,10 @@ class _SceneRowWidget extends ConsumerWidget {
     ];
 
     if (chips.isEmpty) {
+      // Nothing at all, for a row that is the exception rather than the rule:
+      // most rooms have no scenes of their own, and a heading over the words
+      // "No scenes in this room" is a hole in every one of them.
+      if (config['hide_when_empty'] == true) return const SizedBox.shrink();
       final scope = config['scope'] as String? ?? 'all';
       final picked = ((config['scene_ids'] as List?) ?? const [])
           .whereType<String>()
@@ -804,7 +841,27 @@ class _SceneRowWidget extends ConsumerWidget {
         style: t.text.captionStyle.copyWith(color: t.surface.onBaseMuted),
       );
     }
-    return Wrap(spacing: t.space.sm, runSpacing: t.space.sm, children: chips);
+    final row =
+        Wrap(spacing: t.space.sm, runSpacing: t.space.sm, children: chips);
+
+    // **A row that can vanish carries its own heading.** A page cannot hide a
+    // separate label when the row beneath it turns out to be empty — the label
+    // is a text element and knows nothing about scenes — so most rooms would
+    // keep a heading over nothing.
+    final heading = (config['heading'] as String? ?? '').trim();
+    if (heading.isEmpty) return row;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(heading.toUpperCase(),
+            style: t.text.overlineStyle.copyWith(
+                color: t.surface.onBaseMuted,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.6)),
+        SizedBox(height: t.space.sm),
+        row,
+      ],
+    );
   }
 }
 
@@ -2009,6 +2066,19 @@ void registerBuiltinDashboardWidgets() {
             label: 'Light',
             help: 'Only when Which scenes is “device”. Set it to the picked '
                 'device and the scenes follow whichever light you tap.'),
+        WidgetConfigField('skip_light_scenes', WidgetConfigKind.boolean,
+            label: 'Not a light\u2019s own',
+            defaultValue: false,
+            help: 'Leaves out the scenes a light in this room already offers, '
+                'so a room row and a light\u2019s panel do not say the same '
+                'scene twice.'),
+        WidgetConfigField('hide_when_empty', WidgetConfigKind.boolean,
+            label: 'Hide when empty',
+            defaultValue: false,
+            help: 'Draw nothing at all rather than saying there are none.'),
+        WidgetConfigField('heading', WidgetConfigKind.text,
+            label: 'Heading',
+            help: 'Drawn above the scenes, and gone when they are.'),
       ],
       growsToFit: true,
       builder: (context, a) => _SceneRowWidget(config: a.config),

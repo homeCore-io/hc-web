@@ -7,6 +7,7 @@ import 'package:hc_web/core/providers/devices_provider.dart';
 import 'package:hc_web/core/providers/scenes_provider.dart';
 import 'package:hc_web/core/dashboard/widget_registry.dart';
 import 'package:hc_web/design/skins.dart';
+import 'package:hc_web/design/components/hc_scene_chip.dart';
 import 'package:hc_web/features/dashboard/builtin_cards.dart';
 
 /// The scene row lists the scenes a house actually has.
@@ -88,6 +89,7 @@ Future<void> pump(
 void main() {
   _scoping();
   _picking();
+  _roomsOwn();
   testWidgets('a plugin scene is a scene', (tester) async {
     // The house this was found on: every scene arrives as a device and
     // `/scenes` is empty.
@@ -286,5 +288,129 @@ void _picking() {
     });
 
     expect(find.textContaining('are gone'), findsOneWidget);
+  });
+}
+
+/// **A room's own scenes, which had nowhere to be.**
+///
+/// A Hue scene belongs to a room's group and is shown under the light it sets.
+/// A Lutron scene is attached to no light at all, so a room page could not
+/// reach it: of this house's fifteen Lutron scenes the two with a room were
+/// invisible. John: *"some plugins provide scenes like lutron. Currently there
+/// is no device scenes area in the room pages for these types of scenes."*
+void _roomsOwn() {
+  DeviceState hueScene(String id, String name, String area) => DeviceState(
+        id: id,
+        pluginId: 'plugin.hue',
+        name: name,
+        deviceType: 'scene',
+        area: area,
+        available: true,
+        state: const {'bridge_id': 'bridge-1'},
+      );
+
+  DeviceState hueLight(String id, String area) => DeviceState(
+        id: id,
+        pluginId: 'plugin.hue',
+        name: id,
+        deviceType: 'light',
+        area: area,
+        available: true,
+        state: const {'on': true, 'bridge_id': 'bridge-1'},
+      );
+
+  DeviceState lutronScene(String id, String name, String area) => DeviceState(
+        id: id,
+        pluginId: 'plugin.lutron',
+        name: name,
+        deviceType: 'scene',
+        area: area,
+        available: true,
+        state: const {},
+      );
+
+  final garage = [
+    hueLight('lamp', 'garage'),
+    hueScene('hue_evening', 'Evening', 'garage'),
+    lutronScene('oh1', 'OH Door 01', 'garage'),
+    lutronScene('oh2', 'OH Door 02', 'garage'),
+  ];
+
+  testWidgets('a room row shows what no light in it offers', (tester) async {
+    await pump(tester, devices: garage, config: const {
+      'scope': 'room',
+      'room': 'garage',
+      'skip_light_scenes': true,
+    });
+
+    expect(find.text('OH Door 01'), findsOneWidget);
+    expect(find.text('OH Door 02'), findsOneWidget);
+    expect(find.text('Evening'), findsNothing,
+        reason: "the light's own panel draws that one");
+  });
+
+  testWidgets('and without the switch it shows every scene in the room',
+      (tester) async {
+    await pump(tester, devices: garage, config: const {
+      'scope': 'room',
+      'room': 'garage',
+    });
+    expect(find.text('Evening'), findsOneWidget);
+  });
+
+  testWidgets('its heading goes with it', (tester) async {
+    // A page cannot hide a label when the row under it turns out to be empty,
+    // so a row that can vanish carries its own.
+    await pump(tester, devices: garage, config: const {
+      'scope': 'room',
+      'room': 'garage',
+      'skip_light_scenes': true,
+      'hide_when_empty': true,
+      'heading': 'Room scenes',
+    });
+    expect(find.text('ROOM SCENES'), findsOneWidget);
+
+    await pump(tester, devices: [
+      hueLight('lamp', 'office'),
+      hueScene('hue_read', 'Read', 'office'),
+    ], config: const {
+      'scope': 'room',
+      'room': 'office',
+      'skip_light_scenes': true,
+      'hide_when_empty': true,
+      'heading': 'Room scenes',
+    });
+    expect(find.text('ROOM SCENES'), findsNothing);
+  });
+
+  testWidgets('a room with none of its own draws nothing at all',
+      (tester) async {
+    // Most rooms are this one, and a heading over "No scenes in this room" is
+    // a hole in every one of them.
+    await pump(tester, devices: [
+      hueLight('lamp', 'office'),
+      hueScene('hue_read', 'Read', 'office'),
+    ], config: const {
+      'scope': 'room',
+      'room': 'office',
+      'skip_light_scenes': true,
+      'hide_when_empty': true,
+    });
+
+    expect(find.byType(HcSceneChip), findsNothing);
+    expect(find.textContaining('No scenes'), findsNothing);
+  });
+
+  testWidgets('and says so when it was not told to hide', (tester) async {
+    await pump(tester, devices: [
+      hueLight('lamp', 'office'),
+      hueScene('hue_read', 'Read', 'office'),
+    ], config: const {
+      'scope': 'room',
+      'room': 'office',
+      'skip_light_scenes': true,
+    });
+
+    expect(find.text('No scenes in this room.'), findsOneWidget);
   });
 }

@@ -136,6 +136,10 @@ void main() {
     const elsewhere = {
       'add': 'card_members.dart',
       'remove': 'card_members.dart',
+      // The order the devices are drawn in, which is not something a form
+      // field can be: it is written by dragging the rows into place in the
+      // panel that shows what the card holds.
+      'order': 'card_members.dart, by dragging',
       // Every widget carries it, and no widget declares it as a config field:
       // an action belongs to all of them, so it has a section of its own.
       'on_tap': 'card_inspector.dart, the WHEN TAPPED section',
