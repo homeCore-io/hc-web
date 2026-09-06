@@ -1123,7 +1123,7 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
   Widget _deviceRefs(WidgetConfigField f) {
     final devices = ref.watch(devicesProvider).value ?? const [];
     final ids =
-        ((_config[f.name] as List?) ?? const []).map((e) => '$e').toSet();
+        ((_config[f.name] as List?) ?? const []).map((e) => '$e').toList();
     // Named rather than counted, for the same reason the scenes are: `6
     // selected` is a fact about the list, not about this page.
     final names = [
@@ -1138,10 +1138,29 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
       f,
       value: names.isEmpty ? null : names.join(', '),
       placeholder: 'Choose devices…',
+      // **The same sheet the scenes go through.** A hand-picked list of
+      // devices asks the same question a hand-picked list of scenes does —
+      // which ones, and in what order — and it was asked with tick-boxes and
+      // no order at all.
       onTap: () async {
-        final picked =
-            await pickDevices(context, devices, single: false, selected: ids);
-        if (picked != null) _set(f.name, picked);
+        final picked = await pickAndOrder(
+          context,
+          title: 'Pick devices',
+          all: [
+            for (final d in devices)
+              (
+                id: d.id,
+                name: d.displayName,
+                where: (d.effectiveArea ?? '').isEmpty
+                    ? 'No room'
+                    : humanize(d.effectiveArea!)
+              ),
+          ],
+          selected: ids,
+          addHint: 'Add a device',
+          clearLabel: 'Choose none',
+        );
+        if (picked != null) _set(f.name, picked.isEmpty ? null : picked);
       },
     );
   }
@@ -1533,55 +1552,105 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
 /// keep the order somebody put them in, and anything ticked today goes on the
 /// end. Reordering by re-ticking would mean a person opening this to add one
 /// scene came out with six in a different order.
+/// One thing a sheet can offer: what it is called, and where it lives.
+typedef PickItem = ({String id, String name, String where});
+
+/// **Pick some, and put them in order.** The sheet behind every list on a
+/// page.
+///
+/// Two lists: what is on the page, in the order it is drawn and draggable, and
+/// everything else behind a search. Returning an empty list is the third
+/// answer — *stop choosing, follow the rule* — which is a different thing from
+/// choosing nothing.
+///
+/// Scenes had this and devices did not, so the same question was asked two
+/// ways in one panel. John: *"This is no way matches the way scenes are
+/// selected from the 'every room' starting page editor."*
+Future<List<String>?> pickAndOrder(
+  BuildContext context, {
+  required String title,
+  required List<PickItem> all,
+  required List<String> selected,
+  required String addHint,
+  required String clearLabel,
+}) {
+  return showHcSheet<List<String>>(
+    context,
+    title: title,
+    child: _PickAndOrder(
+      title: title,
+      all: all,
+      initial: selected,
+      addHint: addHint,
+      clearLabel: clearLabel,
+    ),
+  );
+}
+
+/// The scene picker, in the words scenes use.
 Future<List<String>?> pickScenes(
   BuildContext context,
   List<ScenePick> scenes, {
   required List<String> selected,
-}) {
-  return showHcSheet<List<String>>(
-    context,
-    title: 'Pick scenes',
-    child: _ScenePicker(scenes: scenes, initial: selected),
-  );
-}
+}) =>
+    pickAndOrder(
+      context,
+      title: 'Pick scenes',
+      all: [
+        for (final s in scenes)
+          (
+            id: s.id,
+            name: s.name,
+            where: (s.area ?? '').isEmpty ? 'Whole house' : humanize(s.area!)
+          ),
+      ],
+      selected: selected,
+      addHint: 'Add a scene',
+      clearLabel: 'Show every scene',
+    );
 
-class _ScenePicker extends StatefulWidget {
-  const _ScenePicker({required this.scenes, required this.initial});
+class _PickAndOrder extends StatefulWidget {
+  const _PickAndOrder({
+    required this.title,
+    required this.all,
+    required this.initial,
+    required this.addHint,
+    required this.clearLabel,
+  });
 
-  final List<ScenePick> scenes;
+  final String title;
+  final List<PickItem> all;
   final List<String> initial;
+  final String addHint;
+  final String clearLabel;
 
   @override
-  State<_ScenePicker> createState() => _ScenePickerState();
+  State<_PickAndOrder> createState() => _PickAndOrderState();
 }
 
-class _ScenePickerState extends State<_ScenePicker> {
+class _PickAndOrderState extends State<_PickAndOrder> {
   late final List<String> _shown = [...widget.initial];
   String _query = '';
 
-  ScenePick? _find(String id) =>
-      widget.scenes.where((s) => s.id == id).firstOrNull;
-
-  String _where(ScenePick s) =>
-      (s.area ?? '').isEmpty ? 'Whole house' : humanize(s.area!);
+  PickItem? _find(String id) => widget.all.where((s) => s.id == id).firstOrNull;
 
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
     final q = _query.toLowerCase();
-    final rest = widget.scenes
+    final rest = widget.all
         .where((s) => !_shown.contains(s.id))
         .where((s) =>
             q.isEmpty ||
             s.name.toLowerCase().contains(q) ||
-            (s.area ?? '').toLowerCase().contains(q))
+            s.where.toLowerCase().contains(q))
         .toList();
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const HcSheetHeader(title: 'Pick scenes'),
+        HcSheetHeader(title: widget.title),
         Padding(
           padding: EdgeInsets.symmetric(horizontal: t.space.lg),
           child: Text(
@@ -1591,10 +1660,10 @@ class _ScenePickerState extends State<_ScenePicker> {
           ),
         ),
         SizedBox(height: t.space.sm),
-        // **What is on the page, in the order it is drawn.** The row and this
-        // list are the same list — a picker that opened empty while the footer
-        // showed fourteen chips is what sent somebody looking for the switch
-        // that turns scenes on.
+        // **What is on the page, in the order it is drawn.** This list and the
+        // page are the same list — a picker that opened empty while the page
+        // showed fourteen is what sent somebody looking for the switch that
+        // turns things on.
         Flexible(
           child: _shown.isEmpty
               ? Padding(
@@ -1608,16 +1677,15 @@ class _ScenePickerState extends State<_ScenePicker> {
                   buildDefaultDragHandles: false,
                   padding: EdgeInsets.symmetric(horizontal: t.space.md),
                   itemCount: _shown.length,
-                  // , not : the older callback
+                  // `onReorderItem`, not `onReorder`: the older callback
                   // reports where the row would land *before* it is lifted
                   // out, so every move downward is one place too far unless
-                  // the caller knows to subtract one. This one is the index
-                  // the row actually wants.
+                  // the caller knows to subtract one.
                   onReorderItem: (from, to) =>
                       setState(() => _shown.insert(to, _shown.removeAt(from))),
                   itemBuilder: (context, i) {
                     final id = _shown[i];
-                    final scene = _find(id);
+                    final item = _find(id);
                     return Material(
                       key: ValueKey(id),
                       type: MaterialType.transparency,
@@ -1628,17 +1696,17 @@ class _ScenePickerState extends State<_ScenePicker> {
                           child: Icon(Icons.drag_indicator,
                               size: 18, color: t.surface.onBaseMuted),
                         ),
-                        title: Text(scene?.name ?? 'A scene that is gone',
+                        title: Text(item?.name ?? 'One that is gone',
                             style: t.text.bodyStyle
                                 .copyWith(color: t.surface.onBase)),
-                        subtitle: scene == null
+                        subtitle: item == null
                             ? null
-                            : Text(_where(scene),
+                            : Text(item.where,
                                 style: t.text.captionStyle
                                     .copyWith(color: t.surface.onBaseMuted)),
                         trailing: IconButton(
                           icon: const Icon(Icons.close, size: 16),
-                          tooltip: 'Take it off the row',
+                          tooltip: 'Take it off',
                           onPressed: () => setState(() => _shown.remove(id)),
                         ),
                       ),
@@ -1650,11 +1718,11 @@ class _ScenePickerState extends State<_ScenePicker> {
         Padding(
           padding: EdgeInsets.symmetric(horizontal: t.space.lg),
           child: TextField(
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               isDense: true,
-              prefixIcon: Icon(Icons.search, size: 18),
-              hintText: 'Add a scene',
-              border: OutlineInputBorder(),
+              prefixIcon: const Icon(Icons.search, size: 18),
+              hintText: widget.addHint,
+              border: const OutlineInputBorder(),
             ),
             onChanged: (v) => setState(() => _query = v),
           ),
@@ -1666,8 +1734,8 @@ class _ScenePickerState extends State<_ScenePicker> {
                   padding: EdgeInsets.symmetric(horizontal: t.space.lg),
                   child: Text(
                       q.isEmpty
-                          ? 'Every scene in the house is on the row.'
-                          : 'No scene matches that.',
+                          ? 'Everything is on the list.'
+                          : 'Nothing matches that.',
                       style: t.text.bodySmallStyle
                           .copyWith(color: t.surface.onBaseMuted)),
                 )
@@ -1684,9 +1752,9 @@ class _ScenePickerState extends State<_ScenePicker> {
                         title: Text(s.name,
                             style: t.text.bodyStyle
                                 .copyWith(color: t.surface.onBase)),
-                        // The room, because four scenes are called Nightlight
-                        // — one per room — and a bare name cannot say which.
-                        subtitle: Text(_where(s),
+                        // Where it lives, because four scenes are called
+                        // Nightlight and two lamps are called Lamp.
+                        subtitle: Text(s.where,
                             style: t.text.captionStyle
                                 .copyWith(color: t.surface.onBaseMuted)),
                         trailing: const Icon(Icons.add, size: 18),
@@ -1701,10 +1769,9 @@ class _ScenePickerState extends State<_ScenePicker> {
           child: Row(
             children: [
               TextButton(
-                // Back to automatic: whatever the scope allows, in the order
-                // the house lists it.
+                // The third answer: stop choosing, and let the rule decide.
                 onPressed: () => Navigator.of(context).pop(const <String>[]),
-                child: const Text('Show every scene'),
+                child: Text(widget.clearLabel),
               ),
               const Spacer(),
               TextButton(
