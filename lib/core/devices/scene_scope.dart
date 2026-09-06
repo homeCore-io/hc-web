@@ -51,11 +51,36 @@ List<ScenePick> scenesInScope(
         _ => true,
       };
 
+  // **The scenes a room has that none of its lights offer.**
+  //
+  // A Hue scene belongs to a room's *group*, so it is shown under the light it
+  // sets and a room row listing every scene would say those twice. A Lutron or
+  // Caseta scene is attached to no light at all — and so had nowhere on a room
+  // page to be. John: *"some plugins provide scenes like lutron. Currently
+  // there is no device scenes area in the room pages for these types of
+  // scenes."*
+  //
+  // Claimed by asking the lights themselves rather than by testing for a
+  // bridge id: whatever `scenesForDevice` decides belongs to a light is what
+  // the light's own panel will draw, and this is the remainder by
+  // construction.
+  final claimed = <String>{};
+  if (config['skip_light_scenes'] == true) {
+    for (final d in devices) {
+      if (!facetOf(d, d.schema).isLight) continue;
+      if (!wanted(d.effectiveArea)) continue;
+      for (final scene in scenesForDevice(d, devices)) {
+        claimed.add(scene.id);
+      }
+    }
+  }
+
   return [
     for (final s in native)
-      if (wanted(null)) (id: s.id, name: s.name, area: null),
+      if (wanted(null) && !claimed.contains(s.id))
+        (id: s.id, name: s.name, area: null),
     for (final d in devices.where(isSceneDevice))
-      if (wanted(d.effectiveArea))
+      if (wanted(d.effectiveArea) && !claimed.contains(d.id))
         (id: d.id, name: d.displayName, area: d.effectiveArea),
   ];
 }

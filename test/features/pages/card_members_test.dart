@@ -44,6 +44,16 @@ final _house = [
   _d('hall_lamp', 'hallway'),
 ];
 
+/// The cross on the row a device is drawn in.
+///
+/// The panel is a list of what the card holds, in the order it draws them, so
+/// a name is something you drag rather than something you toggle — taking a
+/// device off is its own control.
+Finder _crossFor(String name) => find.descendant(
+      of: find.ancestor(of: find.text(name), matching: find.byType(Row)).first,
+      matching: find.byTooltip('Take it off this card'),
+    );
+
 void main() {
   group('resolving', () {
     test('the rule alone, when there are no exceptions', () {
@@ -167,7 +177,7 @@ void main() {
         'selection_mode': 'area',
         'area_name': 'living_room',
       });
-      await tester.tap(find.text('tv'));
+      await tester.tap(_crossFor('tv'));
       await tester.pumpAndSettle();
 
       expect(config['remove'], ['tv']);
@@ -202,7 +212,7 @@ void main() {
         'selection_mode': 'manual',
         'device_ids': ['lamp', 'sconce'],
       });
-      await tester.tap(find.text('sconce'));
+      await tester.tap(_crossFor('sconce'));
       await tester.pumpAndSettle();
 
       expect(config['device_ids'], ['lamp']);
