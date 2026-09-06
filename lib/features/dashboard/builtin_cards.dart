@@ -44,7 +44,7 @@ import '../../design/components/hc_tile.dart';
 import '../../design/tokens.dart';
 import 'floor_plan_card.dart';
 import 'device_pill.dart';
-import '../devices/device_scenes.dart';
+import '../../core/devices/scene_scope.dart';
 import '../../design/components/hc_scene_chip.dart';
 import '../devices/device_sheet.dart';
 import '../home/home_entity_row.dart';
@@ -729,145 +729,65 @@ class _SceneRowWidget extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // **Both kinds, or this element is empty in most houses.**
-    //
-    // It read `/scenes` and nothing else, and `/scenes` is core's own registry.
-    // A house whose scenes all arrive from plugins — Hue, Lutron, a hub — has
-    // an empty one, so this drew nothing at all on a house with fifty-eight
-    // scenes in it. Found by putting it on a page and looking: `SCENES`, and
-    // then blank space under it.
-    //
-    // `scene_button` has always known there are two kinds and applied each the
-    // way its own kind is applied. This is that knowledge, in the element whose
-    // whole job is to list them.
+    // **Both kinds, or this element is empty in most houses.** It read
+    // `/scenes` and nothing else — core's own registry — so a house whose
+    // scenes all arrive from plugins had an empty one, and this drew nothing
+    // at all on a house with fifty-eight scenes in it.
     final native = ref.watch(scenesProvider).value ?? const <SceneModel>[];
     final devices = ref.watch(devicesProvider).value ?? const <DeviceState>[];
     final t = HcTokens.of(context);
 
-    // **Where a scene belongs.**
-    //
-    // A house-wide footer listing all fifty-eight scenes prints *Nightlight*
-    // three times, because three rooms each have one — and none of the three
-    // is a house-wide scene at all. The mockup states the rule in its own
-    // footer: whole-house only; a scene that belongs to a room is on that
-    // room's page. Until now the element could not say it.
-    //
-    // `house` keeps the scenes with no room. `room` keeps one room's. Anything
-    // else keeps them all, which is what every page built before this got.
-    final scope = config['scope'] as String? ?? 'all';
-    final room = (config['room'] as String? ?? '').trim();
+    // **What it shows is one question, answered once.** `scene_scope.dart`
+    // answers it for the picker too — the row drawing fourteen chips while the
+    // picker opened with nothing ticked was the two working it out separately.
+    final ids = scenesShown(config, native, devices);
 
-    // **A device's scenes belong with the device.** A Hue scene is a property
-    // of a room's *group*, so a room page that lists them beside its lights
-    // says them twice — once as the room's, once as the picked light's. John:
-    // *"Device scenes should be shown as part of the device details and only
-    // group/room scenes shown on the main room page."*
-    if (scope == 'device') {
-      final id = (config['device_id'] as String? ?? '').trim();
-      final owner =
-          devices.where((d) => d.id == id).cast<DeviceState?>().firstOrNull;
-      final mine = owner == null
-          ? const <DeviceState>[]
-          : scenesForDevice(owner, devices);
-      if (mine.isEmpty) {
-        return Text(
-          owner == null ? 'Pick a light to see its scenes.' : 'No scenes here.',
-          style: t.text.captionStyle.copyWith(color: t.surface.onBaseMuted),
-        );
-      }
-      return Wrap(
-        spacing: t.space.sm,
-        runSpacing: t.space.sm,
-        children: [
-          for (final sc in mine)
-            HcSceneChip(
-              name: sc.displayName,
-              onRun: () => ref
-                  .read(devicesProvider.notifier)
-                  .command(sc.id, {'action': 'activate_scene'}),
-            ),
-        ],
-      );
-    }
-
-    // **A hand-picked list is the whole answer.** Chosen scenes are shown in
-    // the order they were chosen and nothing else is, whatever the scope says
-    // — picking six by name and then having a scope quietly drop three of them
-    // would make the picker a suggestion. The scope is what answers when
-    // nobody has picked.
-    final picked = ((config['scene_ids'] as List?) ?? const [])
-        .whereType<String>()
-        .toList();
-
-    bool wanted(String? area) => switch (scope) {
-          'house' => area == null || area.isEmpty,
-          'room' => room.isEmpty || area == room,
-          _ => true,
-        };
-
-    if (picked.isNotEmpty) {
-      final byId = <String, Widget>{
-        for (final scene in native)
-          scene.id: HcSceneChip(
-            name: scene.name,
-            onRun: () => ref.read(scenesApiProvider).activateScene(scene.id),
-          ),
-        for (final d in devices.where(isSceneDevice))
-          d.id: HcSceneChip(
-            name: d.displayName,
-            onRun: () => ref
-                .read(devicesApiProvider)
-                .setDeviceState(d.id, {'activate': true}),
-          ),
-      };
-      // A scene deleted since the page was made is simply not drawn: the row
-      // is a set of buttons, and a button that cannot do anything is worse
-      // than a gap.
-      final kept = [
-        for (final id in picked)
-          if (byId[id] case final chip?) chip,
-      ];
-      return kept.isEmpty
-          ? Text(
-              'The scenes this row was given are gone.',
-              style: t.text.captionStyle.copyWith(color: t.surface.onBaseMuted),
-            )
-          : Wrap(spacing: t.space.sm, runSpacing: t.space.sm, children: kept);
-    }
-
-    // The same chip the device panel uses. Two different-looking scene chips in
-    // one product is the tell that they were built by different hands — and
-    // this one paints itself the colour of the light it makes.
-    final chips = <Widget>[
-      for (final scene in native.where((s) => wanted(null)))
-        HcSceneChip(
+    final byId = <String, Widget>{
+      for (final scene in native)
+        scene.id: HcSceneChip(
           name: scene.name,
           onRun: () => ref.read(scenesApiProvider).activateScene(scene.id),
         ),
-      for (final d in devices.where(isSceneDevice).where(
-            (d) => wanted(d.effectiveArea),
-          ))
-        HcSceneChip(
+      for (final d in devices.where(isSceneDevice))
+        // A plugin scene is a device, and applying it is a write to that
+        // device — not a POST to a registry it is not in. Sending it the other
+        // way is not a small bug: the request goes to the wrong place and the
+        // scene never runs.
+        d.id: HcSceneChip(
           name: d.displayName,
-          // A plugin scene is a device, and applying it is a write to that
-          // device — not a POST to a registry it is not in. Sending it the
-          // other way is not a small bug: the request goes to the wrong place
-          // and the scene never runs.
           onRun: () => ref
               .read(devicesApiProvider)
               .setDeviceState(d.id, {'activate': true}),
         ),
+    };
+
+    // A scene deleted since the page was made is simply not drawn: the row is
+    // a set of buttons, and a button that cannot do anything is worse than a
+    // gap.
+    final chips = [
+      for (final id in ids)
+        if (byId[id] case final chip?) chip,
     ];
 
     if (chips.isEmpty) {
+      final scope = config['scope'] as String? ?? 'all';
+      final picked = ((config['scene_ids'] as List?) ?? const [])
+          .whereType<String>()
+          .isNotEmpty;
       return Text(
-        // Which is a different fact from having none at all, and the one a
-        // person staring at an empty footer needs.
-        switch (scope) {
-          'house' => 'No whole-house scenes.',
-          'room' => 'No scenes in this room.',
-          _ => 'No scenes yet.',
-        },
+        // Each of these is a different fact, and the one a person staring at
+        // an empty footer needs.
+        picked
+            ? 'The scenes this row was given are gone.'
+            : switch (scope) {
+                'device' =>
+                  (config['device_id'] as String? ?? '').trim().isEmpty
+                      ? 'Pick a light to see its scenes.'
+                      : 'No scenes here.',
+                'house' => 'No whole-house scenes.',
+                'room' => 'No scenes in this room.',
+                _ => 'No scenes yet.',
+              },
         style: t.text.captionStyle.copyWith(color: t.surface.onBaseMuted),
       );
     }
@@ -2056,6 +1976,14 @@ void registerBuiltinDashboardWidgets() {
       sizeHint: const WidgetSizeHint(
           minW: 3, minH: 1, recommendedW: 6, recommendedH: 1),
       configFields: const [
+        // **First, because it is the one people come here to change.** The
+        // scope answers *whose* scenes and is set once when the page is built;
+        // which of them to show is the everyday edit, and it was fourth on the
+        // list under two settings that only apply to other scopes.
+        WidgetConfigField('scene_ids', WidgetConfigKind.sceneRefs,
+            label: 'Which ones',
+            help: 'Pick the scenes this row shows. With none picked it shows '
+                'every scene the setting below allows.'),
         WidgetConfigField('scope', WidgetConfigKind.choice,
             label: 'Which scenes',
             options: ['all', 'house', 'room', 'device'],
@@ -2068,11 +1996,6 @@ void registerBuiltinDashboardWidgets() {
             label: 'Light',
             help: 'Only when Which scenes is “device”. Set it to the picked '
                 'device and the scenes follow whichever light you tap.'),
-        // The scope answers *whose* scenes; this answers *which*. A house with
-        // fifty-eight of them still wants six on a footer.
-        WidgetConfigField('scene_ids', WidgetConfigKind.sceneRefs,
-            label: 'Which ones',
-            help: 'Tap the scenes to show. Empty shows them all.'),
       ],
       growsToFit: true,
       builder: (context, a) => _SceneRowWidget(config: a.config),

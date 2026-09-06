@@ -82,9 +82,9 @@ Future<Map<String, dynamic>> _pump(
   return config;
 }
 
-/// Opens the sheet from the panel's one line.
+/// Opens the sheet from the panel's one line, whatever it currently says.
 Future<void> _open(WidgetTester tester) async {
-  await tester.tap(find.text('Every scene'));
+  await tester.tap(find.byIcon(Icons.chevron_right).first);
   await tester.pumpAndSettle();
 }
 
@@ -99,13 +99,16 @@ void main() {
     expect(find.textContaining('Nightlight'), findsOneWidget);
   });
 
-  testWidgets('and says every scene when nothing is picked', (tester) async {
+  testWidgets('and names them even when nobody picked any', (tester) async {
+    // Nothing picked means every scene, and the panel says which those are
+    // rather than a word that could mean none of them.
     await _pump(tester);
-    expect(find.text('Every scene'), findsOneWidget);
+    expect(find.textContaining('Away Scene'), findsOneWidget);
   });
 
   testWidgets('the sheet tells two scenes of the same name apart',
       (tester) async {
+    // Four scenes in this house are called Nightlight, one per room.
     await _pump(tester);
     await _open(tester);
 
@@ -114,51 +117,14 @@ void main() {
     expect(find.text('Kitchen'), findsOneWidget);
   });
 
-  testWidgets('a scene already chosen is ticked where it sits', (tester) async {
+  testWidgets('a row with a pick opens on exactly that pick', (tester) async {
     await _pump(tester, initial: {
       'scene_ids': ['night_kitchen'],
     });
-    await tester.tap(find.textContaining('Nightlight'));
-    await tester.pumpAndSettle();
-
-    final ticked = tester
-        .widgetList<CheckboxListTile>(find.byType(CheckboxListTile))
-        .where((c) => c.value == true)
-        .length;
-    expect(ticked, 1, reason: 'the chosen one, in the list it came from');
-  });
-
-  testWidgets('ticking adds, in the order they were ticked', (tester) async {
-    final config = await _pump(tester);
     await _open(tester);
 
-    // Two rows say Nightlight; the list is by name and then by room, so the
-    // Kitchen one is the first of them.
-    await tester.tap(find.text('Nightlight').first);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Away Scene'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Done'));
-    await tester.pumpAndSettle();
-
-    expect(config['scene_ids'], ['night_kitchen', 'away']);
-  });
-
-  testWidgets('adding one does not reorder the rest', (tester) async {
-    // Somebody opening this to add a scene must not come out with six in a
-    // different order.
-    final config = await _pump(tester, initial: {
-      'scene_ids': ['night_office', 'away'],
-    });
-    await tester.tap(find.textContaining('Nightlight'));
-    await tester.pumpAndSettle();
-    // The Kitchen one, which is not yet in the list.
-    await tester.tap(find.text('Nightlight').first);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Done'));
-    await tester.pumpAndSettle();
-
-    expect(config['scene_ids'], ['night_office', 'away', 'night_kitchen']);
+    expect(find.byIcon(Icons.drag_indicator), findsOneWidget);
+    expect(find.text('Kitchen'), findsOneWidget);
   });
 
   testWidgets('and showing every scene again clears the field', (tester) async {
@@ -178,5 +144,69 @@ void main() {
       (tester) async {
     await _pump(tester, devices: const []);
     expect(find.text('No scenes yet'), findsOneWidget);
+  });
+
+  testWidgets('the sheet opens showing what the page is showing',
+      (tester) async {
+    // **This is the one that made the panel look broken.** Nothing picked
+    // means every scene, so the row drew three chips and the sheet opened with
+    // an empty list — the two worked out what was showing separately. John:
+    // *"when I drill into either of those nothing is already selected but
+    // there are items in the box."*
+    await _pump(tester);
+    await _open(tester);
+
+    expect(find.byIcon(Icons.drag_indicator), findsNWidgets(3),
+        reason: 'all three, ready to be reordered or removed');
+    expect(find.textContaining('Every scene in the house is on the row'),
+        findsOneWidget);
+  });
+
+  testWidgets('dragging one to the top is the order the row draws',
+      (tester) async {
+    final config = await _pump(tester, initial: {
+      'scene_ids': ['away', 'night_office'],
+    });
+    await _open(tester);
+
+    // The second row's handle, dragged above the first.
+    await tester.drag(
+        find.byIcon(Icons.drag_indicator).last, const Offset(0, -60));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Done'));
+    await tester.pumpAndSettle();
+
+    expect(config['scene_ids'], ['night_office', 'away']);
+  });
+
+  testWidgets('taking one off leaves the rest in their order', (tester) async {
+    final config = await _pump(tester, initial: {
+      'scene_ids': ['away', 'night_office', 'night_kitchen'],
+    });
+    await _open(tester);
+
+    await tester.tap(find.byTooltip('Take it off the row').at(1));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Done'));
+    await tester.pumpAndSettle();
+
+    expect(config['scene_ids'], ['away', 'night_kitchen']);
+  });
+
+  testWidgets('and a scene is added where the last one left off',
+      (tester) async {
+    final config = await _pump(tester, initial: {
+      'scene_ids': ['away'],
+    });
+    await _open(tester);
+
+    // Two are not on the row; both are offered under the search box.
+    await tester.tap(find.byIcon(Icons.add).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Done'));
+    await tester.pumpAndSettle();
+
+    expect((config['scene_ids'] as List).first, 'away');
+    expect((config['scene_ids'] as List).length, 2);
   });
 }
