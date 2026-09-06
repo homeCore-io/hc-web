@@ -141,6 +141,43 @@ void main() {
       expect(find.text('Save'), findsOneWidget);
     });
 
+    testWidgets('Save has an opposite', (tester) async {
+      // The only way out was an arrow at the other end of the bar, which reads
+      // as *back* rather than as *throw this away*. John: *"designer has a
+      // save button but no cancel which isn't intuitive."*
+      await _openDesigner(tester);
+      expect(find.text('Cancel'), findsOneWidget);
+    });
+
+    testWidgets('leaving an untouched page asks nothing', (tester) async {
+      // A dialog that always appears is one people learn to dismiss without
+      // reading, which is how the guard stops working on the day it matters.
+      await _openDesigner(tester);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Discard your changes?'), findsNothing);
+      expect(find.byType(CardLibrary), findsNothing, reason: 'and it left');
+    });
+
+    testWidgets('but a page you have changed asks before losing it',
+        (tester) async {
+      await _openDesigner(tester);
+      // Any real edit will do; this one is a control the page already has.
+      await tester.tap(find.text('Close gaps'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(find.text('Discard your changes?'), findsOneWidget);
+
+      await tester.tap(find.text('Keep editing'));
+      await tester.pumpAndSettle();
+      expect(find.byType(PageGrid), findsOneWidget,
+          reason: 'saying no leaves you where you were, still editing');
+      expect(find.text('Save'), findsOneWidget);
+    });
+
     testWidgets('the status bar says what is true', (tester) async {
       await _openDesigner(tester);
       expect(find.text('Nothing selected'), findsOneWidget);

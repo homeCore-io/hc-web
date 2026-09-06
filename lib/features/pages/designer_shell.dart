@@ -68,6 +68,7 @@ class DesignerShell extends StatefulWidget {
     required this.onRemoveSelected,
     required this.onDeselect,
     required this.onSave,
+    required this.onDiscard,
     required this.canvas,
     required this.emptyStart,
     required this.canvasWidth,
@@ -158,6 +159,10 @@ class DesignerShell extends StatefulWidget {
   final VoidCallback onRemoveSelected;
   final VoidCallback onDeselect;
   final VoidCallback onSave;
+
+  /// Throw the draft away. The shell asks first when there is something to
+  /// lose; this is what it calls once the answer is yes.
+  final VoidCallback onDiscard;
   final Widget canvas;
 
   /// What a page with nothing on it offers instead of a canvas.
@@ -458,6 +463,44 @@ class _DesignerShellState extends State<DesignerShell> {
         false;
   }
 
+  /// Leave the designer, asking first when there is something to lose.
+  ///
+  /// **Both ways out go through here.** The arrow and Cancel are the same
+  /// act — stop, and keep what was last saved — and a page half-arranged is
+  /// exactly the state in which somebody presses one of them by accident.
+  /// Silence would be this screen deciding an hour's work was not worth a
+  /// question.
+  ///
+  /// Nothing to lose asks nothing: a dialog that always appears is one people
+  /// learn to dismiss without reading, which is how the guard stops working on
+  /// the day it matters.
+  Future<void> _leave(BuildContext context) async {
+    if (widget.dirty) {
+      final go = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Discard your changes?'),
+          content: const Text(
+              'This page goes back to the way it was when you last saved.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Keep editing'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Discard'),
+            ),
+          ],
+        ),
+      );
+      if (go != true) return;
+    }
+    widget.onDiscard();
+    if (!context.mounted) return;
+    context.go('/pages/${widget.dashboard.id}');
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
@@ -545,7 +588,8 @@ class _DesignerShellState extends State<DesignerShell> {
                 onSelectBreakpoint: widget.onSelectBreakpoint,
                 onRevert: widget.onRevert,
                 onSave: widget.onSave,
-                onLeave: () => context.go('/pages/${widget.dashboard.id}'),
+                onCancel: () => _leave(context),
+                onLeave: () => _leave(context),
                 zoom: _zoom,
                 effectiveZoom: scale,
                 onZoom: (z) => setState(() => _zoom = z),
@@ -954,6 +998,7 @@ class _TopBar extends StatelessWidget {
     required this.onSelectBreakpoint,
     required this.onRevert,
     required this.onSave,
+    required this.onCancel,
     required this.onLeave,
     required this.zoom,
     required this.effectiveZoom,
@@ -983,6 +1028,7 @@ class _TopBar extends StatelessWidget {
   final ValueChanged<DashboardBreakpoint> onSelectBreakpoint;
   final VoidCallback? onRevert;
   final VoidCallback onSave;
+  final VoidCallback onCancel;
   final VoidCallback onLeave;
 
   /// The chosen zoom, or null when it is Fit.
@@ -1125,6 +1171,17 @@ class _TopBar extends StatelessWidget {
               child: Text('Unsaved',
                   style: t.text.captionStyle.copyWith(color: t.accent.active)),
             ),
+          // **Save had no opposite.** The only way out was the arrow at the
+          // far end of the bar, which reads as *back* rather than as *throw
+          // this away* — so the one thing a person wants when they have made a
+          // mess of a page was the one thing the designer did not offer.
+          // John: *"designer has a save button but no cancel which isn't
+          // intuitive."*
+          TextButton(
+            onPressed: saving ? null : onCancel,
+            child: const Text('Cancel'),
+          ),
+          SizedBox(width: t.space.xs),
           FilledButton(
             onPressed: saving ? null : onSave,
             child: Text(saving ? 'Saving…' : 'Save'),
