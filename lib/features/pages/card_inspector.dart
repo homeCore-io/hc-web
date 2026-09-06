@@ -132,6 +132,20 @@ class _CardInspectorState extends ConsumerState<CardInspector> {
   /// screen admitting they were there, and the wheel did not reach them.
   final _scroll = ScrollController();
 
+  /// **One panel, three questions.** Everything a card can be told was one
+  /// column: what it shows, then its name, then its style, then its saved
+  /// looks, its background, its border, its corners, its blur, its picture,
+  /// what it does when the house changes, and its coordinates — so the two
+  /// settings a scenes row actually has sat above eleven screens of things
+  /// that are true of every card alike. John: *"Too many elements on a long
+  /// page for different features, should be in tabbed options or something to
+  /// make it less busy."*
+  ///
+  /// The tab is kept across selections on purpose: somebody nudging the
+  /// position of one card after another should not have to find Place again
+  /// each time.
+  _Tab _tab = _Tab.settings;
+
   @override
   void dispose() {
     _scroll.dispose();
@@ -141,9 +155,6 @@ class _CardInspectorState extends ConsumerState<CardInspector> {
   @override
   Widget build(BuildContext context) {
     final model = widget.model;
-    final onChanged = widget.onChanged;
-    final onRename = widget.onRename;
-    final onStack = widget.onStack;
     final t = HcTokens.of(context);
     final descriptor = WidgetRegistry.lookup(model.type);
 
@@ -190,109 +201,7 @@ class _CardInspectorState extends ConsumerState<CardInspector> {
                     style: t.text.captionStyle
                         .copyWith(color: t.surface.onBaseMuted)),
               SizedBox(height: t.space.md),
-              if (descriptor == null)
-                Text('This card type is not installed.',
-                    style: t.text.bodySmallStyle
-                        .copyWith(color: t.surface.onBaseMuted))
-              else ...[
-                WidgetConfigForm(
-                  // Keyed by card, or moving the selection to another card would
-                  // reuse the previous one's field state — its text controllers
-                  // still holding the last card's values.
-                  key: ValueKey(model.id),
-                  descriptor: descriptor,
-                  initial: model.config,
-                  onChanged: onChanged,
-                ),
-                // The card's own validator, inline. There is no Done here to
-                // hang it off, and an unsaveable card must say so where it is
-                // being edited rather than at the page's save.
-                if (descriptor.validate?.call(model.config) case final message?)
-                  Padding(
-                    padding: EdgeInsets.only(bottom: t.space.xs),
-                    child: Text(
-                      message,
-                      style: t.text.bodySmallStyle
-                          .copyWith(color: t.accent.danger),
-                    ),
-                  ),
-                _Preview(config: model.config, descriptor: descriptor),
-                // Which devices, listed and tickable — for the card types whose
-                // contents are a device selection. A room card was a live query
-                // with nothing showing what it held.
-                if (_selects(descriptor.type))
-                  CardMembers(config: model.config, onChanged: onChanged),
-              ],
-              // Style is offered only where there is a card to un-draw. A
-              // heading, a rule and a spacer have no surface at all, so a
-              // "background" switch on one would be a control with nothing
-              // behind it.
-              if (onRename != null)
-                _NameField(
-                  key: ValueKey('title-${model.id}'),
-                  value: model.title,
-                  hint: descriptor?.title ?? model.type,
-                  onChanged: onRename,
-                ),
-              if (descriptor != null &&
-                  descriptor.chrome != WidgetChrome.bare) ...[
-                _StyleSection(
-                  cardId: model.id,
-                  style: CardStyle.fromConfig(model.config),
-                  // Derived on every build rather than cached, and cheap
-                  // enough to be: it is a walk of the widgets already in
-                  // memory, and a cached library is one that can be wrong
-                  // about a style you named ten seconds ago. See
-                  // `named_styles.dart` for why there is nothing stored.
-                  saved: namedStylesIn(
-                      ref.watch(dashboardsProvider).value ?? const []),
-                  onChanged: (style) => onChanged(style.toConfig(model.config)),
-                ),
-                _VariantsSection(
-                  style: CardStyle.fromConfig(model.config),
-                  onChanged: (style) => onChanged(style.toConfig(model.config)),
-                ),
-              ],
-              // Outside the chrome test above: an element with no surface —
-              // an icon, a shape — is exactly the kind of thing worth binding,
-              // so this must not hang off whether the card has a frame.
-              if (descriptor != null && descriptor.bindable.isNotEmpty)
-                _DataSection(
-                  descriptor: descriptor,
-                  config: model.config,
-                  onChanged: onChanged,
-                ),
-              if (widget.rect != null && widget.onRect != null)
-                _PositionSection(
-                  rect: widget.rect!,
-                  rotation: widget.rotation,
-                  onRect: widget.onRect!,
-                  onRotate: widget.onRotate ?? (_) {},
-                ),
-              if (widget.insideFrame case final frame?)
-                _PinSection(
-                  frame: frame,
-                  pins: Pins.fromConfig(model.config),
-                  onChanged: (pins) => onChanged(pins.toConfig(model.config)),
-                ),
-              if (widget.onRotate case final onRotate?)
-                _TransformSection(
-                  rotation: widget.rotation,
-                  opacity: widget.opacity,
-                  onRotate: onRotate,
-                  onFade: widget.onFade ?? (_) {},
-                ),
-              if (onStack != null)
-                _StackSection(
-                    floating: widget.floating, z: widget.z, onStack: onStack),
-              // Every element, not only the ones that thought to ask. An
-              // action belongs to all of them or to none — see `_TapSection`.
-              _TapSection(config: model.config, onChanged: onChanged),
-              // Last, and folded: the drawn controls above are how you are
-              // meant to work. This is the hatch for everything they do not
-              // reach — including keys this version of this app has never
-              // heard of.
-              _AllPropertiesSection(config: model.config, onChanged: onChanged),
+              ..._tabs(context, t, model, descriptor),
               SizedBox(height: t.space.md),
               Align(
                 alignment: Alignment.centerLeft,
@@ -308,6 +217,192 @@ class _CardInspectorState extends ConsumerState<CardInspector> {
       ),
     );
   }
+
+  /// The panel's three tabs, and whichever one is showing.
+  ///
+  /// A tab with nothing in it is not offered: a heading has no surface to
+  /// style and a card outside a frame has nothing to pin, and an empty tab is
+  /// a promise the panel cannot keep.
+  List<Widget> _tabs(
+    BuildContext context,
+    HcTokens t,
+    DashboardWidgetModel model,
+    WidgetDescriptor? descriptor,
+  ) {
+    final settings = _settings(context, t, model, descriptor);
+    final look = _look(model, descriptor);
+    final place = _place(model);
+
+    final has = {
+      _Tab.settings: settings.isNotEmpty,
+      _Tab.look: look.isNotEmpty,
+      _Tab.place: place.isNotEmpty,
+    };
+    final showing = has[_tab] == true
+        ? _tab
+        : has.entries.where((e) => e.value).map((e) => e.key).firstOrNull;
+
+    return [
+      if (has.values.where((v) => v).length > 1) ...[
+        Row(
+          children: [
+            for (final tab in _Tab.values)
+              if (has[tab] == true)
+                Padding(
+                  padding: EdgeInsets.only(right: t.space.xs),
+                  child: _StylePill(
+                    label: tab.label,
+                    on: tab == showing,
+                    onTap: () => setState(() => _tab = tab),
+                  ),
+                ),
+          ],
+        ),
+        SizedBox(height: t.space.md),
+      ],
+      ...switch (showing) {
+        _Tab.settings => settings,
+        _Tab.look => look,
+        _Tab.place => place,
+        null => const <Widget>[],
+      },
+    ];
+  }
+
+  /// What the card is and what it shows.
+  List<Widget> _settings(
+    BuildContext context,
+    HcTokens t,
+    DashboardWidgetModel model,
+    WidgetDescriptor? descriptor,
+  ) {
+    final onChanged = widget.onChanged;
+    final onRename = widget.onRename;
+    return [
+      if (descriptor == null)
+        Text('This card type is not installed.',
+            style: t.text.bodySmallStyle.copyWith(color: t.surface.onBaseMuted))
+      else ...[
+        WidgetConfigForm(
+          // Keyed by card, or moving the selection to another card would
+          // reuse the previous one's field state — its text controllers
+          // still holding the last card's values.
+          key: ValueKey(model.id),
+          descriptor: descriptor,
+          initial: model.config,
+          onChanged: onChanged,
+        ),
+        // The card's own validator, inline. There is no Done here to
+        // hang it off, and an unsaveable card must say so where it is
+        // being edited rather than at the page's save.
+        if (descriptor.validate?.call(model.config) case final message?)
+          Padding(
+            padding: EdgeInsets.only(bottom: t.space.xs),
+            child: Text(
+              message,
+              style: t.text.bodySmallStyle.copyWith(color: t.accent.danger),
+            ),
+          ),
+        _Preview(config: model.config, descriptor: descriptor),
+        // Which devices, listed and tickable — for the card types whose
+        // contents are a device selection. A room card was a live query
+        // with nothing showing what it held.
+        if (_selects(descriptor.type))
+          CardMembers(config: model.config, onChanged: onChanged),
+      ],
+      // Style is offered only where there is a card to un-draw. A
+      // heading, a rule and a spacer have no surface at all, so a
+      // "background" switch on one would be a control with nothing
+      // behind it.
+      if (onRename != null)
+        _NameField(
+          key: ValueKey('title-${model.id}'),
+          value: model.title,
+          hint: descriptor?.title ?? model.type,
+          onChanged: onRename,
+        ),
+      // What drives it. Outside any chrome test: an element with no surface —
+      // an icon, a shape — is exactly the kind of thing worth binding, so this
+      // must not hang off whether the card has a frame.
+      if (descriptor != null && descriptor.bindable.isNotEmpty)
+        _DataSection(
+          descriptor: descriptor,
+          config: model.config,
+          onChanged: onChanged,
+        ),
+      // Every element, not only the ones that thought to ask. An action
+      // belongs to all of them or to none — see `_TapSection`.
+      _TapSection(config: model.config, onChanged: onChanged),
+      // Last, and folded: the drawn controls above are how you are meant to
+      // work. This is the hatch for everything they do not reach — including
+      // keys this version of this app has never heard of.
+      _AllPropertiesSection(config: model.config, onChanged: onChanged),
+    ];
+  }
+
+  /// How it is drawn, and when it is drawn differently.
+  List<Widget> _look(DashboardWidgetModel model, WidgetDescriptor? descriptor) {
+    final onChanged = widget.onChanged;
+    return [
+      if (descriptor != null && descriptor.chrome != WidgetChrome.bare) ...[
+        _StyleSection(
+          cardId: model.id,
+          style: CardStyle.fromConfig(model.config),
+          // Derived on every build rather than cached, and cheap
+          // enough to be: it is a walk of the widgets already in
+          // memory, and a cached library is one that can be wrong
+          // about a style you named ten seconds ago. See
+          // `named_styles.dart` for why there is nothing stored.
+          saved: namedStylesIn(ref.watch(dashboardsProvider).value ?? const []),
+          onChanged: (style) => onChanged(style.toConfig(model.config)),
+        ),
+        _VariantsSection(
+          style: CardStyle.fromConfig(model.config),
+          onChanged: (style) => onChanged(style.toConfig(model.config)),
+        ),
+      ],
+    ];
+  }
+
+  /// Where it sits.
+  List<Widget> _place(DashboardWidgetModel model) {
+    final onChanged = widget.onChanged;
+    final onStack = widget.onStack;
+    return [
+      if (widget.rect != null && widget.onRect != null)
+        _PositionSection(
+          rect: widget.rect!,
+          rotation: widget.rotation,
+          onRect: widget.onRect!,
+          onRotate: widget.onRotate ?? (_) {},
+        ),
+      if (widget.insideFrame case final frame?)
+        _PinSection(
+          frame: frame,
+          pins: Pins.fromConfig(model.config),
+          onChanged: (pins) => onChanged(pins.toConfig(model.config)),
+        ),
+      if (widget.onRotate case final onRotate?)
+        _TransformSection(
+          rotation: widget.rotation,
+          opacity: widget.opacity,
+          onRotate: onRotate,
+          onFade: widget.onFade ?? (_) {},
+        ),
+      if (onStack != null)
+        _StackSection(floating: widget.floating, z: widget.z, onStack: onStack),
+    ];
+  }
+}
+
+/// The three questions the panel answers, in the order somebody asks them.
+enum _Tab {
+  settings('Settings'),
+  look('Look'),
+  place('Place');
+
+  const _Tab(this.label);
+  final String label;
 }
 
 /// What this card will actually contain, right now.

@@ -81,13 +81,15 @@ final _devices = [
   ),
 ];
 
-Future<void> _openDesigner(WidgetTester tester, {Size? size}) async {
+Future<GoRouter> _openDesigner(WidgetTester tester,
+    {Size? size, String? room}) async {
   registerBuiltinDashboardWidgets();
   await tester.binding.setSurfaceSize(size ?? const Size(1500, 950));
   addTearDown(() => tester.binding.setSurfaceSize(null));
 
   final router = GoRouter(
-    initialLocation: '/pages/kitchen/design',
+    initialLocation: '/pages/kitchen/design'
+        '${room == null ? '' : '?room=$room'}',
     routes: [
       GoRoute(
         path: '/pages/:id',
@@ -112,7 +114,12 @@ Future<void> _openDesigner(WidgetTester tester, {Size? size}) async {
     ),
   ));
   await tester.pumpAndSettle();
+  return router;
 }
+
+/// Where the app thinks it is.
+String _where(GoRouter router) =>
+    router.routerDelegate.currentConfiguration.uri.toString();
 
 void main() {
   group('the frame', () {
@@ -176,6 +183,19 @@ void main() {
       expect(find.byType(PageGrid), findsOneWidget,
           reason: 'saying no leaves you where you were, still editing');
       expect(find.text('Save'), findsOneWidget);
+    });
+
+    testWidgets('leaving takes the room back with it', (tester) async {
+      // **One page serves fifteen rooms.** The designer is opened for one of
+      // them — `?room=Garage` — and leaving without it lands on a page where
+      // every element that says `@room` resolves to nothing: the URL looks
+      // right and the page is empty. John: *"clicking the back arrow to leave
+      // designer it does not go back to the page, it goes back to no page."*
+      final router = await _openDesigner(tester, room: 'Garage');
+      await tester.tap(find.byTooltip('Back to the page'));
+      await tester.pumpAndSettle();
+
+      expect(_where(router), '/pages/kitchen?room=Garage');
     });
 
     testWidgets('the status bar says what is true', (tester) async {

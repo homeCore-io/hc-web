@@ -47,6 +47,7 @@ Future<({List<DashboardRect> rects, List<Map<String, dynamic>> configs})> _pump(
     ),
   ));
   await tester.pumpAndSettle();
+  await _tab(tester, 'Place');
   return (rects: rects, configs: configs);
 }
 
@@ -113,6 +114,8 @@ void main() {
   });
 
   group('all properties', () {
+    // The hatch for keys with no control of their own sits with the card's
+    // own settings, not with its coordinates.
     testWidgets('every key is there, including ones with no control',
         (tester) async {
       // `types` is a field core validates on an event feed and this editor
@@ -122,6 +125,7 @@ void main() {
         'limit': 20,
         'something_new_from_a_plugin': 'kept',
       });
+      await _tab(tester, 'Settings');
       await tester.tap(find.text('ALL PROPERTIES'));
       await tester.pumpAndSettle();
       expect(find.text('something_new_from_a_plugin'), findsOneWidget);
@@ -138,6 +142,7 @@ void main() {
       // somebody opened this list, and then would not.
       final out =
           await _pump(tester, config: const {'text': 'Hi', 'limit': 20});
+      await _tab(tester, 'Settings');
       await tester.tap(find.text('ALL PROPERTIES'));
       await tester.pumpAndSettle();
       await tester.enterText(
@@ -159,10 +164,21 @@ void main() {
         'text': 'Hi',
         'device_ids': ['a', 'b'],
       });
+      await _tab(tester, 'Settings');
       await tester.tap(find.text('ALL PROPERTIES'));
       await tester.pumpAndSettle();
       expect(find.text('2 items'), findsOneWidget);
       expect(out.configs, isEmpty);
     });
   });
+}
+
+/// The panel is tabbed: what a card shows, how it looks and where it sits are
+/// three questions now rather than one long column. This file is about one of
+/// them, so it opens that tab first.
+Future<void> _tab(WidgetTester tester, String name) async {
+  final tab = find.text(name);
+  if (tab.evaluate().isEmpty) return;
+  await tester.tap(tab);
+  await tester.pumpAndSettle();
 }

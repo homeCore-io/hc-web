@@ -48,6 +48,7 @@ Future<List<Slider>> _pump(
     ),
   ));
   await tester.pumpAndSettle();
+  await _tab(tester, 'Place');
   return tester.widgetList<Slider>(find.byType(Slider)).toList();
 }
 
@@ -87,11 +88,13 @@ void main() {
     final sliders = await _pump(tester,
         rotation: -8, opacity: 0.4, onRotate: (_) {}, onFade: (_) {});
 
-    // Blur, then Turn, then Fade — the style pane's slider comes first.
+    // Turn and Fade, and only those two: blur is how a card *looks* and lives
+    // on the other tab now, so a count that included it was counting the
+    // panel rather than this pane.
     expect(find.text('TRANSFORM'), findsOneWidget);
     expect(find.text('-8°'), findsOneWidget);
     expect(find.text('40%'), findsOneWidget);
-    expect(sliders.length, greaterThanOrEqualTo(3));
+    expect(sliders.length, 2);
   });
 
   testWidgets('turning writes degrees, and turning back to zero writes none',
@@ -132,4 +135,14 @@ void main() {
     fade.onChanged!(100);
     expect(got, isNull, reason: 'a card at full opacity has not been faded');
   });
+}
+
+/// The panel is tabbed: what a card shows, how it looks and where it sits are
+/// three questions now rather than one long column. This file is about one of
+/// them, so it opens that tab first.
+Future<void> _tab(WidgetTester tester, String name) async {
+  final tab = find.text(name);
+  if (tab.evaluate().isEmpty) return;
+  await tester.tap(tab);
+  await tester.pumpAndSettle();
 }
