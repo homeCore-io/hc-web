@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/dashboard/room_scope.dart';
 import '../../core/models/device_state.dart';
 import '../../core/providers/devices_provider.dart';
+import '../../core/providers/page_room_provider.dart';
 import '../../core/text/humanize.dart';
 import '../../design/tokens.dart';
 import '../dashboard/builtin_cards.dart';
@@ -104,10 +106,21 @@ class _CardMembersState extends ConsumerState<CardMembers> {
     final all = ref.watch(devicesProvider).value;
     if (all == null) return const SizedBox.shrink();
 
+    // **`@room` means a room here too.** The panel asked the selection what
+    // the card holds and handed it the page's own notation — so on a room page
+    // every list said "0 now" and offered nothing to arrange, while the page
+    // beside it drew six devices. The designer knows which room it was opened
+    // for; this is the same resolution the grid does before it draws.
+    final resolved = resolveRoomRefs(
+      widget.config,
+      room: ref.watch(pageRoomProvider),
+      devices: all,
+    );
+
     // In the order the card draws them — `selectDevicesForConfig` has already
     // applied the arrangement, so this list and the page agree.
     final shownDevices =
-        selectDevicesForConfig(all, {...widget.config}..remove('limit'));
+        selectDevicesForConfig(all, {...resolved}..remove('limit'));
     final shown = {for (final d in shownDevices) d.id};
     final add = _list('add');
     final remove = _list('remove');
@@ -153,7 +166,7 @@ class _CardMembersState extends ConsumerState<CardMembers> {
           // The rule, in words, so it stays visible rather than dissolving
           // into the list it produced.
           Text(
-            _ruleLine(shown.length, add.length, remove.length),
+            _ruleLine(resolved, shown.length, add.length, remove.length),
             style: t.text.captionStyle
                 .copyWith(color: t.surface.onBaseMuted, height: 1.4),
           ),
@@ -217,16 +230,18 @@ class _CardMembersState extends ConsumerState<CardMembers> {
     );
   }
 
-  String _ruleLine(int shown, int added, int removed) {
-    final mode = widget.config['selection_mode'] as String? ?? 'query';
+  String _ruleLine(
+      Map<String, dynamic> config, int shown, int added, int removed) {
+    final mode = config['selection_mode'] as String? ?? 'query';
     final base = switch (mode) {
-      'area' =>
-        'Everything in ${humanize('${widget.config['area_name'] ?? ''}')}',
+      'area' => 'Everything in ${humanize('${config['area_name'] ?? ''}')}',
       'facet' =>
-        'Every ${'${widget.config['facet'] ?? ''}'.replaceAll('_', ' ')} in the house',
+        'Every ${'${config['facet'] ?? ''}'.replaceAll('_', ' ')} in the house',
       'manual' => 'The devices you picked',
       _ => 'Everything matching the search',
     };
+    // The room as it reads, not as the page writes it.
+
     final parts = [
       if (added > 0) '$added added',
       if (removed > 0) '$removed removed',

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hc_web/core/models/device_state.dart';
 import 'package:hc_web/core/providers/devices_provider.dart';
+import 'package:hc_web/core/providers/page_room_provider.dart';
 import 'package:hc_web/design/skins.dart';
 import 'package:hc_web/features/dashboard/builtin_cards.dart';
 import 'package:hc_web/features/pages/card_members.dart';
@@ -131,13 +132,17 @@ void main() {
   group('the panel', () {
     late Map<String, dynamic> config;
 
-    Future<void> pump(WidgetTester tester, Map<String, dynamic> initial) async {
+    Future<void> pump(WidgetTester tester, Map<String, dynamic> initial,
+        {String? room}) async {
       registerBuiltinDashboardWidgets();
       config = initial;
       await tester.binding.setSurfaceSize(const Size(400, 900));
       addTearDown(() => tester.binding.setSurfaceSize(null));
       await tester.pumpWidget(ProviderScope(
-        overrides: [devicesProvider.overrideWith(() => _StubDevices(_house))],
+        overrides: [
+          devicesProvider.overrideWith(() => _StubDevices(_house)),
+          if (room != null) pageRoomProvider.overrideWithValue(room),
+        ],
         child: MaterialApp(
           theme: hcTheme(HcSkin.midnight, reduceMotion: true),
           home: Scaffold(
@@ -154,6 +159,28 @@ void main() {
       ));
       await tester.pumpAndSettle();
     }
+
+    testWidgets('a room page\'s own notation means a room here too',
+        (tester) async {
+      // **The panel handed the selection the page's own notation.** So on a
+      // room page every list said "0 now" and offered nothing to arrange,
+      // while the page beside it drew six devices. John, at a panel with no
+      // rows in it: *"all device pickers are still using rounded block
+      // selectors."* There was nothing else to see.
+      await pump(
+          tester,
+          {
+            'selection_mode': 'area',
+            'area_name': '@room',
+          },
+          room: 'living_room');
+
+      expect(find.text('lamp'), findsOneWidget);
+      expect(find.text('sconce'), findsOneWidget);
+      expect(find.text('hall_lamp'), findsNothing);
+      expect(find.text('Everything in Living Room — 3 now.'), findsOneWidget,
+          reason: 'and the rule reads as the room, not as the token');
+    });
 
     testWidgets('shows what the card holds, and says what the rule was',
         (tester) async {
