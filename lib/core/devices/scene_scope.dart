@@ -45,9 +45,16 @@ List<ScenePick> scenesInScope(
   // `house` keeps the scenes with no room — a whole-house footer listing every
   // room's prints the same name three times, and none of the three is a
   // whole-house scene. `room` keeps one room's. Anything else keeps them all.
+  // **Normalized on both sides, the way every other room comparison is.** A
+  // page resolves `@room` to the room as it is written on the page — `Garage`
+  // — and a device carries its plugin's spelling, `garage`. Comparing those
+  // raw is why the Garage's two Lutron scenes still did not appear after the
+  // element was built to show them: the row was right, the match was not.
+  // `card_selection_test.dart` records the same bug in the device rules.
+  final want = normalizeAreaName(room);
   bool wanted(String? area) => switch (scope) {
         'house' => area == null || area.isEmpty,
-        'room' => room.isEmpty || area == room,
+        'room' => want.isEmpty || normalizeAreaName(area) == want,
         _ => true,
       };
 
