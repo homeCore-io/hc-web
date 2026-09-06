@@ -78,6 +78,7 @@ Future<Map<String, dynamic>> _pump(
     ),
   ));
   await tester.pumpAndSettle();
+  await _tab(tester, 'Look');
   return live;
 }
 
@@ -162,4 +163,14 @@ void main() {
         tester.widget<OutlinedButton>(find.byType(OutlinedButton).last);
     expect(button.onPressed, isNull);
   });
+}
+
+/// The panel is tabbed: what a card shows, how it looks and where it sits are
+/// three questions now rather than one long column. This file is about one of
+/// them, so it opens that tab first.
+Future<void> _tab(WidgetTester tester, String name) async {
+  final tab = find.text(name);
+  if (tab.evaluate().isEmpty) return;
+  await tester.tap(tab);
+  await tester.pumpAndSettle();
 }

@@ -1274,29 +1274,40 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
             ),
           ),
           SizedBox(width: t.space.sm),
+          // **It has to look like something you press.** As a bare line of
+          // text with a chevron it read as a label with a value beside it, and
+          // the way to choose scenes was to guess that the words were a
+          // button. John: *"Not intuitive on how to select scenes within the
+          // container."* A sunken field says *control* the way the old
+          // outlined button did, at a fifth of the height.
           Expanded(
-            child: InkWell(
-              onTap: onTap,
+            child: Material(
+              color: t.surface.sunken,
               borderRadius: t.radius.smR,
-              child: Padding(
-                padding: EdgeInsets.symmetric(vertical: t.space.xs),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        value ?? placeholder,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: t.text.bodySmallStyle.copyWith(
-                          color: value == null
-                              ? t.surface.onBaseMuted
-                              : t.surface.onBase,
+              child: InkWell(
+                onTap: onTap,
+                borderRadius: t.radius.smR,
+                child: Padding(
+                  padding: EdgeInsets.symmetric(
+                      horizontal: t.space.sm, vertical: t.space.xs),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          value ?? placeholder,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: t.text.bodySmallStyle.copyWith(
+                            color: value == null
+                                ? t.surface.onBaseMuted
+                                : t.surface.onBase,
+                          ),
                         ),
                       ),
-                    ),
-                    Icon(Icons.chevron_right,
-                        size: 16, color: t.surface.onBaseMuted),
-                  ],
+                      Icon(Icons.chevron_right,
+                          size: 16, color: t.surface.onBaseMuted),
+                    ],
+                  ),
                 ),
               ),
             ),

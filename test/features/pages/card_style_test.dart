@@ -116,6 +116,17 @@ Future<void> _selectCard(WidgetTester tester) async {
   await tester
       .tapAt(tester.getTopLeft(find.byType(PageGrid)) + const Offset(60, 40));
   await tester.pumpAndSettle();
+  await _tab(tester, 'Look');
+}
+
+/// The panel is tabbed: what a card shows, how it looks, and where it sits are
+/// three questions now rather than one long column. These tests are about one
+/// of the other two, so they open it first.
+Future<void> _tab(WidgetTester tester, String name) async {
+  final tab = find.text(name);
+  if (tab.evaluate().isEmpty) return;
+  await tester.tap(tab);
+  await tester.pumpAndSettle();
 }
 
 void main() {
@@ -372,6 +383,10 @@ void main() {
       await tester.pumpAndSettle();
       expect(_surface(tester).filled, isFalse);
 
+      // The card's own settings are a tab away now, which is the whole point
+      // of the tabs — and does not change what this is about: two different
+      // parts of the panel writing the same config.
+      await _tab(tester, 'Settings');
       await tester.enterText(find.byType(TextFormField).first, 'new words');
       await tester.pumpAndSettle();
 

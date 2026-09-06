@@ -498,7 +498,19 @@ class _DesignerShellState extends State<DesignerShell> {
     }
     widget.onDiscard();
     if (!context.mounted) return;
-    context.go('/pages/${widget.dashboard.id}');
+    // **The room comes back with you.** One page serves fifteen rooms and the
+    // designer is opened for one of them — `?room=Garage` — so leaving without
+    // it lands on a page where every element that says `@room` resolves to
+    // nothing. The URL looks right and the page is empty. John: *"clicking the
+    // back arrow to leave designer it does not go back to the page, it goes
+    // back to no page."*
+    //
+    // The whole query rather than the room by name: anything the page was
+    // opened with is the page's business, and a list of the ones this screen
+    // happens to know about would go stale the first time another was added.
+    final query = GoRouterState.of(context).uri.query;
+    context.go('/pages/${widget.dashboard.id}'
+        '${query.isEmpty ? '' : '?$query'}');
   }
 
   @override
