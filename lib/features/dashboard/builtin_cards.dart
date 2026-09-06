@@ -27,6 +27,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/devices/house_tally.dart';
 import '../../core/devices/scene_state.dart';
 import '../../core/api/events_history_api.dart';
 import '../../core/api/history_api.dart';
@@ -288,6 +289,42 @@ DeviceSelection selectDevicesWithCount(
         : matched,
     matched: matched.length,
   );
+}
+
+/// Words — or, when the author asked for one, a tally of the house in the
+/// same type.
+///
+/// **The cheap check first.** A text element that is not counting anything
+/// never watches the device list, which is nearly all of them: a page of
+/// labels should cost what a page of labels costs.
+class _TextElement extends StatelessWidget {
+  final Map<String, dynamic> config;
+  final bool editing;
+
+  const _TextElement({required this.config, required this.editing});
+
+  @override
+  Widget build(BuildContext context) {
+    final metric = config['count'] as String?;
+    if (metric == null || metric.isEmpty) return _bound(config);
+    return Consumer(
+      builder: (context, ref, _) {
+        final devices = ref.watch(devicesProvider).value;
+        // Not yet, or not a tally this build knows: the author's own words are
+        // the honest answer, and a confident 0 is not.
+        if (devices == null) return _bound(config);
+        final n = houseTally(metric, devices);
+        if (n < 0) return _bound(config);
+        return _bound({...config, 'text': '$n'});
+      },
+    );
+  }
+
+  Widget _bound(Map<String, dynamic> config) => BoundElement(
+        type: 'text',
+        config: config,
+        builder: (c) => TextPrimitiveCard(config: c, editing: editing),
+      );
 }
 
 class _StatSummaryWidget extends ConsumerWidget {
@@ -1658,6 +1695,18 @@ class _HistoryChartContent extends ConsumerWidget {
 
     final chart = LineChart(
       LineChartData(
+        // **A readout that will not fit above the point goes below it.**
+        // fl_chart hangs the bubble over the spot and, given no instruction,
+        // lets it hang off the top of the plot — so the highest points on a
+        // line, which are exactly the ones worth hovering, answered with
+        // nothing at all. The same is true of the first and last points
+        // against the sides.
+        lineTouchData: const LineTouchData(
+          touchTooltipData: LineTouchTooltipData(
+            fitInsideVertically: true,
+            fitInsideHorizontally: true,
+          ),
+        ),
         minX: minX,
         maxX: maxX,
         minY: isBool ? -0.1 : minY - yPad,
@@ -2524,6 +2573,16 @@ void registerBuiltinDashboardWidgets() {
       configFields: const [
         WidgetConfigField('text', WidgetConfigKind.text,
             required: true, label: 'Text'),
+        // **A number the house decides, in this element's own type.** The
+        // alternative was a second element that reimplemented every type
+        // control this one already has, for the sake of one integer. The words
+        // stay required and stay the fallback: they are what is drawn while
+        // the device list is still arriving, and what the designer shows you
+        // as you place it.
+        WidgetConfigField('count', WidgetConfigKind.choice,
+            label: 'Count',
+            help: 'Show a tally of the house instead of these words.',
+            options: houseTallyMetrics),
         WidgetConfigField('size', WidgetConfigKind.choice,
             group: 'Type',
             label: 'Step',
@@ -2580,10 +2639,9 @@ void registerBuiltinDashboardWidgets() {
         BindableProperty('ink', 'Colour', BindKind.look),
       ],
       passesTaps: true,
-      builder: (context, a) => BoundElement(
-        type: 'text',
+      builder: (context, a) => _TextElement(
         config: a.config,
-        builder: (c) => TextPrimitiveCard(config: c, editing: a.editing),
+        editing: a.editing,
       ),
     ),
     // The first element that WRITES. Everything above shows the house; this
