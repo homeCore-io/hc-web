@@ -82,23 +82,34 @@ final _devices = [
 ];
 
 Future<GoRouter> _openDesigner(WidgetTester tester,
-    {Size? size, String? room}) async {
+        {Size? size, String? room}) =>
+    _open(tester,
+        size: size,
+        at: '/pages/kitchen/design${room == null ? '' : '?room=$room'}');
+
+Future<GoRouter> _open(WidgetTester tester,
+    {Size? size, required String at}) async {
   registerBuiltinDashboardWidgets();
   await tester.binding.setSurfaceSize(size ?? const Size(1500, 950));
   addTearDown(() => tester.binding.setSurfaceSize(null));
 
   final router = GoRouter(
-    initialLocation: '/pages/kitchen/design'
-        '${room == null ? '' : '?room=$room'}',
+    initialLocation: at,
     routes: [
       GoRoute(
         path: '/pages/:id',
-        builder: (_, s) => PageScreen(dashboardId: s.pathParameters['id']!),
+        builder: (_, s) => PageScreen(
+          dashboardId: s.pathParameters['id']!,
+          room: s.uri.queryParameters['room'],
+        ),
       ),
       GoRoute(
         path: '/pages/:id/design',
-        builder: (_, s) =>
-            PageScreen(dashboardId: s.pathParameters['id']!, designer: true),
+        builder: (_, s) => PageScreen(
+          dashboardId: s.pathParameters['id']!,
+          designer: true,
+          room: s.uri.queryParameters['room'],
+        ),
       ),
     ],
   );
@@ -116,6 +127,10 @@ Future<GoRouter> _openDesigner(WidgetTester tester,
   await tester.pumpAndSettle();
   return router;
 }
+
+/// The page itself, not the designer — the door the Design button is on.
+Future<GoRouter> _openPage(WidgetTester tester, {String? room}) =>
+    _open(tester, at: '/pages/kitchen${room == null ? '' : '?room=$room'}');
 
 /// Where the app thinks it is.
 String _where(GoRouter router) =>
@@ -183,6 +198,20 @@ void main() {
       expect(find.byType(PageGrid), findsOneWidget,
           reason: 'saying no leaves you where you were, still editing');
       expect(find.text('Save'), findsOneWidget);
+    });
+
+    testWidgets('and the room went in with you in the first place',
+        (tester) async {
+      // **Carrying it out again made no difference while it was never carried
+      // in.** The Design button opened `/pages/:id/design` flat, so a room
+      // page was designed blind and leaving landed on a page with nothing on
+      // it. John: *"cancel from room design takes back to unassigned room
+      // page."*
+      final router = await _openPage(tester, room: 'Garage');
+      await tester.tap(find.text('Design'));
+      await tester.pumpAndSettle();
+
+      expect(_where(router), '/pages/kitchen/design?room=Garage');
     });
 
     testWidgets('leaving takes the room back with it', (tester) async {

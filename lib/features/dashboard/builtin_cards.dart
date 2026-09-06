@@ -85,13 +85,26 @@ import 'svg_card.dart';
 List<DeviceState> selectDevicesForConfig(
     List<DeviceState> all, Map<String, dynamic> config) {
   final selectionMode = config['selection_mode'] as String? ?? 'query';
-  // Device grids/lists are for real, physical devices. Never surface the
-  // pseudo-entries — modes/timers/switches (`core.*`, isSystem) and scene
-  // devices (device_type "scene") — or a broad/empty query fills the card with
-  // "Day Mode", "Night Mode", and scene rows that belong in mode_chips /
-  // scene_row instead. Those get their own widgets.
-  final base =
-      all.where((d) => !d.isSystem && d.deviceType != 'scene').toList();
+  // Device grids/lists are for real, physical devices. A broad or empty query
+  // must not fill the card with "Day Mode", "Night Mode" and scene rows that
+  // belong in `mode_chips` and `scene_row` — those have their own elements.
+  //
+  // **But a helper somebody has put in a room is in that room.** The rule read
+  // `core.*` as *never belongs anywhere*, and that was true of the modes it
+  // was written for and wrong about the rest: a garage's auto-close timer and
+  // its virtual door switch are the garage's, because somebody said so in the
+  // device sheet. John: *"There are glue/helper devices in the system group
+  // but have room assignments. they do not show up in the rooms."*
+  //
+  // So a pseudo-entry earns its place two ways — named outright, or asked for
+  // by room. Neither is the broad query this exclusion exists to protect, and
+  // a mode has no room to be asked for by.
+  final byHand = selectionMode == 'manual';
+  final inARoom = normalizeAreaName(config['area_name'] as String?).isNotEmpty;
+  final base = all
+      .where(
+          (d) => d.deviceType != 'scene' && (!d.isSystem || byHand || inARoom))
+      .toList();
   var selected = base;
   switch (selectionMode) {
     case 'manual':

@@ -175,10 +175,14 @@ class DeviceState {
   /// True when the user has pinned a room against the bridge's.
   bool get hasAreaOverride => areaOverride != null;
 
-  /// Built-in / virtual devices — modes (`core.mode`), timers & switches
-  /// (`core.glue`), etc. Real device plugins are `plugin.*`. These are not
-  /// physical, so they never "belong" to a room and shouldn't be nagged about
-  /// one.
+  /// Built-in / virtual devices — modes (`core.mode`), timers and virtual
+  /// switches (`core.glue`). Real device plugins are `plugin.*`.
+  ///
+  /// Nothing gives one of these a room, so they are never *nagged* about not
+  /// having one — but they can be **given** one, and a timer somebody has put
+  /// in the garage is in the garage. Whoever asks this must say which they
+  /// mean: `selectDevicesForConfig` keeps them out of a broad query and lets
+  /// them into a room that was asked for by name.
   bool get isSystem => pluginId.startsWith('core.');
 
   String get ruleReference => canonicalName ?? id;

@@ -2819,8 +2819,17 @@ class _PageScreenState extends ConsumerState<PageScreen> {
                   // is the only thing that fits there. Changing what the pencil
                   // means on wide viewports would take the in-place editor away
                   // from the desktop without asking.
+                  // **The room goes in with you.** One page serves fifteen
+                  // rooms and you are looking at one of them; opening the
+                  // designer without it is a canvas of empty boxes reading
+                  // "No devices match", and coming back out of it lands on a
+                  // page with nothing on it. The leaving half of this was
+                  // fixed first and made no difference, because the room was
+                  // never carried in. John: *"cancel from room design takes
+                  // back to unassigned room page."*
                   onDesign: hasInspector
-                      ? () => context.go('/pages/${dashboard.id}/design')
+                      ? () => context.go('/pages/${dashboard.id}/design'
+                          '${widget.room == null ? '' : '?room=${Uri.encodeQueryComponent(widget.room!)}'}')
                       : null,
                 ),
                 if (_editing && _draftLayouts != null)
