@@ -8,6 +8,7 @@ import '../../core/providers/page_room_provider.dart';
 import '../../core/text/humanize.dart';
 import '../../design/tokens.dart';
 import '../dashboard/builtin_cards.dart';
+import 'widget_config_form.dart';
 
 /// The devices a card holds, listed and tickable.
 ///
@@ -41,9 +42,6 @@ class CardMembers extends ConsumerStatefulWidget {
 }
 
 class _CardMembersState extends ConsumerState<CardMembers> {
-  String _query = '';
-  bool _showAll = false;
-
   bool get _isManual => widget.config['selection_mode'] == 'manual';
 
   Set<String> _list(String key) {
@@ -51,53 +49,58 @@ class _CardMembersState extends ConsumerState<CardMembers> {
     return raw is List ? raw.whereType<String>().toSet() : <String>{};
   }
 
-  /// Toggling a device, written wherever it belongs.
+  /// What the sheet chose, written back as the rule plus its exceptions.
   ///
-  /// In `manual` mode the rule *is* a list, so membership edits `device_ids`
-  /// directly — writing an exception against your own list would be a second
-  /// way to say the same thing, and an older client would not read it. In every
-  /// other mode the rule stays untouched and the change lands in `add` or
-  /// `remove`, whichever cancels first.
-  void _toggle(DeviceState device, bool wanted) {
+  /// **The rule stays a live query.** A new lamp in the room should appear
+  /// without editing the page, so the answer is not frozen into a list: what
+  /// somebody added that the rule did not choose becomes `add`, what they took
+  /// off that it did becomes `remove`, and the order they put them in becomes
+  /// `order`. In manual mode the rule already *is* a list, so it is written
+  /// directly — an exception against your own list would be a second way to
+  /// say the same thing.
+  void _write(List<String> picked, List<DeviceState> all,
+      Map<String, dynamic> resolved) {
     final next = {...widget.config};
 
-    if (_isManual) {
-      final ids = _list('device_ids').toList();
-      wanted ? ids.add(device.id) : ids.remove(device.id);
-      next['device_ids'] = ids;
+    if (picked.isEmpty) {
+      // Back to the rule alone, which is what the sheet's third button means.
+      next
+        ..remove('add')
+        ..remove('remove')
+        ..remove('order');
       widget.onChanged(next);
       return;
     }
 
-    final add = _list('add');
-    final remove = _list('remove');
-    if (wanted) {
-      // Cancel an exclusion before inventing an inclusion, so ticking a device
-      // back on leaves the config exactly as it was before you ticked it off.
-      if (remove.remove(device.id) == false) add.add(device.id);
-    } else {
-      if (add.remove(device.id) == false) remove.add(device.id);
+    if (_isManual) {
+      widget.onChanged(next..['device_ids'] = picked);
+      return;
     }
-    next['add'] = add.toList();
-    next['remove'] = remove.toList();
-    // An empty exception list is no exception. Keeping `"add": []` on every
-    // card would make a document that records every idle tick.
-    if (add.isEmpty) next.remove('add');
-    if (remove.isEmpty) next.remove('remove');
-    widget.onChanged(next);
-  }
 
-  /// The order the author arranged, written as the ids in the order they are
-  /// drawn.
-  ///
-  /// **A rule says which devices, never in what order.** So an arrangement is
-  /// its own list: the ids as they now stand, which is what `applyOrder` reads
-  /// back. Anything the rule matches later and this does not name follows on
-  /// the end rather than disturbing what somebody arranged.
-  void _reorder(List<DeviceState> shown, int from, int to) {
-    final ids = [for (final d in shown) d.id];
-    ids.insert(to, ids.removeAt(from));
-    widget.onChanged({...widget.config, 'order': ids});
+    // What the rule alone would have chosen, so an exception is only written
+    // where somebody actually disagreed with it.
+    final rule = {
+      for (final d in selectDevicesForConfig(
+          all,
+          {...resolved}
+            ..remove('limit')
+            ..remove('add')
+            ..remove('remove')))
+        d.id,
+    };
+    final add = [
+      for (final id in picked)
+        if (!rule.contains(id)) id
+    ];
+    final remove = [
+      for (final id in rule)
+        if (!picked.contains(id)) id
+    ];
+
+    next['order'] = picked;
+    add.isEmpty ? next.remove('add') : next['add'] = add;
+    remove.isEmpty ? next.remove('remove') : next['remove'] = remove;
+    widget.onChanged(next);
   }
 
   @override
@@ -107,10 +110,8 @@ class _CardMembersState extends ConsumerState<CardMembers> {
     if (all == null) return const SizedBox.shrink();
 
     // **`@room` means a room here too.** The panel asked the selection what
-    // the card holds and handed it the page's own notation — so on a room page
-    // every list said "0 now" and offered nothing to arrange, while the page
-    // beside it drew six devices. The designer knows which room it was opened
-    // for; this is the same resolution the grid does before it draws.
+    // the card holds and handed it the page's own notation, so on a room page
+    // every list said "0 now" while the page beside it drew six devices.
     final resolved = resolveRoomRefs(
       widget.config,
       room: ref.watch(pageRoomProvider),
@@ -121,28 +122,9 @@ class _CardMembersState extends ConsumerState<CardMembers> {
     // applied the arrangement, so this list and the page agree.
     final shownDevices =
         selectDevicesForConfig(all, {...resolved}..remove('limit'));
-    final shown = {for (final d in shownDevices) d.id};
+    final shown = [for (final d in shownDevices) d.id];
     final add = _list('add');
     final remove = _list('remove');
-
-    // What to offer: everything you have had an opinion about, and — once you
-    // ask — the rest of the house, behind a search. 188 rows in front of the
-    // answer would bury it.
-    //
-    // `remove` is in that list for a reason: without it, ticking a device off
-    // made it vanish from the panel, so the only way to change your mind was
-    // to know the exception existed and go looking for the device by name. An
-    // exclusion you cannot see is one you cannot undo.
-    final q = _query.toLowerCase();
-    final offers = <DeviceState>[
-      for (final d in all)
-        if (!shown.contains(d.id) && !d.isSystem && d.deviceType != 'scene')
-          if (remove.contains(d.id) || _showAll || _query.isNotEmpty)
-            if (q.isEmpty ||
-                d.displayName.toLowerCase().contains(q) ||
-                (d.effectiveArea ?? '').toLowerCase().contains(q))
-              d,
-    ]..sort((a, b) => a.displayName.compareTo(b.displayName));
 
     return Padding(
       padding: EdgeInsets.only(top: t.space.md),
@@ -170,61 +152,54 @@ class _CardMembersState extends ConsumerState<CardMembers> {
             style: t.text.captionStyle
                 .copyWith(color: t.surface.onBaseMuted, height: 1.4),
           ),
-          SizedBox(height: t.space.xs),
-          if (shownDevices.isNotEmpty)
-            Text('Drag to reorder. Cross to take one off.',
-                style:
-                    t.text.captionStyle.copyWith(color: t.surface.onBaseMuted)),
-          SizedBox(height: t.space.xs),
-          // **What is on the card, in the order it is drawn.** The panel used
-          // to be one alphabetical list of tick-boxes, which could say what a
-          // card held and never what came first. John: *"All sections need to
-          // be easily arranged like what was done for scenes in the house
-          // view."*
-          ReorderableListView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            buildDefaultDragHandles: false,
-            itemCount: shownDevices.length,
-            onReorderItem: (from, to) => _reorder(shownDevices, from, to),
-            itemBuilder: (context, i) {
-              final device = shownDevices[i];
-              return _MemberRow(
-                key: ValueKey(device.id),
-                index: i,
-                device: device,
-                note: add.contains(device.id) ? 'added' : null,
-                onRemove: () => _toggle(device, false),
-              );
-            },
-          ),
           SizedBox(height: t.space.sm),
-          TextField(
-            onChanged: (v) => setState(() => _query = v),
-            style: t.text.bodySmallStyle.copyWith(color: t.surface.onBase),
-            decoration: InputDecoration(
-              isDense: true,
-              border: const OutlineInputBorder(),
-              hintText: 'Find a device to add',
-              hintStyle:
-                  t.text.bodySmallStyle.copyWith(color: t.surface.onBaseMuted),
-            ),
-          ),
-          SizedBox(height: t.space.xs),
-          for (final device in offers.take(40))
-            _OfferRow(
-              device: device,
-              note: remove.contains(device.id) ? 'removed' : null,
-              onAdd: () => _toggle(device, true),
-            ),
-          if (!_showAll && _query.isEmpty)
-            Align(
+          // **The same sheet the scenes go through.** This was an inline list
+          // of its own — a second way of asking one question, in one panel.
+          // John: *"This is no way matches the way scenes are selected from
+          // the 'every room' starting page editor."*
+          OutlinedButton.icon(
+            onPressed: () async {
+              final picked = await pickAndOrder(
+                context,
+                title: 'Pick devices',
+                all: [
+                  for (final d in all)
+                    if (!d.isSystem && d.deviceType != 'scene')
+                      (
+                        id: d.id,
+                        name: d.displayName,
+                        where: (d.effectiveArea ?? '').isEmpty
+                            ? 'No room'
+                            : humanize(d.effectiveArea!)
+                      ),
+                ],
+                selected: shown,
+                addHint: 'Add a device',
+                clearLabel: 'Back to the rule',
+              );
+              if (picked != null) _write(picked, all, resolved);
+            },
+            icon: const Icon(Icons.tune, size: 15),
+            label: Align(
               alignment: Alignment.centerLeft,
-              child: TextButton(
-                onPressed: () => setState(() => _showAll = true),
-                child: const Text('Show every device'),
+              child: Text(
+                shown.isEmpty
+                    ? 'Choose devices…'
+                    : 'Choose and arrange — ${shown.length}',
+                style: t.text.bodySmallStyle.copyWith(color: t.surface.onBase),
               ),
             ),
+          ),
+          SizedBox(height: t.space.xs),
+          // What it holds, in the order it draws them, so the panel answers
+          // without opening anything.
+          for (final device in shownDevices.take(12))
+            _DeviceLine(
+                device: device, note: add.contains(device.id) ? 'added' : null),
+          if (shownDevices.length > 12)
+            Text('and ${shownDevices.length - 12} more',
+                style:
+                    t.text.captionStyle.copyWith(color: t.surface.onBaseMuted)),
         ],
       ),
     );
@@ -252,20 +227,13 @@ class _CardMembersState extends ConsumerState<CardMembers> {
   }
 }
 
-/// A device the card is drawing: drag it, or take it off.
-class _MemberRow extends StatelessWidget {
-  const _MemberRow({
-    super.key,
-    required this.index,
-    required this.device,
-    required this.note,
-    required this.onRemove,
-  });
+/// A device the card draws: its name, its room, and why it is there when the
+/// rule alone does not say.
+class _DeviceLine extends StatelessWidget {
+  const _DeviceLine({required this.device, this.note});
 
-  final int index;
   final DeviceState device;
   final String? note;
-  final VoidCallback onRemove;
 
   @override
   Widget build(BuildContext context) {
@@ -274,85 +242,27 @@ class _MemberRow extends StatelessWidget {
       padding: EdgeInsets.symmetric(vertical: t.space.xs / 2),
       child: Row(
         children: [
-          ReorderableDragStartListener(
-            index: index,
-            child: Padding(
-              padding: EdgeInsets.only(right: t.space.xs),
-              child: Icon(Icons.drag_indicator,
-                  size: 16, color: t.surface.onBaseMuted),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(device.displayName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: t.text.bodySmallStyle
+                        .copyWith(color: t.surface.onBase)),
+                if ((device.effectiveArea ?? '').isNotEmpty)
+                  Text(humanize(device.effectiveArea!),
+                      style: t.text.captionStyle
+                          .copyWith(color: t.surface.onBaseMuted)),
+              ],
             ),
           ),
-          Expanded(child: _DeviceLine(device: device, on: true)),
           if (note != null)
             Text(note!,
                 style: t.text.captionStyle.copyWith(color: t.accent.active)),
-          IconButton(
-            icon: const Icon(Icons.close, size: 14),
-            tooltip: 'Take it off this card',
-            visualDensity: VisualDensity.compact,
-            onPressed: onRemove,
-          ),
         ],
       ),
-    );
-  }
-}
-
-/// A device the card is not drawing, and the one tap that adds it.
-class _OfferRow extends StatelessWidget {
-  const _OfferRow(
-      {required this.device, required this.note, required this.onAdd});
-
-  final DeviceState device;
-  final String? note;
-  final VoidCallback onAdd;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = HcTokens.of(context);
-    return InkWell(
-      onTap: onAdd,
-      child: Padding(
-        padding: EdgeInsets.symmetric(vertical: t.space.xs / 2),
-        child: Row(
-          children: [
-            Expanded(child: _DeviceLine(device: device, on: false)),
-            if (note != null)
-              Text(note!,
-                  style: t.text.captionStyle.copyWith(color: t.accent.active)),
-            SizedBox(width: t.space.xs),
-            Icon(Icons.add, size: 16, color: t.surface.onBaseMuted),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// A name and, under it, the room — which is what tells two of the same name
-/// apart.
-class _DeviceLine extends StatelessWidget {
-  const _DeviceLine({required this.device, required this.on});
-
-  final DeviceState device;
-  final bool on;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = HcTokens.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(device.displayName,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: t.text.bodySmallStyle.copyWith(
-                color: on ? t.surface.onBase : t.surface.onBaseMuted)),
-        if ((device.effectiveArea ?? '').isNotEmpty)
-          Text(humanize(device.effectiveArea!),
-              style:
-                  t.text.captionStyle.copyWith(color: t.surface.onBaseMuted)),
-      ],
     );
   }
 }

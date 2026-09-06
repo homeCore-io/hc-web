@@ -12,9 +12,11 @@ import '../../core/dashboard/named_styles.dart';
 import '../../core/dashboard/transform.dart';
 import '../../core/dashboard/widget_registry.dart';
 import '../../core/devices/scene_state.dart';
+import '../../core/dashboard/room_scope.dart';
 import '../../core/models/device_state.dart';
 import '../../core/models/dashboard.dart';
 import '../../core/providers/devices_provider.dart';
+import '../../core/providers/page_room_provider.dart';
 import '../../core/providers/dashboards_provider.dart';
 import '../../core/providers/modes_provider.dart';
 import '../../core/providers/scenes_provider.dart';
@@ -435,7 +437,19 @@ class _Preview extends ConsumerWidget {
     final async = ref.watch(devicesProvider);
     if (async.value == null) return const SizedBox.shrink();
 
-    final selection = selectDevicesWithCount(async.value!, config);
+    // **The same room the page means.** The panel under this one already
+    // resolves `@room`; this did not, so a card on a room page could show
+    // "No devices match — this card will be blank on the page" directly above
+    // a list of the six devices it holds. Two answers to one question, and the
+    // wrong one was the one in the warning colour.
+    final selection = selectDevicesWithCount(
+      async.value!,
+      resolveRoomRefs(
+        config,
+        room: ref.watch(pageRoomProvider),
+        devices: async.value!,
+      ),
+    );
     final none = selection.matched == 0;
     final names = selection.shown.take(8).map((d) => d.displayName).join(' · ');
 

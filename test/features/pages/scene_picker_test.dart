@@ -158,8 +158,7 @@ void main() {
 
     expect(find.byIcon(Icons.drag_indicator), findsNWidgets(3),
         reason: 'all three, ready to be reordered or removed');
-    expect(find.textContaining('Every scene in the house is on the row'),
-        findsOneWidget);
+    expect(find.textContaining('Everything is on the list'), findsOneWidget);
   });
 
   testWidgets('dragging one to the top is the order the row draws',
@@ -185,7 +184,7 @@ void main() {
     });
     await _open(tester);
 
-    await tester.tap(find.byTooltip('Take it off the row').at(1));
+    await tester.tap(find.byTooltip('Take it off').at(1));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Done'));
     await tester.pumpAndSettle();

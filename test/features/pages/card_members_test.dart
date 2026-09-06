@@ -45,14 +45,18 @@ final _house = [
   _d('hall_lamp', 'hallway'),
 ];
 
-/// The cross on the row a device is drawn in.
-///
-/// The panel is a list of what the card holds, in the order it draws them, so
-/// a name is something you drag rather than something you toggle — taking a
-/// device off is its own control.
+/// Opens the sheet the panel and the scenes both go through.
+Future<void> _openSheet(WidgetTester tester) async {
+  await tester.tap(find.textContaining('Choose'));
+  await tester.pumpAndSettle();
+}
+
+/// The cross on a row in that sheet.
 Finder _crossFor(String name) => find.descendant(
-      of: find.ancestor(of: find.text(name), matching: find.byType(Row)).first,
-      matching: find.byTooltip('Take it off this card'),
+      of: find
+          .ancestor(of: find.text(name), matching: find.byType(ListTile))
+          .first,
+      matching: find.byIcon(Icons.close),
     );
 
 void main() {
@@ -136,7 +140,7 @@ void main() {
         {String? room}) async {
       registerBuiltinDashboardWidgets();
       config = initial;
-      await tester.binding.setSurfaceSize(const Size(400, 900));
+      await tester.binding.setSurfaceSize(const Size(520, 1200));
       addTearDown(() => tester.binding.setSurfaceSize(null));
       await tester.pumpWidget(ProviderScope(
         overrides: [
@@ -204,7 +208,10 @@ void main() {
         'selection_mode': 'area',
         'area_name': 'living_room',
       });
+      await _openSheet(tester);
       await tester.tap(_crossFor('tv'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Done'));
       await tester.pumpAndSettle();
 
       expect(config['remove'], ['tv']);
@@ -239,7 +246,10 @@ void main() {
         'selection_mode': 'manual',
         'device_ids': ['lamp', 'sconce'],
       });
+      await _openSheet(tester);
       await tester.tap(_crossFor('sconce'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Done'));
       await tester.pumpAndSettle();
 
       expect(config['device_ids'], ['lamp']);
