@@ -290,6 +290,7 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
             showRange: true,
           ),
         WidgetConfigKind.sceneRef => _scene(f),
+        WidgetConfigKind.sceneRefs => _scenes(f),
         WidgetConfigKind.ink => _ink(f),
         WidgetConfigKind.dashboardRef => _dashboard(f),
         WidgetConfigKind.pluginId => _pluginId(f),
@@ -1186,6 +1187,87 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
   /// thing — a named thing you can run — and only the code that sends knows the
   /// difference, so a picker that offered one and not the other would hide half
   /// the house's scenes for no reason the author could see.
+  /// Which scenes to show, ticked off a list of the house's own.
+  ///
+  /// **Empty means all of them**, which is what every page written before this
+  /// field had — so the element a house with fifty-eight scenes drops onto a
+  /// footer still shows them all until somebody says otherwise, and saying
+  /// otherwise is tapping the ones you want.
+  ///
+  /// Order is the order you tapped, because that is the only order the author
+  /// expressed. The unchosen ones stay listed underneath in alphabetical
+  /// order, which is the only order they have.
+  Widget _scenes(WidgetConfigField f) {
+    final native = ref.watch(scenesProvider).value ?? const <SceneModel>[];
+    final devices = ref.watch(devicesProvider).value ?? const <DeviceState>[];
+
+    final all = <({String id, String name})>[
+      for (final s in native) (id: s.id, name: s.name),
+      for (final d in devices)
+        if (isSceneDevice(d)) (id: d.id, name: d.displayName),
+    ]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+
+    final chosen =
+        ((_config[f.name] as List?) ?? const []).whereType<String>().toList();
+    String nameOf(String id) => all
+        .where((c) => c.id == id)
+        .map((c) => c.name)
+        .followedBy(['(gone)']).first;
+
+    void write(List<String> next) => _set(f.name, next.isEmpty ? null : next);
+
+    final t = HcTokens.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _label(f),
+        if (all.isEmpty)
+          _hint('This house has no scenes yet.')
+        else ...[
+          if (chosen.isEmpty)
+            _hint('Every scene, until you pick some.')
+          else
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                for (final id in chosen)
+                  InputChip(
+                    label: Text(nameOf(id)),
+                    // Named rather than left to the chip theme, which supplies
+                    // whatever glyph the skin happens to carry.
+                    deleteIcon: const Icon(Icons.close, size: 16),
+                    // The ones that are shown; the cross takes one off.
+                    onDeleted: () => write([...chosen]..remove(id)),
+                  ),
+              ],
+            ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final c in all)
+                if (!chosen.contains(c.id))
+                  ActionChip(
+                    label: Text(c.name),
+                    onPressed: () => write([...chosen, c.id]),
+                  ),
+            ],
+          ),
+          if (chosen.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: TextButton(
+                onPressed: () => write(const []),
+                child: Text('Show every scene', style: t.text.captionStyle),
+              ),
+            ),
+        ],
+      ],
+    );
+  }
+
   Widget _scene(WidgetConfigField f) {
     final native = ref.watch(scenesProvider).value ?? const <SceneModel>[];
     final devices = ref.watch(devicesProvider).value ?? const <DeviceState>[];
