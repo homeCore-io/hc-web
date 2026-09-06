@@ -358,6 +358,20 @@ void _roomsOwn() {
     expect(find.text('Evening'), findsOneWidget);
   });
 
+  testWidgets('the room is matched however either side spells it',
+      (tester) async {
+    // A page resolves  to the room as the page writes it —  —
+    // and a device carries its plugin's spelling, . Comparing those
+    // raw is why the Garage's two Lutron scenes still did not appear after
+    // the element was built to show them.
+    await pump(tester, devices: garage, config: const {
+      'scope': 'room',
+      'room': 'Garage',
+      'skip_light_scenes': true,
+    });
+    expect(find.text('OH Door 01'), findsOneWidget);
+  });
+
   testWidgets('its heading goes with it', (tester) async {
     // A page cannot hide a label when the row under it turns out to be empty,
     // so a row that can vanish carries its own.
