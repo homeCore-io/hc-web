@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hc_web/core/models/device_state.dart';
-import 'package:hc_web/features/devices/device_scenes.dart';
+import 'package:hc_web/core/devices/scene_scope.dart';
 
 DeviceState _d(
   String id, {

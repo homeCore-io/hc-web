@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/dashboard/card_style.dart' show inkColours, resolveInk;
 import '../../core/dashboard/widget_registry.dart';
 import '../../core/providers/dashboard_vocabulary_provider.dart';
+import '../../core/devices/scene_scope.dart';
 import '../../core/devices/scene_state.dart';
 import '../../core/devices/presentation.dart';
 import '../../core/models/device_state.dart';
@@ -1088,7 +1089,6 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
             }
           },
         ),
-        _help(f),
       ],
     );
   }
@@ -1177,71 +1177,57 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
   /// thing — a named thing you can run — and only the code that sends knows the
   /// difference, so a picker that offered one and not the other would hide half
   /// the house's scenes for no reason the author could see.
-  /// Which scenes to show — a line, and the same searchable sheet a device
-  /// goes through.
+  /// Which scenes to show — a line, and a sheet that opens showing what is
+  /// already on the page.
   ///
-  /// **A wall of chips could not answer either question this has to.** A house
-  /// with fifty-eight scenes has four called *Nightlight*, one per room, so a
-  /// grid of names cannot say which one is which — and the ones already chosen
-  /// were lifted out into a row of their own, where they read as a different
-  /// list rather than as ticks against the same one. John: *"pre-selected
-  /// scenes are not identified"*, and *"the boxes used throughout the editor
-  /// for scenes and devices is not very nice."*
+  /// **Nothing picked means all of them, and that is what broke this.** The
+  /// row drew fourteen chips and the picker opened with nothing ticked,
+  /// because the two worked out what was showing separately — so the panel
+  /// looked like a switch nobody had found yet. John: *"when I drill into
+  /// either of those nothing is already selected but there are items in the
+  /// box."*
   ///
-  /// So: the room is on every row, the chosen ones are ticked in place, and
-  /// the panel keeps one line. Empty still means all of them.
+  /// `scenesShown` is the one answer now, and the sheet opens on it: the
+  /// scenes on the page, in the order they are drawn, to reorder or remove.
   Widget _scenes(WidgetConfigField f) {
-    final t = HcTokens.of(context);
-    final all = _sceneChoices();
-    final chosen =
+    final native = ref.watch(scenesProvider).value ?? const <SceneModel>[];
+    final devices = ref.watch(devicesProvider).value ?? const <DeviceState>[];
+    final all = allScenes(native, devices);
+
+    final explicit =
         ((_config[f.name] as List?) ?? const []).whereType<String>().toList();
+    final showing = scenesShown(_config, native, devices);
 
     String? nameOf(String id) =>
         all.where((c) => c.id == id).map((c) => c.name).firstOrNull;
 
-    // Named, and in the order they will be drawn: a count alone leaves the one
-    // question a person opens this panel to answer — *which six?* — needing a
-    // second click to see.
-    final named = [for (final id in chosen) nameOf(id) ?? 'one that is gone'];
-
     return _pickRow(
       f,
-      value: chosen.isEmpty ? null : named.join(', '),
-      placeholder: all.isEmpty ? 'No scenes yet' : 'Every scene',
+      // Named and in the order they are drawn, so the panel and the page say
+      // the same thing without opening anything.
+      value: showing.isEmpty
+          ? null
+          : [for (final id in showing) nameOf(id) ?? 'one that is gone']
+              .join(', '),
+      placeholder: all.isEmpty ? 'No scenes yet' : 'Choose scenes…',
       onTap: all.isEmpty
           ? null
           : () async {
-              final picked = await pickScenes(context, all, selected: chosen);
+              final picked = await pickScenes(context, all, selected: showing);
               if (picked != null) _set(f.name, picked.isEmpty ? null : picked);
             },
-      trailing: chosen.isEmpty
+      // Only when something was picked by hand: a row following its scope has
+      // nothing to put back.
+      trailing: explicit.isEmpty
           ? null
           : IconButton(
-              tooltip: 'Show every scene',
+              tooltip: 'Back to every scene',
               icon: const Icon(Icons.close, size: 16),
               onPressed: () => _set(f.name, null),
-              color: t.surface.onBaseMuted,
+              color: HcTokens.of(context).surface.onBaseMuted,
               visualDensity: VisualDensity.compact,
             ),
     );
-  }
-
-  /// Every scene this house has, native and plugin alike, with where it lives.
-  ///
-  /// The room is not decoration: it is the only thing telling four scenes
-  /// called *Nightlight* apart.
-  List<SceneChoice> _sceneChoices() {
-    final native = ref.watch(scenesProvider).value ?? const <SceneModel>[];
-    final devices = ref.watch(devicesProvider).value ?? const <DeviceState>[];
-    return <SceneChoice>[
-      for (final s in native) (id: s.id, name: s.name, area: null),
-      for (final d in devices)
-        if (isSceneDevice(d))
-          (id: d.id, name: d.displayName, area: d.effectiveArea),
-    ]..sort((a, b) {
-        final byName = a.name.toLowerCase().compareTo(b.name.toLowerCase());
-        return byName != 0 ? byName : (a.area ?? '').compareTo(b.area ?? '');
-      });
   }
 
   /// One line: what is chosen, and a tap to change it.
@@ -1258,63 +1244,73 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
     Widget? trailing,
   }) {
     final t = HcTokens.of(context);
-    return Padding(
-      padding: EdgeInsets.symmetric(vertical: t.space.xs),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          // The name of the setting keeps its own column so the value can wrap
-          // under nothing but itself.
-          SizedBox(
-            width: 96,
-            child: Text(
-              _title(f),
-              style: t.text.bodySmallStyle.copyWith(
-                  fontWeight: FontWeight.w600, color: t.surface.onBase),
-            ),
-          ),
-          SizedBox(width: t.space.sm),
-          // **It has to look like something you press.** As a bare line of
-          // text with a chevron it read as a label with a value beside it, and
-          // the way to choose scenes was to guess that the words were a
-          // button. John: *"Not intuitive on how to select scenes within the
-          // container."* A sunken field says *control* the way the old
-          // outlined button did, at a fifth of the height.
-          Expanded(
-            child: Material(
-              color: t.surface.sunken,
-              borderRadius: t.radius.smR,
-              child: InkWell(
-                onTap: onTap,
-                borderRadius: t.radius.smR,
-                child: Padding(
-                  padding: EdgeInsets.symmetric(
-                      horizontal: t.space.sm, vertical: t.space.xs),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          value ?? placeholder,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: t.text.bodySmallStyle.copyWith(
-                            color: value == null
-                                ? t.surface.onBaseMuted
-                                : t.surface.onBase,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: EdgeInsets.symmetric(vertical: t.space.xs),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // The name of the setting keeps its own column so the value can wrap
+              // under nothing but itself.
+              SizedBox(
+                width: 96,
+                child: Text(
+                  _title(f),
+                  style: t.text.bodySmallStyle.copyWith(
+                      fontWeight: FontWeight.w600, color: t.surface.onBase),
+                ),
+              ),
+              SizedBox(width: t.space.sm),
+              // **It has to look like something you press.** As a bare line of
+              // text with a chevron it read as a label with a value beside it, and
+              // the way to choose scenes was to guess that the words were a
+              // button. John: *"Not intuitive on how to select scenes within the
+              // container."* A sunken field says *control* the way the old
+              // outlined button did, at a fifth of the height.
+              Expanded(
+                child: Material(
+                  color: t.surface.sunken,
+                  borderRadius: t.radius.smR,
+                  child: InkWell(
+                    onTap: onTap,
+                    borderRadius: t.radius.smR,
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(
+                          horizontal: t.space.sm, vertical: t.space.xs),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              value ?? placeholder,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: t.text.bodySmallStyle.copyWith(
+                                color: value == null
+                                    ? t.surface.onBaseMuted
+                                    : t.surface.onBase,
+                              ),
+                            ),
                           ),
-                        ),
+                          Icon(Icons.chevron_right,
+                              size: 16, color: t.surface.onBaseMuted),
+                        ],
                       ),
-                      Icon(Icons.chevron_right,
-                          size: 16, color: t.surface.onBaseMuted),
-                    ],
+                    ),
                   ),
                 ),
               ),
-            ),
+              if (trailing != null) trailing,
+            ],
           ),
-          if (trailing != null) trailing,
-        ],
-      ),
+        ),
+        // **Said where the control is.** The sentence explaining what this
+        // picker does was written on the field and never drawn, so the one
+        // line telling somebody that picking nothing shows everything was in
+        // the descriptor and nowhere else.
+        _help(f),
+      ],
     );
   }
 
@@ -1498,9 +1494,6 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
   }
 }
 
-/// One scene as the picker sees it: what it is called, and where it lives.
-typedef SceneChoice = ({String id, String name, String? area});
-
 /// The scene picker every field that names scenes goes through.
 ///
 /// **The same sheet a device goes through, for the same reasons.** A house
@@ -1515,7 +1508,7 @@ typedef SceneChoice = ({String id, String name, String? area});
 /// scene came out with six in a different order.
 Future<List<String>?> pickScenes(
   BuildContext context,
-  List<SceneChoice> scenes, {
+  List<ScenePick> scenes, {
   required List<String> selected,
 }) {
   return showHcSheet<List<String>>(
@@ -1528,7 +1521,7 @@ Future<List<String>?> pickScenes(
 class _ScenePicker extends StatefulWidget {
   const _ScenePicker({required this.scenes, required this.initial});
 
-  final List<SceneChoice> scenes;
+  final List<ScenePick> scenes;
   final List<String> initial;
 
   @override
@@ -1536,14 +1529,21 @@ class _ScenePicker extends StatefulWidget {
 }
 
 class _ScenePickerState extends State<_ScenePicker> {
-  late final List<String> _selected = [...widget.initial];
+  late final List<String> _shown = [...widget.initial];
   String _query = '';
+
+  ScenePick? _find(String id) =>
+      widget.scenes.where((s) => s.id == id).firstOrNull;
+
+  String _where(ScenePick s) =>
+      (s.area ?? '').isEmpty ? 'Whole house' : humanize(s.area!);
 
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
     final q = _query.toLowerCase();
-    final matches = widget.scenes
+    final rest = widget.scenes
+        .where((s) => !_shown.contains(s.id))
         .where((s) =>
             q.isEmpty ||
             s.name.toLowerCase().contains(q) ||
@@ -1557,66 +1557,125 @@ class _ScenePickerState extends State<_ScenePicker> {
         const HcSheetHeader(title: 'Pick scenes'),
         Padding(
           padding: EdgeInsets.symmetric(horizontal: t.space.lg),
+          child: Text(
+            // The two things this sheet does, in the order somebody does them.
+            'Drag to reorder. Cross to remove.',
+            style: t.text.captionStyle.copyWith(color: t.surface.onBaseMuted),
+          ),
+        ),
+        SizedBox(height: t.space.sm),
+        // **What is on the page, in the order it is drawn.** The row and this
+        // list are the same list — a picker that opened empty while the footer
+        // showed fourteen chips is what sent somebody looking for the switch
+        // that turns scenes on.
+        Flexible(
+          child: _shown.isEmpty
+              ? Padding(
+                  padding: EdgeInsets.symmetric(horizontal: t.space.lg),
+                  child: Text('Nothing yet — add one below.',
+                      style: t.text.bodySmallStyle
+                          .copyWith(color: t.surface.onBaseMuted)),
+                )
+              : ReorderableListView.builder(
+                  shrinkWrap: true,
+                  buildDefaultDragHandles: false,
+                  padding: EdgeInsets.symmetric(horizontal: t.space.md),
+                  itemCount: _shown.length,
+                  // , not : the older callback
+                  // reports where the row would land *before* it is lifted
+                  // out, so every move downward is one place too far unless
+                  // the caller knows to subtract one. This one is the index
+                  // the row actually wants.
+                  onReorderItem: (from, to) =>
+                      setState(() => _shown.insert(to, _shown.removeAt(from))),
+                  itemBuilder: (context, i) {
+                    final id = _shown[i];
+                    final scene = _find(id);
+                    return Material(
+                      key: ValueKey(id),
+                      type: MaterialType.transparency,
+                      child: ListTile(
+                        dense: true,
+                        leading: ReorderableDragStartListener(
+                          index: i,
+                          child: Icon(Icons.drag_indicator,
+                              size: 18, color: t.surface.onBaseMuted),
+                        ),
+                        title: Text(scene?.name ?? 'A scene that is gone',
+                            style: t.text.bodyStyle
+                                .copyWith(color: t.surface.onBase)),
+                        subtitle: scene == null
+                            ? null
+                            : Text(_where(scene),
+                                style: t.text.captionStyle
+                                    .copyWith(color: t.surface.onBaseMuted)),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.close, size: 16),
+                          tooltip: 'Take it off the row',
+                          onPressed: () => setState(() => _shown.remove(id)),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+        ),
+        Divider(color: t.stroke.hairline, height: t.space.lg),
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: t.space.lg),
           child: TextField(
-            autofocus: true,
             decoration: const InputDecoration(
               isDense: true,
               prefixIcon: Icon(Icons.search, size: 18),
-              hintText: 'Search scenes',
+              hintText: 'Add a scene',
               border: OutlineInputBorder(),
             ),
             onChanged: (v) => setState(() => _query = v),
           ),
         ),
         SizedBox(height: t.space.sm),
-        Padding(
-          padding: EdgeInsets.symmetric(horizontal: t.space.lg),
-          child: Text(
-            // What an empty pick means, said where the decision is made.
-            _selected.isEmpty
-                ? 'Nothing picked shows every scene.'
-                : '${_selected.length} of ${widget.scenes.length}, in the '
-                    'order you picked them.',
-            style: t.text.captionStyle.copyWith(color: t.surface.onBaseMuted),
-          ),
-        ),
-        SizedBox(height: t.space.sm),
         Flexible(
-          child: ListView.builder(
-            shrinkWrap: true,
-            padding: EdgeInsets.symmetric(horizontal: t.space.md),
-            itemCount: matches.length,
-            itemBuilder: (context, i) {
-              final s = matches[i];
-              final on = _selected.contains(s.id);
-              // A ListTile paints its ink on the nearest Material ancestor,
-              // and the sheet's surface is a DecoratedBox — without this every
-              // tap in the picker looks like nothing happened.
-              return Material(
-                type: MaterialType.transparency,
-                child: CheckboxListTile(
-                  dense: true,
-                  value: on,
-                  title: Text(s.name,
-                      style:
-                          t.text.bodyStyle.copyWith(color: t.surface.onBase)),
-                  subtitle: Text(
-                    (s.area ?? '').isEmpty ? 'Whole house' : humanize(s.area!),
-                    style: t.text.captionStyle
-                        .copyWith(color: t.surface.onBaseMuted),
-                  ),
-                  onChanged: (_) => setState(
-                      () => on ? _selected.remove(s.id) : _selected.add(s.id)),
+          child: rest.isEmpty
+              ? Padding(
+                  padding: EdgeInsets.symmetric(horizontal: t.space.lg),
+                  child: Text(
+                      q.isEmpty
+                          ? 'Every scene in the house is on the row.'
+                          : 'No scene matches that.',
+                      style: t.text.bodySmallStyle
+                          .copyWith(color: t.surface.onBaseMuted)),
+                )
+              : ListView.builder(
+                  shrinkWrap: true,
+                  padding: EdgeInsets.symmetric(horizontal: t.space.md),
+                  itemCount: rest.length,
+                  itemBuilder: (context, i) {
+                    final s = rest[i];
+                    return Material(
+                      type: MaterialType.transparency,
+                      child: ListTile(
+                        dense: true,
+                        title: Text(s.name,
+                            style: t.text.bodyStyle
+                                .copyWith(color: t.surface.onBase)),
+                        // The room, because four scenes are called Nightlight
+                        // — one per room — and a bare name cannot say which.
+                        subtitle: Text(_where(s),
+                            style: t.text.captionStyle
+                                .copyWith(color: t.surface.onBaseMuted)),
+                        trailing: const Icon(Icons.add, size: 18),
+                        onTap: () => setState(() => _shown.add(s.id)),
+                      ),
+                    );
+                  },
                 ),
-              );
-            },
-          ),
         ),
         Padding(
           padding: EdgeInsets.all(t.space.lg),
           child: Row(
             children: [
               TextButton(
+                // Back to automatic: whatever the scope allows, in the order
+                // the house lists it.
                 onPressed: () => Navigator.of(context).pop(const <String>[]),
                 child: const Text('Show every scene'),
               ),
@@ -1627,7 +1686,7 @@ class _ScenePickerState extends State<_ScenePicker> {
               ),
               SizedBox(width: t.space.sm),
               FilledButton(
-                onPressed: () => Navigator.of(context).pop(_selected),
+                onPressed: () => Navigator.of(context).pop(_shown),
                 child: const Text('Done'),
               ),
             ],
