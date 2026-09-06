@@ -339,6 +339,13 @@ enum WidgetConfigKind {
   /// anything to do with the rule engine.
   sceneRef,
 
+  /// SEVERAL scenes, hand-picked and in the order they are shown.
+  ///
+  /// Distinct from [sceneRef] the way [deviceRefs] is from [deviceRef]: the
+  /// question is not *which one* but *which of these*, and the answer is a
+  /// list whose order is part of it.
+  sceneRefs,
+
   /// A kind of device — lights, locks, sensors — picked from the kinds this
   /// house actually has. Distinct from [choice] because the options are the
   /// live device map, not a fixed list in a descriptor.

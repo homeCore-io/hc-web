@@ -87,6 +87,7 @@ Future<void> pump(
 
 void main() {
   _scoping();
+  _picking();
   testWidgets('a plugin scene is a scene', (tester) async {
     // The house this was found on: every scene arrives as a device and
     // `/scenes` is empty.
@@ -200,5 +201,90 @@ void _scoping() {
       expect(find.text('Goodnight'), findsOneWidget);
       expect(find.text('Nightlight'), findsOneWidget);
     });
+  });
+}
+
+/// **Which ones, chosen by hand.**
+///
+/// The scope answers whose scenes; a house with fifty-eight of them still
+/// wants six on its footer. John, at a row fourteen chips wide: *"need an easy
+/// way to edit what scenes are shown on the every room page."*
+void _picking() {
+  final house = [
+    lamp(),
+    sceneDevice('a', 'Away Scene'),
+    sceneDevice('b', 'Deck On'),
+    sceneDevice('c', 'Goodnight'),
+    sceneDevice('d', 'Welcome'),
+  ];
+
+  testWidgets('only the picked scenes are shown', (tester) async {
+    await pump(tester, devices: house, config: const {
+      'scene_ids': ['c', 'a'],
+    });
+
+    expect(find.text('Goodnight'), findsOneWidget);
+    expect(find.text('Away Scene'), findsOneWidget);
+    expect(find.text('Deck On'), findsNothing);
+    expect(find.text('Welcome'), findsNothing);
+  });
+
+  testWidgets('in the order they were picked', (tester) async {
+    await pump(tester, devices: house, config: const {
+      'scene_ids': ['d', 'a'],
+    });
+
+    // Alphabetically Away comes first, so an order that fell back to the
+    // house's own would put it there.
+    expect(tester.getTopLeft(find.text('Welcome')).dx,
+        lessThan(tester.getTopLeft(find.text('Away Scene')).dx));
+  });
+
+  testWidgets('a pick beats the scope rather than being filtered by it',
+      (tester) async {
+    // Picking six by name and then having the scope quietly drop three would
+    // make the picker a suggestion.
+    await pump(tester, devices: [
+      lamp(),
+      DeviceState(
+        id: 'kitchen_scene',
+        pluginId: 'plugin.hue',
+        name: 'Kitchen Bright',
+        deviceType: 'scene',
+        area: 'kitchen',
+        available: true,
+        state: const {},
+      ),
+    ], config: const {
+      'scope': 'house',
+      'scene_ids': ['kitchen_scene'],
+    });
+
+    expect(find.text('Kitchen Bright'), findsOneWidget);
+  });
+
+  testWidgets('an empty pick is every scene, as it always was', (tester) async {
+    await pump(tester, devices: house, config: const {'scene_ids': <String>[]});
+
+    expect(find.text('Goodnight'), findsOneWidget);
+    expect(find.text('Welcome'), findsOneWidget);
+  });
+
+  testWidgets('a scene that has been deleted since is simply not drawn',
+      (tester) async {
+    await pump(tester, devices: house, config: const {
+      'scene_ids': ['c', 'gone'],
+    });
+
+    expect(find.text('Goodnight'), findsOneWidget);
+    expect(find.textContaining('gone'), findsNothing);
+  });
+
+  testWidgets('and a row whose scenes have all gone says so', (tester) async {
+    await pump(tester, devices: house, config: const {
+      'scene_ids': ['nothing_here'],
+    });
+
+    expect(find.textContaining('are gone'), findsOneWidget);
   });
 }

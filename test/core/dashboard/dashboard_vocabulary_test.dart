@@ -191,6 +191,7 @@ void main() {
       'device': WidgetConfigKind.deviceRef,
       'devices': WidgetConfigKind.deviceRefs,
       'scene': WidgetConfigKind.sceneRef,
+      'scenes': WidgetConfigKind.sceneRefs,
     };
     final disagreements = <String>[];
 

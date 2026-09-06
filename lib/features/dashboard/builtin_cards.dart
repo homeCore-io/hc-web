@@ -790,11 +790,50 @@ class _SceneRowWidget extends ConsumerWidget {
       );
     }
 
+    // **A hand-picked list is the whole answer.** Chosen scenes are shown in
+    // the order they were chosen and nothing else is, whatever the scope says
+    // — picking six by name and then having a scope quietly drop three of them
+    // would make the picker a suggestion. The scope is what answers when
+    // nobody has picked.
+    final picked = ((config['scene_ids'] as List?) ?? const [])
+        .whereType<String>()
+        .toList();
+
     bool wanted(String? area) => switch (scope) {
           'house' => area == null || area.isEmpty,
           'room' => room.isEmpty || area == room,
           _ => true,
         };
+
+    if (picked.isNotEmpty) {
+      final byId = <String, Widget>{
+        for (final scene in native)
+          scene.id: HcSceneChip(
+            name: scene.name,
+            onRun: () => ref.read(scenesApiProvider).activateScene(scene.id),
+          ),
+        for (final d in devices.where(isSceneDevice))
+          d.id: HcSceneChip(
+            name: d.displayName,
+            onRun: () => ref
+                .read(devicesApiProvider)
+                .setDeviceState(d.id, {'activate': true}),
+          ),
+      };
+      // A scene deleted since the page was made is simply not drawn: the row
+      // is a set of buttons, and a button that cannot do anything is worse
+      // than a gap.
+      final kept = [
+        for (final id in picked)
+          if (byId[id] case final chip?) chip,
+      ];
+      return kept.isEmpty
+          ? Text(
+              'The scenes this row was given are gone.',
+              style: t.text.captionStyle.copyWith(color: t.surface.onBaseMuted),
+            )
+          : Wrap(spacing: t.space.sm, runSpacing: t.space.sm, children: kept);
+    }
 
     // The same chip the device panel uses. Two different-looking scene chips in
     // one product is the tell that they were built by different hands — and
@@ -2029,6 +2068,11 @@ void registerBuiltinDashboardWidgets() {
             label: 'Light',
             help: 'Only when Which scenes is “device”. Set it to the picked '
                 'device and the scenes follow whichever light you tap.'),
+        // The scope answers *whose* scenes; this answers *which*. A house with
+        // fifty-eight of them still wants six on a footer.
+        WidgetConfigField('scene_ids', WidgetConfigKind.sceneRefs,
+            label: 'Which ones',
+            help: 'Tap the scenes to show. Empty shows them all.'),
       ],
       growsToFit: true,
       builder: (context, a) => _SceneRowWidget(config: a.config),
