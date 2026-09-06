@@ -2674,6 +2674,7 @@ class _PageScreenState extends ConsumerState<PageScreen> {
                 ? null
                 : (on) => _setGroupFrame(_groupInHand!, on),
             onSave: () => _save(dashboard),
+            onDiscard: _exitEditing,
             canvas: canvas(),
             emptyStart: emptyStart(),
             // The frame *is* the canvas when there is one: composing at the
