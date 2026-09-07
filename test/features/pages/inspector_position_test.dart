@@ -51,11 +51,23 @@ Future<({List<DashboardRect> rects, List<Map<String, dynamic>> configs})> _pump(
   return (rects: rects, configs: configs);
 }
 
+/// X and Y share the *Position* row; W and H share *Size* — read as pairs,
+/// the way every drawing tool shows them.
+const _rows = {
+  'X': ('Position', 0),
+  'Y': ('Position', 1),
+  'W': ('Size', 0),
+  'H': ('Size', 1)
+};
+
 Future<void> _type(WidgetTester tester, String label, String value) async {
-  final field = find.ancestor(
-    of: find.text('$label  '),
-    matching: find.byType(TextField),
-  );
+  final (row, index) = _rows[label]!;
+  final field = find
+      .descendant(
+        of: find.ancestor(of: find.text(row), matching: find.byType(Row)).first,
+        matching: find.byType(TextField),
+      )
+      .at(index);
   await tester.enterText(field, value);
   await tester.testTextInput.receiveAction(TextInputAction.done);
   await tester.pumpAndSettle();
@@ -94,14 +106,18 @@ void main() {
       expect(out.rects.single.w, 1);
     });
 
-    testWidgets('a typo goes back to what it was, not to zero', (tester) async {
+    testWidgets('a letter cannot be typed into a number at all',
+        (tester) async {
+      // The old boxed field took anything and refused it on commit, which is
+      // a rejection you find out about after the fact. The inspector's number
+      // does not accept the keystroke: `12o` is 12, and the position moves to
+      // where the digits say.
       final out = await _pump(
         tester,
         rect: const DashboardRect(x: 42, y: 0, w: 100, h: 50),
       );
       await _type(tester, 'X', '12o');
-      expect(out.rects, isEmpty, reason: 'nothing was sent');
-      expect(find.text('42'), findsOneWidget, reason: 'and it is shown again');
+      expect(out.rects.single.x, 12);
     });
 
     testWidgets('a card the engine packs is offered no position at all',
@@ -110,6 +126,7 @@ void main() {
       // silently did nothing would be worse than none.
       await _pump(tester);
       expect(find.text('POSITION'), findsNothing);
+      expect(find.text('Size'), findsNothing);
     });
   });
 
