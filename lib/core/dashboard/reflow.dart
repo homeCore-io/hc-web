@@ -136,13 +136,26 @@ Map<String, DashboardRect> reflow(
     for (final other in order) {
       if (other == id) continue;
       final o = rects[other]!;
+      final apart = o.x >= rect.x + rect.w || o.x + o.w <= rect.x;
+      if (apart) continue;
+
+      // **A container stretches; a sibling moves.** The page's own ground is a
+      // slab that starts above everything and ends below it, and a list that
+      // grew past it drew its last two rows on the bare app background — the
+      // page ended and the list did not. Whatever wraps the thing that grew
+      // grows with it, which is what "the page should grow to support the
+      // device list" means.
+      final wraps = o.y <= rect.y + 0.5 && o.y + o.h >= was - 0.5;
+      if (wraps) {
+        height[other] = height[other]! + grew;
+        continue;
+      }
+
       // Below, and overlapping the column this one occupies. A strict `>=`
       // on the bottom edge is what keeps a background slab — which starts at
       // the same y as the thing on top of it — from being shoved out from
       // under it.
       if (o.y + shift[other]! < was) continue;
-      final apart = o.x >= rect.x + rect.w || o.x + o.w <= rect.x;
-      if (apart) continue;
       shift[other] = shift[other]! + grew;
     }
   }

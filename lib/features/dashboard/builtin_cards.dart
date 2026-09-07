@@ -328,8 +328,15 @@ List<DeviceState> applyOrder(
   // nobody has arranged by hand, is all of it. A sort that threw away the
   // arrangement would make dragging a thing you could do and not keep.
   if (sort != null && sort.isNotEmpty) {
-    int byName(DeviceState a, DeviceState b) =>
-        a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase());
+    // **By the name on the page, not the one in the database.** A room card
+    // strips the room from what it draws — *Garage Leak Sensor* is drawn
+    // *Leak Sensor* — so sorting the stored names put every "Garage …" device
+    // first and the two without the prefix at the end, under V. Alphabetical
+    // by something the reader cannot see is worse than no order at all.
+    final room = config['area_name'] as String?;
+    String shown(DeviceState d) =>
+        labelInRoom(d.displayName, room).toLowerCase();
+    int byName(DeviceState a, DeviceState b) => shown(a).compareTo(shown(b));
     rest.sort(switch (sort) {
       'name' => byName,
       'room' => (a, b) {
