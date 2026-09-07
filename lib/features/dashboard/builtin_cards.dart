@@ -312,7 +312,9 @@ List<DeviceState> applyOrder(
     List<DeviceState> selected, Map<String, dynamic> config) {
   final order =
       ((config['order'] as List?) ?? const []).whereType<String>().toList();
-  if (order.isEmpty) return selected;
+  final sort = config['sort'] as String?;
+  if (order.isEmpty && (sort == null || sort.isEmpty)) return selected;
+
   final rank = {for (var i = 0; i < order.length; i++) order[i]: i};
   final named = <DeviceState>[];
   final rest = <DeviceState>[];
@@ -320,6 +322,40 @@ List<DeviceState> applyOrder(
     (rank.containsKey(d.id) ? named : rest).add(d);
   }
   named.sort((a, b) => rank[a.id]!.compareTo(rank[b.id]!));
+
+  // **The two compose.** What somebody dragged into place keeps the place they
+  // put it; the sort is what happens to everything else — which, on a card
+  // nobody has arranged by hand, is all of it. A sort that threw away the
+  // arrangement would make dragging a thing you could do and not keep.
+  if (sort != null && sort.isNotEmpty) {
+    int byName(DeviceState a, DeviceState b) =>
+        a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase());
+    rest.sort(switch (sort) {
+      'name' => byName,
+      'room' => (a, b) {
+          final byRoom = (a.effectiveArea ?? '~')
+              .toLowerCase()
+              .compareTo((b.effectiveArea ?? '~').toLowerCase());
+          return byRoom != 0 ? byRoom : byName(a, b);
+        },
+      'kind' => (a, b) {
+          final byKind = facetGroupOf(facetOf(a, a.schema))
+              .label
+              .compareTo(facetGroupOf(facetOf(b, b.schema)).label);
+          return byKind != 0 ? byKind : byName(a, b);
+        },
+      // What is on, first — the ones a person is looking for when they glance
+      // at a room. A device with nothing to be on about sorts with the off.
+      'on' => (a, b) {
+          final lit = (a.state['on'] == true ? 0 : 1)
+              .compareTo(b.state['on'] == true ? 0 : 1);
+          return lit != 0 ? lit : byName(a, b);
+        },
+      // A sort this build has never heard of leaves the order alone rather
+      // than inventing one.
+      _ => (a, b) => 0,
+    });
+  }
   return [...named, ...rest];
 }
 
@@ -3248,6 +3284,16 @@ const _selectionFields = [
         'other',
       ],
       help: 'Kinds another panel is already showing.'),
+  // **What order the ones nobody arranged come in.** Every element that
+  // selects devices gets this, because every one of them is a list somebody
+  // reads: a room's lights, its switches, and the everything-else beneath
+  // them. John: *"I don't see any sorting options for switches or everything
+  // else"*, then *"lights needs sorting options as well."*
+  WidgetConfigField('sort', WidgetConfigKind.choice,
+      label: 'In order of',
+      options: ['name', 'room', 'kind', 'on'],
+      help: 'How the ones you have not arranged by hand are ordered. Unset '
+          'leaves them in the order the house lists them.'),
   WidgetConfigField('limit', WidgetConfigKind.integer),
   WidgetConfigField('show_offline', WidgetConfigKind.boolean),
 ];

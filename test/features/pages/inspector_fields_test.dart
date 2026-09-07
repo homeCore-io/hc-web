@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hc_web/core/dashboard/widget_registry.dart';
+import 'package:hc_web/core/models/device_state.dart';
+import 'package:hc_web/core/providers/devices_provider.dart';
 import 'package:hc_web/design/skins.dart';
 import 'package:hc_web/design/tokens.dart';
 import 'package:hc_web/features/dashboard/builtin_cards.dart';
@@ -19,6 +21,31 @@ import 'package:hc_web/features/pages/widget_config_form.dart';
 ///   * a small set of choices is **visible**, not folded into a menu;
 ///   * a number can be **pulled**, not only typed.
 
+/// A house with something in it, for the fields that ask what the house has.
+class _StubDevices extends DevicesNotifier {
+  _StubDevices(this.items);
+  final List<DeviceState> items;
+  @override
+  Future<List<DeviceState>> build() async => items;
+}
+
+DeviceState _device(String id, {String type = 'switch', String? area}) =>
+    DeviceState(
+      id: id,
+      pluginId: 'plugin.test',
+      name: id,
+      area: area,
+      deviceType: type,
+      available: true,
+      state: const {'on': false},
+    );
+
+final _house = [
+  _device('lamp', type: 'light', area: 'living_room'),
+  _device('relay', area: 'living_room'),
+  _device('fan', type: 'fan', area: 'living_room'),
+];
+
 Future<Map<String, dynamic>> _pump(
   WidgetTester tester,
   String type, {
@@ -33,6 +60,7 @@ Future<Map<String, dynamic>> _pump(
   await tester.binding.setSurfaceSize(const Size(420, 1400));
   addTearDown(() => tester.binding.setSurfaceSize(null));
   await tester.pumpWidget(ProviderScope(
+    overrides: [devicesProvider.overrideWith(() => _StubDevices(_house))],
     child: MaterialApp(
       theme: hcTheme(HcSkin.midnight, reduceMotion: true),
       home: Scaffold(
@@ -64,6 +92,7 @@ double _rowHeight(WidgetTester tester, String label) => tester
     .height;
 
 void main() {
+  _kindFolds();
   group('a setting is one line', () {
     testWidgets('a number is its name and its value, side by side',
         (tester) async {
@@ -312,6 +341,59 @@ void main() {
       // Grouping is the card's knowledge, and most cards have none.
       await _pump(tester, 'event_feed');
       expect(find.byType(InspectorField), findsWidgets);
+    });
+  });
+}
+
+/// **No chips, anywhere something is chosen from a list.**
+///
+/// Kind was eleven of them and Except twenty more, so a facet card's panel was
+/// mostly pills — and picking a kind looked nothing like picking a scene two
+/// settings above it. John: *"why does the switches card still have boxed
+/// selectors?"*, then *"I don't want any chips in use for any device/scene
+/// selectors."*
+void _kindFolds() {
+  group('kind', () {
+    testWidgets('is a line naming what the card is about', (tester) async {
+      await _pump(tester, 'device_list', initial: {
+        'selection_mode': 'facet',
+        'facet': ['switches', 'fans'],
+      });
+
+      expect(find.textContaining('Switches'), findsOneWidget);
+      expect(find.byType(FilterChip), findsNothing);
+      expect(find.byType(ActionChip), findsNothing);
+    });
+
+    testWidgets('and asks to be pressed when nothing is chosen',
+        (tester) async {
+      await _pump(tester, 'device_list', initial: {'selection_mode': 'facet'});
+      expect(find.text('Choose kinds…'), findsOneWidget);
+    });
+
+    testWidgets('opening it is the same sheet the scenes go through',
+        (tester) async {
+      await _pump(tester, 'device_list', initial: {
+        'selection_mode': 'facet',
+        'facet': ['switches'],
+      });
+      await tester.tap(find.byIcon(Icons.chevron_right).first);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Pick kinds'), findsWidgets);
+      expect(find.textContaining('Drag to reorder'), findsOneWidget);
+      expect(find.byType(FilterChip), findsNothing);
+    });
+
+    testWidgets('Except is a line too, and says what it holds', (tester) async {
+      await _pump(tester, 'device_list', initial: {
+        'selection_mode': 'area',
+        'area_name': 'living_room',
+        'except': ['lights', 'switches'],
+      });
+
+      expect(find.textContaining('Lights, Switches'), findsOneWidget);
+      expect(find.byType(FilterChip), findsNothing);
     });
   });
 }
