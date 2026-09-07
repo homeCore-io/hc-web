@@ -2451,6 +2451,33 @@ class _Cell extends StatelessWidget {
       return Stack(
         children: [
           Positioned.fill(child: IgnorePointer(child: card)),
+          // **Everything selected says so, not only the things with a card.**
+          //
+          // The ring belonged to `HcSurface`, so a chromed card lit up and a
+          // bare element — a rule, a label, a shape, which is most of a
+          // designed page — showed nothing at all. Selecting one from the
+          // layers list left the canvas looking exactly as it had. John,
+          // having picked the first rule on the page: *"Visually I can't tell
+          // what is selected in the designer window."*
+          //
+          // Only for the bare ones: a surface already draws its own, and two
+          // rings on one card is a card with a double border.
+          if ((selected || dragging) && chrome == WidgetChrome.bare)
+            Positioned.fill(
+              key: const Key('selection-ring'),
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    // Filled faintly as well as outlined, because an outline
+                    // on a two-pixel rule is two pixels of outline: the wash
+                    // is what makes a hairline findable at 55%.
+                    color: t.accent.active.withValues(alpha: 0.14),
+                    border: Border.all(
+                        color: t.accent.active, width: t.stroke.width),
+                  ),
+                ),
+              ),
+            ),
           // Drag anywhere on the body to move.
           Positioned.fill(
             child: _DragBody(
