@@ -11,7 +11,6 @@ import '../../core/providers/devices_provider.dart';
 import '../../core/providers/page_room_provider.dart';
 import '../../design/tokens.dart';
 import '../assets/asset_field.dart';
-import 'inspector_controls.dart';
 import 'inspector_fields.dart';
 
 /// The page itself, when no card is selected.
@@ -287,36 +286,51 @@ class _BackgroundControls extends StatefulWidget {
 class _BackgroundControlsState extends State<_BackgroundControls> {
   @override
   Widget build(BuildContext context) {
-    final t = HcTokens.of(context);
     final v = widget.value;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        AssetField(
-          value: v.image ?? '',
-          onChanged: (s) =>
-              widget.onChanged(v.copyWith(image: s.isEmpty ? null : s)),
-        ),
-        SizedBox(height: t.space.xs),
-        InspectorSlider(
-          label: 'Blur',
-          value: v.blur,
-          max: 40,
-          onChanged: (n) => widget.onChanged(v.copyWith(blur: n)),
-        ),
-        InspectorSlider(
-          label: 'Dim',
-          value: v.dim * 100,
-          max: 100,
-          onChanged: (n) => widget.onChanged(v.copyWith(dim: n / 100)),
-        ),
-        Text(
-          v.isEmpty
-              ? 'A picture behind the whole page. Blur and dim are what keep '
-                  'the cards readable on top of it.'
+        InspectorField(
+          label: 'Picture',
+          // The one sentence this section keeps: a photograph behind live
+          // content is unreadable without the two rows under it, so the
+          // moment there is a picture the panel says what makes it work.
+          help: v.isEmpty
+              ? null
               : 'Blurred and dimmed behind the cards; the cards stay sharp.',
-          style: t.text.captionStyle
-              .copyWith(color: t.surface.onBaseMuted, height: 1.4),
+          child: AssetField(
+            value: v.image ?? '',
+            onChanged: (s) =>
+                widget.onChanged(v.copyWith(image: s.isEmpty ? null : s)),
+          ),
+        ),
+        InspectorField(
+          label: 'Blur',
+          child: InspectorNumber(
+            value: v.blur.round(),
+            unit: 'px',
+            min: 0,
+            max: 40,
+            onChanged: (n) =>
+                widget.onChanged(v.copyWith(blur: (n ?? 0).toDouble())),
+          ),
+          // Pulling the name is how a number like this is found by eye: a blur
+          // is a look, not a figure somebody knows in advance.
+          onScrub: (steps) => widget.onChanged(
+              v.copyWith(blur: (v.blur + steps).clamp(0, 40).toDouble())),
+        ),
+        InspectorField(
+          label: 'Dim',
+          child: InspectorNumber(
+            value: (v.dim * 100).round(),
+            unit: '%',
+            min: 0,
+            max: 100,
+            onChanged: (n) =>
+                widget.onChanged(v.copyWith(dim: (n ?? 0).toDouble() / 100)),
+          ),
+          onScrub: (steps) => widget.onChanged(v.copyWith(
+              dim: (v.dim * 100 + steps).clamp(0, 100).toDouble() / 100)),
         ),
       ],
     );
