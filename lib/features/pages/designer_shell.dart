@@ -1151,7 +1151,7 @@ class _TopBar extends StatelessWidget {
             at: historyAt,
             onJump: onJumpHistory,
           ),
-          SizedBox(width: t.space.sm),
+          const _ToolDivider(),
           // Canvas tools. Align first, because it acts on the thing you have
           // in hand; zoom last, because it acts on where you are standing.
           for (final align in CanvasAlign.values)
@@ -1181,7 +1181,7 @@ class _TopBar extends StatelessWidget {
                 : 'Spread evenly down',
             visualDensity: VisualDensity.compact,
           ),
-          SizedBox(width: t.space.sm),
+          const _ToolDivider(),
           _ZoomControl(
             zoom: zoom,
             effective: effectiveZoom,
@@ -1190,7 +1190,7 @@ class _TopBar extends StatelessWidget {
             onFrameSelection: onFrameSelection,
             canFrame: canFrame,
           ),
-          SizedBox(width: t.space.md),
+          const _ToolDivider(),
           if (dirty)
             Padding(
               padding: EdgeInsets.only(right: t.space.sm),
@@ -1699,21 +1699,32 @@ class _LeftRailState extends State<_LeftRail> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          children: [
-            for (final tab in _Panel.values)
-              _RailTab(
-                label: tab.label,
-                on: _panel == tab,
-                onTap: () => setState(() => _panel = tab),
+        // **Three views of one panel, not three pages.** Underlined tabs are
+        // how a site says *you are on this page*; a segmented control is how
+        // an application says *the panel is showing this*. Same three words,
+        // and the difference is whether the pane reads as somewhere you
+        // navigated to.
+        Padding(
+          padding: EdgeInsets.fromLTRB(
+              t.space.sm, t.space.xs, t.space.xs, t.space.xs),
+          child: Row(
+            children: [
+              Expanded(
+                child: InspectorSegments(
+                  options: [for (final tab in _Panel.values) tab.label],
+                  value: _panel.label,
+                  onChanged: (label) => setState(() => _panel =
+                      _Panel.values.firstWhere((tab) => tab.label == label)),
+                ),
               ),
-            const Spacer(),
-            _CollapseButton(
-              icon: Icons.chevron_left,
-              tooltip: 'Hide the panel',
-              onTap: widget.onClose,
-            ),
-          ],
+              SizedBox(width: t.space.xs),
+              _CollapseButton(
+                icon: Icons.chevron_left,
+                tooltip: 'Hide the panel',
+                onTap: widget.onClose,
+              ),
+            ],
+          ),
         ),
         Divider(height: t.stroke.width, color: t.stroke.hairline),
         Expanded(
@@ -1735,37 +1746,23 @@ class _LeftRailState extends State<_LeftRail> {
   }
 }
 
-class _RailTab extends StatelessWidget {
-  const _RailTab({required this.label, required this.on, required this.onTap});
-
-  final String label;
-  final bool on;
-  final VoidCallback onTap;
+/// A hairline between two groups of tools.
+///
+/// **A toolbar is groups, and a gap does not say so.** Undo and redo are about
+/// the past, align and spread act on what is in hand, zoom acts on where you
+/// are standing — three different kinds of button in one strip, told apart
+/// until now by eight pixels of nothing.
+class _ToolDivider extends StatelessWidget {
+  const _ToolDivider();
 
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
-    return Expanded(
-      child: InkWell(
-        onTap: onTap,
-        child: Container(
-          padding: EdgeInsets.symmetric(vertical: t.space.sm),
-          decoration: BoxDecoration(
-            border: Border(
-              bottom: BorderSide(
-                color: on ? t.accent.active : Colors.transparent,
-                width: 2,
-              ),
-            ),
-          ),
-          child: Text(
-            label,
-            textAlign: TextAlign.center,
-            style: t.text.overlineStyle.copyWith(
-              color: on ? t.surface.onBase : t.surface.onBaseMuted,
-            ),
-          ),
-        ),
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: t.space.sm),
+      child: SizedBox(
+        height: 18,
+        child: VerticalDivider(width: t.stroke.width, color: t.stroke.hairline),
       ),
     );
   }
