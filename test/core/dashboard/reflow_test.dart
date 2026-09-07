@@ -165,4 +165,34 @@ void _overlappingHides() {
     );
     expect(out['above']!.y, 0);
   });
+
+  test('a slab that wraps what grew grows with it', () {
+    // **The page's own ground.** A list that grew past it drew its last two
+    // rows on the bare app background — the page ended and the list did not.
+    // John: *"the page should grow to support the device list."*
+    final out = reflow(
+      {
+        'ground': const DashboardRect(x: 0, y: 0, w: 400, h: 300),
+        'list': const DashboardRect(x: 20, y: 100, w: 300, h: 100),
+      },
+      const {'list': 260},
+    );
+    expect(out['list']!.h, 260);
+    expect(out['ground']!.h, 460, reason: '300 and the 160 the list gained');
+    expect(out['ground']!.y, 0, reason: 'and it stays where it started');
+  });
+
+  test('but a slab that only sits under it is still pushed down', () {
+    // Wrapping is starting above AND ending below. A footer band under the
+    // list is neither, and moving it is what reflow is for.
+    final out = reflow(
+      {
+        'list': const DashboardRect(x: 20, y: 100, w: 300, h: 100),
+        'footer': const DashboardRect(x: 0, y: 200, w: 400, h: 60),
+      },
+      const {'list': 160},
+    );
+    expect(out['footer']!.y, 260);
+    expect(out['footer']!.h, 60);
+  });
 }
