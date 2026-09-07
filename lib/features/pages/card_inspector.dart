@@ -529,6 +529,13 @@ class _ImageField extends StatelessWidget {
 }
 
 /// A row of choices, small enough to sit in a 340px pane.
+/// A choice, as a row: segments while they fit, a menu when they do not.
+///
+/// **One control, one rule.** This was a label with a wrap of pills under it,
+/// which is three lines for a setting with seven options — and the panel it
+/// sits in is rows. `InspectorChoice.segmented` decides which shape, so *Fill
+/// / Fit / Stretch* is three buttons and *what happens when you tap this* is a
+/// list, without either being argued about at the call site.
 class _StyleChoice extends StatelessWidget {
   const _StyleChoice({
     required this.label,
@@ -544,46 +551,25 @@ class _StyleChoice extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final t = HcTokens.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: t.text.bodyStyle.copyWith(color: t.surface.onBase)),
-        SizedBox(height: t.space.xs),
-        Wrap(
-          spacing: t.space.xs,
-          runSpacing: t.space.xs,
-          children: [
-            for (final option in options)
-              Semantics(
-                button: true,
-                selected: option.key == value,
-                child: GestureDetector(
-                  onTap: () => onChanged(option.key),
-                  child: Container(
-                    padding: EdgeInsets.symmetric(
-                        horizontal: t.space.sm, vertical: t.space.xs / 2),
-                    decoration: BoxDecoration(
-                      color: option.key == value ? t.surface.raised : null,
-                      borderRadius: BorderRadius.circular(t.radius.pill),
-                      border: Border.all(
-                        color: option.key == value
-                            ? t.accent.active
-                            : t.stroke.hairline,
-                        width: t.stroke.width,
-                      ),
-                    ),
-                    child: Text(option.label,
-                        style: t.text.captionStyle.copyWith(
-                            color: option.key == value
-                                ? t.surface.onBase
-                                : t.surface.onBaseMuted)),
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ],
+    final keys = [for (final o in options) o.key];
+    String labelFor(String key) =>
+        options.where((o) => o.key == key).map((o) => o.label).firstOrNull ??
+        key;
+    return InspectorField(
+      label: label,
+      child: InspectorChoice.segmented(keys, labelFor)
+          ? InspectorSegments(
+              options: keys,
+              value: value,
+              labelFor: labelFor,
+              onChanged: onChanged,
+            )
+          : InspectorMenu(
+              options: keys,
+              value: value,
+              labelFor: labelFor,
+              onChanged: (v) => v == null ? null : onChanged(v),
+            ),
     );
   }
 }
@@ -2395,25 +2381,21 @@ class _StyleSection extends StatelessWidget {
         ),
       ),
       if (style.filled)
-        InspectorField(
+        _StyleChoice(
           label: 'Colour',
-          child: _choice(
-            value: style.tint ?? 'raised',
-            options: [
-              for (final tint in cardTints) (key: tint.key, label: tint.label)
-            ],
-            onChanged: (v) =>
-                onChanged(style.copyWith(tint: v == 'raised' ? null : v)),
-          ),
-        ),
-      InspectorField(
-        label: 'Corners',
-        child: _choice(
-          value: style.corner ?? 'md',
-          options: cardCorners,
+          value: style.tint ?? 'raised',
+          options: [
+            for (final tint in cardTints) (key: tint.key, label: tint.label)
+          ],
           onChanged: (v) =>
-              onChanged(style.copyWith(corner: v == 'md' ? null : v)),
+              onChanged(style.copyWith(tint: v == 'raised' ? null : v)),
         ),
+      _StyleChoice(
+        label: 'Corners',
+        value: style.corner ?? 'md',
+        options: cardCorners,
+        onChanged: (v) =>
+            onChanged(style.copyWith(corner: v == 'md' ? null : v)),
       ),
       InspectorField(
         label: 'Blur',
@@ -2438,18 +2420,16 @@ class _StyleSection extends StatelessWidget {
         ),
       ),
       if ((style.image ?? '').isNotEmpty) ...[
-        InspectorField(
+        _StyleChoice(
           label: 'Fit',
-          child: _choice(
-            value: style.imageFit ?? 'cover',
-            options: const [
-              (key: 'cover', label: 'Fill'),
-              (key: 'contain', label: 'Fit'),
-              (key: 'fill', label: 'Stretch'),
-            ],
-            onChanged: (v) =>
-                onChanged(style.copyWith(imageFit: v == 'cover' ? null : v)),
-          ),
+          value: style.imageFit ?? 'cover',
+          options: const [
+            (key: 'cover', label: 'Fill'),
+            (key: 'contain', label: 'Fit'),
+            (key: 'fill', label: 'Stretch'),
+          ],
+          onChanged: (v) =>
+              onChanged(style.copyWith(imageFit: v == 'cover' ? null : v)),
         ),
         InspectorField(
           label: 'Fade',
@@ -2467,33 +2447,6 @@ class _StyleSection extends StatelessWidget {
         ),
       ],
     ]);
-  }
-
-  /// Segments while they fit, a menu when they do not — the same rule the rest
-  /// of the panel follows, so *Fill / Fit / Stretch* is three buttons and the
-  /// eleven tints are a list.
-  Widget _choice({
-    required String value,
-    required List<({String key, String label})> options,
-    required ValueChanged<String> onChanged,
-  }) {
-    final keys = [for (final o in options) o.key];
-    String label(String key) =>
-        options.where((o) => o.key == key).map((o) => o.label).firstOrNull ??
-        key;
-    return InspectorChoice.segmented(keys, label)
-        ? InspectorSegments(
-            options: keys,
-            value: value,
-            labelFor: label,
-            onChanged: onChanged,
-          )
-        : InspectorMenu(
-            options: keys,
-            value: value,
-            labelFor: label,
-            onChanged: (v) => v == null ? null : onChanged(v),
-          );
   }
 }
 
