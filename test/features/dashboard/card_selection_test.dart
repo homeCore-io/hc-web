@@ -49,6 +49,7 @@ List<DeviceState> _select(Map<String, dynamic> config) =>
 void main() {
   _kindsAndExceptions();
   _arranging();
+  _sorting();
   _narrowing();
   _helpers();
   group('area selection', () {
@@ -482,6 +483,86 @@ void _arranging() {
       final got = selectDevicesForConfig(
           room, const {'selection_mode': 'area', 'area_name': 'living_room'});
       expect(got.map((d) => d.id), ['lamp', 'tv', 'lock']);
+    });
+  });
+}
+
+/// **What order the ones nobody arranged come in.**
+///
+/// A rule answers which devices and says nothing about their order, so a list
+/// came out in whatever order the house was walked in. John: *"I don't see any
+/// sorting options for switches or everything else"*, and *"lights needs
+/// sorting options as well."*
+void _sorting() {
+  DeviceState d(String id,
+          {String type = 'switch', String? area, bool on = false}) =>
+      DeviceState(
+        id: id,
+        pluginId: 'plugin.test',
+        name: id,
+        area: area,
+        deviceType: type,
+        available: true,
+        state: {'on': on},
+      );
+
+  final house = [
+    d('zulu', area: 'attic'),
+    d('alpha', type: 'light', area: 'garage', on: true),
+    d('mike', area: 'garage'),
+  ];
+
+  List<String> ids(Map<String, dynamic> config) => [
+        for (final x in selectDevicesForConfig(house, config)) x.id,
+      ];
+
+  group('sorting', () {
+    test('by name', () {
+      expect(ids(const {'selection_mode': 'query', 'sort': 'name'}),
+          ['alpha', 'mike', 'zulu']);
+    });
+
+    test('by room, and by name inside a room', () {
+      expect(ids(const {'selection_mode': 'query', 'sort': 'room'}),
+          ['zulu', 'alpha', 'mike']);
+    });
+
+    test('by kind', () {
+      // Lights before switches, which is their own alphabetical order and
+      // also the one a person reads a room in.
+      expect(ids(const {'selection_mode': 'query', 'sort': 'kind'}).first,
+          'alpha');
+    });
+
+    test('what is on, first', () {
+      expect(
+          ids(const {'selection_mode': 'query', 'sort': 'on'}).first, 'alpha');
+    });
+
+    test('and an arrangement still wins for the ones it names', () {
+      // The two compose: what somebody dragged into place keeps its place, and
+      // the sort is what happens to the rest. A sort that threw the
+      // arrangement away would make dragging a thing you could do and not
+      // keep.
+      expect(
+        ids(const {
+          'selection_mode': 'query',
+          'sort': 'name',
+          'order': ['zulu'],
+        }),
+        ['zulu', 'alpha', 'mike'],
+      );
+    });
+
+    test('no sort leaves the order the rule gave', () {
+      expect(ids(const {'selection_mode': 'query'}), ['zulu', 'alpha', 'mike']);
+    });
+
+    test('a sort this build has never heard of changes nothing', () {
+      // A page written by a newer client must not scramble a list to prove it
+      // read the key.
+      expect(ids(const {'selection_mode': 'query', 'sort': 'by_vibes'}),
+          ['zulu', 'alpha', 'mike']);
     });
   });
 }

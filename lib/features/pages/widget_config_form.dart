@@ -725,104 +725,47 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
     );
   }
 
-  /// Some of a fixed set, as chips you toggle.
+  /// Several of a fixed set — Except, and the counts a summary card shows.
   ///
-  /// An empty selection means *all of them* rather than none: a watch list
-  /// nobody has touched should watch everything, and an element that went blank
-  /// the moment you cleared the last chip would be a trap.
-  /// Which chip blocks the person has opened. See [_choices].
-  final _opened = <String>{};
-
+  /// The same row and the same sheet as everything else that picks from a
+  /// list. It was twenty chips, open whenever it held anything, which on a
+  /// room card is six of them and most of the panel.
   Widget _choices(WidgetConfigField f) {
-    final t = HcTokens.of(context);
     final options = f.options ?? const <String>[];
     final chosen =
-        ((_config[f.name] as List?) ?? const []).map((e) => '$e').toSet();
+        ((_config[f.name] as List?) ?? const []).map((e) => '$e').toList();
 
-    // **Twenty chips for a setting nobody is editing.** Except is secondary —
-    // it takes back out of a rule what the rule already chose — and it was a
-    // wall of pills whenever it held anything, which on a room card is six of
-    // them and most of the panel. John: *"all device pickers are still using
-    // rounded block selectors."*
-    //
-    // So it is one line that says what it holds, and the wall only while
-    // somebody is working on it. Folded reads as a sentence; open is a set of
-    // switches, and the two are the same setting.
-    final open = _opened.contains(f.name);
-    if (!open) {
-      final names = [
-        for (final o in options)
-          if (chosen.contains(o)) humanize(o)
-      ];
-      final shown = names.length > 3
-          ? '${names.take(3).join(', ')} +${names.length - 3}'
-          : names.join(', ');
-      return Padding(
-        padding: EdgeInsets.only(bottom: t.space.xs),
-        child: InkWell(
-          onTap: () => setState(() => _opened.add(f.name)),
-          borderRadius: t.radius.smR,
-          child: Padding(
-            padding: EdgeInsets.symmetric(vertical: t.space.xs),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                      '${_title(f)} — ${names.isEmpty ? 'none' : shown}',
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: t.text.bodySmallStyle.copyWith(
-                          color: names.isEmpty
-                              ? t.surface.onBaseMuted
-                              : t.surface.onBase)),
-                ),
-                Icon(Icons.expand_more, size: 16, color: t.surface.onBaseMuted),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        InkWell(
-          onTap: () => setState(() => _opened.remove(f.name)),
-          borderRadius: t.radius.smR,
-          child: Row(
-            children: [
-              Expanded(child: _label(f, section: true)),
-              Icon(Icons.expand_less, size: 16, color: t.surface.onBaseMuted),
-            ],
-          ),
-        ),
-        Wrap(
-          spacing: 6,
-          runSpacing: 6,
-          children: [
-            for (final o in options)
-              FilterChip(
-                label: Text(humanize(o)),
-                selected: chosen.contains(o),
-                onSelected: (on) {
-                  final next = {...chosen};
-                  if (on) {
-                    next.add(o);
-                  } else {
-                    next.remove(o);
-                  }
-                  _set(f.name, [
-                    for (final o in options)
-                      if (next.contains(o)) o
-                  ]);
-                },
-              ),
+    return _pickRow(
+      f,
+      value: chosen.isEmpty
+          ? null
+          : [for (final o in chosen) humanize(o)].join(', '),
+      placeholder: 'None',
+      onTap: () async {
+        final picked = await pickAndOrder(
+          context,
+          title: 'Pick ${_title(f).toLowerCase()}',
+          all: [
+            for (final o in options) (id: o, name: humanize(o), where: ''),
           ],
-        ),
-        if (chosen.isEmpty) _hint('Nothing picked — all of them.'),
-        _help(f),
-      ],
+          selected: chosen,
+          addHint: 'Add one',
+          clearLabel: 'Choose none',
+        );
+        if (picked != null) {
+          // Stored in the order the options were declared, not the order they
+          // were ticked: this is a set, and a document that records the order
+          // of an idle tick is one whose diffs stop meaning anything.
+          _set(
+              f.name,
+              picked.isEmpty
+                  ? null
+                  : [
+                      for (final o in options)
+                        if (picked.contains(o)) o
+                    ]);
+        }
+      },
     );
   }
 
@@ -914,6 +857,16 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
   ///
   /// The counts come from the same `facetGroupOf(facetOf(...))` the card
   /// filters on, so the number beside the name is the number you get.
+  /// Which kinds of device a card is about.
+  ///
+  /// **No chips.** This was eleven of them, and Except below it was twenty
+  /// more, so a facet card's panel was mostly pills — and picking a kind
+  /// looked nothing like picking a scene two settings above it. John: *"I
+  /// don't want any chips in use for any device/scene selectors."*
+  ///
+  /// One line, and the sheet every other list goes through. The count rides
+  /// along on each row, because *Lights · 19* is the fact that tells you
+  /// whether you picked the right kind.
   Widget _facet(WidgetConfigField f) {
     final devices = ref.watch(devicesProvider).value ?? const <DeviceState>[];
     final counts = <DeviceFacetGroup, int>{};
@@ -924,64 +877,61 @@ class _WidgetConfigFormState extends ConsumerState<WidgetConfigForm> {
     }
     final present = counts.keys.toList()
       ..sort((a, b) => a.label.compareTo(b.label));
+
     // One or several: the stored value is a bare string when there is one kind
     // and a list when there are more, so every card written before this reads
     // unchanged.
     final raw = _config[f.name];
-    final value = <String>{
+    final value = <String>[
       for (final k in raw is List ? raw : [raw])
         if (k is String && k.isNotEmpty) k,
-    };
+    ];
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _label(f),
-        if (present.isEmpty)
-          _hint('No devices yet, so there are no kinds to pick from.')
-        else
-          // Chips rather than a dropdown, because a panel can want more than
-          // one kind: a room's "Lights" wants the lamps and the switches that
-          // are lights in everything but their `device_type`.
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              for (final g in present)
-                FilterChip(
-                  label: Text('${g.label} · ${counts[g]}'),
-                  selected: value.contains(g.key),
-                  onSelected: (on) {
-                    final next = {...value};
-                    if (on) {
-                      next.add(g.key);
-                    } else {
-                      next.remove(g.key);
-                    }
-                    // One kind stays a bare string, so a card edited here and
-                    // read by an older build still means what it says.
-                    final picked = [
-                      for (final g in present)
-                        if (next.contains(g.key)) g.key,
-                    ];
-                    _set(f.name, picked.length == 1 ? picked.first : picked);
-                  },
-                ),
-            ],
-          ),
-        if (value.isEmpty) _hint('Nothing picked — this shows nothing.'),
-        _help(f),
-      ],
+    if (present.isEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _label(f),
+          _hint('No devices yet, so there are no kinds to pick from.'),
+        ],
+      );
+    }
+
+    final byKey = {for (final g in present) g.key: g};
+    return _pickRow(
+      f,
+      value: value.isEmpty
+          ? null
+          : [for (final k in value) byKey[k]?.label ?? humanize(k)].join(', '),
+      placeholder: 'Choose kinds…',
+      onTap: () async {
+        final picked = await pickAndOrder(
+          context,
+          title: 'Pick kinds',
+          all: [
+            for (final g in present)
+              (
+                id: g.key,
+                name: g.label,
+                where: '${counts[g]} ${counts[g] == 1 ? 'device' : 'devices'}'
+              ),
+          ],
+          selected: value,
+          addHint: 'Add a kind',
+          clearLabel: 'Choose none',
+        );
+        if (picked == null) return;
+        // A single kind stays a bare string, which is how every card written
+        // before this one reads.
+        _set(
+            f.name,
+            picked.isEmpty
+                ? null
+                : (picked.length == 1 ? picked.first : picked));
+      },
     );
   }
 
-  /// Which plugin provides this card.
-  ///
-  /// The list is what this installation actually has, not what this build knows
-  /// about — a plugin card is unknowable at compile time by construction. A
-  /// core too old to be asked and a core with no plugin cards are told apart on
-  /// purpose: the first is our ignorance and the second is a fact about the
-  /// house, and offering an empty dropdown for either would say neither.
   Widget _pluginId(WidgetConfigField f) {
     final async = ref.watch(dashboardVocabularyProvider);
     final all = async.value?.pluginWidgets;
