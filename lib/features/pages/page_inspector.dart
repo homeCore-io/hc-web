@@ -12,6 +12,7 @@ import '../../core/providers/page_room_provider.dart';
 import '../../design/tokens.dart';
 import '../assets/asset_field.dart';
 import 'inspector_controls.dart';
+import 'inspector_fields.dart';
 
 /// The page itself, when no card is selected.
 ///
@@ -99,7 +100,6 @@ class _PageInspectorState extends State<PageInspector> {
     final dashboard = widget.dashboard;
     final layout = widget.layout;
     final breakpoint = widget.breakpoint;
-    final cardCount = widget.cardCount;
     final onFlowChanged = widget.onFlowChanged;
     final onBackgroundChanged = widget.onBackgroundChanged;
     final t = HcTokens.of(context);
@@ -109,146 +109,161 @@ class _PageInspectorState extends State<PageInspector> {
     // an ordinary layout loses nothing; following a composed one loses the
     // free positions, and that is worth saying out loud.
     final sourceComposed = derived != null && widget.sourceComposed;
+    final composed = layout?.isComposed ?? false;
 
     return Scrollbar(
       controller: _scroll,
       thumbVisibility: true,
       child: SingleChildScrollView(
         controller: _scroll,
-        padding: EdgeInsets.all(t.space.sm),
+        padding:
+            EdgeInsets.symmetric(horizontal: t.space.sm, vertical: t.space.xs),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(dashboard.name,
-                style: t.text.subtitleStyle.copyWith(
-                    color: t.surface.onBase, fontWeight: FontWeight.w600)),
-            Text('This page',
-                style:
-                    t.text.captionStyle.copyWith(color: t.surface.onBaseMuted)),
-            SizedBox(height: t.space.md),
-            _Row(label: 'Cards', value: '$cardCount'),
-            _Row(label: 'Columns', value: '${layout?.columns ?? 12}'),
-            _Row(
-              label: 'Arranging',
-              value: switch (breakpoint) {
-                DashboardBreakpoint.mobile => 'Mobile',
-                DashboardBreakpoint.tablet => 'Tablet',
-                DashboardBreakpoint.desktop => 'Desktop',
-                DashboardBreakpoint.tv => 'Wall',
-              },
+            // The subject, the way a title bar names a document: what it is,
+            // and what is true of it, without a sentence about either.
+            Padding(
+              padding: EdgeInsets.only(bottom: t.space.xs),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(dashboard.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: t.text.bodyStyle.copyWith(
+                            color: t.surface.onBase,
+                            fontWeight: FontWeight.w600)),
+                  ),
+                  Text('This page',
+                      style: t.text.captionStyle
+                          .copyWith(color: t.surface.onBaseMuted)),
+                ],
+              ),
             ),
-            // **A page about a room has to be designable as one.**
-            //
-            // Everything on the room page that says `@room` resolves against
-            // the room it was opened for, and the designer opened it without
-            // one — so the canvas was a set of empty boxes reading "No devices
-            // match" and you were arranging a layout you could not see.
-            if (_saysRoom) ...[
-              SizedBox(height: t.space.md),
-              Text('SEE IT AS',
-                  style: t.text.overlineStyle
-                      .copyWith(color: t.surface.onBaseMuted)),
-              SizedBox(height: t.space.xs),
-              _RoomPreviewPicker(dashboardId: widget.dashboard.id),
-              SizedBox(height: t.space.xs),
-              Text(
-                'This page is about whichever room it is opened for. Pick one '
-                'to arrange it against real devices.',
-                style:
-                    t.text.captionStyle.copyWith(color: t.surface.onBaseMuted),
+            InspectorSection(title: 'Page', children: [
+              InspectorField(
+                label: 'Cards',
+                child: _Reading('${widget.cardCount}'),
               ),
-            ],
-            SizedBox(height: t.space.md),
-            Text('SPACE',
-                style: t.text.overlineStyle
-                    .copyWith(color: t.surface.onBaseMuted)),
-            SizedBox(height: t.space.xs),
-            if (derived != null)
-              Text(
-                'This layout follows another one, so it is packed for its own '
-                'width. Arrange it by hand to give it gaps of its own.',
-                style: t.text.captionStyle
-                    .copyWith(color: t.surface.onBaseMuted, height: 1.4),
-              )
-            else ...[
-              _Choice(
-                value: flow,
-                onChanged: onFlowChanged,
+              InspectorField(
+                label: 'Columns',
+                child: _Reading('${layout?.columns ?? 12}'),
               ),
-              SizedBox(height: t.space.xs),
-              Text(
-                flow == GridFlow.free
-                    ? 'Cards stay where you put them. Empty space is part of the '
-                        'design.'
-                    : 'Cards float up to close gaps, the way a dashboard packs '
-                        'itself.',
-                style: t.text.captionStyle
-                    .copyWith(color: t.surface.onBaseMuted, height: 1.4),
+              InspectorField(
+                label: 'Arranging',
+                child: _Reading(_breakpointName(breakpoint)),
               ),
-            ],
-            if (widget.onComposeChanged case final onCompose?) ...[
-              SizedBox(height: t.space.lg),
-              Text('CANVAS',
-                  style: t.text.overlineStyle
-                      .copyWith(color: t.surface.onBaseMuted)),
-              SizedBox(height: t.space.xs),
-              InspectorToggle(
-                label: 'Compose freely',
-                value: layout?.isComposed ?? false,
-                onChanged: derived != null ? null : onCompose,
-              ),
-              Text(
-                derived != null
-                    ? sourceComposed
-                        // The one case where following costs something
-                        // visible. Saying it here, where there is room, is
-                        // what stops the phone reading as lost work.
-                        ? 'This layout follows a composed one, so it has no '
-                            'canvas of its own. That composition is packed '
-                            'into these cells — the same cards in the same '
-                            'order, at whatever size fits this grid. Arrange '
-                            'it by hand to give it a canvas of its own.'
-                        : 'This layout follows another one, so it has no '
-                            'canvas of its own to compose on.'
-                    : layout?.isComposed ?? false
-                        ? 'Cards sit anywhere on the canvas at any size. The '
-                            'grid is still here as something to line up with, '
-                            'and the cells are kept alongside so the page still '
-                            'opens as a grid anywhere that cannot read a canvas.'
-                        : 'Cards are whole cells of the grid. Turn this on to '
-                            'put them anywhere and at any size — nothing moves '
-                            'when you do.',
-                style: t.text.captionStyle
-                    .copyWith(color: t.surface.onBaseMuted, height: 1.4),
-              ),
-              if (layout?.frame case final frame?) ...[
-                SizedBox(height: t.space.xs),
-                InspectorToggle(
-                  label: 'Snap to the grid',
-                  value: widget.snapToGrid,
-                  onChanged: widget.onSnapChanged,
+            ]),
+
+            // **A page about a room has to be designable as one.** Everything
+            // on it that says `@room` resolves against the room it was opened
+            // for, and without one the canvas is a set of empty boxes reading
+            // "No devices match".
+            if (_saysRoom)
+              InspectorSection(title: 'Preview', children: [
+                InspectorField(
+                  label: 'Room',
+                  help: 'Which room to arrange this page against.',
+                  child: _RoomPreviewPicker(dashboardId: widget.dashboard.id),
                 ),
-                SizedBox(height: t.space.md),
-                _FrameControls(
-                  frame: frame,
-                  onChanged: widget.onFrameChanged,
+              ]),
+
+            InspectorSection(title: 'Layout', children: [
+              if (derived != null)
+                InspectorField(
+                  label: 'Space',
+                  help: 'Follows another layout, so it is packed for its own '
+                      'width. Arrange it by hand to give it gaps of its own.',
+                  child: _Reading('Follows ${_breakpointName(derived)}'),
+                )
+              else
+                InspectorField(
+                  label: 'Space',
+                  child: InspectorSegments(
+                    options: const ['packed', 'free'],
+                    value: flow == GridFlow.free ? 'free' : 'packed',
+                    labelFor: (o) => o == 'free' ? 'Keep gaps' : 'Close gaps',
+                    onChanged: onFlowChanged == null
+                        ? (_) {}
+                        : (o) => onFlowChanged(
+                            o == 'free' ? GridFlow.free : GridFlow.packed),
+                  ),
                 ),
+              if (widget.onComposeChanged case final onCompose?) ...[
+                InspectorField(
+                  label: 'Compose',
+                  // The one case where following costs something visible, and
+                  // the only sentence in this section that earns its line.
+                  help: sourceComposed
+                      ? 'This follows a composed layout, so that composition '
+                          'is packed into these cells.'
+                      : null,
+                  child: InspectorSwitch(
+                    value: composed,
+                    semanticLabel: 'Compose freely',
+                    onChanged: derived != null ? (_) {} : (v) => onCompose(v),
+                  ),
+                ),
+                if (layout?.frame != null)
+                  InspectorField(
+                    label: 'Snap',
+                    child: InspectorSwitch(
+                      value: widget.snapToGrid,
+                      semanticLabel: 'Snap to the grid',
+                      onChanged: widget.onSnapChanged ?? (_) {},
+                    ),
+                  ),
               ],
-            ],
-            if (onBackgroundChanged != null) ...[
-              SizedBox(height: t.space.lg),
-              Text('BACKGROUND',
-                  style: t.text.overlineStyle
-                      .copyWith(color: t.surface.onBaseMuted)),
-              SizedBox(height: t.space.xs),
-              _BackgroundControls(
-                value: dashboard.background ?? const DashboardBackground(),
-                onChanged: onBackgroundChanged,
+            ]),
+
+            if (widget.onComposeChanged != null && layout?.frame != null)
+              _FrameControls(
+                frame: layout!.frame!,
+                onChanged: widget.onFrameChanged,
               ),
-            ],
+
+            if (onBackgroundChanged != null)
+              InspectorSection(title: 'Background', children: [
+                _BackgroundControls(
+                  value: dashboard.background ?? const DashboardBackground(),
+                  onChanged: onBackgroundChanged,
+                ),
+              ]),
+            SizedBox(height: t.space.md),
           ],
         ),
       ),
+    );
+  }
+
+  static String _breakpointName(DashboardBreakpoint b) => switch (b) {
+        DashboardBreakpoint.mobile => 'Mobile',
+        DashboardBreakpoint.tablet => 'Tablet',
+        DashboardBreakpoint.desktop => 'Desktop',
+        DashboardBreakpoint.tv => 'Wall',
+      };
+}
+
+/// A value the panel states rather than asks for.
+///
+/// The same line height and the same column as every editable value, because a
+/// panel where the facts and the settings sit at different heights reads as two
+/// panels stacked.
+class _Reading extends StatelessWidget {
+  const _Reading(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HcTokens.of(context);
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Text(text,
+          style: t.text.bodySmallStyle.copyWith(
+              color: t.surface.onBaseMuted,
+              fontFeatures: t.numericFontFeatures)),
     );
   }
 }
@@ -308,33 +323,6 @@ class _BackgroundControlsState extends State<_BackgroundControls> {
   }
 }
 
-class _Row extends StatelessWidget {
-  const _Row({required this.label, required this.value});
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = HcTokens.of(context);
-    return Padding(
-      padding: EdgeInsets.only(bottom: t.space.xs),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(label,
-                style: t.text.bodySmallStyle
-                    .copyWith(color: t.surface.onBaseMuted)),
-          ),
-          Text(value,
-              style: t.text.bodySmallStyle.copyWith(
-                  color: t.surface.onBase,
-                  fontFeatures: t.numericFontFeatures)),
-        ],
-      ),
-    );
-  }
-}
-
 /// A labelled switch, using the house control rather than Material's.
 ///
 /// `SwitchListTile` paints its background on the nearest `Material` ancestor,
@@ -356,264 +344,95 @@ class _FrameControls extends StatefulWidget {
   State<_FrameControls> createState() => _FrameControlsState();
 }
 
+/// The canvas sizes worth one click.
+///
+/// Screens people actually design walls and tablets for, and nothing else — a
+/// list of every resolution would be a menu you have to read rather than one
+/// you can point at.
+const _presets = <String, (double, double)>{
+  '720p': (1280, 720),
+  '1080p': (1920, 1080),
+  '1440p': (2560, 1440),
+  '4K': (3840, 2160),
+};
+
 class _FrameControlsState extends State<_FrameControls> {
-  late final _width = TextEditingController(text: _round(widget.frame.width));
-  late final _height = TextEditingController(text: _round(widget.frame.height));
-
-  /// The sizes people actually have on a wall, plus the shape a page is when
-  /// it is meant to be read rather than watched.
-  static const _presets = <String, (double, double)>{
-    '720p': (1280, 720),
-    '1080p': (1920, 1080),
-    '1440p': (2560, 1440),
-    '4K': (3840, 2160),
-  };
-
-  static String _round(double v) => v.toStringAsFixed(0);
-
-  @override
-  void didUpdateWidget(_FrameControls old) {
-    super.didUpdateWidget(old);
-    // Only when the frame really changed, or every rebuild would fight the
-    // person typing into the field.
-    if (old.frame.width != widget.frame.width) {
-      _width.text = _round(widget.frame.width);
-    }
-    if (old.frame.height != widget.frame.height) {
-      _height.text = _round(widget.frame.height);
-    }
-  }
-
-  @override
-  void dispose() {
-    _width.dispose();
-    _height.dispose();
-    super.dispose();
-  }
-
-  void _commit() {
-    final w = double.tryParse(_width.text);
-    final h = double.tryParse(_height.text);
-    // A canvas with no size would divide by zero on the way to the screen, and
-    // core rejects it. Refusing here rather than clamping keeps the field
-    // saying what was typed, so a stray keystroke is visible instead of
-    // silently becoming a 1.
-    if (w == null || h == null || w <= 0 || h <= 0) {
-      _width.text = _round(widget.frame.width);
-      _height.text = _round(widget.frame.height);
-      return;
-    }
-    widget.onChanged?.call(widget.frame.copyWith(width: w, height: h));
-  }
-
   @override
   Widget build(BuildContext context) {
-    final t = HcTokens.of(context);
     final onChanged = widget.onChanged;
+    final size =
+        '${widget.frame.width.round()} × ${widget.frame.height.round()}';
+    final preset = _presets.entries
+        .where((e) =>
+            widget.frame.width == e.value.$1 &&
+            widget.frame.height == e.value.$2)
+        .map((e) => e.key)
+        .firstOrNull;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text('SIZE',
-            style: t.text.overlineStyle.copyWith(color: t.surface.onBaseMuted)),
-        SizedBox(height: t.space.xs),
-        Row(
-          children: [
-            Expanded(
-                child: _Number(
-                    label: 'Width', controller: _width, onDone: _commit)),
-            SizedBox(width: t.space.xs),
-            Expanded(
-                child: _Number(
-                    label: 'Height', controller: _height, onDone: _commit)),
-          ],
+    return InspectorSection(title: 'Canvas', children: [
+      InspectorField(
+        label: 'Width',
+        child: InspectorNumber(
+          value: widget.frame.width,
+          unit: 'px',
+          // **A canvas with no width divides by zero on the way to the
+          // screen**, and core rejects it — so a 0, or a word, leaves the
+          // canvas as it was rather than becoming one.
+          onChanged: (n) => onChanged == null || n == null || n <= 0
+              ? null
+              : onChanged(widget.frame.copyWith(width: n.toDouble())),
         ),
-        SizedBox(height: t.space.xs),
-        Wrap(
-          spacing: t.space.xs,
-          runSpacing: t.space.xs / 2,
-          children: [
-            for (final entry in _presets.entries)
-              _Preset(
-                label: entry.key,
-                selected: widget.frame.width == entry.value.$1 &&
-                    widget.frame.height == entry.value.$2,
-                onTap: onChanged == null
-                    ? null
-                    : () => onChanged(widget.frame.copyWith(
-                        width: entry.value.$1, height: entry.value.$2)),
-              ),
-          ],
+      ),
+      InspectorField(
+        label: 'Height',
+        child: InspectorNumber(
+          value: widget.frame.height,
+          unit: 'px',
+          onChanged: (n) => onChanged == null || n == null || n <= 0
+              ? null
+              : onChanged(widget.frame.copyWith(height: n.toDouble())),
         ),
-        SizedBox(height: t.space.xs),
-        Text(
-          'Changing the size does not move anything. A bigger canvas is more '
-          'room, not a rearrangement.',
-          style: t.text.captionStyle
-              .copyWith(color: t.surface.onBaseMuted, height: 1.4),
-        ),
-        SizedBox(height: t.space.md),
-        Text('HEIGHT',
-            style: t.text.overlineStyle.copyWith(color: t.surface.onBaseMuted)),
-        SizedBox(height: t.space.xs),
-        Row(
-          children: [
-            for (final fit in DashboardFrameFit.values)
-              Padding(
-                padding: EdgeInsets.only(right: t.space.xs),
-                child: _Preset(
-                  label: switch (fit) {
-                    DashboardFrameFit.scroll => 'Grows',
-                    DashboardFrameFit.fixed => 'Fixed',
-                  },
-                  selected: widget.frame.fit == fit,
-                  onTap: onChanged == null
-                      ? null
-                      : () => onChanged(widget.frame.copyWith(fit: fit)),
-                ),
-              ),
-          ],
-        ),
-        SizedBox(height: t.space.xs),
-        Text(
-          switch (widget.frame.fit) {
-            DashboardFrameFit.scroll =>
-              'The height is a starting point. The page carries on below it if '
-                  'there is more on it, and scrolls.',
-            DashboardFrameFit.fixed =>
-              'The whole canvas is shown at once, scaled to whatever it is on, '
-                  'and nothing scrolls. What a wall display is.',
+      ),
+      // **The presets are a menu, not five pills.** Four names and a "custom"
+      // that is whatever the numbers above say: a row of segments would be
+      // five words in two hundred pixels, and the numbers are already there
+      // for anyone who wants an exact one.
+      InspectorField(
+        label: 'Preset',
+        child: InspectorMenu(
+          options: _presets.keys.toList(),
+          value: preset,
+          hint: size,
+          onChanged: (name) {
+            final chosen = _presets[name];
+            if (chosen == null || onChanged == null) return;
+            onChanged(
+                widget.frame.copyWith(width: chosen.$1, height: chosen.$2));
           },
-          style: t.text.captionStyle
-              .copyWith(color: t.surface.onBaseMuted, height: 1.4),
-        ),
-      ],
-    );
-  }
-}
-
-class _Number extends StatelessWidget {
-  const _Number({
-    required this.label,
-    required this.controller,
-    required this.onDone,
-  });
-
-  final String label;
-  final TextEditingController controller;
-  final VoidCallback onDone;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = HcTokens.of(context);
-    return TextField(
-      controller: controller,
-      keyboardType: TextInputType.number,
-      style: t.text.bodyStyle.copyWith(
-          color: t.surface.onBase, fontFeatures: t.numericFontFeatures),
-      decoration: InputDecoration(
-        isDense: true,
-        labelText: label,
-        border: const OutlineInputBorder(),
-      ),
-      onSubmitted: (_) => onDone(),
-      // Also on losing focus: a number typed and then clicked away from is a
-      // number that was meant.
-      onTapOutside: (_) {
-        onDone();
-        FocusManager.instance.primaryFocus?.unfocus();
-      },
-    );
-  }
-}
-
-class _Preset extends StatelessWidget {
-  const _Preset({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = HcTokens.of(context);
-    return Semantics(
-      button: true,
-      selected: selected,
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: EdgeInsets.symmetric(
-              horizontal: t.space.sm, vertical: t.space.xs / 2),
-          decoration: BoxDecoration(
-            color: selected ? t.surface.raised : null,
-            borderRadius: BorderRadius.circular(t.radius.pill),
-            border: Border.all(
-              color: selected ? t.accent.active : t.stroke.hairline,
-              width: t.stroke.width,
-            ),
-          ),
-          child: Text(
-            label,
-            style: t.text.captionStyle.copyWith(
-                color: selected ? t.surface.onBase : t.surface.onBaseMuted),
-          ),
         ),
       ),
-    );
-  }
-}
-
-class _Choice extends StatelessWidget {
-  const _Choice({required this.value, required this.onChanged});
-
-  final GridFlow value;
-  final ValueChanged<GridFlow>? onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = HcTokens.of(context);
-    return Row(
-      children: [
-        for (final option in GridFlow.values)
-          Padding(
-            padding: EdgeInsets.only(right: t.space.xs),
-            child: Semantics(
-              button: true,
-              selected: option == value,
-              child: GestureDetector(
-                onTap: onChanged == null ? null : () => onChanged!(option),
-                child: Container(
-                  padding: EdgeInsets.symmetric(
-                      horizontal: t.space.sm, vertical: t.space.xs / 2),
-                  decoration: BoxDecoration(
-                    color: option == value ? t.surface.raised : null,
-                    borderRadius: BorderRadius.circular(t.radius.pill),
-                    border: Border.all(
-                      color:
-                          option == value ? t.accent.active : t.stroke.hairline,
-                      width: t.stroke.width,
-                    ),
-                  ),
-                  // Named for what they do, not for the enum: "packed" and
-                  // "free" are the document's words, not a person's.
-                  child: Text(
-                    option == GridFlow.free ? 'Keep gaps' : 'Close gaps',
-                    style: t.text.captionStyle.copyWith(
-                        color: option == value
-                            ? t.surface.onBase
-                            : t.surface.onBaseMuted),
-                  ),
-                ),
-              ),
-            ),
-          ),
-      ],
-    );
+      InspectorField(
+        label: 'Height is',
+        // The one thing here that is not obvious from the value: what a fixed
+        // canvas *does* on a screen that is not its size.
+        help: switch (widget.frame.fit) {
+          DashboardFrameFit.scroll =>
+            'A starting point. The page carries on below it and scrolls.',
+          DashboardFrameFit.fixed =>
+            'The whole canvas at once, scaled to fit. What a wall display is.',
+        },
+        child: InspectorSegments(
+          options: const ['scroll', 'fixed'],
+          value:
+              widget.frame.fit == DashboardFrameFit.fixed ? 'fixed' : 'scroll',
+          labelFor: (o) => o == 'fixed' ? 'Fixed' : 'Grows',
+          onChanged: (o) => onChanged?.call(widget.frame.copyWith(
+              fit: o == 'fixed'
+                  ? DashboardFrameFit.fixed
+                  : DashboardFrameFit.scroll)),
+        ),
+      ),
+    ]);
   }
 }
 

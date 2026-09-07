@@ -31,6 +31,35 @@ import 'package:flutter/services.dart';
 import '../../design/components/hc_controls.dart';
 import '../../design/tokens.dart';
 
+/// Where the keyboard belongs when a panel has finished with it.
+///
+/// **An application whose undo stops working because you used a control is not
+/// one you can trust.** A menu keeps focus after it closes, and the shortcuts
+/// live around the canvas — so the next Ctrl+Z went to the menu and nothing
+/// happened. Unfocusing is not the answer either: with nothing focused at all
+/// the shortcuts are not in the chain and the keys reach no one.
+///
+/// So the surface that owns the keyboard puts its node here, and a control
+/// that is done hands it back. Absent — in a test, or in the device sheet —
+/// the fallback is to unfocus, which is what it did before.
+class CanvasFocus extends InheritedWidget {
+  const CanvasFocus({super.key, required this.node, required super.child});
+
+  final FocusNode node;
+
+  static void giveBack(BuildContext context) {
+    final held = context.dependOnInheritedWidgetOfExactType<CanvasFocus>();
+    if (held == null) {
+      FocusManager.instance.primaryFocus?.unfocus();
+      return;
+    }
+    held.node.requestFocus();
+  }
+
+  @override
+  bool updateShouldNotify(CanvasFocus old) => old.node != node;
+}
+
 /// The width of the name column, in logical pixels.
 ///
 /// Fixed rather than intrinsic, and this is what buys the whole layout: every
@@ -423,7 +452,14 @@ class InspectorMenu extends StatelessWidget {
                     maxLines: 1, overflow: TextOverflow.ellipsis),
               ),
           ],
-          onChanged: onChanged,
+          // **The keyboard goes back to the document.** A menu keeps focus
+          // after it closes, so the next Ctrl+Z went to the menu and the
+          // canvas did not come back — an application where undo stops
+          // working because you used a control is not one you can trust.
+          onChanged: (v) {
+            CanvasFocus.giveBack(context);
+            onChanged(v);
+          },
         ),
       ),
     );
