@@ -1,12 +1,12 @@
 import 'package:flutter/foundation.dart'
     show kIsWeb, defaultTargetPlatform, TargetPlatform;
-import '../../core/api/api_error.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'
     show BrowserContextMenu, Clipboard, ClipboardData;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/api/api_error.dart';
 import '../../core/dashboard/breakpoints.dart';
 import '../../core/dashboard/canvas_view.dart';
 import '../../core/dashboard/constraints.dart';
@@ -25,6 +25,7 @@ import '../../core/dashboard/repeat.dart';
 import '../../core/text/humanize.dart';
 import '../../core/dashboard/widget_registry.dart';
 import '../../core/models/dashboard.dart';
+import '../../core/web/browser_env.dart';
 import '../../core/models/device_state.dart';
 import '../../core/providers/dashboards_provider.dart';
 import '../../core/devices/breakdown.dart' show prettyGroup;
@@ -2222,6 +2223,7 @@ class _PageScreenState extends ConsumerState<PageScreen> {
   /// Drops the whole draft in one place. Leaving `_editingBreakpoint` set after
   /// a save would aim the *next* edit at the breakpoint the last one used.
   void _exitEditing() {
+    warnBeforeLeaving(false);
     setState(() {
       _draftLayouts = null;
       _draftItems = null;
@@ -2297,7 +2299,21 @@ class _PageScreenState extends ConsumerState<PageScreen> {
         updatedAt: DateTime.now(),
       );
       await ref.read(dashboardsProvider.notifier).updateDashboard(next);
-      if (mounted) _exitEditing();
+      if (!mounted) return;
+      _exitEditing();
+      // **Save is a way out, not only a write.** Saving left you in the
+      // designer looking at what you had just saved, with the only exit
+      // labelled Cancel — so the safe-looking button was the one that
+      // discarded and the finished-looking one did nothing visible. John:
+      // *"save button does not close the editor after saving."*
+      //
+      // The room rides along the same way it does when you leave any other
+      // way: one page serves fifteen of them and landing on the roomless one
+      // is landing on an empty page.
+      if (widget.designer && mounted) {
+        final query = GoRouterState.of(context).uri.query;
+        context.go('/pages/${d.id}${query.isEmpty ? '' : '?$query'}');
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -2308,8 +2324,17 @@ class _PageScreenState extends ConsumerState<PageScreen> {
     }
   }
 
+  /// Ask the browser to ask, while there is a draft to lose.
+  ///
+  /// Called from `build` because that is where the answer changes: every edit
+  /// rebuilds, and the guard is idempotent — it only touches the listener when
+  /// the answer is different from last time.
+  void _guardTheDraft() =>
+      warnBeforeLeaving(_touched.isNotEmpty || _contentDirty);
+
   @override
   Widget build(BuildContext context) {
+    _guardTheDraft();
     // The room the page is about, put where everything under it can read it.
     // Overridden here rather than passed down: the config that mentions `@room`
     // is resolved at the placement seam, several widgets deep, and a parameter

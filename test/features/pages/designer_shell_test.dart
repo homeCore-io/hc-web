@@ -27,6 +27,17 @@ class _StubDashboards extends DashboardsNotifier {
   final List<DashboardDefinition> items;
   @override
   Future<List<DashboardDefinition>> build() async => items;
+
+  /// Saving, without the API behind it. The real one posts and then holds
+  /// what came back; a test wants the same *shape* — an await that succeeds —
+  /// so the screen's behaviour after a save is testable at all.
+  @override
+  Future<void> updateDashboard(DashboardDefinition dashboard) async {
+    state = AsyncData([
+      for (final d in items)
+        if (d.id == dashboard.id) dashboard else d,
+    ]);
+  }
 }
 
 class _StubDevices extends DevicesNotifier {
@@ -212,6 +223,21 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(_where(router), '/pages/kitchen/design?room=Garage');
+    });
+
+    testWidgets('saving is a way out, and takes the room with it',
+        (tester) async {
+      // **Save left you looking at what you had just saved**, with the only
+      // exit labelled Cancel — so the safe-looking button was the one that
+      // discarded, and the finished-looking one did nothing visible. John:
+      // *"save button does not close the editor after saving."*
+      final router = await _openDesigner(tester, room: 'Garage');
+      await tester.tap(find.text('Close gaps'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+
+      expect(_where(router), '/pages/kitchen?room=Garage');
     });
 
     testWidgets('leaving takes the room back with it', (tester) async {

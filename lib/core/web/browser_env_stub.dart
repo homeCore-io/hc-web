@@ -13,3 +13,9 @@ String get pageOrigin => 'http://localhost';
 String get pageHostname => 'localhost';
 
 void openInNewTab(String url) {}
+
+/// Whether the browser should ask before closing the tab.
+///
+/// Nothing to ask off the web: the guard is the browser's own dialog, and
+/// there is no browser here.
+void warnBeforeLeaving(bool unsaved) {}
