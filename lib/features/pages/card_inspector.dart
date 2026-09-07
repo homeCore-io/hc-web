@@ -26,6 +26,7 @@ import '../../design/tokens.dart';
 import '../assets/asset_field.dart';
 import '../dashboard/builtin_cards.dart';
 import 'card_members.dart';
+import 'inspector_fields.dart';
 import 'widget_config_form.dart';
 
 /// The selected card's settings, beside the canvas.
@@ -597,8 +598,6 @@ class _StyleSlider extends StatelessWidget {
     required this.value,
     required this.max,
     required this.onChanged,
-    this.min = 0,
-    this.suffix = '',
   });
 
   final String label;
@@ -608,11 +607,9 @@ class _StyleSlider extends StatelessWidget {
   /// Sliders here have started at zero until now. A turn goes both ways, and a
   /// control that could only turn one way would make the other direction a
   /// journey through 359 degrees.
-  final double min;
 
   /// A unit on the readout. Without it a slider reading 40 says nothing about
   /// whether that is degrees, percent, or pixels.
-  final String suffix;
 
   final ValueChanged<double> onChanged;
 
@@ -628,17 +625,16 @@ class _StyleSlider extends StatelessWidget {
         ),
         Expanded(
           child: Slider(
-            value: value.clamp(min, max),
-            min: min,
+            value: value.clamp(0, max),
             max: max,
-            divisions: (max - min).round(),
-            label: '${value.round()}$suffix',
+            divisions: max.round(),
+            label: '${value.round()}',
             onChanged: onChanged,
           ),
         ),
         SizedBox(
           width: 32,
-          child: Text('${value.round()}$suffix',
+          child: Text('${value.round()}',
               textAlign: TextAlign.right,
               style: t.text.captionStyle.copyWith(
                   color: t.surface.onBaseMuted,
@@ -2192,6 +2188,12 @@ class _PinSection extends StatelessWidget {
   }
 }
 
+/// Where the card is and how big, in the two rows every drawing tool has.
+///
+/// **X and Y belong on one line, and W and H on the next.** They are read as
+/// pairs — a position, then a size — and four boxed fields stacked down a panel
+/// is four rows saying what two can. The names sit in the same column as every
+/// other setting so the panel still reads down.
 class _PositionSection extends StatelessWidget {
   const _PositionSection({
     required this.rect,
@@ -2207,183 +2209,88 @@ class _PositionSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final t = HcTokens.of(context);
-    return Padding(
-      padding: EdgeInsets.only(top: t.space.md),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text('POSITION',
-              style:
-                  t.text.overlineStyle.copyWith(color: t.surface.onBaseMuted)),
-          SizedBox(height: t.space.xs),
-          Row(children: [
-            Expanded(
-              child: _NumberBox(
-                label: 'X',
-                value: rect.x,
-                onChanged: (v) => onRect(rect.copyWith(x: v)),
-              ),
-            ),
-            SizedBox(width: t.space.xs),
-            Expanded(
-              child: _NumberBox(
-                label: 'Y',
-                value: rect.y,
-                onChanged: (v) => onRect(rect.copyWith(y: v)),
-              ),
-            ),
-          ]),
-          SizedBox(height: t.space.xs),
-          Row(children: [
-            Expanded(
-              child: _NumberBox(
-                label: 'W',
-                value: rect.w,
-                // Never zero. A rectangle with no width is a card you cannot
-                // see and cannot click, so it cannot be selected to be fixed —
-                // the one edit here that could lose somebody their work.
-                min: 1,
-                onChanged: (v) => onRect(rect.copyWith(w: v)),
-              ),
-            ),
-            SizedBox(width: t.space.xs),
-            Expanded(
-              child: _NumberBox(
-                label: 'H',
-                value: rect.h,
-                min: 1,
-                onChanged: (v) => onRect(rect.copyWith(h: v)),
-              ),
-            ),
-          ]),
-          SizedBox(height: t.space.xs),
-          Row(children: [
-            Expanded(
-              child: _NumberBox(
-                label: '∠',
-                value: rotation ?? 0,
-                suffix: '°',
-                // Cleared back to none rather than to zero: a card at exactly
-                // 0° and a card nobody turned are the same picture, and only
-                // one of them adds a key to the document.
-                onChanged: (v) => onRotate(v == 0 ? null : v),
-              ),
-            ),
-            SizedBox(width: t.space.xs),
-            const Expanded(child: SizedBox()),
-          ]),
-        ],
+    return InspectorSection(title: 'Position', children: [
+      InspectorField(
+        label: 'Position',
+        child: _Pair(
+          first: InspectorNumber(
+            value: rect.x.round(),
+            hint: 'X',
+            onChanged: (v) =>
+                onRect(rect.copyWith(x: (v ?? rect.x).toDouble())),
+          ),
+          second: InspectorNumber(
+            value: rect.y.round(),
+            hint: 'Y',
+            onChanged: (v) =>
+                onRect(rect.copyWith(y: (v ?? rect.y).toDouble())),
+          ),
+        ),
       ),
-    );
+      InspectorField(
+        label: 'Size',
+        child: _Pair(
+          // Never zero. A rectangle with no width is a card you cannot see and
+          // cannot click, so it cannot be selected to be fixed — the one edit
+          // here that could lose somebody their work.
+          first: InspectorNumber(
+            value: rect.w.round(),
+            hint: 'W',
+            min: 1,
+            onChanged: (v) => onRect(
+                rect.copyWith(w: (v == null || v < 1 ? rect.w : v).toDouble())),
+          ),
+          second: InspectorNumber(
+            value: rect.h.round(),
+            hint: 'H',
+            min: 1,
+            onChanged: (v) => onRect(
+                rect.copyWith(h: (v == null || v < 1 ? rect.h : v).toDouble())),
+          ),
+        ),
+      ),
+      InspectorField(
+        label: 'Turn',
+        // Cleared back to none rather than to zero: a card at exactly 0° and a
+        // card nobody turned are the same picture, and only one of them adds a
+        // key to the document.
+        onScrub: (steps) => onRotate(
+            ((rotation ?? 0) + steps) == 0 ? null : (rotation ?? 0) + steps),
+        child: InspectorNumber(
+          value: (rotation ?? 0).round(),
+          unit: '°',
+          onChanged: (v) => onRotate(v == null || v == 0 ? null : v.toDouble()),
+        ),
+      ),
+    ]);
   }
 }
 
-/// One number you can type.
-///
-/// Commits on Enter and on losing focus, never per keystroke: a field that
-/// applied every character would move the card to x=1 on the way to typing 120,
-/// and each of those is an undo entry.
-class _NumberBox extends StatefulWidget {
-  const _NumberBox({
-    required this.label,
-    required this.value,
-    required this.onChanged,
-    this.min,
-    this.suffix,
-  });
+/// Two values on one line — a position, a size.
+class _Pair extends StatelessWidget {
+  const _Pair({required this.first, required this.second});
 
-  final String label;
-  final double value;
-  final ValueChanged<double> onChanged;
-  final double? min;
-  final String? suffix;
-
-  @override
-  State<_NumberBox> createState() => _NumberBoxState();
-}
-
-class _NumberBoxState extends State<_NumberBox> {
-  late final TextEditingController _controller =
-      TextEditingController(text: _show(widget.value));
-  late final FocusNode _focus = FocusNode()..addListener(_onFocus);
-
-  @override
-  void didUpdateWidget(covariant _NumberBox old) {
-    super.didUpdateWidget(old);
-    // Dragged on the canvas while the field is on screen: follow it, unless
-    // somebody is mid-edit, where overwriting what they are typing is worse
-    // than being briefly out of date.
-    if (widget.value != old.value && !_focus.hasFocus) {
-      _controller.text = _show(widget.value);
-      _sent = widget.value;
-    }
-  }
-
-  @override
-  void dispose() {
-    _focus.dispose();
-    _controller.dispose();
-    super.dispose();
-  }
-
-  void _onFocus() {
-    if (!_focus.hasFocus) _commit();
-  }
-
-  /// The value this box last sent, so pressing Enter and then clicking away
-  /// is one edit rather than two. Both gestures commit, deliberately — a
-  /// number you typed and clicked away from was still typed — and without this
-  /// the second would send the same rectangle again and take an undo step with
-  /// it.
-  late double _sent = widget.value;
-
-  void _commit() {
-    final typed = double.tryParse(_controller.text.trim());
-    // Unparseable goes back to what it was rather than to zero. "12o" is a
-    // typo, not a request to move the card to the origin.
-    if (typed == null) {
-      _controller.text = _show(widget.value);
-      return;
-    }
-    final next = widget.min != null && typed < widget.min!
-        ? widget.min!
-        : typed.roundToDouble();
-    _controller.text = _show(next);
-    if (next == _sent) return;
-    _sent = next;
-    widget.onChanged(next);
-  }
-
-  static String _show(double v) =>
-      v == v.roundToDouble() ? v.round().toString() : v.toStringAsFixed(1);
+  final Widget first;
+  final Widget second;
 
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
-    return TextField(
-      controller: _controller,
-      focusNode: _focus,
-      onSubmitted: (_) => _commit(),
-      keyboardType: const TextInputType.numberWithOptions(signed: true),
-      style: t.text.bodySmallStyle.copyWith(
-        color: t.surface.onBase,
-        fontFeatures: t.numericFontFeatures,
-      ),
-      decoration: InputDecoration(
-        isDense: true,
-        prefixText: '${widget.label}  ',
-        prefixStyle: t.text.captionStyle.copyWith(color: t.surface.onBaseMuted),
-        suffixText: widget.suffix,
-        suffixStyle: t.text.captionStyle.copyWith(color: t.surface.onBaseMuted),
-        border: const OutlineInputBorder(),
-        contentPadding:
-            EdgeInsets.symmetric(horizontal: t.space.sm, vertical: t.space.sm),
-      ),
+    return Row(
+      children: [
+        Expanded(child: first),
+        SizedBox(width: t.space.xs),
+        Expanded(child: second),
+      ],
     );
   }
 }
 
+/// How the card is turned and how solid it is.
+///
+/// Both are numbers you find by eye rather than know in advance, so both scrub
+/// from their names — the drag is the control and the field is there to be
+/// exact with.
 class _TransformSection extends StatelessWidget {
   const _TransformSection({
     required this.rotation,
@@ -2399,43 +2306,38 @@ class _TransformSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final t = HcTokens.of(context);
-    return Padding(
-      padding: EdgeInsets.only(top: t.space.md),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text('TRANSFORM',
-              style:
-                  t.text.overlineStyle.copyWith(color: t.surface.onBaseMuted)),
-          SizedBox(height: t.space.xs),
-          _StyleSlider(
-            label: 'Turn',
-            value: rotation ?? 0,
-            // Half a turn either way reaches every angle. Core allows a whole
-            // one, which a slider would spend half its length repeating.
-            min: -180,
-            max: 180,
-            suffix: '°',
-            // Back to none rather than to zero: a card at exactly 0° and a card
-            // nobody turned are the same picture, and only one of them adds a
-            // key to the document.
-            onChanged: (v) => onRotate(v == 0 ? null : v),
-          ),
-          SizedBox(height: t.space.xs),
-          _StyleSlider(
-            label: 'Fade',
-            // Shown as a percentage and stored as a fraction: every renderer
-            // takes a fraction, and a document storing 40 while every client
-            // divided by 100 would be describing the division.
-            value: opacityToControl(opacity),
-            max: 100,
-            suffix: '%',
-            onChanged: (v) => onFade(opacityFromControl(v)),
-          ),
-        ],
+    final fade = opacityToControl(opacity);
+    return InspectorSection(title: 'Transform', children: [
+      InspectorField(
+        label: 'Turn',
+        onScrub: (steps) {
+          final next = ((rotation ?? 0) + steps).clamp(-180, 180).toDouble();
+          onRotate(next == 0 ? null : next);
+        },
+        child: InspectorNumber(
+          value: (rotation ?? 0).round(),
+          unit: '°',
+          min: -180,
+          max: 180,
+          onChanged: (v) => onRotate(v == null || v == 0 ? null : v.toDouble()),
+        ),
       ),
-    );
+      InspectorField(
+        label: 'Fade',
+        onScrub: (steps) =>
+            onFade(opacityFromControl((fade + steps).clamp(0, 100).toDouble())),
+        // Shown as a percentage and stored as a fraction: every renderer takes
+        // a fraction, and a document storing 40 while every client divided by
+        // 100 would be describing the division.
+        child: InspectorNumber(
+          value: fade.round(),
+          unit: '%',
+          min: 0,
+          max: 100,
+          onChanged: (v) => onFade(opacityFromControl((v ?? 100).toDouble())),
+        ),
+      ),
+    ]);
   }
 }
 
