@@ -111,10 +111,24 @@ void main() {
     expect(style.variants.single.style, {'tint': 'danger'});
   });
 
+  /// Opens the menu on the row with this name.
+  ///
+  /// A house's devices are a list, not a row of pills: two of them fit and a
+  /// hundred and eighty-nine do not, and a panel that changed shape with the
+  /// size of the house would be a panel you cannot learn.
+  Future<void> openRow(WidgetTester tester, String label) async {
+    await tester.tap(find.descendant(
+      of: find.ancestor(of: find.text(label), matching: find.byType(Row)).first,
+      matching: find.byType(DropdownButton<String>),
+    ));
+    await tester.pumpAndSettle();
+  }
+
   testWidgets('only the devices this house has are offered', (tester) async {
     await _pump(tester);
     await tester.tap(find.text('Add a state'));
     await tester.pumpAndSettle();
+    await openRow(tester, 'Device');
 
     expect(find.text('Front door'), findsWidgets);
     expect(find.text('Hall lamp'), findsWidgets);
@@ -134,6 +148,7 @@ void main() {
       reason: 'the door reports battery and open; sorted, battery is first',
     );
 
+    await openRow(tester, 'Device');
     await tester.tap(find.text('Hall lamp').last);
     await tester.pumpAndSettle();
 
