@@ -19,6 +19,7 @@ import 'canvas_rulers.dart';
 import 'card_inspector.dart';
 import 'assets_panel.dart';
 import 'devices_panel.dart';
+import 'inspector_fields.dart';
 import 'wiring_panel.dart';
 import 'inspector_controls.dart';
 import 'layer_tree_panel.dart';
@@ -513,264 +514,277 @@ class _DesignerShellState extends State<DesignerShell> {
         '${query.isEmpty ? '' : '?$query'}');
   }
 
+  /// The canvas's own focus, held here so a panel can hand the keyboard back
+  /// to it — see [CanvasFocus].
+  final _canvasFocus = FocusNode(debugLabel: 'designer canvas');
+
   @override
   Widget build(BuildContext context) {
     final t = HcTokens.of(context);
 
-    return Scaffold(
-      backgroundColor: t.surface.base,
-      body: SafeArea(
-        child: LayoutBuilder(builder: (context, frame) {
-          // One scale for the whole shell: the canvas is drawn at it and the
-          // status bar reports it. Computed here rather than inside the canvas
-          // because a designer that silently shrinks what you are arranging,
-          // without saying by how much, is lying about the size of it.
-          final available = frame.maxWidth -
-              DesignerShell._libraryWidth -
-              DesignerShell._inspectorWidth -
-              // Nor is the tool strip. Left out, Fit would pick a scale a strip
-              // too wide — the same mistake the ruler taught, one pane later.
-              ToolPalette.width -
-              // The ruler down the left-hand edge is not canvas. Left out of
-              // this, Fit would pick a scale twenty pixels too wide and quietly
-              // stop meaning what it says.
-              CanvasRuler.thickness -
-              t.space.lg * 2;
-          // Wall has no preview width — it *is* the big end — so it takes the
-          // pane's own width. Before zoom that made it the one breakpoint the
-          // scale never applied to; now it simply starts at 1:1 like the rest.
-          final width =
-              widget.canvasWidth ?? (available <= 0 ? 1.0 : available);
+    return CanvasFocus(
+      node: _canvasFocus,
+      child: Scaffold(
+        backgroundColor: t.surface.base,
+        body: SafeArea(
+          child: LayoutBuilder(builder: (context, frame) {
+            // One scale for the whole shell: the canvas is drawn at it and the
+            // status bar reports it. Computed here rather than inside the canvas
+            // because a designer that silently shrinks what you are arranging,
+            // without saying by how much, is lying about the size of it.
+            final available = frame.maxWidth -
+                DesignerShell._libraryWidth -
+                DesignerShell._inspectorWidth -
+                // Nor is the tool strip. Left out, Fit would pick a scale a strip
+                // too wide — the same mistake the ruler taught, one pane later.
+                ToolPalette.width -
+                // The ruler down the left-hand edge is not canvas. Left out of
+                // this, Fit would pick a scale twenty pixels too wide and quietly
+                // stop meaning what it says.
+                CanvasRuler.thickness -
+                t.space.lg * 2;
+            // Wall has no preview width — it *is* the big end — so it takes the
+            // pane's own width. Before zoom that made it the one breakpoint the
+            // scale never applied to; now it simply starts at 1:1 like the rest.
+            final width =
+                widget.canvasWidth ?? (available <= 0 ? 1.0 : available);
 
-          final layout = widget.layouts
-              ?.where((l) => l.breakpoint == widget.breakpoint)
-              .firstOrNull;
+            final layout = widget.layouts
+                ?.where((l) => l.breakpoint == widget.breakpoint)
+                .firstOrNull;
 
-          // Fit means *show the whole thing*, and for a fixed canvas the whole
-          // thing has a height. Width alone would cut the bottom off a wall
-          // layout — which is precisely the arrangement nobody can check
-          // without walking across the room to the wall it is for.
-          //
-          // The pane's height is not known until the row below has laid out, so
-          // it is taken from the frame we are in: everything above and below
-          // the canvas is fixed chrome, and being a few pixels out here shows
-          // up as a scale, not as a broken layout.
-          final double fit;
-          if (layout?.frame case final composed?
-              when composed.fit == DashboardFrameFit.fixed) {
-            final tall = frame.maxHeight - _chromeHeight - t.space.lg * 2;
-            // **Not clamped to the zoom floor.** A 4K canvas in this pane is
-            // 22%, and refusing to go below 50% would show three quarters of a
-            // wall while still calling itself Fit. The floor exists so the
-            // *stops* stay usable; Fit is a promise about what you can see, and
-            // a promise that quietly stops applying at some size is worse than
-            // a small number. Only a hair above zero, so a preposterous canvas
-            // still has a scale rather than vanishing.
-            fit = frameScale(composed, Size(available, tall)).clamp(0.02, 1.0);
-          } else {
-            // Not clamped to the zoom floor either, for the reason the fixed
-            // branch above gives: Fit is a promise about what you can see, and
-            // the floor exists so the *stops* stay usable. Adding the tool
-            // strip is what made this matter — it took the desktop preview in
-            // a 1500-pixel window from 52% to 49%, and the clamp turned "the
-            // whole width" into "the whole width, minus twelve pixels you can
-            // scroll to but are not told about".
-            fit = (available / width).clamp(0.02, 1.0);
-          }
-          final scale = _zoom ?? fit;
-          // The canvas in pixels, at 1:1. Framing works in these units and
-          // applies the scale itself, so a selection lands in the same place
-          // whatever you were standing at when you asked.
-          final geometry = CanvasGeometry(
-            width: width,
-            columns: widget.columns,
-            rowHeight: layout?.rowHeight ?? 120,
-            gap: layout?.gap ?? 12,
-          );
+            // Fit means *show the whole thing*, and for a fixed canvas the whole
+            // thing has a height. Width alone would cut the bottom off a wall
+            // layout — which is precisely the arrangement nobody can check
+            // without walking across the room to the wall it is for.
+            //
+            // The pane's height is not known until the row below has laid out, so
+            // it is taken from the frame we are in: everything above and below
+            // the canvas is fixed chrome, and being a few pixels out here shows
+            // up as a scale, not as a broken layout.
+            final double fit;
+            if (layout?.frame case final composed?
+                when composed.fit == DashboardFrameFit.fixed) {
+              final tall = frame.maxHeight - _chromeHeight - t.space.lg * 2;
+              // **Not clamped to the zoom floor.** A 4K canvas in this pane is
+              // 22%, and refusing to go below 50% would show three quarters of a
+              // wall while still calling itself Fit. The floor exists so the
+              // *stops* stay usable; Fit is a promise about what you can see, and
+              // a promise that quietly stops applying at some size is worse than
+              // a small number. Only a hair above zero, so a preposterous canvas
+              // still has a scale rather than vanishing.
+              fit =
+                  frameScale(composed, Size(available, tall)).clamp(0.02, 1.0);
+            } else {
+              // Not clamped to the zoom floor either, for the reason the fixed
+              // branch above gives: Fit is a promise about what you can see, and
+              // the floor exists so the *stops* stay usable. Adding the tool
+              // strip is what made this matter — it took the desktop preview in
+              // a 1500-pixel window from 52% to 49%, and the clamp turned "the
+              // whole width" into "the whole width, minus twelve pixels you can
+              // scroll to but are not told about".
+              fit = (available / width).clamp(0.02, 1.0);
+            }
+            final scale = _zoom ?? fit;
+            // The canvas in pixels, at 1:1. Framing works in these units and
+            // applies the scale itself, so a selection lands in the same place
+            // whatever you were standing at when you asked.
+            final geometry = CanvasGeometry(
+              width: width,
+              columns: widget.columns,
+              rowHeight: layout?.rowHeight ?? 120,
+              gap: layout?.gap ?? 12,
+            );
 
-          return Column(
-            children: [
-              _TopBar(
-                title: widget.dashboard.name,
-                layouts: widget.layouts,
-                breakpoint: widget.breakpoint,
-                source: widget.source,
-                saving: widget.saving,
-                dirty: widget.dirty,
-                onSelectBreakpoint: widget.onSelectBreakpoint,
-                onRevert: widget.onRevert,
-                onSave: widget.onSave,
-                onCancel: () => _leave(context),
-                onLeave: () => _leave(context),
-                zoom: _zoom,
-                effectiveZoom: scale,
-                onZoom: (z) => setState(() => _zoom = z),
-                onZoomStep: (delta) =>
-                    setState(() => _zoom = _step(scale, delta)),
-                onFrameSelection: () => _frameSelection(geometry, t.space.lg),
-                canFrame: widget.selectedCount > 0,
-                // Align works on one card or on many; distribute needs three.
-                onAlign: widget.selectedCount == 0 ? null : widget.onAlign,
-                onDistribute:
-                    widget.selectedCount < 3 ? null : widget.onDistribute,
-                canUndo: widget.canUndo,
-                undoLabel: widget.undoLabel,
-                onUndo: widget.onUndo,
-                canRedo: widget.canRedo,
-                redoLabel: widget.redoLabel,
-                onRedo: widget.onRedo,
-                history: widget.history,
-                historyAt: widget.historyAt,
-                onJumpHistory: widget.onJumpHistory,
-              ),
-              if (widget.consequence case final line?)
-                Container(
-                  width: double.infinity,
-                  padding: EdgeInsets.symmetric(
-                      horizontal: t.space.md, vertical: t.space.xs),
-                  color: t.surface.sunken,
-                  child: Text(line,
-                      style: t.text.captionStyle
-                          .copyWith(color: t.surface.onBaseMuted)),
+            return Column(
+              children: [
+                _TopBar(
+                  title: widget.dashboard.name,
+                  layouts: widget.layouts,
+                  breakpoint: widget.breakpoint,
+                  source: widget.source,
+                  saving: widget.saving,
+                  dirty: widget.dirty,
+                  onSelectBreakpoint: widget.onSelectBreakpoint,
+                  onRevert: widget.onRevert,
+                  onSave: widget.onSave,
+                  onCancel: () => _leave(context),
+                  onLeave: () => _leave(context),
+                  zoom: _zoom,
+                  effectiveZoom: scale,
+                  onZoom: (z) => setState(() => _zoom = z),
+                  onZoomStep: (delta) =>
+                      setState(() => _zoom = _step(scale, delta)),
+                  onFrameSelection: () => _frameSelection(geometry, t.space.lg),
+                  canFrame: widget.selectedCount > 0,
+                  // Align works on one card or on many; distribute needs three.
+                  onAlign: widget.selectedCount == 0 ? null : widget.onAlign,
+                  onDistribute:
+                      widget.selectedCount < 3 ? null : widget.onDistribute,
+                  canUndo: widget.canUndo,
+                  undoLabel: widget.undoLabel,
+                  onUndo: widget.onUndo,
+                  canRedo: widget.canRedo,
+                  redoLabel: widget.redoLabel,
+                  onRedo: widget.onRedo,
+                  history: widget.history,
+                  historyAt: widget.historyAt,
+                  onJumpHistory: widget.onJumpHistory,
                 ),
-              Expanded(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // **The rail is the outermost thing on the left.** It is
-                    // the one piece of furniture that is never put away — you
-                    // are always holding a tool, even if it is Select — so it
-                    // sits outside the panel that comes and goes. Every drawing
-                    // application since MacPaint has put it against the window
-                    // edge for the same reason.
-                    ToolPalette(tool: widget.tool, onTool: widget.onTool),
-                    if (_leftOpen)
-                      _Pane(
-                        width: DesignerShell._libraryWidth,
-                        border: Border(
-                            right: BorderSide(
-                                color: t.stroke.hairline,
-                                width: t.stroke.width)),
-                        child: _LeftRail(
-                          items: widget.items,
-                          widgetsById: widget.widgetsById,
-                          selectedIds: widget.selectedIds,
-                          onSelectMany: widget.onSelectMany,
-                          onEnterGroupId: widget.onEnterGroupId,
-                          onPick: widget.onPick,
-                          tool: widget.tool,
-                          onClose: () => setState(() => _leftOpen = false),
+                if (widget.consequence case final line?)
+                  Container(
+                    width: double.infinity,
+                    padding: EdgeInsets.symmetric(
+                        horizontal: t.space.md, vertical: t.space.xs),
+                    color: t.surface.sunken,
+                    child: Text(line,
+                        style: t.text.captionStyle
+                            .copyWith(color: t.surface.onBaseMuted)),
+                  ),
+                Expanded(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // **The rail is the outermost thing on the left.** It is
+                      // the one piece of furniture that is never put away — you
+                      // are always holding a tool, even if it is Select — so it
+                      // sits outside the panel that comes and goes. Every drawing
+                      // application since MacPaint has put it against the window
+                      // edge for the same reason.
+                      ToolPalette(tool: widget.tool, onTool: widget.onTool),
+                      if (_leftOpen)
+                        _Pane(
+                          width: DesignerShell._libraryWidth,
+                          border: Border(
+                              right: BorderSide(
+                                  color: t.stroke.hairline,
+                                  width: t.stroke.width)),
+                          child: _LeftRail(
+                            items: widget.items,
+                            widgetsById: widget.widgetsById,
+                            selectedIds: widget.selectedIds,
+                            onSelectMany: widget.onSelectMany,
+                            onEnterGroupId: widget.onEnterGroupId,
+                            onPick: widget.onPick,
+                            tool: widget.tool,
+                            onClose: () => setState(() => _leftOpen = false),
+                          ),
+                        )
+                      else
+                        _PaneHandle(
+                          icon: Icons.chevron_right,
+                          tooltip: 'Layers, devices and pictures',
+                          onTap: () => setState(() => _leftOpen = true),
                         ),
-                      )
-                    else
-                      _PaneHandle(
-                        icon: Icons.chevron_right,
-                        tooltip: 'Layers, devices and pictures',
-                        onTap: () => setState(() => _leftOpen = true),
-                      ),
-                    // The canvas is the only thing allowed to be large. It
-                    // scrolls inside itself; the frame around it never moves.
-                    // The canvas, with what is not wired yet above it.
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          // Above the canvas rather than in the panel beside
-                          // it: the panel holds what the HOUSE has, and this
-                          // holds what this PAGE is still missing. It is also a
-                          // job you finish, and it disappears when you have.
-                          if (widget.onWire case final onWire?)
-                            WiringPanel(
-                              gaps: wiringGaps(widget.widgetsById.values),
-                              onWire: onWire,
-                              onSelect: (id) => widget.onSelectMany?.call({id}),
-                            ),
-                          Expanded(
-                            child: _CanvasKeys(
-                              onNudge: widget.onNudge,
-                              onDuplicate: widget.onDuplicate,
-                              onCopy: widget.onCopy,
-                              onPaste: widget.onPaste,
-                              onSelectAll: widget.onSelectAll,
-                              onRemove: widget.selectedCount == 0
-                                  ? null
-                                  : widget.onRemoveSelected,
-                              onDeselect: widget.onDeselect,
-                              onFit: () => setState(() => _zoom = null),
-                              onFrameSelection: () =>
-                                  _frameSelection(geometry, t.space.lg),
-                              onPanKey: (down) {
-                                if (down == _panArmed) return;
-                                setState(() => _panArmed = down);
-                              },
-                              onGroup: widget.onGroup,
-                              onUngroup: widget.onUngroup,
-                              onStack: widget.onStack,
-                              onUndo: widget.canUndo ? widget.onUndo : null,
-                              onRedo: widget.canRedo ? widget.onRedo : null,
-                              onTool: widget.onTool,
-                              child: _Ruled(
-                                geometry: geometry,
-                                scale: scale,
-                                lead: t.space.lg,
-                                horizontal: _horizontal,
-                                vertical: _vertical,
-                                items: widget.items,
-                                selected: widget.selectedIds,
-                                child: _PanArea(
-                                  armed: _panArmed,
-                                  onPan: _panBy,
-                                  child: Container(
-                                    color: t.surface.sunken,
-                                    // The page's own background, behind the canvas: you are
-                                    // arranging cards *on* it, so it has to be visible
-                                    // while you arrange them.
-                                    child: PageBackground(
-                                      background: widget.dashboard.background,
-                                      // Two scrollers, because zoom has two directions. The
-                                      // canvas draws the layout at the width that breakpoint
-                                      // really has — 1600 for desktop — which the middle pane
-                                      // is nowhere near once two panels take their 600; and
-                                      // above Fit it is wider still. Vertical alone would
-                                      // strand the right-hand edge of the page off-screen
-                                      // with no way to reach it.
-                                      // Both bars always drawn, both reachable.
-                                      //
-                                      // The nesting alone was not enough: Flutter web draws
-                                      // no scrollbar for an unmanaged scroll view, and a
-                                      // mouse wheel only ever reaches the vertical one — so
-                                      // at any zoom where the canvas is wider than the pane,
-                                      // the right-hand side of the page existed and could not
-                                      // be got to. `ScaledCanvas` made the extent honest,
-                                      // which is precisely what turned a slightly clipped
-                                      // card into unreachable content.
-                                      child: Scrollbar(
-                                        controller: _vertical,
-                                        thumbVisibility: true,
-                                        child: SingleChildScrollView(
+                      // The canvas is the only thing allowed to be large. It
+                      // scrolls inside itself; the frame around it never moves.
+                      // The canvas, with what is not wired yet above it.
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            // Above the canvas rather than in the panel beside
+                            // it: the panel holds what the HOUSE has, and this
+                            // holds what this PAGE is still missing. It is also a
+                            // job you finish, and it disappears when you have.
+                            if (widget.onWire case final onWire?)
+                              WiringPanel(
+                                gaps: wiringGaps(widget.widgetsById.values),
+                                onWire: onWire,
+                                onSelect: (id) =>
+                                    widget.onSelectMany?.call({id}),
+                              ),
+                            Expanded(
+                              child: _CanvasKeys(
+                                focusNode: _canvasFocus,
+                                onNudge: widget.onNudge,
+                                onDuplicate: widget.onDuplicate,
+                                onCopy: widget.onCopy,
+                                onPaste: widget.onPaste,
+                                onSelectAll: widget.onSelectAll,
+                                onRemove: widget.selectedCount == 0
+                                    ? null
+                                    : widget.onRemoveSelected,
+                                onDeselect: widget.onDeselect,
+                                onFit: () => setState(() => _zoom = null),
+                                onFrameSelection: () =>
+                                    _frameSelection(geometry, t.space.lg),
+                                onPanKey: (down) {
+                                  if (down == _panArmed) return;
+                                  setState(() => _panArmed = down);
+                                },
+                                onGroup: widget.onGroup,
+                                onUngroup: widget.onUngroup,
+                                onStack: widget.onStack,
+                                onUndo: widget.canUndo ? widget.onUndo : null,
+                                onRedo: widget.canRedo ? widget.onRedo : null,
+                                onTool: widget.onTool,
+                                child: _Ruled(
+                                  geometry: geometry,
+                                  scale: scale,
+                                  lead: t.space.lg,
+                                  horizontal: _horizontal,
+                                  vertical: _vertical,
+                                  items: widget.items,
+                                  selected: widget.selectedIds,
+                                  child: _PanArea(
+                                    armed: _panArmed,
+                                    onPan: _panBy,
+                                    child: Container(
+                                      color: t.surface.sunken,
+                                      // The page's own background, behind the canvas: you are
+                                      // arranging cards *on* it, so it has to be visible
+                                      // while you arrange them.
+                                      child: PageBackground(
+                                        background: widget.dashboard.background,
+                                        // Two scrollers, because zoom has two directions. The
+                                        // canvas draws the layout at the width that breakpoint
+                                        // really has — 1600 for desktop — which the middle pane
+                                        // is nowhere near once two panels take their 600; and
+                                        // above Fit it is wider still. Vertical alone would
+                                        // strand the right-hand edge of the page off-screen
+                                        // with no way to reach it.
+                                        // Both bars always drawn, both reachable.
+                                        //
+                                        // The nesting alone was not enough: Flutter web draws
+                                        // no scrollbar for an unmanaged scroll view, and a
+                                        // mouse wheel only ever reaches the vertical one — so
+                                        // at any zoom where the canvas is wider than the pane,
+                                        // the right-hand side of the page existed and could not
+                                        // be got to. `ScaledCanvas` made the extent honest,
+                                        // which is precisely what turned a slightly clipped
+                                        // card into unreachable content.
+                                        child: Scrollbar(
                                           controller: _vertical,
-                                          padding: EdgeInsets.all(t.space.lg),
-                                          child: Scrollbar(
-                                            controller: _horizontal,
-                                            thumbVisibility: true,
-                                            child: SingleChildScrollView(
+                                          thumbVisibility: true,
+                                          child: SingleChildScrollView(
+                                            controller: _vertical,
+                                            padding: EdgeInsets.all(t.space.lg),
+                                            child: Scrollbar(
                                               controller: _horizontal,
-                                              scrollDirection: Axis.horizontal,
-                                              child: widget.emptyStart == null
-                                                  ? ScaledCanvas(
-                                                      scale: scale,
-                                                      child: SizedBox(
-                                                          width: width,
-                                                          child: widget.canvas),
-                                                    )
-                                                  : SizedBox(
-                                                      // The pane's own width, so the
-                                                      // offer is centred in what you
-                                                      // are looking at rather than in
-                                                      // a board that is not there.
-                                                      width: available,
-                                                      child: widget.emptyStart,
-                                                    ),
+                                              thumbVisibility: true,
+                                              child: SingleChildScrollView(
+                                                controller: _horizontal,
+                                                scrollDirection:
+                                                    Axis.horizontal,
+                                                child: widget.emptyStart == null
+                                                    ? ScaledCanvas(
+                                                        scale: scale,
+                                                        child: SizedBox(
+                                                            width: width,
+                                                            child:
+                                                                widget.canvas),
+                                                      )
+                                                    : SizedBox(
+                                                        // The pane's own width, so the
+                                                        // offer is centred in what you
+                                                        // are looking at rather than in
+                                                        // a board that is not there.
+                                                        width: available,
+                                                        child:
+                                                            widget.emptyStart,
+                                                      ),
+                                              ),
                                             ),
                                           ),
                                         ),
@@ -780,110 +794,110 @@ class _DesignerShellState extends State<DesignerShell> {
                                 ),
                               ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-                    if (!_rightOpen)
-                      _PaneHandle(
-                        icon: Icons.chevron_left,
-                        tooltip: 'The inspector',
-                        onTap: () => setState(() => _rightOpen = true),
-                      ),
-                    if (_rightOpen)
-                      _Pane(
-                        width: DesignerShell._inspectorWidth,
-                        onClose: () => setState(() => _rightOpen = false),
-                        border: Border(
-                            left: BorderSide(
-                                color: t.stroke.hairline,
-                                width: t.stroke.width)),
-                        child: widget.selected == null &&
-                                widget.selectedCount > 1
-                            ? _ManySelected(
-                                count: widget.selectedCount,
-                                onDistribute: widget.selectedCount < 3
-                                    ? null
-                                    : widget.onDistribute,
-                                onAlign: widget.onAlign,
-                                onRemove: widget.onRemoveSelected,
-                                onDeselect: widget.onDeselect,
-                                groupInHand: widget.groupInHand,
-                                onGroup: widget.onGroup,
-                                onUngroup: widget.onUngroup,
-                                onRenameGroup: widget.onRenameGroup,
-                                onEnterGroup: widget.onEnterGroup,
-                                groupBox: widget.groupBox,
-                                onGroupBox: widget.onGroupBox,
-                                onGroupFrame: widget.onGroupFrame,
-                              )
-                            : widget.selected == null
-                                ? PageInspector(
-                                    dashboard: widget.dashboard,
-                                    breakpoint: widget.breakpoint,
-                                    layout: widget.layouts
-                                        ?.where((l) =>
-                                            l.breakpoint == widget.breakpoint)
-                                        .firstOrNull,
-                                    cardCount: widget.cardCount,
-                                    onFlowChanged: widget.onFlowChanged,
-                                    onComposeChanged: widget.onComposeChanged,
-                                    onFrameChanged: widget.onFrameChanged,
-                                    snapToGrid: widget.snapToGrid,
-                                    onSnapChanged: widget.onSnapChanged,
-                                    sourceComposed: _followsAComposition,
-                                    onBackgroundChanged:
-                                        widget.onBackgroundChanged,
-                                  )
-                                : CardInspector(
-                                    model: widget.selected!,
-                                    onChanged: widget.onChanged,
-                                    onRemove: widget.onRemoveSelected,
-                                    onClose: widget.onDeselect,
-                                    onRename: widget.onRename,
-                                    floating:
-                                        widget.selectedItem?.floating ?? false,
-                                    z: widget.selectedItem?.z ?? 0,
-                                    onStack: widget.onStack,
-                                    rotation: widget.selectedItem?.rotation,
-                                    opacity: widget.selectedItem?.opacity,
-                                    rect: widget.selectedItem?.rect,
-                                    onRect: widget.onRect,
-                                    insideFrame: widget.insideFrame,
-                                    onRotate: widget.onRotate,
-                                    onFade: widget.onFade,
-                                  ),
-                      ),
-                  ],
+                      if (!_rightOpen)
+                        _PaneHandle(
+                          icon: Icons.chevron_left,
+                          tooltip: 'The inspector',
+                          onTap: () => setState(() => _rightOpen = true),
+                        ),
+                      if (_rightOpen)
+                        _Pane(
+                          width: DesignerShell._inspectorWidth,
+                          onClose: () => setState(() => _rightOpen = false),
+                          border: Border(
+                              left: BorderSide(
+                                  color: t.stroke.hairline,
+                                  width: t.stroke.width)),
+                          child: widget.selected == null &&
+                                  widget.selectedCount > 1
+                              ? _ManySelected(
+                                  count: widget.selectedCount,
+                                  onDistribute: widget.selectedCount < 3
+                                      ? null
+                                      : widget.onDistribute,
+                                  onAlign: widget.onAlign,
+                                  onRemove: widget.onRemoveSelected,
+                                  onDeselect: widget.onDeselect,
+                                  groupInHand: widget.groupInHand,
+                                  onGroup: widget.onGroup,
+                                  onUngroup: widget.onUngroup,
+                                  onRenameGroup: widget.onRenameGroup,
+                                  onEnterGroup: widget.onEnterGroup,
+                                  groupBox: widget.groupBox,
+                                  onGroupBox: widget.onGroupBox,
+                                  onGroupFrame: widget.onGroupFrame,
+                                )
+                              : widget.selected == null
+                                  ? PageInspector(
+                                      dashboard: widget.dashboard,
+                                      breakpoint: widget.breakpoint,
+                                      layout: widget.layouts
+                                          ?.where((l) =>
+                                              l.breakpoint == widget.breakpoint)
+                                          .firstOrNull,
+                                      cardCount: widget.cardCount,
+                                      onFlowChanged: widget.onFlowChanged,
+                                      onComposeChanged: widget.onComposeChanged,
+                                      onFrameChanged: widget.onFrameChanged,
+                                      snapToGrid: widget.snapToGrid,
+                                      onSnapChanged: widget.onSnapChanged,
+                                      sourceComposed: _followsAComposition,
+                                      onBackgroundChanged:
+                                          widget.onBackgroundChanged,
+                                    )
+                                  : CardInspector(
+                                      model: widget.selected!,
+                                      onChanged: widget.onChanged,
+                                      onRemove: widget.onRemoveSelected,
+                                      onClose: widget.onDeselect,
+                                      onRename: widget.onRename,
+                                      floating: widget.selectedItem?.floating ??
+                                          false,
+                                      z: widget.selectedItem?.z ?? 0,
+                                      onStack: widget.onStack,
+                                      rotation: widget.selectedItem?.rotation,
+                                      opacity: widget.selectedItem?.opacity,
+                                      rect: widget.selectedItem?.rect,
+                                      onRect: widget.onRect,
+                                      insideFrame: widget.insideFrame,
+                                      onRotate: widget.onRotate,
+                                      onFade: widget.onFade,
+                                    ),
+                        ),
+                    ],
+                  ),
                 ),
-              ),
-              // The bottom strip that used to be here is **deleted**, not
-              // moved: the rail's Layers tab says the same names and more, with
-              // the grouping shown and a row you can actually hit. Two lists of
-              // one page is one list too many, and the strip was the one to
-              // give — it cost a band of height off the canvas to say less.
-              //
-              // `PageLayers` had no other caller, so it went with it. The tests
-              // that pinned its behaviour now point at the tree, because the
-              // behaviour is the same and only its home changed.
-              _StatusBar(
-                selectedCount: widget.selectedCount,
-                item: widget.selectedItem,
-                columns: widget.columns,
-                flow: widget.layouts
-                        ?.where((l) => l.breakpoint == widget.breakpoint)
-                        .firstOrNull
-                        ?.flow ??
-                    GridFlow.packed,
-                dirty: widget.dirty,
-                saving: widget.saving,
-                panning: _panArmed,
-                groupInHand: widget.groupInHand,
-                inside: widget.inside,
-              ),
-            ],
-          );
-        }),
+                // The bottom strip that used to be here is **deleted**, not
+                // moved: the rail's Layers tab says the same names and more, with
+                // the grouping shown and a row you can actually hit. Two lists of
+                // one page is one list too many, and the strip was the one to
+                // give — it cost a band of height off the canvas to say less.
+                //
+                // `PageLayers` had no other caller, so it went with it. The tests
+                // that pinned its behaviour now point at the tree, because the
+                // behaviour is the same and only its home changed.
+                _StatusBar(
+                  selectedCount: widget.selectedCount,
+                  item: widget.selectedItem,
+                  columns: widget.columns,
+                  flow: widget.layouts
+                          ?.where((l) => l.breakpoint == widget.breakpoint)
+                          .firstOrNull
+                          ?.flow ??
+                      GridFlow.packed,
+                  dirty: widget.dirty,
+                  saving: widget.saving,
+                  panning: _panArmed,
+                  groupInHand: widget.groupInHand,
+                  inside: widget.inside,
+                ),
+              ],
+            );
+          }),
+        ),
       ),
     );
   }
@@ -1770,6 +1784,7 @@ class _RailTab extends StatelessWidget {
 /// drag to reach it.
 class _CanvasKeys extends StatelessWidget {
   const _CanvasKeys({
+    required this.focusNode,
     required this.onNudge,
     required this.onDuplicate,
     required this.onCopy,
@@ -1820,6 +1835,9 @@ class _CanvasKeys extends StatelessWidget {
   final ValueChanged<DesignTool> onTool;
 
   final Widget child;
+
+  /// The shell's, so a control in a panel can hand the keyboard back here.
+  final FocusNode focusNode;
 
   void _step(int dx, int dy) => onNudge?.call(dx, dy);
 
@@ -1927,6 +1945,7 @@ class _CanvasKeys extends StatelessWidget {
       // designer opens — a tool whose keyboard needs a click first is a tool
       // whose keyboard nobody finds.
       child: Focus(
+        focusNode: focusNode,
         autofocus: true,
         // Space is held, not pressed, so it cannot be a shortcut: the canvas
         // has to know while it is down and again when it comes up.

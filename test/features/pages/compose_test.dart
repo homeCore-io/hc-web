@@ -157,13 +157,32 @@ Future<void> _dragCard(WidgetTester tester, String id, Offset by) async {
 }
 
 /// A preset or fit chip, by its label.
+/// One of a row of segments — *Grows* / *Fixed*, *Close gaps* / *Keep gaps*.
+///
+/// The panel is an inspector now rather than a form, so these are segments in
+/// a single control rather than a row of pills, and the way to press one is to
+/// press its name.
 Future<void> _chip(WidgetTester tester, String label) async {
-  await tester.tap(find.widgetWithText(GestureDetector, label).last);
+  await tester.tap(find.text(label).last);
+  await tester.pumpAndSettle();
+}
+
+/// A canvas preset, which is a menu: four names and the numbers above it for
+/// anything else.
+Future<void> _preset(WidgetTester tester, String label) async {
+  await tester.tap(find.byType(DropdownButton<String>).last);
+  await tester.pumpAndSettle();
+  await tester.tap(find.text(label).last);
   await tester.pumpAndSettle();
 }
 
 Future<void> _typeSize(WidgetTester tester, String label, String value) async {
-  final field = find.widgetWithText(TextField, label);
+  // Width and Height are rows: the name in the left column, the number in the
+  // right, with no box or floating label of their own.
+  final field = find.descendant(
+    of: find.ancestor(of: find.text(label), matching: find.byType(Row)).first,
+    matching: find.byType(TextField),
+  );
   await tester.enterText(field, value);
   await tester.testTextInput.receiveAction(TextInputAction.done);
   await tester.pumpAndSettle();
@@ -441,7 +460,7 @@ void main() {
       await _toggleCompose(tester);
       expect(_frame(tester).width, 1600);
 
-      await _chip(tester, '1080p');
+      await _preset(tester, '1080p');
       expect(_frame(tester).width, 1920);
       expect(_frame(tester).height, 1080);
     });
@@ -454,7 +473,7 @@ void main() {
       await _toggleCompose(tester);
       final before = _item(tester, 'b').rect!;
 
-      await _chip(tester, '4K');
+      await _preset(tester, '4K');
       expect(_item(tester, 'b').rect, before);
     });
 
@@ -467,7 +486,7 @@ void main() {
       await _toggleCompose(tester);
       expect(_item(tester, 'b').x, 4);
 
-      await _chip(tester, '4K');
+      await _preset(tester, '4K');
       expect(_item(tester, 'b').x, lessThan(4));
       for (final item in _grid(tester).items) {
         expect(item.x, greaterThanOrEqualTo(0), reason: item.id);
@@ -549,7 +568,7 @@ void main() {
       // has a height — width alone would cut the bottom off a wall layout.
       await _open(tester);
       await _toggleCompose(tester);
-      await _chip(tester, '4K');
+      await _preset(tester, '4K');
       await _chip(tester, 'Fixed');
 
       final pane = tester.getRect(find.byType(PageBackground));
@@ -561,7 +580,7 @@ void main() {
     testWidgets('undo puts the canvas back', (tester) async {
       await _open(tester);
       await _toggleCompose(tester);
-      await _chip(tester, '1080p');
+      await _preset(tester, '1080p');
       expect(_frame(tester).width, 1920);
 
       await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
