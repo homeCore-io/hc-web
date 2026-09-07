@@ -588,63 +588,6 @@ class _StyleChoice extends StatelessWidget {
   }
 }
 
-/// Blur, 0–20, in whole steps.
-///
-/// Steps rather than a continuous drag: nobody can tell 11 from 12, and a
-/// stored 11.437 is a number that came from a pixel rather than a decision.
-class _StyleSlider extends StatelessWidget {
-  const _StyleSlider({
-    required this.label,
-    required this.value,
-    required this.max,
-    required this.onChanged,
-  });
-
-  final String label;
-  final double value;
-  final double max;
-
-  /// Sliders here have started at zero until now. A turn goes both ways, and a
-  /// control that could only turn one way would make the other direction a
-  /// journey through 359 degrees.
-
-  /// A unit on the readout. Without it a slider reading 40 says nothing about
-  /// whether that is degrees, percent, or pixels.
-
-  final ValueChanged<double> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = HcTokens.of(context);
-    return Row(
-      children: [
-        SizedBox(
-          width: 64,
-          child: Text(label,
-              style: t.text.bodyStyle.copyWith(color: t.surface.onBase)),
-        ),
-        Expanded(
-          child: Slider(
-            value: value.clamp(0, max),
-            max: max,
-            divisions: max.round(),
-            label: '${value.round()}',
-            onChanged: onChanged,
-          ),
-        ),
-        SizedBox(
-          width: 32,
-          child: Text('${value.round()}',
-              textAlign: TextAlign.right,
-              style: t.text.captionStyle.copyWith(
-                  color: t.surface.onBaseMuted,
-                  fontFeatures: t.numericFontFeatures)),
-        ),
-      ],
-    );
-  }
-}
-
 /// Card types whose contents are a device selection.
 ///
 /// The same set `_Preview` counts, and for the same reason: these are the cards
@@ -2361,212 +2304,202 @@ class _StyleSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final t = HcTokens.of(context);
-    return Padding(
-      padding: EdgeInsets.only(top: t.space.md),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text('STYLE',
-              style:
-                  t.text.overlineStyle.copyWith(color: t.surface.onBaseMuted)),
-          SizedBox(height: t.space.xs),
-          // **The two ends of the three switches below, in one press each.**
-          //
-          // An element now arrives undecorated — see `CardStyle.undecorated`,
-          // and the reason there. Which is right for designing and wrong for
-          // the moment you actually want the card look, because the card look
-          // is three switches and nobody wants to find out that it is three.
-          //
-          // Not a mode: these set the same three booleans the rows below show,
-          // and the rows stay live. Whichever end you are at is marked, and
-          // anything in between is at neither.
-          Row(
-            children: [
-              Expanded(
-                child: _StylePreset(
-                  label: 'Plain',
-                  on: !style.filled && !style.bordered && !style.titled,
-                  onTap: () => onChanged(style.copyWith(
-                      filled: false, bordered: false, titled: false)),
-                ),
-              ),
-              SizedBox(width: t.space.xs),
-              Expanded(
-                child: _StylePreset(
-                  label: 'Card',
-                  on: style.filled && style.bordered && style.titled,
-                  onTap: () => onChanged(style.copyWith(
-                      filled: true, bordered: true, titled: true)),
-                ),
-              ),
-            ],
-          ),
-          if (saved.isNotEmpty || !style.isDefault) ...[
-            SizedBox(height: t.space.sm),
-            Text('SAVED LOOKS',
-                style: t.text.overlineStyle
-                    .copyWith(color: t.surface.onBaseMuted)),
-            SizedBox(height: t.space.xs),
-            Wrap(
-              spacing: t.space.xs,
-              runSpacing: t.space.xs,
-              children: [
-                for (final entry in saved)
-                  _StylePill(
-                    label: entry.name,
-                    count: entry.uses,
-                    on: entry.name == style.name,
-                    // **Applying copies.** The nine properties and the name go
-                    // onto this card and nothing links back — see
-                    // `named_styles.dart`. Editing it a second later is an
-                    // ordinary edit and reaches nothing else, on this page or
-                    // any other.
-                    onTap: () => onChanged(entry.style),
-                  ),
-                if (!style.isDefault)
-                  _StylePill(
-                    label: style.name == null ? 'Save this look…' : 'Rename…',
-                    on: false,
-                    onTap: () async {
-                      final name = await _promptStyleName(
-                        context,
-                        style.name ??
-                            freshStyleName([for (final e in saved) e.name]),
-                      );
-                      if (name == null) return;
-                      // An empty answer forgets the name and keeps the look,
-                      // which is the only way back out of the library — a
-                      // style stops existing when the last card wearing it is
-                      // unnamed.
-                      onChanged(style.called(name.isEmpty ? null : name));
-                    },
-                  ),
-              ],
-            ),
-            SizedBox(height: t.space.xs),
-            Text(
-              style.name == null
-                  ? 'A saved look is copied onto the card. Change it afterwards '
-                      'and nothing else moves.'
-                  : 'Wearing “${style.name}”. Editing it here changes this card '
-                      'only.',
-              style: t.text.captionStyle
-                  .copyWith(color: t.surface.onBaseMuted, height: 1.4),
-            ),
-          ],
-          SizedBox(height: t.space.xs),
-          _StyleSwitch(
-            label: 'Background',
-            value: style.filled,
-            onChanged: (v) => onChanged(style.copyWith(filled: v)),
-          ),
-          _StyleSwitch(
-            label: 'Border',
-            value: style.bordered,
-            onChanged: (v) => onChanged(style.copyWith(bordered: v)),
-          ),
-          _StyleSwitch(
-            label: 'Title',
-            value: style.titled,
-            onChanged: (v) => onChanged(style.copyWith(titled: v)),
-          ),
-          if (style.filled) ...[
-            SizedBox(height: t.space.xs),
-            _StyleChoice(
-              label: 'Colour',
-              value: style.tint ?? 'raised',
-              options: [
-                for (final tint in cardTints) (key: tint.key, label: tint.label)
-              ],
-              onChanged: (v) =>
-                  onChanged(style.copyWith(tint: v == 'raised' ? null : v)),
-            ),
-          ],
-          SizedBox(height: t.space.xs),
-          _StyleChoice(
-            label: 'Corners',
-            value: style.corner ?? 'md',
-            options: cardCorners,
-            onChanged: (v) =>
-                onChanged(style.copyWith(corner: v == 'md' ? null : v)),
-          ),
-          SizedBox(height: t.space.xs),
-          _StyleSlider(
-            label: 'Blur',
-            value: style.blur,
-            max: 20,
-            onChanged: (v) => onChanged(style.copyWith(blur: v)),
-          ),
-          SizedBox(height: t.space.xs),
-          _ImageField(
-            key: ValueKey('card-image-$cardId'),
-            value: style.image ?? '',
-            onChanged: (v) =>
-                onChanged(style.copyWith(image: v.isEmpty ? null : v)),
-          ),
-          if ((style.image ?? '').isNotEmpty) ...[
-            SizedBox(height: t.space.xs),
-            _StyleChoice(
-              label: 'Picture',
-              value: style.imageFit ?? 'cover',
-              options: const [
-                (key: 'cover', label: 'Fill'),
-                (key: 'contain', label: 'Fit'),
-                (key: 'fill', label: 'Stretch'),
-              ],
-              onChanged: (v) =>
-                  onChanged(style.copyWith(imageFit: v == 'cover' ? null : v)),
-            ),
-            _StyleSlider(
-              label: 'Fade',
-              value: style.imageOpacity * 100,
-              max: 100,
-              onChanged: (v) =>
-                  onChanged(style.copyWith(imageOpacity: v / 100)),
-            ),
-          ],
-          if (!style.titled)
-            Text(
-              'The name still labels it here and in the layers strip — it just '
-              'is not drawn on the card.',
-              style: t.text.captionStyle
-                  .copyWith(color: t.surface.onBaseMuted, height: 1.4),
-            )
-          else if (style.isDefault)
-            Text(
-              'A card, like the others.',
-              style: t.text.captionStyle
-                  .copyWith(color: t.surface.onBaseMuted, height: 1.4),
-            )
-          else
-            Text(
-              style.filled
-                  ? 'No outline — it sits on the page without a frame.'
-                  : 'The page shows through, and the contents reach the edges '
-                      'of the box you drew.',
-              style: t.text.captionStyle
-                  .copyWith(color: t.surface.onBaseMuted, height: 1.4),
-            ),
-        ],
+    final named = style.name;
+    return InspectorSection(title: 'Look', children: [
+      // **The two ends of the three switches below, in one press each.** An
+      // element arrives undecorated — see `CardStyle.undecorated` — which is
+      // right for designing and wrong for the moment you want the card look,
+      // because the card look is three switches and nobody wants to find out
+      // that it is three.
+      //
+      // Not a mode: these set the same three booleans the rows below show, and
+      // the rows stay live. Whichever end you are at is marked, and anything
+      // in between is at neither.
+      InspectorField(
+        label: 'Style',
+        child: InspectorSegments(
+          options: const ['plain', 'card'],
+          value: !style.filled && !style.bordered && !style.titled
+              ? 'plain'
+              : style.filled && style.bordered && style.titled
+                  ? 'card'
+                  : null,
+          labelFor: (o) => o == 'plain' ? 'Plain' : 'Card',
+          onChanged: (o) => onChanged(o == 'plain'
+              ? style.copyWith(filled: false, bordered: false, titled: false)
+              : style.copyWith(filled: true, bordered: true, titled: true)),
+        ),
       ),
-    );
+      if (saved.isNotEmpty || !style.isDefault)
+        InspectorField(
+          label: 'Saved look',
+          // **Applying copies.** The nine properties and the name go onto this
+          // card and nothing links back — see `named_styles.dart`. Editing it
+          // a second later is an ordinary edit and reaches nothing else.
+          help: named == null
+              ? null
+              : 'Wearing “$named”. Editing it here changes this card only.',
+          child: InspectorMenu(
+            options: [for (final e in saved) e.name, _saveSentinel],
+            value: named,
+            hint: 'None',
+            labelFor: (o) => o == _saveSentinel
+                ? (named == null ? 'Save this look…' : 'Rename…')
+                : o,
+            onChanged: (o) async {
+              if (o == null) return;
+              if (o != _saveSentinel) {
+                final entry = saved.where((e) => e.name == o).firstOrNull;
+                if (entry != null) onChanged(entry.style);
+                return;
+              }
+              final name = await _promptStyleName(
+                context,
+                named ?? freshStyleName([for (final e in saved) e.name]),
+              );
+              if (name == null) return;
+              // An empty answer forgets the name and keeps the look, which is
+              // the only way back out of the library — a style stops existing
+              // when the last card wearing it is unnamed.
+              onChanged(style.called(name.isEmpty ? null : name));
+            },
+          ),
+        ),
+      InspectorField(
+        label: 'Background',
+        child: InspectorSwitch(
+          value: style.filled,
+          semanticLabel: 'Background',
+          onChanged: (v) => onChanged(style.copyWith(filled: v)),
+        ),
+      ),
+      InspectorField(
+        label: 'Border',
+        child: InspectorSwitch(
+          value: style.bordered,
+          semanticLabel: 'Border',
+          onChanged: (v) => onChanged(style.copyWith(bordered: v)),
+        ),
+      ),
+      InspectorField(
+        label: 'Title',
+        // The one thing a person cannot see for themselves: where the name
+        // went when it stopped being drawn.
+        help: style.titled
+            ? null
+            : 'Still labels it here and in the layers strip.',
+        child: InspectorSwitch(
+          value: style.titled,
+          semanticLabel: 'Title',
+          onChanged: (v) => onChanged(style.copyWith(titled: v)),
+        ),
+      ),
+      if (style.filled)
+        InspectorField(
+          label: 'Colour',
+          child: _choice(
+            value: style.tint ?? 'raised',
+            options: [
+              for (final tint in cardTints) (key: tint.key, label: tint.label)
+            ],
+            onChanged: (v) =>
+                onChanged(style.copyWith(tint: v == 'raised' ? null : v)),
+          ),
+        ),
+      InspectorField(
+        label: 'Corners',
+        child: _choice(
+          value: style.corner ?? 'md',
+          options: cardCorners,
+          onChanged: (v) =>
+              onChanged(style.copyWith(corner: v == 'md' ? null : v)),
+        ),
+      ),
+      InspectorField(
+        label: 'Blur',
+        onScrub: (steps) =>
+            onChanged(style.copyWith(blur: (style.blur + steps).clamp(0, 20))),
+        child: InspectorNumber(
+          value: style.blur.round(),
+          unit: 'px',
+          min: 0,
+          max: 20,
+          onChanged: (v) =>
+              onChanged(style.copyWith(blur: (v ?? 0).toDouble())),
+        ),
+      ),
+      InspectorField(
+        label: 'Picture',
+        child: _ImageField(
+          key: ValueKey('card-image-$cardId'),
+          value: style.image ?? '',
+          onChanged: (v) =>
+              onChanged(style.copyWith(image: v.isEmpty ? null : v)),
+        ),
+      ),
+      if ((style.image ?? '').isNotEmpty) ...[
+        InspectorField(
+          label: 'Fit',
+          child: _choice(
+            value: style.imageFit ?? 'cover',
+            options: const [
+              (key: 'cover', label: 'Fill'),
+              (key: 'contain', label: 'Fit'),
+              (key: 'fill', label: 'Stretch'),
+            ],
+            onChanged: (v) =>
+                onChanged(style.copyWith(imageFit: v == 'cover' ? null : v)),
+          ),
+        ),
+        InspectorField(
+          label: 'Fade',
+          onScrub: (steps) => onChanged(style.copyWith(
+              imageOpacity:
+                  (style.imageOpacity * 100 + steps).clamp(0, 100) / 100)),
+          child: InspectorNumber(
+            value: (style.imageOpacity * 100).round(),
+            unit: '%',
+            min: 0,
+            max: 100,
+            onChanged: (v) =>
+                onChanged(style.copyWith(imageOpacity: (v ?? 100) / 100)),
+          ),
+        ),
+      ],
+    ]);
+  }
+
+  /// Segments while they fit, a menu when they do not — the same rule the rest
+  /// of the panel follows, so *Fill / Fit / Stretch* is three buttons and the
+  /// eleven tints are a list.
+  Widget _choice({
+    required String value,
+    required List<({String key, String label})> options,
+    required ValueChanged<String> onChanged,
+  }) {
+    final keys = [for (final o in options) o.key];
+    String label(String key) =>
+        options.where((o) => o.key == key).map((o) => o.label).firstOrNull ??
+        key;
+    return InspectorChoice.segmented(keys, label)
+        ? InspectorSegments(
+            options: keys,
+            value: value,
+            labelFor: label,
+            onChanged: onChanged,
+          )
+        : InspectorMenu(
+            options: keys,
+            value: value,
+            labelFor: label,
+            onChanged: (v) => v == null ? null : onChanged(v),
+          );
   }
 }
 
-/// Where the card sits relative to the grid — and, once it is above it, where
-/// it sits relative to everything else up there.
-///
-/// The same six moves as the card's own menu, because a right-click is where
-/// you go when you already know a thing exists and a panel is where you find
-/// out that it does. This one also *reports*: a card either competes for its
-/// cells or floats over them, and until now nothing on screen said which
-/// except the status bar, one line high, at the far bottom of the window.
-///
-/// The stacking row is hidden while the card is in the grid rather than
-/// disabled. Grid cards cannot be underneath anything, so "bring forward" is
-/// not a control that happens to be unavailable — it is a question that does
-/// not apply.
+/// The one option in the saved-looks menu that is an action rather than a look.
+const _saveSentinel = '\u0000save';
+
 class _StackSection extends StatelessWidget {
   const _StackSection({
     required this.floating,
@@ -2704,12 +2637,10 @@ class _StylePill extends StatelessWidget {
     required this.label,
     required this.on,
     required this.onTap,
-    this.count,
   });
 
   final String label;
   final bool on;
-  final int? count;
   final VoidCallback onTap;
 
   @override
@@ -2731,20 +2662,9 @@ class _StylePill extends StatelessWidget {
               width: t.stroke.width,
             ),
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(label,
-                  style: t.text.captionStyle.copyWith(
-                      color: on ? t.surface.onBase : t.surface.onBaseMuted)),
-              if (count case final n?) ...[
-                SizedBox(width: t.space.xs / 2),
-                Text('$n',
-                    style: t.text.captionStyle
-                        .copyWith(color: t.surface.onBaseMuted)),
-              ],
-            ],
-          ),
+          child: Text(label,
+              style: t.text.captionStyle.copyWith(
+                  color: on ? t.surface.onBase : t.surface.onBaseMuted)),
         ),
       ),
     );
@@ -2777,60 +2697,4 @@ Future<String?> _promptStyleName(BuildContext context, String initial) {
       ],
     ),
   );
-}
-
-/// One end of the STYLE section, as a button that shows whether you are at it.
-class _StylePreset extends StatelessWidget {
-  const _StylePreset({
-    required this.label,
-    required this.on,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool on;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = HcTokens.of(context);
-    return OutlinedButton(
-      onPressed: onTap,
-      style: OutlinedButton.styleFrom(
-        visualDensity: VisualDensity.compact,
-        foregroundColor: on ? t.accent.primary : t.surface.onBaseMuted,
-        side: BorderSide(
-          color: on ? t.accent.primary : t.stroke.hairline,
-          width: t.stroke.width,
-        ),
-      ),
-      child: Text(label),
-    );
-  }
-}
-
-class _StyleSwitch extends StatelessWidget {
-  const _StyleSwitch({
-    required this.label,
-    required this.value,
-    required this.onChanged,
-  });
-
-  final String label;
-  final bool value;
-  final ValueChanged<bool> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = HcTokens.of(context);
-    return Row(
-      children: [
-        Expanded(
-          child: Text(label,
-              style: t.text.bodyStyle.copyWith(color: t.surface.onBase)),
-        ),
-        Switch(value: value, onChanged: onChanged),
-      ],
-    );
-  }
 }

@@ -9,6 +9,7 @@ import 'package:hc_web/core/models/device_state.dart';
 import 'package:hc_web/core/providers/dashboards_provider.dart';
 import 'package:hc_web/core/providers/devices_provider.dart';
 import 'package:hc_web/design/components/hc_surface.dart';
+import 'package:hc_web/design/components/hc_controls.dart';
 import 'package:hc_web/design/skins.dart';
 import 'package:hc_web/features/dashboard/builtin_cards.dart';
 import 'package:hc_web/features/pages/page_grid.dart';
@@ -336,7 +337,10 @@ void main() {
     testWidgets('offers the two switches for a card', (tester) async {
       await _openDesigner(tester);
       await _selectCard(tester);
-      expect(find.text('STYLE'), findsOneWidget);
+      // The section is *Look* now: what a card is made of reads as one
+      // question, and the panel says it in the same voice as Position and
+      // Transform beside it.
+      expect(find.text('LOOK'), findsOneWidget);
       expect(find.text('Background'), findsOneWidget);
       expect(find.text('Border'), findsOneWidget);
     });
@@ -357,7 +361,7 @@ void main() {
       await _openDesigner(tester);
       await _selectCard(tester);
       expect(find.text('Saved'), findsOneWidget);
-      await tester.tap(find.byType(Switch).first);
+      await tester.tap(find.byType(HcToggle).first);
       await tester.pumpAndSettle();
       expect(find.text('Unsaved changes'), findsOneWidget);
     });
@@ -366,7 +370,7 @@ void main() {
       await _openDesigner(tester);
       await _selectCard(tester);
       expect(_surface(tester).filled, isTrue);
-      await tester.tap(find.byType(Switch).first);
+      await tester.tap(find.byType(HcToggle).first);
       await tester.pumpAndSettle();
       expect(_surface(tester).filled, isFalse);
     });
@@ -379,7 +383,7 @@ void main() {
       // silently, and only when both were used together.
       await _openDesigner(tester);
       await _selectCard(tester);
-      await tester.tap(find.byType(Switch).first);
+      await tester.tap(find.byType(HcToggle).first);
       await tester.pumpAndSettle();
       expect(_surface(tester).filled, isFalse);
 
