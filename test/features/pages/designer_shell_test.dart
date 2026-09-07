@@ -66,7 +66,18 @@ DashboardDefinition _page() => DashboardDefinition(
       isDefault: false,
       createdAt: DateTime.utc(2026),
       updatedAt: DateTime.utc(2026),
-      widgets: [_w('a')],
+      widgets: [
+        _w('a'),
+        // A bare element — a rule — because a designed page is mostly these
+        // and they are what the canvas used to say nothing about.
+        const DashboardWidgetModel(
+          id: 'line',
+          type: 'line',
+          title: 'Rule',
+          refreshPolicy: DashboardRefreshPolicy.passive,
+          config: {'ink': 'hairline'},
+        ),
+      ],
       layouts: [
         const DashboardLayout(
           breakpoint: DashboardBreakpoint.desktop,
@@ -75,6 +86,9 @@ DashboardDefinition _page() => DashboardDefinition(
           gap: 12,
           placements: [
             DashboardWidgetPlacement(widgetId: 'a', x: 0, y: 0, w: 4, h: 2),
+            // After the card, so the tests that reach for the *first* card
+            // options button still mean the card they always meant.
+            DashboardWidgetPlacement(widgetId: 'line', x: 0, y: 4, w: 6, h: 1),
           ],
         ),
       ],
@@ -274,6 +288,22 @@ void main() {
   });
 
   group('selection', () {
+    testWidgets('a bare element says on the canvas that it is selected',
+        (tester) async {
+      // **The ring belonged to the card surface.** So a chromed card lit up
+      // and a rule, a label or a shape — most of a designed page — showed
+      // nothing at all: picking one in the layers list left the canvas looking
+      // exactly as it had. John: *"Visually I can't tell what is selected in
+      // the designer window."*
+      await _openDesigner(tester);
+      expect(find.byKey(const Key('selection-ring')), findsNothing);
+
+      await tester.tap(find.text('Rule').last);
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('selection-ring')), findsOneWidget);
+    });
+
     testWidgets('choosing a card fills the inspector', (tester) async {
       await _openDesigner(tester);
       await tester.tap(find.byTooltip('Card options').first);
