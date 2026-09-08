@@ -228,7 +228,11 @@ void main() {
           'state': AttributeSchema(
               kind: AttributeKind.enum_,
               displayName: 'Playback',
-              options: ['playing', 'paused', 'stopped']),
+              options: [
+                AttributeOption('playing'),
+                AttributeOption('paused'),
+                AttributeOption('stopped'),
+              ]),
           'source': AttributeSchema(
               kind: AttributeKind.string, displayName: 'Source'),
           'tv_channel': AttributeSchema(

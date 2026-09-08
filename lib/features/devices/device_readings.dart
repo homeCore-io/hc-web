@@ -64,6 +64,24 @@ class _DeviceReadingsBlockState extends State<DeviceReadingsBlock> {
     final normal = keys.where((k) => !advancedBy(k)).toList();
     if (normal.isEmpty && advanced.isEmpty) return const SizedBox.shrink();
 
+    // What the device is *for*, in core's order — a temperature/humidity
+    // sensor leads with temperature, a multi-sensor that reports motion leads
+    // with motion. `category` says which readings are not the point; this says
+    // which of the rest comes first, and it is a declaration rather than this
+    // client's guess at what an attribute name means. Empty from a core that
+    // predates the field, and then the grouping below decides alone.
+    final declared = schema?.primary ?? const <String>[];
+    if (declared.isNotEmpty) {
+      normal.sort((a, b) {
+        final ia = declared.indexOf(a);
+        final ib = declared.indexOf(b);
+        if (ia == ib) return 0;
+        if (ia < 0) return 1;
+        if (ib < 0) return -1;
+        return ia.compareTo(ib);
+      });
+    }
+
     // Group, then order the groups so the ones a person came for lead.
     final grouped = <String, List<String>>{};
     for (final k in normal) {

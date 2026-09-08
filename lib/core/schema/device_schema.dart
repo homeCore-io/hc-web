@@ -121,6 +121,61 @@ enum AttributeCategory {
       };
 }
 
+/// One value an [AttributeKind.enum_] attribute can take.
+///
+/// Two wire forms, both valid in the same list: a bare string, or an object
+/// carrying a label and an icon. Attributes were behind action parameters
+/// here — a parameter's options have carried a label since actions existed,
+/// while an attribute's were bare values, so a fan's `medium-high` arrived as
+/// `medium-high` and every client prettified it alone.
+///
+/// A plugin that says nothing still sends the bare string, so [label] and
+/// [icon] are null for almost everything today.
+class AttributeOption {
+  const AttributeOption(this.value, {this.label, this.icon});
+
+  /// What a write actually sends.
+  final String value;
+
+  /// What to call it. Null means this client humanises [value] itself.
+  final String? label;
+
+  /// Semantic icon name, not a font codepoint — the same convention device
+  /// actions use, so an unknown name falls back rather than failing.
+  final String? icon;
+
+  /// What to show a person: the plugin's word, else the value made readable.
+  String get display => label ?? humaniseOptionValue(value);
+
+  /// Parse either wire form. Anything else is dropped rather than guessed at.
+  static AttributeOption? fromWire(Object? raw) => switch (raw) {
+        final String v => AttributeOption(v),
+        final Map m when m['value'] is String => AttributeOption(
+            m['value'] as String,
+            label: m['label'] as String?,
+            icon: m['icon'] as String?,
+          ),
+        _ => null,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      other is AttributeOption &&
+      other.value == value &&
+      other.label == label &&
+      other.icon == icon;
+
+  @override
+  int get hashCode => Object.hash(value, label, icon);
+}
+
+/// `medium-high` → `Medium high`, for an option the plugin did not name.
+String humaniseOptionValue(String value) {
+  final spaced = value.replaceAll(RegExp(r'[_-]'), ' ').trim();
+  if (spaced.isEmpty) return value;
+  return spaced[0].toUpperCase() + spaced.substring(1);
+}
+
 class AttributeSchema {
   const AttributeSchema({
     required this.kind,
@@ -151,7 +206,14 @@ class AttributeSchema {
   final double? step;
 
   /// The fixed value set for [AttributeKind.enum_].
-  final List<String>? options;
+  ///
+  /// See [AttributeOption]: an entry may be a bare value or carry a label and
+  /// an icon, and both arrive in the same list.
+  final List<AttributeOption>? options;
+
+  /// Just the wire values, for the places that send rather than show.
+  List<String> get optionValues =>
+      options?.map((o) => o.value).toList() ?? const [];
 
   /// What this attribute's two states are called, when the plugin said so.
   /// Only meaningful for [AttributeKind.bool_].
@@ -180,7 +242,10 @@ class AttributeSchema {
       min: (json['min'] as num?)?.toDouble(),
       max: (json['max'] as num?)?.toDouble(),
       step: (json['step'] as num?)?.toDouble(),
-      options: (json['options'] as List?)?.cast<String>(),
+      options: (json['options'] as List?)
+          ?.map(AttributeOption.fromWire)
+          .whereType<AttributeOption>()
+          .toList(),
       category: AttributeCategory.fromWire(json['category'] as String?),
       states: BoolStates.fromJson(json['states']),
     );
@@ -188,9 +253,22 @@ class AttributeSchema {
 }
 
 class DeviceSchema {
-  const DeviceSchema(this.attributes, {this.actions = const []});
+  const DeviceSchema(this.attributes,
+      {this.actions = const [], this.primary = const []});
 
   final Map<String, AttributeSchema> attributes;
+
+  /// The readings this device is *for*, most important first.
+  ///
+  /// `category` says which attributes are **not** the point of the device;
+  /// this ranks what is left, so a temperature/humidity sensor leads with
+  /// temperature and a multi-sensor that reports motion leads with motion.
+  ///
+  /// Derived by core from the device's own type unless the plugin declared its
+  /// own order, and always in a stable order — `attributes` is a map, so
+  /// "the first one" is not otherwise repeatable between reads. Empty from a
+  /// core that predates the field.
+  final List<String> primary;
 
   /// Action-style commands the device accepts. Empty for every device that
   /// predates the descriptor — see `claude-notes/plans/device_action_descriptor.md`.
@@ -227,6 +305,8 @@ class DeviceSchema {
               .whereType<DeviceActionSpec>()
               .toList() ??
           const [],
+      primary:
+          (json['primary'] as List?)?.whereType<String>().toList() ?? const [],
     );
   }
 }
