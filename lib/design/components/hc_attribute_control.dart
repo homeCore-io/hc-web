@@ -171,9 +171,13 @@ class HcAttributeControl extends StatelessWidget {
   }
 
   Widget _enumControl(BuildContext context) {
-    final options = schema.options ?? const <String>[];
+    final options = schema.options ?? const <AttributeOption>[];
     if (options.isEmpty) return _textField(context);
 
+    // The plugin's own word for a value when it gave one, this client's
+    // humanising when it did not. `medium-high` reads "Medium High" either
+    // way; the difference is who decided, and only the plugin can say
+    // "Cooling" for `cool`.
     // A few options are faster to hit as chips than as a dropdown — and on a
     // wall panel a dropdown is a hostile control.
     if (options.length <= 4) {
@@ -182,22 +186,23 @@ class HcAttributeControl extends StatelessWidget {
         children: [
           for (final o in options)
             ChoiceChip(
-              label: Text(_humanize(o)),
-              selected: value == o,
-              onSelected: _live ? (_) => onCommit!(o) : null,
+              label: Text(o.display),
+              selected: value == o.value,
+              onSelected: _live ? (_) => onCommit!(o.value) : null,
             ),
         ],
       );
     }
 
+    final values = options.map((o) => o.value).toList();
     return DropdownButtonFormField<String>(
-      initialValue: options.contains(value) ? value as String : null,
+      initialValue: values.contains(value) ? value as String : null,
       isExpanded: true,
       decoration:
           const InputDecoration(isDense: true, border: OutlineInputBorder()),
       items: [
         for (final o in options)
-          DropdownMenuItem(value: o, child: Text(_humanize(o))),
+          DropdownMenuItem(value: o.value, child: Text(o.display)),
       ],
       onChanged: _live ? (v) => v == null ? null : onCommit!(v) : null,
     );

@@ -33,6 +33,16 @@ const _writableBools = {'on', 'locked', 'muted', 'enabled', 'activate'};
 /// word rather than guessing at a level, so this list is not a suggestion.
 const kFanSpeeds = ['off', 'low', 'medium', 'medium-high', 'high'];
 
+/// The same ladder as declared options, for a fan whose plugin published no
+/// schema. A plugin that does declare them supplies its own labels.
+const kFanSpeedOptions = [
+  AttributeOption('off'),
+  AttributeOption('low'),
+  AttributeOption('medium'),
+  AttributeOption('medium-high', label: 'Medium high'),
+  AttributeOption('high'),
+];
+
 /// A fan speed said the way a person would read it: `medium-high` → "Medium
 /// high". Used by the tile summary and the row's trailing value.
 String fanSpeedLabel(String speed) {
@@ -77,7 +87,7 @@ AttributeSchema heuristicSchemaFor(String name, Object? value) {
     String _ when name == 'speed' => const AttributeSchema(
         kind: AttributeKind.enum_,
         displayName: 'Speed',
-        options: kFanSpeeds,
+        options: kFanSpeedOptions,
       ),
     String _ => const AttributeSchema(
         kind: AttributeKind.string,

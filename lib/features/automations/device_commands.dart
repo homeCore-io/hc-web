@@ -805,7 +805,7 @@ List<DeviceCommand> _attributeCommands(
       ];
 
     case AttributeKind.enum_:
-      final options = a.options ?? const <String>[];
+      final options = a.optionValues;
       if (options.isEmpty) return const [];
       return [
         DeviceCommand(

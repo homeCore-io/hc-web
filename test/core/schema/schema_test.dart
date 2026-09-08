@@ -388,7 +388,10 @@ void main() {
         name: 'protocol',
         schema: const AttributeSchema(
           kind: AttributeKind.enum_,
-          options: ['ecowitt', 'wunderground'],
+          options: [
+            AttributeOption('ecowitt'),
+            AttributeOption('wunderground')
+          ],
         ),
         value: 'ecowitt',
         onCommit: (_) {},
@@ -431,6 +434,74 @@ void main() {
 
     test('a degenerate xy does not blow up', () {
       expect(() => xyToRgb(0, 0), returnsNormally);
+    });
+  });
+  group('attribute options', () {
+    // The compatibility promise, from this side: a plugin that says nothing
+    // still sends bare strings, and they must keep working exactly as before.
+    test('a bare string is still an option', () {
+      final schema = DeviceSchema.fromJson({
+        'attributes': {
+          'speed': {
+            'kind': 'enum',
+            'options': ['off', 'low', 'high'],
+          },
+        },
+      });
+      final opts = schema['speed']!.options!;
+      expect(opts.map((o) => o.value), ['off', 'low', 'high']);
+      expect(opts.every((o) => o.label == null), isTrue);
+      expect(schema['speed']!.optionValues, ['off', 'low', 'high']);
+    });
+
+    test('a label and an icon are read when the plugin sends them', () {
+      final schema = DeviceSchema.fromJson({
+        'attributes': {
+          'mode': {
+            'kind': 'enum',
+            'options': [
+              'off',
+              {'value': 'cool', 'label': 'Cooling', 'icon': 'snowflake'},
+            ],
+          },
+        },
+      });
+      final opts = schema['mode']!.options!;
+      expect(opts[0], const AttributeOption('off'));
+      expect(opts[1].label, 'Cooling');
+      expect(opts[1].icon, 'snowflake');
+    });
+
+    test('an unnamed value is humanised rather than shown raw', () {
+      expect(const AttributeOption('medium-high').display, 'Medium high');
+      expect(
+        const AttributeOption('cool', label: 'Cooling').display,
+        'Cooling',
+      );
+    });
+  });
+
+  group('primary readings', () {
+    test('core says which readings the device is for', () {
+      final schema = DeviceSchema.fromJson({
+        'primary': ['temperature', 'humidity'],
+        'attributes': {
+          'temperature': {'kind': 'float'},
+          'humidity': {'kind': 'float'},
+          'battery': {'kind': 'integer', 'category': 'diagnostic'},
+        },
+      });
+      expect(schema.primary, ['temperature', 'humidity']);
+      expect(schema['battery']!.isDiagnostic, isTrue);
+    });
+
+    test('a core that predates the field leaves it empty', () {
+      final schema = DeviceSchema.fromJson({
+        'attributes': {
+          'temperature': {'kind': 'float'},
+        },
+      });
+      expect(schema.primary, isEmpty);
     });
   });
 }

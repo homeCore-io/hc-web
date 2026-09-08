@@ -459,7 +459,9 @@ class _DeviceTriggerPickerState extends State<DeviceTriggerPicker> {
     final seen = e.device?.state[attr];
     final options = e.device?.schema?[attr]?.options;
     if (options != null && options.isNotEmpty) {
-      return 'e.g. ${options.take(3).join(', ')}';
+      // The plugin's own word for the value where it gave one, so a hint reads
+      // "Medium High" rather than "medium-high".
+      return 'e.g. ${options.take(3).map((o) => o.display).join(', ')}';
     }
     return seen == null ? 'the value to match' : 'e.g. $seen';
   }

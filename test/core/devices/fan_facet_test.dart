@@ -148,7 +148,7 @@ void main() {
     test('is an enum of named steps, not a slider', () {
       final s = heuristicSchemaFor('speed', 'high');
       expect(s.kind, AttributeKind.enum_);
-      expect(s.options, kFanSpeeds);
+      expect(s.optionValues, kFanSpeeds);
       expect(s.displayName, 'Speed');
     });
 
